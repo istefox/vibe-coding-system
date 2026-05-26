@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Use this skill to generate and apply a Conventional Commits message after explicit HITL approval. Reads context (diff, CLAUDE.md, ADR/manifest if present), proposes the message, waits for user click, then executes git commit. Use standalone after any implementation cycle, or as Step 7 in the concept-to-code chain. NEVER commit before the explicit user click.
+description: Use this skill for ANY git commit request — including "commit", "committa", "commit and push", "commit e crea PR", "committa e crea PR". Generates a Conventional Commits message with explicit HITL approval gate before executing. Optionally pushes and creates a PR after commit. Reads context (diff, CLAUDE.md, ADR/manifest). NEVER commits before the explicit user click. Supersedes commit-commands:commit and commit-commands:commit-push-pr.
 ---
 
 # `commit` — Commit Wizard Skill
