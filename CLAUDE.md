@@ -80,9 +80,9 @@ sezioni indicate.
 ## Comandi
 
 Repository di sola documentazione: **nessun comando** di build, lint, test o run.
-Solo Markdown. Git non è inizializzato in questo repo. Gli artefatti del sistema
-descritto (agents, skills, hook, rules) vivono in `~/.claude/` e nei `.claude/` dei
-progetti target — non qui.
+Solo Markdown. Remote: `https://github.com/istefox/vibe-coding-system` (privato).
+Gli artefatti del sistema descritto (agents, skills, hook, rules) vivono in `~/.claude/`
+e nei `.claude/` dei progetti target — non qui.
 
 ## Decisioni dal chain clean-public-repo (ADR-0011)
 
