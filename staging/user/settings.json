@@ -1,0 +1,115 @@
+{
+  "cleanupPeriodDays": 30,
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mkdir -p \"${CLAUDE_PROJECT_DIR:-.}/.remember/logs\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/protect-files.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/auto-format.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "mcp__*",
+      "WebFetch(*)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(pip install*)",
+      "Bash(pytest*)",
+      "Bash(python3 -m pytest*)",
+      "Bash(ruff*)",
+      "Bash(black*)",
+      "Bash(mypy*)",
+      "Bash(npm run*)",
+      "Bash(npm test*)",
+      "Bash(rg*)",
+      "Bash(fd*)",
+      "Bash(gh issue *)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)"
+    ],
+    "defaultMode": "auto"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline.sh"
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "warp@claude-code-warp": true,
+    "swift-lsp@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "remember@claude-plugins-official": true,
+    "pydantic-ai@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-code-warp": {
+      "source": {
+        "source": "github",
+        "repo": "warpdotdev/claude-code-warp"
+      }
+    }
+  },
+  "spinnerTipsEnabled": false,
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Running `gh issue comment` and `gh issue create` against repos under the istefox/* GitHub namespace is the user's own fork-write activity (Stefano owns these repos). Treat as user-authored work, not third-party outreach."
+    ]
+  }
+}

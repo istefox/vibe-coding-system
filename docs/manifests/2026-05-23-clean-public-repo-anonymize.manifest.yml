@@ -1,0 +1,63 @@
+manifest_schema_version: "1.1"
+topic: "clean-public-repo-anonymize"
+topic_full_title: "Modalita anonimizzazione contributo Claude per repo pubblici (gate y/n nel chain + skill clean-public-repo)"
+project_root: "/Users/stefanoferri/Developer/vibe-coding-system"
+mode: "greenfield"
+created_at: "2026-05-23T08:34:11+00:00"
+last_updated_at: "2026-05-23T10:44:09+00:00"
+current_step: "completed"
+status: "completed"
+
+# Gate 0 triage result
+gate0:
+  decision: null
+  criteria_spec_adr_exist: false
+  decided_at: null
+
+# Artifacts (absolute paths, populated as steps complete)
+artifacts:
+  spec: "/Users/stefanoferri/Developer/vibe-coding-system/SPEC.md"
+  brainstorm: "/Users/stefanoferri/Developer/vibe-coding-system/BRAINSTORM.md"
+  adr: "/Users/stefanoferri/Developer/vibe-coding-system/docs/architecture/ADR-0011-clean-public-repo-anonymize.md"
+  arch: null
+  plan: "/Users/stefanoferri/Developer/vibe-coding-system/docs/superpowers/plans/2026-05-23-clean-public-repo-anonymize.md"
+  project_claude_md: "/Users/stefanoferri/Developer/vibe-coding-system/CLAUDE.md"
+
+# HITL gates audit trail
+hitl_gates:
+  - gate: 1
+    label: "spec_review"
+    status: "approved"
+    approved_at: "2026-05-23T08:48:48+00:00"
+    notes: "SPEC.md approvato ('y'). Greenfield. Scope retroattivo incluso, azione ibrida, safety rewrite backup+dry-run, no falsificazione autori."
+  - gate: 2
+    label: "architecture_review"
+    status: "approved"
+    approved_at: "2026-05-23T09:23:28+00:00"
+    notes: "ADR-0011 + plan (11 task) approvati ('y'). Ibrido prevenzione+rimedio, fresh-history default per gia-pubblici, git-filter-repo/gitleaks degrade graceful, safety-first, etica esplicita."
+  - gate: 3
+    label: "project_memory_review"
+    status: "approved"
+    approved_at: "2026-05-23T09:31:45+00:00"
+    notes: "Applicato ('y'): CLAUDE.md + sezione additiva riferimento ADR-0011 (8 righe). Backup CLAUDE.md.bak-2026-05-23."
+  - gate: 5
+    label: "review_cycle_decision"
+    status: "approved"
+    approved_at: "2026-05-23T10:08:02+00:00"
+    notes: "Utente ha scelto [r] run review-triage-fix v1.2 sui file di step_5."
+
+# Session boundary tracking
+session_boundary:
+  pre_step_4_session_id: null
+  fresh_session_started_at: null
+  resumed_at: "2026-05-23T09:36:49+00:00"
+
+# Failure tracking (populated only on status=failed)
+failure:
+  failed_at: null
+  failed_step: null
+  failure_reason: null
+  partial_artifacts: []
+
+# Hint for next action (UX)
+next_action: "CHAIN COMPLETED 2026-05-23. 11 task implementati + 2 cicli review-triage-fix (8+1 finding risolti). Polish opzionale residuo: manifest-set-flag.sh exit 2 vs 4 disambiguation (MINOR cosmetica), + report-only by-design (init schema 1.1+anonymize, URL trailing-slash fail-safe)."

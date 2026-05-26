@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Claude Code local session state
+.claude/settings.local.json
+.claude/.triage-fix-last*.json
+.claude/test-cmd
+
+# Session memory (runtime, not source of truth)
+.remember/logs/
+.remember/tmp/
+.remember/now.md
+.remember/today-*.md
+.remember/recent.md
+.remember/archive.md
+.remember/remember.md

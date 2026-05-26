@@ -1,0 +1,2 @@
+# Aggiungi questa riga al .gitignore del progetto:
+CLAUDE.local.md
