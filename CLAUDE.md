@@ -2,101 +2,95 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Cos'è questo repository
+## What is this repository
 
-Non è un progetto di codice: è il **repository del blueprint** del "Vibe Coding System per
-Stefano Ferri — Architettura Multi-Agente v2.1". Contiene un unico artefatto autorevole:
+This is not a code project: it is the **blueprint repository** for the "Vibe Coding System for
+Stefano Ferri — Multi-Agent Architecture v2.1". It contains one authoritative artifact:
 
-- `docs/vibe-coding-system.md` (~1770 righe) — specifica completa del setup Claude Code
-  multi-agente: sub-agent, agent-teams, path-scoped rules, hook, MCP, permission modes,
-  workflow concept→code. È la **single source of truth**: ogni decisione va riconciliata
-  con questo documento.
+- `docs/vibe-coding-system.md` (~1770 lines) — complete specification of the multi-agent Claude Code
+  setup: sub-agents, agent-teams, path-scoped rules, hooks, MCP, permission modes,
+  concept→code workflow. This is the **single source of truth**: every decision must be reconciled
+  with this document.
 
-Il file supera i 25k token: leggilo con `Read` usando `offset`/`limit` per sezioni, non
-in blocco. Le sezioni sono numerate (1–17) e si referenziano a vicenda nel testo.
+The file exceeds 25k tokens: read it with `Read` using `offset`/`limit` per section, not
+in one block. Sections are numbered (1–17) and cross-reference each other throughout the text.
 
-## Eredita le regole globali
+## Inherits global rules
 
-Questo progetto eredita `~/.claude/CLAUDE.md` (Stefano Ferri), già caricato in ogni
-sessione. **Non duplicare qui** le convenzioni generali (Python/Swift/web style, git
-workflow, terminologia Vibrofer, safety): valgono già. Questo file specializza solo
-per questo repo.
+This project inherits `~/.claude/CLAUDE.md` (Stefano Ferri), loaded in every session.
+**Do not duplicate here** the general conventions (Python/Swift/web style, git workflow,
+Vibrofer terminology, safety): they already apply. This file specializes only for this repo.
 
-## Regole comportamentali invariabili
+## Invariant behavioral rules
 
-Dalla sez. 4 del documento, coerenti con le convenzioni globali — applicano qui e a
-qualunque sistema generato da questo blueprint:
+From section 4 of the document, consistent with global conventions — apply here and to
+any system generated from this blueprint:
 
-- Plan mode obbligatorio per qualunque task che modifica >1 file o tocca migrazioni/config produzione
-- Conventional Commits in inglese (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`)
-- Mai `git push --force` senza approvazione esplicita di Stefano
-- Mai modificare migration già applicate in produzione
-- Mai disabilitare un test per farlo passare: se va cambiato, spiegare perché in chat prima
-- Confidence dichiarata in chat a fine task, **mai** nei file deliverable
-- HITL gate sempre prima di: commit, push, deploy, modifica schema DB, eliminazioni permanenti
-- Lingua: italiano in chat e nei doc; inglese per codice, commit, docstring API
-- Tono: diretto, conciso, tecnico — niente filler
+- Plan mode required for any task modifying >1 file or touching production migrations/config
+- Conventional Commits in English (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`)
+- Never `git push --force` without explicit approval from Stefano
+- Never modify migrations already applied in production
+- Never disable a test to make it pass: if it needs changing, explain why in chat first
+- Confidence declared in chat at end of task, **never** in deliverable files
+- HITL gate always before: commit, push, deploy, DB schema changes, permanent deletions
+- Language: English throughout — chat, docs, code, commits, docstrings
+- Tone: direct, concise, technical — no filler
 
-## Architettura descritta nel documento (big picture)
+## Architecture described in the document (big picture)
 
-Serve per orientarsi senza rileggere tutte le 1770 righe. Dettagli e razionali nelle
-sezioni indicate.
+Use this to orient without re-reading all 1770 lines. Details and rationale in the indicated sections.
 
-- **Topologia (sez. 2):** Orchestrator (sessione principale CLI) → fino a 4 sub-agent
-  paralleli *dentro* la sessione (task isolati, ritornano summary) **oppure** 3–5
-  teammate di un agent-team in *sessioni separate* (lavoro cross-strato, experimental,
-  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Sub-agent NON spawnano altri sub-agent.
-- **8 sub-agent custom (sez. 3)** in `~/.claude/agents/`: `architect` (Opus, plan,
-  solo ADR), `coder` (Sonnet, `isolation: worktree`), `reviewer`/`tester`/`debugger`/
-  `refactorer` (Sonnet), `doc-writer`/`researcher` (Haiku). Modello scelto per
-  bilanciare costo/capacità (sez. 3.9).
-- **Extension stack a livelli:** `~/.claude/CLAUDE.md` globale (solo identità+comportamento,
-  <200 righe) → path-scoped rules in `.claude/rules/` con frontmatter `paths:` (sez. 5)
-  → sub-agent in `.claude/agents/` → skill in `.claude/skills/` (sez. 8) → hook in
-  `settings.json` (sez. 7, automazione deterministica) → MCP in `.mcp.json` (sez. 9).
-  Il pattern rules sostituisce gran parte del CLAUDE.md monolitico.
-- **Permission strategy (sez. 10):** `acceptEdits` default, plan mode esplicito per
-  feature nuove, allowlist per comandi ricorrenti; gli hook deny vincono su qualunque
-  permission mode (difesa a strati).
-- **Workflow concept→code (sez. 11):** interview mode (`AskUserQuestion`) → `SPEC.md`
-  → `ARCH.md` (+ ADR) → CLAUDE.md di progetto → **fresh session** → scaffold in plan
-  mode → implementazione multi-agente parallela (worktree) → review → commit + PR.
-  Mai mischiare interview e coding nella stessa sessione.
-- **Convenzione identità (sez. 4, parte del design proposto):** assistente "Adriano",
-  utente "Stefano" — annotata qui come elemento del blueprint; l'identità effettiva
-  resta governata da `~/.claude/CLAUDE.md`.
+- **Topology (sec. 2):** Orchestrator (main CLI session) → up to 4 sub-agents in parallel *within*
+  the session (isolated tasks, return summary) **or** 3–5 teammates in an agent-team in *separate
+  sessions* (cross-layer work, experimental, `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Sub-agents
+  do NOT spawn other sub-agents.
+- **8 custom sub-agents (sec. 3)** in `~/.claude/agents/`: `architect` (Opus, plans, ADR only),
+  `coder` (Sonnet, `isolation: worktree`), `reviewer`/`tester`/`debugger`/`refactorer` (Sonnet),
+  `doc-writer`/`researcher` (Haiku). Model chosen to balance cost/capability (sec. 3.9).
+- **Layered extension stack:** `~/.claude/CLAUDE.md` global (identity+behavior only, <200 lines)
+  → path-scoped rules in `.claude/rules/` with `paths:` frontmatter (sec. 5) → sub-agents in
+  `.claude/agents/` → skills in `.claude/skills/` (sec. 8) → hooks in `settings.json` (sec. 7,
+  deterministic automation) → MCP in `.mcp.json` (sec. 9). The rules pattern replaces most of
+  the monolithic CLAUDE.md.
+- **Permission strategy (sec. 10):** `acceptEdits` default, explicit plan mode for new features,
+  allowlist for recurring commands; hook-deny rules override any permission mode (layered defense).
+- **concept→code workflow (sec. 11):** interview mode (`AskUserQuestion`) → `SPEC.md` → `ARCH.md`
+  (+ ADR) → project CLAUDE.md → **fresh session** → scaffold in plan mode → parallel multi-agent
+  implementation (worktree) → review → commit + PR. Never mix interview and coding in the same session.
+- **Identity convention (sec. 4, proposed design element):** assistant "Adriano", user "Stefano" —
+  noted here as a blueprint element; effective identity is governed by `~/.claude/CLAUDE.md`.
 
-## Lavorare con il documento
+## Working with the document
 
-- Quando aggiorni `docs/vibe-coding-system.md`: mantieni coerenti la numerazione delle
-  sezioni, i blocchi "Cambiamenti rispetto a…" (changelog di versione in testa) e la
-  "Confidence finale" + "Cose verificate vs assunte" in coda.
-- Preserva la distinzione esplicita **verificato vs assunto**: il documento cita
-  `code.claude.com/docs` come fonti primarie verificate. Non promuovere un'assunzione a
-  fatto senza verifica e relativa citazione.
-- Le checklist (sez. 15) e i template (sez. 4, 6) sono destinati a essere copiati in
-  altri repo: tienili autoconsistenti e validi standalone.
+- When updating `docs/vibe-coding-system.md`: keep section numbering consistent, the
+  "Changes from…" blocks (version changelog at the top), and the "Final confidence" +
+  "Verified vs assumed" section at the bottom.
+- Preserve the explicit **verified vs assumed** distinction: the document cites
+  `code.claude.com/docs` as verified primary sources. Do not promote an assumption to
+  a fact without verification and a citation.
+- The checklists (sec. 15) and templates (sec. 4, 6) are intended to be copied into other
+  repos: keep them self-consistent and valid as standalone documents.
 
-## Comandi
+## Commands
 
-Repository di sola documentazione: **nessun comando** di build, lint, test o run.
-Solo Markdown. Remote: `https://github.com/istefox/vibe-coding-system` (privato).
-Gli artefatti del sistema descritto (agents, skills, hook, rules) vivono in `~/.claude/`
-e nei `.claude/` dei progetti target — non qui.
+Documentation-only repository: **no** build, lint, test, or run commands.
+Markdown only. Remote: `https://github.com/istefox/vibe-coding-system` (private).
+The artifacts of the described system (agents, skills, hooks, rules) live in `~/.claude/`
+and in the `.claude/` directories of target projects — not here.
 
-## Decisioni dal chain clean-public-repo (ADR-0011)
+## Decisions from the clean-public-repo chain (ADR-0011)
 
-Modalità anonimizzazione per repo pubblici: Gate 0b nel chain (auto-detect remote
-pubblico → flag `anonymize`) + skill `clean-public-repo` (audit/rimedio, fresh-history
-publish di default, rewrite chirurgico opt-in con backup+dry-run+HITL). Scopo:
-qualità + nessuna auto-attribuzione dello strumento; **mai** falsificare autori.
-Dettaglio: `docs/architecture/ADR-0011-clean-public-repo-anonymize.md`.
+Anonymization mode for public repos: Gate 0b in the chain (auto-detect public remote →
+`anonymize` flag) + `clean-public-repo` skill (audit/remedy, fresh-history publish by default,
+surgical rewrite opt-in with backup+dry-run+HITL). Goal: quality + no auto-attribution of the
+tool; **never** falsify authors.
+Detail: `docs/architecture/ADR-0011-clean-public-repo-anonymize.md`.
 
-## Decisioni dal chain humanize-en (ADR-0015)
+## Decisions from the humanize-en chain (ADR-0015)
 
 English prose humanizer: skill `humanize-en` + hook regex `PostToolUse` (hint, zero-LLM)
-+ hook condizionale `UserPromptSubmit` (keyword detection EN prose, ~80 tok solo su match).
-Integrazione chain: Gate 0c (flag `humanize` post-anonimizzazione) + Gate 5.5 (humanize
-deliverable pre-commit) + commit Step 3.5 (humanize message su repo pubblici pre-HITL).
-Chat globale in EN (default) con preservazione terminologia Vibrofer IT.
-Dettaglio: `docs/architecture/ADR-0015-humanize-en-chain-integration.md`.
++ conditional `UserPromptSubmit` hook (keyword detection EN prose, ~80 tokens on match only).
+Chain integration: Gate 0c (flag `humanize` post-anonymization) + Gate 5.5 (humanize
+deliverable pre-commit) + commit Step 3.5 (humanize message on public repos pre-HITL).
+Global chat in EN (default) with preservation of Vibrofer IT terminology.
+Detail: `docs/architecture/ADR-0015-humanize-en-chain-integration.md`.
