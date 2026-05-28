@@ -1,234 +1,233 @@
-# ADR-0013 — Migrare la memoria cross-session degli agenti alla feature NATIVA `memory:` (supersede di ADR-0012, scope `local`)
+# ADR-0013 — Migrate cross-session agent memory to the NATIVE `memory:` feature (supersede ADR-0012, `local` scope)
 
-**Status:** Rejected after pilot — 2026-05-25. La migrazione era stata accettata (scope `local`, Write/Edit su reviewer OK) e la Fase 1 abilitata in coesistenza, ma il **pilota è fallito**: dispatch architect con `memory: local` → la dir nativa `.claude/agent-memory-local/architect/` è rimasta INVARIATA mentre l'agente ha editato autonomamente l'auto-memory curata (`reference_cc-capabilities-research-2026-05.md`), FUORI dalla sua write-scope. Il broad-Write auto-abilitato da `memory:` ha materializzato il downside degli assi 4-5 di questo ADR. Il pilot-gate (precondizione bloccante) NON è passato → **ADR-0012 resta il meccanismo attivo** (mediazione orchestratore, sub-agent senza Write su memoria). `memory: local` rimosso dai 3 agenti, dir seedate ripulite (dati intatti nello store centrale). Caveat: 1 run, possibili confounder (prompt + Sonnet + file tematico scopribile), ma il rischio è strutturale.
+**Status:** Rejected after pilot — 2026-05-25. The migration had been accepted (scope `local`, Write/Edit on reviewer OK) and Phase 1 enabled in coexistence, but the **pilot failed**: architect dispatch with `memory: local` -> the native dir `.claude/agent-memory-local/architect/` remained UNCHANGED while the agent autonomously edited the curated auto-memory (`reference_cc-capabilities-research-2026-05.md`), OUTSIDE its write-scope. The broad-Write auto-enabled by `memory:` materialized the downside of axes 4-5 of this ADR. The pilot-gate (blocking precondition) did NOT pass -> **ADR-0012 remains the active mechanism** (orchestrator mediation, sub-agents without Write on memory). `memory: local` removed from the 3 agents, seeded dirs cleaned (data intact in the central store). Caveat: 1 run, possible confounders (prompt + Sonnet + discoverable thematic file), but the risk is structural.
 
-**Deciders:** architect (dispatch orchestrator), Stefano Ferri (approvazione finale)
+**Deciders:** architect (dispatch orchestrator), Stefano Ferri (final approval)
 
 **Related:** ADR-0012 (`docs/architecture/ADR-0012-agent-memory-orchestrator-mediated.md` +
-`-implementation-plan.md` — la soluzione B-mediata oggi deployata, che questo ADR propone di
-supersedeare); ADR-0004 (`docs/architecture/ADR-0004-pre-flight-pattern-enforce-hook.md` —
-fonte della fragilità dell'encoding project-dir che il nativo elimina internamente); ADR-0001
-(`docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` — il contratto
-`DURABLE NOTES:` mediato ne riusava il pattern report-strutturato, che il nativo rende
-superfluo); ADR-0003 (`docs/architecture/ADR-0003-concept-to-code-chain.md` — il chain in cui
-il contratto mediato è innestato, da semplificare); ADR-0005
-(`docs/architecture/ADR-0005-vibe-status-skill.md` — la Section 7b read-only va ri-puntata);
-ADR-0011 (`docs/architecture/ADR-0011-clean-public-repo-anonymize.md` — vincolo "fuori dal
-tracked tree", che il nativo soddisfa solo con lo scope giusto).
+`-implementation-plan.md` — the B-mediated solution deployed today, which this ADR proposes to
+supersede); ADR-0004 (`docs/architecture/ADR-0004-pre-flight-pattern-enforce-hook.md` — source
+of the project-dir encoding fragility that the native eliminates internally); ADR-0001
+(`docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` — the mediated `DURABLE
+NOTES:` contract reused its structured-report pattern, which the native makes superfluous);
+ADR-0003 (`docs/architecture/ADR-0003-concept-to-code-chain.md` — the chain where the mediated
+contract is inserted, to simplify); ADR-0005
+(`docs/architecture/ADR-0005-vibe-status-skill.md` — the Section 7b read-only to re-point);
+ADR-0011 (`docs/architecture/ADR-0011-clean-public-repo-anonymize.md` — constraint "outside the
+tracked tree", which the native satisfies only with the right scope).
 
 ---
 
 ## Context
 
-### Cosa è cambiato dopo ADR-0012
+### What changed after ADR-0012
 
-ADR-0012 è stato **Accepted e deployato il 2026-05-25** (opzione B-mediata): la memoria
-cross-session di `architect`/`debugger`/`reviewer` è stata spostata da `docs/agent-notes/<agente>.md`
-(dentro il tree di progetto) allo store centrale `~/.claude/projects/<encoded>/memory/agent-notes/<agente>.md`,
-con accesso **mediato dall'orchestratore**: inject del blocco `PRIOR AGENT NOTES` nel brief,
-harvest del blocco terminale `DURABLE NOTES:` dal report via helper
-`~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh`. I sub-agent **non** toccano
-mai memoria né risolvono il path encoded. Lo stato live è **verde** (verificato 2026-05-25):
-helper presente, store popolato (`architect.md` ~25KB, `debugger.md` ~7KB, README), nessun
-agente usa il campo nativo; harness round-trip 7/7, concept-to-code 25, review-triage-fix 62,
-vibe-status 12.
+ADR-0012 was **Accepted and deployed on 2026-05-25** (B-mediated option): the cross-session
+memory of `architect`/`debugger`/`reviewer` was moved from `docs/agent-notes/<agent>.md`
+(inside the project tree) to the central store
+`~/.claude/projects/<encoded>/memory/agent-notes/<agent>.md`, with access **mediated by the
+orchestrator**: injection of the `PRIOR AGENT NOTES` block in the brief, harvest of the
+terminal `DURABLE NOTES:` block from the report via helper
+`~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh`. Sub-agents **never** touch
+memory or resolve the encoded path. The live state is **green** (verified 2026-05-25): helper
+present, store populated (`architect.md` ~25KB, `debugger.md` ~7KB, README), no agent uses the
+native field; round-trip harness 7/7, concept-to-code 25, review-triage-fix 62, vibe-status 12.
 
-La ricerca del 2026-05-25 sui doc ufficiali (memory `reference_cc-capabilities-research-2026-05.md`)
-ha poi scoperto che **Claude Code ha una feature NATIVA** che copre lo stesso bisogno. ADR-0012
-stesso prevedeva una **clausola di rivalutazione** (scelta 5) verso alternative più semplici se
-le assunzioni non reggevano: questo ADR la esercita non per fallimento operativo, ma perché è
-emersa una via più semplice e più robusta che B-mediata aveva dovuto costruire a mano in assenza
-di supporto nativo.
+Research on 2026-05-25 of the official docs (memory `reference_cc-capabilities-research-2026-05.md`)
+then discovered that **Claude Code has a NATIVE feature** that covers the same need. ADR-0012
+itself foresaw a **re-evaluation clause** (choice 5) towards simpler alternatives if the
+assumptions did not hold: this ADR exercises it — not because of an operational failure, but
+because a simpler and more robust path than B-mediated has emerged, which B-mediated had to build
+by hand in the absence of native support.
 
-### Fatti VERIFICATI sulla feature nativa (fonte: `code.claude.com/docs/en/sub-agents`, sezione "Enable persistent memory", letta 2026-05-25)
+### VERIFIED facts about the native feature (source: `code.claude.com/docs/en/sub-agents`, section "Enable persistent memory", read 2026-05-25)
 
-Citazioni verificate alla riga indicata del doc ufficiale:
+Cited verbatim from the indicated line of the official doc:
 
-- **Campo frontmatter** `memory: user | project | local` (riga 277 "Persistent memory scope …
-  Enables cross-session learning"; riga 433 "The `memory` field gives the subagent a persistent
+- **Frontmatter field** `memory: user | project | local` (line 277 "Persistent memory scope …
+  Enables cross-session learning"; line 433 "The `memory` field gives the subagent a persistent
   directory that survives across conversations").
-- **Storage per scope** (righe 452-454, tabella verbatim):
-  - `user` → `~/.claude/agent-memory/<name-of-agent>/` — "remember learnings across all projects";
-  - `project` → `.claude/agent-memory/<name-of-agent>/` — "project-specific and **shareable via
+- **Storage per scope** (lines 452-454, verbatim table):
+  - `user` -> `~/.claude/agent-memory/<name-of-agent>/` — "remember learnings across all projects";
+  - `project` -> `.claude/agent-memory/<name-of-agent>/` — "project-specific and **shareable via
     version control**";
-  - `local` → `.claude/agent-memory-local/<name-of-agent>/` — "project-specific but **should not
+  - `local` -> `.claude/agent-memory-local/<name-of-agent>/` — "project-specific but **should not
     be checked into version control**".
-- **Quando attivo** (righe 456-460, verbatim):
-  - il system prompt del sub-agent include istruzioni read/write per la dir di memoria;
-  - include i **primi 200 righe o 25KB** di `MEMORY.md` di quella dir (il minore dei due), con
-    istruzioni a curarlo se eccede il limite;
-  - **Read, Write, Edit sono auto-abilitati** "so the subagent can manage its memory files".
-- **Chi gestisce la memoria:** il **sub-agent stesso** ("update your agent memory…", riga 444;
-  "manage its memory files", riga 460; tip 465-470 "consult its memory before starting / save
-  what you learned"). Il path encoded è **risolto internamente** da Claude Code: lo scope nominale
-  (`user`/`project`/`local`) mappa al path senza che noi facciamo `tr '/' '-'`.
-- `memory` è confermato nei **supported frontmatter fields** e nel JSON `--agents` (riga 225) →
-  è una feature di prima classe, documentata, non gated.
+- **When active** (lines 456-460, verbatim):
+  - the sub-agent system prompt includes read/write instructions for the memory dir;
+  - includes the **first 200 lines or 25KB** of `MEMORY.md` of that dir (whichever is less), with
+    instructions to curate it if it exceeds the limit;
+  - **Read, Write, Edit are auto-enabled** "so the subagent can manage its memory files".
+- **Who manages the memory:** the **sub-agent itself** ("update your agent memory…", line 444;
+  "manage its memory files", line 460; tip 465-470 "consult its memory before starting / save what
+  you learned"). The encoded path is **resolved internally** by Claude Code: the nominal scope
+  (`user`/`project`/`local`) maps to the path without us doing `tr '/' '-'`.
+- `memory` confirmed in **supported frontmatter fields** and in the JSON `--agents` (line 225) ->
+  it is a first-class feature, documented, not gated.
 
-### Il legame con la lezione di ADR-0004 / ADR-0009 (PRIOR NOTE di questo task)
+### The connection to the lesson of ADR-0004 / ADR-0009 (PRIOR NOTE of this task)
 
-La PRIOR NOTE è centrale: ADR-0004 (v1.0/v1.1) è costato due fix proprio perché derivava la
-project-dir encoded a mano (`_`→`-`, `cwd` ri-encodato ≠ path reale). B-mediata di ADR-0012 ha
-**aggirato** quella trappola confinando l'encoding al solo orchestratore — ma l'encoding fragile
-**resta** nel sistema: l'helper `agent-notes-harvest.sh` (righe 43-44) e `vibe-status/aggregate.sh`
-(Section 7/7b) usano ancora `printf '%s' "$PWD" | tr '/' '-'`. Lo stesso commento nell'helper lo
-ammette ("the same fragile pattern noted in feedback_pretooluse-payload-schema; acceptable HERE…").
-Il nativo **elimina** quella derivazione, non la confina: è esattamente l'applicazione della regola
-"preferisci input diretto/risoluzione nativa all'encoding derivato quando sufficiente".
+The PRIOR NOTE is central: ADR-0004 (v1.0/v1.1) cost two fixes precisely because it derived the
+encoded project-dir by hand (`_`->`-`, `cwd` re-encoded != real path). B-mediated of ADR-0012
+**worked around** that trap by confining encoding to the sole orchestrator — but the fragile
+encoding **persists** in the system: the helper `agent-notes-harvest.sh` (lines 43-44) and
+`vibe-status/aggregate.sh` (Section 7/7b) still use `printf '%s' "$PWD" | tr '/' '-'`. The
+comment in the helper itself acknowledges it ("the same fragile pattern noted in
+feedback_pretooluse-payload-schema; acceptable HERE…"). The native **eliminates** that derivation,
+does not confine it: it is exactly the application of the rule "prefer direct input/native
+resolution over derived encoding when sufficient".
 
-### La regola guida
+### The guiding rule
 
-"Building Effective Agents" (Anthropic) e i best-practice ufficiali (confermati al ~85% allineati,
-stessa ricerca): **non aggiungere complessità finché il semplice non basta**. ADR-0012 si
-giustificava esplicitamente solo perché *non* esisteva supporto nativo e il sistema aveva già
-l'infrastruttura per estendere il pattern. Quel presupposto è caduto: ora il semplice (un campo
-frontmatter) basta.
+"Building Effective Agents" (Anthropic) and official best-practices (confirmed at ~85% aligned,
+same research): **do not add complexity until the simple is enough**. ADR-0012 was explicitly
+justified only because *no* native support existed and the system already had the infrastructure
+to extend the pattern. That premise has fallen: now the simple (a frontmatter field) is enough.
 
-### Assunzioni esplicite (NON validate)
+### Explicit assumptions (NOT validated)
 
-- Si assume che il comportamento documentato del nativo sia stabile nella versione di Claude Code
-  in uso da Stefano. Non è stato eseguito un test live del campo `memory:` su questo ambiente
-  (nessun agente lo usa oggi — grep `^memory:` su `~/.claude/agents/*.md` = vuoto). **Va validato
-  in pilota** prima di rimuovere l'infrastruttura mediata (vedi piano di smontaggio, fase ordinata).
-- Si assume che la memoria degli agenti **abbia ancora valore** (stessa assunzione di ADR-0012):
-  se in pilota emergesse che non producono note utili, l'opzione semplice diventa "non abilitare
-  `memory:` affatto" (= Alternativa C di ADR-0012, qui ribadita come fallback).
-- Si assume che lo scope `local` produca la dir `.claude/agent-memory-local/<agente>/` **dentro il
-  cwd del progetto target** (working tree del progetto su cui l'agente lavora), non dentro `~/.claude`.
-  È la lettura diretta del doc ("project-specific"); va confermata in pilota perché determina la
-  scelta di scope (vedi asse 3).
+- It is assumed that the documented behavior of the native is stable in the Claude Code version
+  in use by Stefano. No live test of the `memory:` field has been run on this environment (no
+  agent uses it today — grep `^memory:` on `~/.claude/agents/*.md` = empty). **It must be
+  validated in a pilot** before removing the mediated infrastructure (see teardown plan, ordered
+  phase).
+- It is assumed that agent memory **still has value** (same assumption as ADR-0012): if in the
+  pilot it emerged that agents produce no useful notes, the simple option becomes "do not enable
+  `memory:` at all" (= Alternative C of ADR-0012, reiterated here as fallback).
+- It is assumed that `local` scope produces the dir `.claude/agent-memory-local/<agent>/`
+  **inside the cwd of the target project** (working tree of the project the agent is working on),
+  not inside `~/.claude`. It is the direct reading of the doc ("project-specific"); to be
+  confirmed in pilot because it determines the scope choice (see axis 3).
 
 ---
 
 ## Decision
 
-Adottare la **migrazione alla feature nativa `memory:`** per i 3 agenti con memoria, con scope
-**`local`** (`.claude/agent-memory-local/<agente>/`, NON checked-in), e **supersedeare ADR-0012**
-(smontaggio dell'infrastruttura mediata: helper, inject/harvest nei due SKILL.md, contratto
-`DURABLE NOTES:`/`PRIOR AGENT NOTES` nelle 3 definizioni agente). La migrazione avviene **dopo**
-una validazione pilota del nativo, con un periodo in cui i dati esistenti restano disponibili.
+Adopt the **migration to the native `memory:` feature** for the 3 agents with memory, with scope
+**`local`** (`.claude/agent-memory-local/<agent>/`, NOT checked-in), and **supersede ADR-0012**
+(teardown of the mediated infrastructure: helper, inject/harvest in the two SKILL.md, `DURABLE
+NOTES:`/`PRIOR AGENT NOTES` contract in the 3 agent definitions). The migration happens **after**
+a native pilot validation, with a period in which existing data remains available.
 
-### Sintesi (<10 righe)
+### Summary (<10 lines)
 
-Il nativo fa ciò che B-mediata costruiva a mano, con **zero nostro codice** e **risolvendo il
-path encoded internamente** (elimina la trappola di ADR-0004, non la confina). Lo scope `local`
-non sporca il tracked tree (vincolo originario di ADR-0012, e di ADR-0011) perché non è
-checked-in. Il prezzo — auto-abilitazione di Write/Edit anche su `reviewer` (read-only) e perdita
-del controllo HITL dell'orchestratore su cosa entra in memoria — è **accettabile**: la scrittura è
-confinata alla dir di memoria dell'agente, non al codice di progetto, e le note degli agenti sono
-scaffolding di sessione, non un artefatto che richiede gate umano. Si applica la regola "preferisci
-il nativo, non aggiungere complessità finché il semplice non basta".
+The native does what B-mediated built by hand, with **zero our code** and **resolving the encoded
+path internally** (eliminates the ADR-0004 trap, does not confine it). The `local` scope does not
+dirty the tracked tree (original constraint of ADR-0012, and ADR-0011) because it is not
+checked-in. The price — auto-enablement of Write/Edit even on `reviewer` (read-only) and loss of
+orchestrator HITL control over what enters memory — is **acceptable**: writing is confined to the
+agent's memory dir, not to project code, and agent notes are session scaffolding, not an artifact
+that requires a human gate. The rule "prefer native, do not add complexity until the simple is
+enough" applies.
 
 ### D1 — Scope: `local`
 
-Usare **`memory: local`** (`.claude/agent-memory-local/<agente>/`). Razionale per asse 3 (tree
-pollution, problema originario di ADR-0012):
+Use **`memory: local`** (`.claude/agent-memory-local/<agent>/`). Rationale per axis 3 (tree
+pollution, original problem of ADR-0012):
 
-- `project` → `.claude/agent-memory/<agente>/` **checked-in**: re-introdurrebbe esattamente il
-  conflitto che ADR-0012 ha risolto (file di scaffolding nel tracked tree, in tensione con
-  ADR-0011). **Escluso.**
-- `user` → `~/.claude/agent-memory/<agente>/`: fuori da ogni tree, mai committato. Ma è
-  **cross-progetto**: le note di un debugger su un progetto si mescolerebbero con quelle di un
-  altro. Per agenti che imparano pattern *specifici di un progetto* (un bug ricorrente in QUEL
-  codebase) è semanticamente sbagliato. Resta valido per pattern davvero universali (vedi punti
-  aperti).
-- `local` → `.claude/agent-memory-local/<agente>/`: **non checked-in** (no tree pollution) **e**
-  per-progetto (semantica corretta della memoria agente). È il default raccomandato per questo
-  caso. Richiede una riga `.claude/agent-memory-local/` nel `.gitignore` del progetto target solo
-  se il progetto traccia `.claude/` — da verificare in pilota; il doc dice esplicitamente
-  "should not be checked into version control", quindi Claude Code lo intende come non-tracciato
-  per design.
+- `project` -> `.claude/agent-memory/<agent>/` **checked-in**: would re-introduce exactly the
+  conflict that ADR-0012 resolved (scaffolding files in the tracked tree, in tension with
+  ADR-0011). **Excluded.**
+- `user` -> `~/.claude/agent-memory/<agent>/`: outside any tree, never committed. But
+  **cross-project**: notes from a debugger on one project would mix with those from another.
+  For agents that learn patterns *specific to a project* (a recurring bug in THAT codebase) it
+  is semantically wrong. Remains valid for truly universal patterns (see open points).
+- `local` -> `.claude/agent-memory-local/<agent>/`: **not checked-in** (no tree pollution) **and**
+  per-project (correct semantics of agent memory). It is the recommended default for this case.
+  Requires a line `.claude/agent-memory-local/` in the `.gitignore` of the target project only
+  if the project tracks `.claude/` — to verify in pilot; the doc explicitly says "should not be
+  checked into version control", so Claude Code intends it as non-tracked by design.
 
-### D2 — Abilitare `memory: local` sulle 3 definizioni agente
+### D2 — Enable `memory: local` on the 3 agent definitions
 
-In `~/.claude/agents/{architect,debugger,reviewer}.md` aggiungere al frontmatter `memory: local`
-e, nel corpo, una breve istruzione proattiva di consultare/aggiornare la propria memoria (pattern
-doc righe 465-470), specifica per il ruolo:
+In `~/.claude/agents/{architect,debugger,reviewer}.md` add to the frontmatter `memory: local`
+and, in the body, a brief proactive instruction to consult/update their own memory (doc pattern
+lines 465-470), specific per role:
 
-- `architect`: "consulta la tua memoria per decisioni/pattern architetturali passati su questo
-  progetto prima di progettare; aggiornala con decisioni durevoli a fine task".
-- `debugger`: "consulta la tua memoria per bug-pattern già visti; salva il pattern + risoluzione a
-  fine fix".
-- `reviewer`: "consulta la tua memoria per pattern ricorrenti; annota nuovi pattern osservati".
+- `architect`: "Consult your memory for past architectural decisions/patterns on this project
+  before designing; update it with durable decisions at end of task."
+- `debugger`: "Consult your memory for already-seen bug patterns; save the pattern + resolution
+  at end of fix."
+- `reviewer`: "Consult your memory for recurring patterns; note newly observed patterns."
 
-Read/Write/Edit vengono auto-abilitati dal nativo per la sola gestione di quella dir (vedi asse 4).
+Read/Write/Edit are auto-enabled by the native for management of that dir only (see axis 4).
 
-### D3 — Smontare l'infrastruttura mediata di ADR-0012 (REMOVE)
+### D3 — Tear down the mediated infrastructure of ADR-0012 (REMOVE)
 
-Dopo validazione pilota (D6), rimuovere ciò che B-mediata aveva montato:
+After pilot validation (D6), remove what B-mediated had set up:
 
-1. Dalle 3 definizioni agente: il blocco `PRIOR AGENT NOTES` (factor-in) e la sezione terminale
-   `DURABLE NOTES:` (Output Format) introdotti da ADR-0012 Task 3/4 → sostituiti dall'istruzione
-   nativa D2. (Il vecchio `docs/agent-notes/` era già stato rimosso da ADR-0012 Task 5; **non**
-   re-introdurlo.)
-2. Dal chain `concept-to-code/SKILL.md` (Step 2): inject `PRIOR AGENT NOTES` + harvest
-   `DURABLE NOTES:` per l'architect (Task 6 di ADR-0012). Il dispatch torna a passare il solo
-   brief; la nota §6 va aggiornata.
-3. Da `review-triage-fix/SKILL.md`: inject/harvest per reviewer e debugger (Task 7 di ADR-0012).
-4. L'helper `~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh` → **eliminazione**
-   (HITL gate: rimozione permanente; backup prima).
-5. L'harness round-trip `agent-notes-roundtrip.sh` → eliminazione (testa un contratto che non
-   esiste più; HITL gate).
-6. `vibe-status` Section 7b: ri-puntarla da `~/.claude/projects/<encoded>/memory/agent-notes/` a
-   `.claude/agent-memory-local/<agente>/` del progetto corrente (o rimuoverla, vedi punto aperto)
-   — read-only, non bloccante; oppure rimuovere del tutto il `tr '/' '-'` di quel segnale.
-7. `claude-md-generator` (Task 8 di ADR-0012, riga di guard): se aggiunta, l'aggiornamento diventa
-   "non generare regole che vietino `.claude/agent-memory-local/` nel tree" — ma con scope `local`
-   non-checked-in il rischio è minore; valutare se la guard serve ancora.
+1. From the 3 agent definitions: the `PRIOR AGENT NOTES` block (factor-in) and the terminal
+   `DURABLE NOTES:` section (Output Format) introduced by ADR-0012 Tasks 3/4 -> replaced by the
+   native instruction D2. (The old `docs/agent-notes/` had already been removed by ADR-0012
+   Task 5; **do not** re-introduce it.)
+2. From the `concept-to-code/SKILL.md` chain (Step 2): inject `PRIOR AGENT NOTES` + harvest
+   `DURABLE NOTES:` for the architect (ADR-0012 Task 6). Dispatch returns to passing only the
+   brief; the §6 note must be updated.
+3. From `review-triage-fix/SKILL.md`: inject/harvest for reviewer and debugger (ADR-0012 Task 7).
+4. The helper `~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh` -> **deletion**
+   (HITL gate: permanent removal; backup before).
+5. The round-trip harness `agent-notes-roundtrip.sh` -> deletion (tests a contract that no longer
+   exists; HITL gate).
+6. `vibe-status` Section 7b: re-point it from `~/.claude/projects/<encoded>/memory/agent-notes/`
+   to `.claude/agent-memory-local/<agent>/` of the current project (or remove it entirely, see
+   open point) — read-only, non-blocking; or remove the `tr '/' '-'` of that signal entirely.
+7. `claude-md-generator` (ADR-0012 Task 8 guard line): if added, the update becomes "do not
+   generate rules that prohibit `.claude/agent-memory-local/` in the tree" — but with non-checked-in
+   `local` scope the risk is minor; evaluate if the guard is still needed.
 
-### D4 — Migrazione dei dati esistenti
+### D4 — Existing data migration
 
-I dati storici vivono in `~/.claude/projects/<encoded>/memory/agent-notes/{architect.md,debugger.md}`
-(migrati da ADR-0012 Task 2). Opzioni, in ordine di preferenza:
+Historical data lives in `~/.claude/projects/<encoded>/memory/agent-notes/{architect.md,debugger.md}`
+(migrated by ADR-0012 Task 2). Options, in order of preference:
 
-- **Seed dei `MEMORY.md` nativi:** copiare il contenuto di `architect.md`/`debugger.md` come
-  `MEMORY.md` iniziale nelle rispettive dir native `.claude/agent-memory-local/<agente>/MEMORY.md`
-  del progetto pilota. Attenzione: il nativo carica solo i primi 200 righe/25KB — `architect.md`
-  è ~25KB → va **potato/curato** al seed (il nativo stesso istruisce a curare `MEMORY.md` se
-  eccede). Questa è additiva: copia, non sposta.
-- I file sorgente nello store centrale **restano** finché il pilota non conferma (rollback
-  garantito). La loro eventuale rimozione è un task separato con HITL gate, post-pilota.
+- **Seed native `MEMORY.md`:** copy the content of `architect.md`/`debugger.md` as initial
+  `MEMORY.md` in the respective native dirs `.claude/agent-memory-local/<agent>/MEMORY.md` of the
+  pilot project. Note: the native loads only the first 200 lines/25KB — `architect.md` is ~25KB ->
+  must be **pruned/curated** at seed (the native itself instructs to curate `MEMORY.md` if it
+  exceeds). This is additive: copy, not move.
+- Source files in the central store **remain** until the pilot confirms (rollback guaranteed). Their
+  eventual removal is a separate task with HITL gate, post-pilot.
 
-Nota: la memoria di `architect`/`debugger` è per-progetto-blueprint; con scope `local` la dir nativa
-è dentro il progetto su cui l'agente lavora di volta in volta. Il seed ha senso solo per i progetti
-dove quella memoria storica è rilevante (qui: il repo `vibe-coding-system` stesso, se è quello su
-cui gli agenti operano). Per progetti nuovi, la memoria nativa parte vuota — comportamento corretto.
+Note: `architect`/`debugger` memory is per-blueprint-project; with `local` scope the native dir
+is inside the project the agent works on each time. The seed makes sense only for projects where
+that historical memory is relevant (here: the `vibe-coding-system` repo itself, if that's what
+agents operate on). For new projects, native memory starts empty — correct behavior.
 
-### D5 — Ordine sicuro dello smontaggio (non perdere dati, non rompere a metà)
+### D5 — Safe teardown order (no data loss, no broken mid-way)
 
-1. **Pilota del nativo** (D6) su un progetto, con `memory: local` abilitato sui 3 agenti **e**
-   l'infrastruttura mediata ancora in piedi (i due meccanismi coesistono temporaneamente:
-   ridondanza tollerata, nessuna perdita).
-2. **Verifica:** il sub-agent legge e scrive la sua dir nativa; i dati seedati sono consultati;
-   nessun file finisce nel tracked tree (scope `local`).
-3. Solo a pilota verde: **smontare** l'infrastruttura mediata (D3) — prima i dispatcher (chain +
-   review-triage-fix), poi le definizioni agente (rimuovere il contratto `DURABLE NOTES:`), poi
-   helper/harness (HITL gate sulle eliminazioni).
-4. **Ultimo:** decidere il destino dei dati nello store centrale `memory/agent-notes/` (mantenere
-   come archivio storico o rimuovere — HITL gate). Non rimuovere prima del seed verificato (D4).
+1. **Native pilot** (D6) on a project, with `memory: local` enabled on the 3 agents **and** the
+   mediated infrastructure still in place (the two mechanisms temporarily coexist: redundancy
+   tolerated, no loss).
+2. **Verification:** the sub-agent reads and writes its native dir; seeded data is consulted;
+   no file ends up in the tracked tree (scope `local`).
+3. Only at green pilot: **tear down** the mediated infrastructure (D3) — first the dispatchers
+   (chain + review-triage-fix), then agent definitions (remove `DURABLE NOTES:` contract), then
+   helper/harness (HITL gate on deletions).
+4. **Last:** decide the fate of data in the central store `memory/agent-notes/` (keep as
+   historical archive or remove — HITL gate). Do not remove before the verified seed (D4).
 
-### D6 — Pilota e presidio
+### D6 — Pilot and watch
 
-Il rischio non testabile headless di ADR-0012 era "l'orchestratore dimentica l'harvest". Il nativo
-**elimina** quel rischio (nessun harvest manuale: l'agente scrive da sé). Il nuovo rischio da
-validare in pilota è opposto e più benigno: **l'agente non aggiorna** la sua memoria (omette la
-scrittura) — degrada a "memoria vuota", non a corruzione né a leak nel tree. Mitigazione:
-istruzione proattiva nel corpo dell'agente (D2). Pilota: un ciclo reale (un dispatch architect + un
-ciclo review-triage-fix) su un progetto, verificando che `.claude/agent-memory-local/<agente>/MEMORY.md`
-venga creato/aggiornato e NON appaia in `git status` del progetto.
+The non-headless-testable risk of ADR-0012 was "orchestrator forgets the harvest". The native
+**eliminates** that risk (no manual harvest: the agent writes by itself). The new risk to validate
+in pilot is the opposite and more benign: **the agent does not update** its memory (omits
+writing) — degrades to "empty memory", not to corruption or leak into the tree. Mitigation:
+proactive instruction in the agent body (D2). Pilot: a real cycle (an architect dispatch + a
+review-triage-fix cycle) on a project, verifying that `.claude/agent-memory-local/<agent>/MEMORY.md`
+is created/updated and does NOT appear in `git status` of the project.
 
-### Punti che richiedono decisione di Stefano (pending — Status: Proposed)
+### Points requiring Stefano's decision (pending — Status: Proposed)
 
-1. **Scope `local` vs `user`.** Raccomando `local` (per-progetto, no tree pollution). `user` solo
-   se Stefano vuole memoria cross-progetto condivisa (semantica diversa). **Decisione.**
-2. **Auto-abilitazione Write/Edit su `reviewer`** (oggi read-only by design): accettabile dato che
-   è confinata alla dir di memoria? Raccomando sì (asse 4). **Conferma o veto.**
-3. **Destino dei dati storici** in `memory/agent-notes/` dopo il seed: archiviare o rimuovere
-   (HITL gate). **Decisione post-pilota.**
-4. **Eliminazione di helper + harness** (`agent-notes-harvest.sh`, `agent-notes-roundtrip.sh`):
-   eliminazione permanente, **HITL gate**, backup prima. **Conferma.**
-5. **Seed della memoria nativa** dell'architect dai ~25KB storici (va potato a ≤25KB/200 righe):
-   farlo o partire puliti? **Decisione.**
+1. **Scope `local` vs `user`.** Recommended: `local` (per-project, no tree pollution). `user` only
+   if Stefano wants cross-project shared memory (different semantics). **Decision.**
+2. **Auto-enablement of Write/Edit on `reviewer`** (today read-only by design): acceptable given
+   it is confined to the memory dir? Recommended: yes (axis 4). **Confirm or veto.**
+3. **Fate of historical data** in `memory/agent-notes/` after the seed: archive or remove (HITL
+   gate). **Post-pilot decision.**
+4. **Deletion of helper + harness** (`agent-notes-harvest.sh`, `agent-notes-roundtrip.sh`):
+   permanent deletion, **HITL gate**, backup before. **Confirm.**
+5. **Seed of native architect memory** from the ~25KB historical data (must be pruned to
+   <=25KB/200 lines): do it or start clean? **Decision.**
 
 ---
 
@@ -236,150 +235,152 @@ venga creato/aggiornato e NON appaia in `git status` del progetto.
 
 ### Positive
 
-- **Zero codice nostro da mantenere.** Spariscono l'helper `agent-notes-harvest.sh`, l'harness
-  round-trip, e il contratto inject/harvest nei due SKILL.md + nelle 3 definizioni agente. Meno
-  superficie, meno test, meno punti di rottura.
-- **Fragilità dell'encoding ELIMINATA (non confinata).** Il nativo risolve `local`/`user`/`project`
-  → path internamente: niente `tr '/' '-'` nostro né in fase di inject/harvest né (ri-puntando o
-  rimuovendo la Section 7b) in `vibe-status`. È l'applicazione diretta della PRIOR NOTE
+- **Zero our code to maintain.** The helper `agent-notes-harvest.sh`, the round-trip harness,
+  and the inject/harvest contract in the two SKILL.md + 3 agent definitions disappear. Less
+  surface, less tests, fewer failure points.
+- **Encoding fragility ELIMINATED (not confined).** The native resolves `local`/`user`/`project`
+  -> path internally: no our `tr '/' '-'` either at inject/harvest phase or (by re-pointing or
+  removing Section 7b) in `vibe-status`. It is the direct application of the PRIOR NOTE
   (ADR-0004/0009).
-- **Rischio-harvest azzerato.** Il rischio operativo TOP di ADR-0012 (orchestratore dimentica di
-  raccogliere → memoria persa in silenzio) sparisce: l'agente scrive da sé, non c'è passo
-  orchestratore da ricordare. Vale anche per i dispatch diretti fuori dal chain — dove B-mediata
-  era più debole.
-- **No tree pollution con scope `local`.** `.claude/agent-memory-local/` è non-checked-in by
-  design (doc): il vincolo originario di ADR-0012 e di ADR-0011 è soddisfatto senza store centrale.
-- **Feature di prima classe, basso rischio dipendenza.** A differenza del Workflow tool (gated,
-  thread chiuso), `memory:` è documentato nei supported frontmatter fields e nel JSON `--agents`.
-- **Pattern coerente coi best-practice ufficiali** ("subagent che accumula insight nella sua
-  memoria" è l'esempio del doc, riga 444) e con la regola "preferisci il nativo".
+- **Harvest risk zeroed.** The TOP operational risk of ADR-0012 (orchestrator forgets to collect
+  -> memory silently lost) disappears: the agent writes by itself, there is no orchestrator step
+  to remember. Valid also for direct dispatches outside the chain — where B-mediated was weaker.
+- **No tree pollution with `local` scope.** `.claude/agent-memory-local/` is not-checked-in by
+  design (doc): the original constraint of ADR-0012 and ADR-0011 is satisfied without central
+  store.
+- **First-class feature, low dependency risk.** Unlike the Workflow tool (gated, closed thread),
+  `memory:` is documented in supported frontmatter fields and in the JSON `--agents`.
+- **Pattern consistent with official best-practices** ("subagent accumulating insights in its
+  memory" is the doc example, line 444) and with the rule "prefer native".
 
 ### Negative
 
-- **Tool surface dei sub-agent allargata.** Read/Write/Edit auto-abilitati anche su `reviewer`
-  (oggi read-only). Confinati alla dir di memoria, ma è una concessione rispetto alla disciplina
-  di ADR-0012 (sub-agent vede solo testo in/out). Vedi asse 4: accettabile, non gratis.
-- **Perdita del controllo orchestratore/HITL su cosa entra in memoria.** B-mediata curava
-  l'harvest; il nativo è autonomia dell'agente. Per scaffolding di sessione è il trade-off giusto;
-  se la memoria contenesse mai dati sensibili sarebbe un problema (ma lo scope `local` non-checked-in
-  e il confinamento alla dir limitano l'esposizione).
-- **Costo di smontaggio + migrazione dati.** ADR-0012 è deployato e verde: smontarlo è lavoro reale
-  (rimuovere contratto, helper, harness; seedare/migrare i dati; ri-puntare vibe-status). Mitigato
-  dall'ordine sicuro (D5) e dalla coesistenza temporanea.
-- **Dipendenza dal comportamento nativo non ancora testato live** su questo ambiente: il pilota è
-  precondizione bloccante allo smontaggio.
+- **Expanded sub-agent tool surface.** Read/Write/Edit auto-enabled even on `reviewer` (today
+  read-only). Confined to the memory dir, but it is a concession relative to ADR-0012 discipline
+  (sub-agent sees only text in/out). See axis 4: acceptable, not free.
+- **Loss of orchestrator/HITL control over what enters memory.** B-mediated curated the harvest;
+  the native is agent autonomy. For session scaffolding it is the right trade-off; if memory
+  ever contained sensitive data it would be a problem (but `local` scope not-checked-in and
+  confinement to the dir limit exposure).
+- **Teardown + data migration cost.** ADR-0012 is deployed and green: tearing it down is real
+  work (remove contract, helper, harness; seed/migrate data; re-point vibe-status). Mitigated
+  by the safe order (D5) and temporary coexistence.
+- **Dependency on untested native behavior on this environment**: the pilot is a blocking
+  precondition to the teardown.
 
 ### Neutral
 
-- **Token cost:** sostanzialmente neutro/leggermente migliore. Il nativo carica ≤200 righe/25KB di
-  `MEMORY.md` nel system prompt dell'agente (caricamento mirato e cap-ato); B-mediata iniettava il
-  blocco `PRIOR AGENT NOTES` nel brief (l'`architect.md` storico è ~25KB → ordine di grandezza
-  simile). Il cap nativo a 25KB è di fatto una protezione che B-mediata non aveva (iniettava tutto).
-- **Reversibilità:** alta finché si tiene la coesistenza temporanea. Se il nativo deludesse in
-  pilota, si torna a B-mediata (ancora in piedi) senza perdita — o si ripiega su Alternativa C di
-  ADR-0012 (rimozione). I dati storici restano nello store centrale fino a conferma.
-- **`.bak` storico** (`refactorer.md.bak-2026-05-20`): invariato, come in ADR-0012.
-- **Repo `vibe-coding-system` NON-git:** il deliverable di questo ADR è il solo markdown. Lo
-  smontaggio degli artefatti live (definizioni agente, 2 SKILL.md, helper/harness, vibe-status) è
-  un **task separato** (plan, **senza commit step**), dopo approvazione e pilota.
+- **Token cost:** substantially neutral/slightly better. The native loads <=200 lines/25KB of
+  `MEMORY.md` in the agent system prompt (targeted and capped load); B-mediated injected the
+  `PRIOR AGENT NOTES` block in the brief (`architect.md` historical is ~25KB -> same order of
+  magnitude). The native 25KB cap is effectively a protection that B-mediated lacked (it injected
+  everything).
+- **Reversibility:** high while keeping temporary coexistence. If the native disappoints in the
+  pilot, we revert to B-mediated (still in place) without data loss — or fall back to ADR-0012
+  Alternative C (removal). Historical data remains in the central store until confirmed.
+- **Historical `.bak`** (`refactorer.md.bak-2026-05-20`): unchanged, as in ADR-0012.
+- **Repo `vibe-coding-system` NON-git:** the deliverable of this ADR is the sole markdown. The
+  teardown of live artifacts (agent definitions, 2 SKILL.md, helper/harness, vibe-status) is a
+  **separate task** (plan, **without commit step**), after approval and pilot.
 
 ---
 
 ## Alternatives considered
 
-### A — Tenere ADR-0012 (mediazione) così com'è, ignorare il nativo
+### A — Keep ADR-0012 (mediation) as is, ignore native
 
-**Rifiutata.** È la scelta a costo-di-cambiamento zero (nulla da smontare) e mantiene il controllo
-HITL dell'orchestratore. Ma: (1) **viola la regola guida** — manteniamo a mano (helper + contratto
-in 2 skill + 3 agenti + harness) ciò che una feature ufficiale fa con un campo frontmatter; (2)
-**conserva la fragilità dell'encoding** `tr '/' '-'` nell'helper e in vibe-status (la PRIOR NOTE
-dice esplicitamente di preferire la risoluzione nativa); (3) **conserva il rischio-harvest** TOP
-(orchestratore che dimentica di raccogliere, specie fuori dal chain). Il controllo HITL che B-mediata
-offre non serve davvero per scaffolding di sessione (asse 5): non è un artefatto che richiede
-approvazione umana su cosa entra. Mantenere complessità per un controllo non necessario è il caso
-esatto che la regola "non aggiungere complessità finché il semplice non basta" vieta.
+**Rejected.** Zero change cost (nothing to tear down) and preserves orchestrator HITL control.
+But: (1) **violates the guiding rule** — we maintain by hand (helper + contract in 2 skills + 3
+agents + harness) what an official feature does with a frontmatter field; (2) **preserves the
+encoding fragility** `tr '/' '-'` in the helper and in vibe-status (the PRIOR NOTE explicitly says
+to prefer native resolution); (3) **preserves the harvest risk** TOP (orchestrator that forgets to
+collect, especially outside the chain). The HITL control that B-mediated offers is not really
+needed for session scaffolding (axis 5): it is not an artifact that requires human approval over
+what enters. Maintaining complexity for an unnecessary control is the exact case the rule
+"do not add complexity until the simple is enough" prohibits.
 
-### B — Ibrido: nativo per la persistenza, ma orchestratore continua a curare/iniettare
+### B — Hybrid: native for persistence, but orchestrator still curates/injects
 
-**Rifiutata.** Si terrebbe il nativo per lo storage (path risolto da CC) ma l'orchestratore
-continuerebbe a iniettare/curare le note. **Incoerente:** il nativo carica già `MEMORY.md`
-nell'agente automaticamente — iniettarlo di nuovo nel brief è ridondanza pura (doppio caricamento,
-doppio token). E se l'orchestratore cura, servono comunque l'helper e il path encoded → non si
-elimina la fragilità né il codice. L'ibrido prende il costo di entrambi e il beneficio di nessuno.
-L'unica giustificazione sarebbe il controllo HITL sulla scrittura, già scartato in A come non
-necessario per scaffolding.
+**Rejected.** Would use the native for storage (path resolved by CC) but the orchestrator would
+continue to inject/curate notes. **Incoherent:** the native already loads `MEMORY.md` in the agent
+automatically — injecting it again in the brief is pure redundancy (double loading, double tokens).
+And if the orchestrator curates, the helper and encoded path are still needed -> does not eliminate
+the fragility or the code. The hybrid takes the cost of both and the benefit of neither. The only
+justification would be HITL control over writing, already dismissed in A as unnecessary for
+scaffolding.
 
-### C — Scope `project` (checked-in) invece di `local`
+### C — Scope `project` (checked-in) instead of `local`
 
-**Rifiutata.** `project` (`.claude/agent-memory/<agente>/`) è "shareable via version control":
-re-introdurrebbe **esattamente** il conflitto che ADR-0012 ha risolto (file di scaffolding nel
-tracked tree, esposti in pubblicazione, in tensione diretta con ADR-0011). Il driver originario di
-ADR-0012 era "no scaffolding nel tracked tree": sceglierlo ora sarebbe annullare quel risultato. Va
-escluso a meno che Stefano voglia deliberatamente versionare la memoria col progetto (improbabile,
-date le regole esistenti).
+**Rejected.** `project` (`.claude/agent-memory/<agent>/`) is "shareable via version control":
+would re-introduce **exactly** the conflict that ADR-0012 resolved (scaffolding files in the
+tracked tree, exposed in publication, in direct tension with ADR-0011). The original driver of
+ADR-0012 was "no scaffolding in the tracked tree": choosing it now would undo that result. To be
+excluded unless Stefano deliberately wants to version memory with the project (unlikely, given
+existing rules).
 
-### D — Scope `user` (cross-progetto) invece di `local`
+### D — Scope `user` (cross-project) instead of `local`
 
-**Rifiutata come default**, tenuta come opzione consapevole. `user` (`~/.claude/agent-memory/<agente>/`)
-è fuori da ogni tree (no pollution) — bene. Ma è **cross-progetto**: mescola le note di tutti i
-progetti in un'unica dir per agente. Per memoria *project-specific* (un bug-pattern di QUEL
-codebase, una decisione di QUEL sistema) è semanticamente errato e rumoroso. `local` dà la stessa
-assenza di pollution **e** l'isolamento per-progetto. `user` resta sensato solo per pattern
-davvero universali (es. una convenzione che vale ovunque) — punto aperto per Stefano.
+**Rejected as default**, retained as conscious option. `user` (`~/.claude/agent-memory/<agent>/`)
+is outside any tree (no pollution) — good. But it is **cross-project**: mixes notes from all
+projects in a single per-agent dir. For *project-specific* memory (a bug-pattern of THAT codebase,
+a decision of THAT system) it is semantically wrong and noisy. `local` gives the same absence of
+pollution **and** per-project isolation. `user` remains sensible only for truly universal patterns
+(e.g. a convention valid everywhere) — open point for Stefano.
 
-### E — Rimuovere del tutto la memoria agenti (= Alternativa C di ADR-0012)
+### E — Remove agent memory entirely (= Alternative C of ADR-0012)
 
-**Rifiutata oggi, ma è il fallback dichiarato.** È la più semplice in assoluto: nessun campo, nessun
-contratto. Si giustifica solo se il pilota mostrasse che gli agenti non producono note utili (stessa
-assunzione non validata di ADR-0012). Finché si assume che la memoria valga, il nativo la preserva a
-costo quasi-nullo, quindi rimuoverla butterebbe via valore. Se il pilota smentisse l'assunzione,
-questa diventa la scelta corretta — più semplice ancora del nativo.
+**Rejected today, but declared fallback.** The simplest of all: no field, no contract. Justified
+only if the pilot showed agents produce no useful notes (same unvalidated assumption of ADR-0012).
+As long as it is assumed memory has value, the native preserves it at near-zero cost, so removing
+it would throw away value. If the pilot refuted the assumption, this becomes the correct choice —
+even simpler than native.
 
-### Perché il nativo (scope `local`) nonostante il costo di smontaggio
+### Why native (`local` scope) despite teardown cost
 
-È l'unica opzione che **rispetta la regola guida** (sostituisce codice nostro con una feature
-ufficiale), **elimina** (non confina) la fragilità dell'encoding della PRIOR NOTE, **azzera** il
-rischio-harvest TOP di ADR-0012 anche fuori dal chain, e **mantiene** l'assenza di tree pollution
-(scope `local`). Il costo — tool surface allargata + perdita del controllo HITL orchestratore — è
-proporzionato e accettabile per *scaffolding di sessione* (non artefatti di prodotto). Il costo di
-smontaggio è una-tantum e protetto dall'ordine sicuro + coesistenza temporanea. ADR-0012 si
-giustificava "solo perché non esisteva il nativo": quel presupposto è caduto.
+It is the only option that **respects the guiding rule** (replaces our code with an official
+feature), **eliminates** (not confines) the encoding fragility of the PRIOR NOTE, **zeroes** the
+TOP harvest risk of ADR-0012 even outside the chain, and **maintains** the absence of tree
+pollution (`local` scope). The cost — expanded tool surface + loss of orchestrator HITL control —
+is proportionate and acceptable for *session scaffolding* (not product artifacts). The teardown
+cost is one-time and protected by the safe order + temporary coexistence. ADR-0012 was justified
+"only because the native did not exist": that premise has fallen.
 
 ---
 
 ## References
 
-- `code.claude.com/docs/en/sub-agents` — sezione "Enable persistent memory" (campo `memory:` riga
-  277/433; storage per scope righe 452-454; comportamento auto-abilitazione + caricamento MEMORY.md
-  righe 456-460; tip righe 465-470; `memory` nei supported fields + JSON `--agents` riga 225).
-  **Fonte primaria verificata 2026-05-25.**
+- `code.claude.com/docs/en/sub-agents` — section "Enable persistent memory" (`memory:` field line
+  277/433; storage per scope lines 452-454; behavior auto-enablement + MEMORY.md loading lines
+  456-460; tip lines 465-470; `memory` in supported fields + JSON `--agents` line 225).
+  **Primary source verified 2026-05-25.**
 - ADR-0012 — `docs/architecture/ADR-0012-agent-memory-orchestrator-mediated.md` +
-  `ADR-0012-implementation-plan.md` (la soluzione B-mediata deployata, superseded da questo ADR;
-  Task 1-10 = lista esatta di ciò che va smontato).
-- `~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh` — helper mediato da eliminare
-  (righe 43-44 = il `tr '/' '-'` fragile che il nativo rende superfluo).
-- `~/.claude/skills/concept-to-code/SKILL.md` (Step 2 inject/harvest architect) e
-  `~/.claude/skills/review-triage-fix/SKILL.md` (inject/harvest reviewer+debugger) — i due
-  dispatcher da semplificare.
-- `~/.claude/agents/{architect,debugger,reviewer}.md` — aggiungere `memory: local`; rimuovere il
-  contratto `PRIOR AGENT NOTES`/`DURABLE NOTES:`.
-- `~/.claude/skills/vibe-status/scripts/aggregate.sh` — Section 7b da ri-puntare/rimuovere
-  (elimina un altro `tr '/' '-'`).
-- Store dati storici: `~/.claude/projects/-Users-stefanoferri-Developer-vibe-coding-system/memory/agent-notes/{architect.md,debugger.md}`
-  — da seedare nella memoria nativa, poi destino post-pilota (HITL gate).
-- ADR-0004 — `docs/architecture/ADR-0004-pre-flight-pattern-enforce-hook.md` e
-  `feedback_pretooluse-payload-schema` (la fragilità encoding `_`→`-`/`cwd` che il nativo elimina).
-- ADR-0009 — `docs/architecture/ADR-0009-db-backup-guardrail.md` (la PRIOR NOTE "preferisci input
-  diretto/risoluzione nativa all'encoding derivato quando sufficiente").
-- ADR-0011 — `docs/architecture/ADR-0011-clean-public-repo-anonymize.md` (vincolo "fuori dal
-  tracked tree": soddisfatto da scope `local` non-checked-in; scope `project` lo violerebbe).
-- Memoria `reference_cc-capabilities-research-2026-05.md` (headline: il nativo overlappa ADR-0012)
-  e `adr0012-agent-memory-mediated.md` (stato deploy + clausola di rivalutazione scelta 5).
+  `ADR-0012-implementation-plan.md` (the B-mediated solution deployed, superseded by this ADR;
+  Tasks 1-10 = exact list of what to tear down).
+- `~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh` — mediated helper to delete
+  (lines 43-44 = the fragile `tr '/' '-'` that the native makes superfluous).
+- `~/.claude/skills/concept-to-code/SKILL.md` (Step 2 architect inject/harvest) and
+  `~/.claude/skills/review-triage-fix/SKILL.md` (reviewer+debugger inject/harvest) — the two
+  dispatchers to simplify.
+- `~/.claude/agents/{architect,debugger,reviewer}.md` — add `memory: local`; remove
+  `PRIOR AGENT NOTES`/`DURABLE NOTES:` contract.
+- `~/.claude/skills/vibe-status/scripts/aggregate.sh` — Section 7b to re-point/remove
+  (eliminates another `tr '/' '-'`).
+- Historical data store: `~/.claude/projects/-Users-stefanoferri-Developer-vibe-coding-system/memory/agent-notes/{architect.md,debugger.md}`
+  — to seed into native memory, then post-pilot fate (HITL gate).
+- ADR-0004 — `docs/architecture/ADR-0004-pre-flight-pattern-enforce-hook.md` and
+  `feedback_pretooluse-payload-schema` (the encoding fragility `_`->`-`/`cwd` that the native
+  eliminates).
+- ADR-0009 — `docs/architecture/ADR-0009-db-backup-guardrail.md` (the PRIOR NOTE "prefer direct
+  input/native resolution over derived encoding when sufficient").
+- ADR-0011 — `docs/architecture/ADR-0011-clean-public-repo-anonymize.md` (constraint "outside the
+  tracked tree": satisfied by non-checked-in `local` scope; `project` scope would violate it).
+- Memory `reference_cc-capabilities-research-2026-05.md` (headline: native overlaps ADR-0012)
+  and `adr0012-agent-memory-mediated.md` (deploy state + re-evaluation clause choice 5).
 
 ---
 
 DURABLE NOTES:
-- [pattern] Quando una feature nativa ufficiale copre un meccanismo che avevamo costruito a mano, la regola "preferisci il nativo / non aggiungere complessità finché il semplice non basta" prevale anche su una soluzione già deployata e verde — purché esista coesistenza temporanea + pilota che evitano perdita dati (ADR-0013 supersede ADR-0012).
-- [decisione] Per memoria agente NON-checked-in usare scope `memory: local` (.claude/agent-memory-local/), non `project` (checked-in → re-introduce il tree pollution di ADR-0012) né `user` (cross-progetto → semantica errata per memoria project-specific).
-- [tradeoff] Il nativo `memory:` auto-abilita Write/Edit anche su agenti read-only (es. reviewer): accettabile perché confinato alla dir di memoria, ma è una concessione esplicita rispetto alla disciplina "sub-agent vede solo testo in/out" di ADR-0012.
-- [robustezza] Il nativo risolve il path encoded internamente (scope→path), eliminando il `tr '/' '-'` fragile (ADR-0004/0009 PRIOR NOTE) invece di confinarlo all'orchestratore come faceva B-mediata.
+- [pattern] When an official native feature covers a mechanism we built by hand, the rule "prefer native / do not add complexity until the simple is enough" prevails even over an already-deployed and green solution — provided temporary coexistence + pilot exist to avoid data loss (ADR-0013 supersedes ADR-0012).
+- [decision] For non-checked-in agent memory use `memory: local` scope (.claude/agent-memory-local/), not `project` (checked-in -> re-introduces ADR-0012 tree pollution) nor `user` (cross-project -> semantically wrong for project-specific memory).
+- [tradeoff] The native `memory:` auto-enables Write/Edit even on read-only agents (e.g. reviewer): acceptable because confined to the memory dir, but it is an explicit concession relative to ADR-0012 "sub-agent sees only text in/out" discipline.
+- [robustness] The native resolves the encoded path internally (scope->path), eliminating the fragile `tr '/' '-'` (ADR-0004/0009 PRIOR NOTE) instead of confining it to the orchestrator as B-mediated did.

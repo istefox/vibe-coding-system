@@ -1,412 +1,400 @@
-# ADR-0010 — web-e2e-test (test E2E web live via Chrome MCP)
+# ADR-0010 — web-e2e-test (live web E2E testing via Chrome MCP)
 
 **Status:** Proposed — 2026-05-22
 
-**Deciders:** architect (dispatch orchestrator), Stefano Ferri (approvazione finale)
+**Deciders:** architect (dispatch orchestrator), Stefano Ferri (final approval)
 
-**Related:** ADR-0003 (concept-to-code chain — la chain in cui si innesta il gate),
-ADR-0008 (workflow v2 brainstorm — precedente di gate opzionale + skill non-terminale
-invocata dal chain), ADR-0005 (vibe-status — skill standalone con report), ADR-0007
-(concept-to-code e2e-smoke — precedente di smoke-test del chain), ADR-0002/0009 (pattern
-"harness structural anchor" e "skill dialogica/orchestrante non testabile end-to-end").
+**Related:** ADR-0003 (concept-to-code chain — the chain where the gate is inserted),
+ADR-0008 (workflow v2 brainstorm — precedent of optional gate + non-terminal skill invoked
+by the chain), ADR-0005 (vibe-status — standalone skill with report), ADR-0007
+(concept-to-code e2e-smoke — precedent for chain smoke-testing), ADR-0002/0009 (pattern
+"harness structural anchor" and "dialogic/orchestrating skill not end-to-end testable").
 
 ---
 
 ## Context
 
-Più volte è emerso un gap operativo: **gli agenti non testano la UI**. Dopo
-l'implementazione di una feature frontend (Step 5 del chain concept-to-code, o un fix
-diretto), resta a carico dell'utente una "verifica UI manuale" — es. il wizard SwiftUI di
-rempay. La chain chiude su "i test unit passano", non su "il codice è live e funziona nel
-browser".
+Repeatedly an operational gap has emerged: **agents do not test the UI**. After implementing
+a frontend feature (Step 5 of the concept-to-code chain, or a direct fix), a "manual UI
+check" remains at the user's charge — e.g. the SwiftUI wizard of rempay. The chain closes on
+"unit tests pass", not on "the code is live and works in the browser".
 
-Claude Code dispone ora dei tool `claude-in-chrome` (browser automation beta): l'agente
-può navigare un browser reale, fare screenshot, leggere la console, monitorare le network
-request, cliccare e compilare form, registrare GIF. Per i **progetti web** questo permette
-di colmare il gap: esercitare i flussi golden-path della feature appena implementata
-**end-to-end sul codice live** e produrre un report E2E (screenshot + errori console +
-network failure + esito per flusso).
+Claude Code now has `claude-in-chrome` tools (browser automation beta): the agent can navigate
+a real browser, take screenshots, read the console, monitor network requests, click and fill
+forms, record GIFs. For **web projects** this allows closing the gap: exercising the golden-path
+flows of the just-implemented feature **end-to-end on live code** and producing an E2E report
+(screenshots + console errors + network failures + per-flow outcome).
 
-Questo ADR progetta la capability `web-e2e-test`: forma (skill/gate), web-detection,
-server lifecycle, contratto del report, gestione fallimenti, anti-rabbit-hole, e
-testabilità della feature stessa.
+This ADR designs the `web-e2e-test` capability: form (skill/gate), web-detection, server
+lifecycle, report contract, failure handling, anti-rabbit-hole guardrails, and testability of
+the feature itself.
 
-**Scope esplicito:** la feature vale **solo per progetti web**. Per SwiftUI/macOS/native/
-CLI/librerie NON si applica e NON deve attivarsi (no falsi avvii su rempay o su una CLI).
-La verifica manuale resta per il non-web.
+**Explicit scope:** the feature applies **only to web projects**. For SwiftUI/macOS/native/
+CLI/libraries it does NOT apply and MUST NOT activate (no false starts on rempay or a CLI).
+Manual verification remains for non-web.
 
-**Fatti verificati (`code.claude.com/docs/en/chrome`, 2026-05-22):**
+**Verified facts (`code.claude.com/docs/en/chrome`, 2026-05-22):**
 
-- I tool browser si abilitano con `claude --chrome` o `/chrome` in sessione; sono **deferred**
-  (aumentano il context, da caricare via `/mcp claude-in-chrome` o ToolSearch quando servono).
-- localhost è un caso d'uso primario documentato ("navigate to your local server").
-- Su login/CAPTCHA "Claude pauses and asks you to handle it manually".
-- I **dialog JavaScript (alert/confirm/prompt) bloccano gli eventi del browser** e impediscono
-  a Claude di ricevere comandi; vanno dismessi manualmente ("Dismiss the dialog manually, then
-  tell Claude to continue").
-- Il **service worker dell'estensione va idle** nelle sessioni lunghe → la connessione cade
-  ("Reconnect extension"). Errori tipici: "No tab available", "Receiving end does not exist".
-- I permessi per-sito sono ereditati dall'estensione Chrome (gestiti lì).
+- Browser tools are enabled with `claude --chrome` or `/chrome` in session; they are **deferred**
+  (increase context, to load via `/mcp claude-in-chrome` or ToolSearch when needed).
+- localhost is a documented primary use case ("navigate to your local server").
+- On login/CAPTCHA "Claude pauses and asks you to handle it manually".
+- **JavaScript dialogs (alert/confirm/prompt) block browser events** and prevent Claude from
+  receiving commands; they must be dismissed manually ("Dismiss the dialog manually, then tell
+  Claude to continue").
+- The **extension service worker goes idle** in long sessions -> connection drops ("Reconnect
+  extension"). Typical errors: "No tab available", "Receiving end does not exist".
+- Per-site permissions are inherited from the Chrome extension (managed there).
 
-**Assunzioni esplicite (NON validate — la feature poggia su queste):**
+**Explicit assumptions (NOT validated — the feature rests on these):**
 
-- **I tool `claude-in-chrome` sono disponibili all'ORCHESTRATOR, NON ai sub-agent.** La doc
-  ufficiale dice che i sub-agent ereditano i tool del thread, **ma** in pratica è un bug noto
-  e ricorrente (anthropics/claude-code issue #7296, #13605, #13898, #34935): i sub-agent
-  lanciati via Task tool **non** accedono ai tool MCP e tendono ad allucinare risultati
-  plausibili. Per un test E2E un risultato allucinato è il fallimento peggiore (falso verde).
-  **Decisione conservativa:** la feature è guidata dall'**orchestrator**, mai delegata a un
-  sub-agent. (Coerente col vincolo blueprint §2: i sub-agent non spawnano sub-agent; qui in
-  più non hanno i tool browser.)
-- Lo `SPEC.md` di un progetto greenfield ha una sezione "success criteria"/"Definition of
-  Done" da cui derivare i flussi golden-path (verificato sul template interview-driver del
-  sistema; assunto per progetti esterni).
-- Non esiste oggi una convenzione utente per dichiarare i flussi E2E o l'URL del dev server.
-  Il contratto `.claude/web-e2e.yaml` proposto è una **nuova convenzione** introdotta da
-  questo ADR (opzionale; vedi D2/D4).
-- Il repo `vibe-coding-system` è NON-git: i deliverable sono i 3 markdown; il deploy degli
-  artefatti live (`~/.claude/skills/web-e2e-test/`, gate nel chain) è un task separato (plan
-  TDD), senza commit step.
+- **`claude-in-chrome` tools are available to the ORCHESTRATOR, NOT to sub-agents.** Official
+  docs say sub-agents inherit the thread's tools, **but** in practice this is a known recurring
+  bug (anthropics/claude-code issues #7296, #13605, #13898, #34935): sub-agents launched via
+  Task tool do **not** reliably access MCP tools and tend to hallucinate plausible results. For
+  an E2E test a hallucinated result is the worst failure (false green). **Conservative decision:**
+  the feature is guided by the **orchestrator**, never delegated to a sub-agent. (Consistent with
+  blueprint §2 constraint: sub-agents do not spawn sub-agents; here additionally they lack
+  browser tools.)
+- The `SPEC.md` of a greenfield project has a "success criteria"/"Definition of Done" section
+  from which golden-path flows can be derived (verified on the system's interview-driver template;
+  assumed for external projects).
+- No user convention currently exists for declaring E2E flows or the dev server URL. The proposed
+  `.claude/web-e2e.yaml` contract is a **new convention** introduced by this ADR (optional;
+  see D2/D4).
+- The repo `vibe-coding-system` is NON-git: the deliverables are the 3 markdowns; the deploy of
+  the live artifacts (`~/.claude/skills/web-e2e-test/`, gate in the chain) is a separate task
+  (TDD plan), without commit step.
 
 ---
 
 ## Decision
 
-Introdurre **una skill standalone `web-e2e-test`**, invocabile a richiesta, **riusata da un
-nuovo gate opzionale "Gate 6 — E2E web" nel chain concept-to-code** (dopo Gate 5 review).
-La skill istruisce l'**orchestrator** a: (1) verificare che il progetto sia web e auto-skip
-altrimenti; (2) scoprire/attendere il dev server; (3) caricare i tool `claude-in-chrome`;
-(4) esercitare i flussi golden-path (dichiarati o derivati dallo SPEC, con conferma utente);
-(5) produrre un report `docs/e2e/<date>-<topic>.md` con screenshot + errori console +
-network failure + esito per flusso; (6) applicare guardrail anti-rabbit-hole (timeout,
-max-tentativi, stop-and-ask). Manifest schema **1.2** (retrocompat 1.0/1.1) con nuovo campo
-`artifacts.e2e`. Harness della skill = **structural anchor** sullo SKILL.md (la feature
-pilota un browser reale → non testabile headless in modo deterministico; onesto come
-design-brainstorm/ADR-0009).
+Introduce **a standalone `web-e2e-test` skill**, callable on demand, **reused by a new optional
+"Gate 6 — E2E web" in the concept-to-code chain** (after Gate 5 review). The skill instructs
+the **orchestrator** to: (1) verify the project is web and auto-skip otherwise; (2) discover/wait
+for the dev server; (3) load `claude-in-chrome` tools; (4) exercise the golden-path flows
+(declared or derived from the SPEC, with user confirmation); (5) produce a report
+`docs/e2e/<date>-<topic>.md` with screenshots + console errors + network failures + per-flow
+outcome; (6) apply anti-rabbit-hole guardrails (timeout, max-retries, stop-and-ask). Manifest
+schema **1.2** (retrocompat 1.0/1.1) with new field `artifacts.e2e`. Skill harness =
+**structural anchor** on the SKILL.md (the feature pilots a real browser -> not deterministically
+testable headless; honest as design-brainstorm/ADR-0009).
 
-Di seguito la decisione per ciascuna delle 8 domande architetturali.
+Below is the decision for each of the 8 architectural questions.
 
-### D1 — Forma: skill standalone + gate riusante (entrambi)
+### D1 — Form: standalone skill + reusing gate (both)
 
-**Skill standalone `web-e2e-test`** invocabile a richiesta, **riusata** da un gate opzionale
-del chain (`Gate 6 — E2E web`, dopo Gate 5). Non un gate-only, non una skill-only.
+**Standalone skill `web-e2e-test`** callable on demand, **reused** by an optional gate in the
+chain (`Gate 6 — E2E web`, after Gate 5). Not a gate-only, not a skill-only.
 
-Razionale:
-- **Standalone** perché il gap "verifica UI manuale" si presenta anche fuori dal chain (fix
-  diretto, brownfield senza chain, iterazione su feature esistente). Una skill invocabile
-  copre tutti i casi.
-- **Gate riusante** perché dentro il chain il momento naturale per l'E2E è subito dopo il
-  review (Gate 5): codice implementato + (eventualmente) rivisto → si verifica live. Il gate
-  non duplica la logica: **invoca la stessa skill** (stesso pattern di Gate 1b, che invoca
-  `design-brainstorm`; e di Step 6, che invoca `review-triage-fix`). Single source of truth.
-- **Opzionale e auto-skip:** il gate appare solo se il progetto è web (D2). Su progetti
-  non-web il gate è un no-op silenzioso (UX del chain invariata per rempay/CLI).
+Rationale:
+- **Standalone** because the "manual UI check" gap also presents itself outside the chain (direct
+  fix, brownfield without chain, iteration on existing feature). A callable skill covers all cases.
+- **Reusing gate** because inside the chain the natural moment for E2E is right after review
+  (Gate 5): code implemented + (optionally) reviewed -> verify live. The gate does not duplicate
+  the logic: it **invokes the same skill** (same pattern as Gate 1b, which invokes
+  `design-brainstorm`; and Step 6, which invokes `review-triage-fix`). Single source of truth.
+- **Optional and auto-skip:** the gate appears only if the project is web (D2). On non-web
+  projects the gate is a silent no-op (chain UX unchanged for rempay/CLI).
 
-**Soggetto = orchestrator.** La skill istruisce l'orchestrator (main CLI agent), che è
-l'unico ad avere i tool `claude-in-chrome` (vedi assunzione in Context). La skill NON
-dispatcha un sub-agent per la parte browser. Coerente con concept-to-code §6 ("this skill
-instructs the orchestrator").
+**Subject = orchestrator.** The skill instructs the orchestrator (main CLI agent), which is the
+only one with `claude-in-chrome` tools (see assumption in Context). The skill does NOT dispatch
+a sub-agent for the browser part. Consistent with concept-to-code §6 ("this skill instructs the
+orchestrator").
 
-### D2 — Web-detection: cascata di segnali, fail-safe verso NON-web
+### D2 — Web-detection: cascade of signals, fail-safe towards NON-web
 
-La skill classifica il progetto come web tramite una **cascata di segnali** valutata sul
-`project_root` (risalendo da `cwd`), in ordine; il primo che decide vince:
+The skill classifies the project as web via a **cascade of signals** evaluated on the
+`project_root` (ascending from `cwd`), in order; the first that decides wins:
 
-1. **Override esplicito (massima priorità):** file `.claude/web-e2e.yaml` presente →
-   `web: true` implicito (l'utente l'ha configurato apposta). Se il file ha `web: false` →
-   NON-web esplicito, skip.
-2. **`package.json` con dev server noto:** esiste `package.json` e contiene uno script
-   `dev`/`start`/`serve` **o** una dependency tra `vite`, `next`, `react-scripts`,
-   `@angular/cli`, `vue`, `svelte`, `astro`, `nuxt`, `remix`, `webpack-dev-server` →
+1. **Explicit override (highest priority):** file `.claude/web-e2e.yaml` present ->
+   `web: true` implicit (the user configured it on purpose). If the file has `web: false` ->
+   explicit NON-web, skip.
+2. **`package.json` with known dev server:** `package.json` exists and contains a script
+   `dev`/`start`/`serve` **or** a dependency among `vite`, `next`, `react-scripts`,
+   `@angular/cli`, `vue`, `svelte`, `astro`, `nuxt`, `remix`, `webpack-dev-server` ->
    `web: true`.
-3. **Static web:** esiste un `index.html` nel root o in `public/`/`src/`/`dist/` →
-   `web: true` (sito statico servibile).
-4. **Nessun segnale → `web: false`:** la feature **NON si attiva**. Se invocata standalone
-   su un progetto non-web, la skill lo dichiara ("progetto non-web rilevato, web-e2e-test
-   non applicabile") e termina senza errore. Nel chain, il Gate 6 è no-op silenzioso.
+3. **Static web:** an `index.html` exists at root or in `public/`/`src/`/`dist/` ->
+   `web: true` (servable static site).
+4. **No signal -> `web: false`:** the feature **does NOT activate**. If invoked standalone
+   on a non-web project, the skill declares it ("non-web project detected, web-e2e-test not
+   applicable") and terminates without error. In the chain, Gate 6 is a silent no-op.
 
-**Anti falso-positivo su rempay/native:** un progetto SwiftUI/macOS non ha `package.json`
-con dev server né `index.html` → cade su (4) → skip. Una CLI Python (es. pricing-markup-cli)
-idem. Una libreria idem. Il default è "non-web" — la feature si attiva solo su segnale
-positivo, mai per assenza di segnale.
+**Anti-false-positive on rempay/native:** a SwiftUI/macOS project has no `package.json` with
+dev server or `index.html` -> falls to (4) -> skip. A Python CLI (e.g. pricing-markup-cli)
+likewise. A library likewise. The default is "non-web" — the feature activates only on a
+positive signal, never on absence of signal.
 
-### D3 — Server lifecycle: prefer-running, opt-in auto-start, polling readiness
+### D3 — Server lifecycle: prefer-running, opt-in auto-start, readiness polling
 
-**Default: prefer-running (l'utente avvia il server).** La skill prima **prova a connettersi**
-a un URL candidato; solo se nessuno risponde e l'utente lo autorizza, prova ad avviarlo.
+**Default: prefer-running (the user starts the server).** The skill first **tries to connect**
+to a candidate URL; only if none responds and the user authorizes it, it tries to start it.
 
-**Scoperta dell'URL** (in ordine):
-1. `.claude/web-e2e.yaml` campo `base_url` (es. `http://localhost:5173`) → autorevole.
-2. Porte candidate note per stack: vite `5173`, next/react-scripts `3000`, vue-cli `8080`,
-   angular `4200`, astro `4321`, generico `8000`/`8888`. Probe HTTP (HEAD/GET) su
-   `http://localhost:<porta>` finché una risponde.
-3. Se nessuna risponde → **stop-and-ask**: chiede all'utente l'URL o l'autorizzazione ad
-   avviare il server.
+**URL discovery** (in order):
+1. `.claude/web-e2e.yaml` field `base_url` (e.g. `http://localhost:5173`) -> authoritative.
+2. Known candidate ports for stack: vite `5173`, next/react-scripts `3000`, vue-cli `8080`,
+   angular `4200`, astro `4321`, generic `8000`/`8888`. HTTP probe (HEAD/GET) on
+   `http://localhost:<port>` until one responds.
+3. If none responds -> **stop-and-ask**: asks the user for the URL or authorization to start
+   the server.
 
-**Avvio del server (opt-in, mai silenzioso):** se nessun URL risponde, la skill **chiede
-conferma** prima di lanciare il dev server (HITL — un avvio di processo è un side-effect).
-Il comando d'avvio viene da `.claude/web-e2e.yaml` campo `start_cmd` (es. `npm run dev`)
-oppure è proposto dall'orchestrator e confermato dall'utente. Lanciato in background
-(`run_in_background`).
+**Server start (opt-in, never silent):** if no URL responds, the skill **asks for confirmation**
+before launching the dev server (HITL — a process start is a side effect). The start command
+comes from `.claude/web-e2e.yaml` field `start_cmd` (e.g. `npm run dev`) or is proposed by the
+orchestrator and confirmed by the user. Launched in background (`run_in_background`).
 
-**Readiness check:** polling HTTP su `base_url` con backoff (es. ogni 1s, max ~30s /
-`startup_timeout_s` configurabile). "Pronto" = risposta HTTP < 500 (anche 401/302 conta come
-"server su"). Timeout → stop-and-ask (non procede a cieco).
+**Readiness check:** HTTP polling on `base_url` with backoff (e.g. every 1s, max ~30s /
+`startup_timeout_s` configurable). "Ready" = HTTP response < 500 (even 401/302 counts as
+"server up"). Timeout -> stop-and-ask (does not proceed blindly).
 
-**Teardown:** se **la skill ha avviato** il server, lo **spegne alla fine** (kill del
-processo background) e lo annota nel report. Se il server era **già in esecuzione**
-(prefer-running), la skill **NON lo spegne** (non è sua proprietà — principio di minima
-sorpresa).
+**Teardown:** if **the skill started** the server, it **stops it at the end** (kill background
+process) and notes it in the report. If the server was **already running** (prefer-running), the
+skill **does NOT stop it** (not its property — principle of least surprise).
 
-### D4 — Cosa testa: flussi dichiarati > derivati-con-conferma (mai auto-generati ciechi)
+### D4 — What it tests: declared flows > derived-with-confirmation (never blind auto-generation)
 
-I flussi golden-path provengono, in ordine di preferenza:
+Golden-path flows come from, in order of preference:
 
-1. **Dichiarati dall'utente:** `.claude/web-e2e.yaml` campo `flows:` (lista di flussi con
-   `name`, `steps` in linguaggio naturale, e `expect` opzionale). Massima affidabilità: il
-   contratto è esplicito, riproducibile, versionabile.
-2. **Derivati dallo SPEC/plan, CON conferma utente:** se non c'è `web-e2e.yaml`, la skill
-   **propone** una bozza di flussi estratti dai "success criteria"/"Definition of Done" dello
-   `SPEC.md` (o dal plan, nel chain) e li **mostra all'utente per conferma/modifica** prima di
-   eseguirli (`AskUserQuestion`). NON esegue flussi auto-generati senza conferma.
-3. **Checklist ad-hoc in sessione:** in standalone, l'utente può dettare i flussi a voce nel
-   prompt; la skill li struttura e conferma.
+1. **Declared by the user:** `.claude/web-e2e.yaml` field `flows:` (list of flows with
+   `name`, `steps` in natural language, and optional `expect`). Maximum reliability: the
+   contract is explicit, reproducible, versionable.
+2. **Derived from SPEC/plan, WITH user confirmation:** if there is no `web-e2e.yaml`, the skill
+   **proposes** a draft of flows extracted from the "success criteria"/"Definition of Done" of the
+   `SPEC.md` (or from the plan, in the chain) and **shows them to the user for confirmation/
+   modification** before executing them (`AskUserQuestion`). Does NOT execute auto-generated
+   flows without confirmation.
+3. **Ad-hoc session checklist:** in standalone, the user can dictate flows in the prompt; the
+   skill structures and confirms them.
 
-**Trade-off automazione vs affidabilità (esplicito):** auto-generare i passi (selettori,
-click) dal solo SPEC è inaffidabile — lo SPEC descrive *cosa* in linguaggio naturale, non
-*quali selettori DOM*. La skill quindi lavora a livello di **intento** ("compila il form di
-login con dati invalidi e verifica che appaia l'errore"), lasciando all'orchestrator+browser
-la traduzione in azioni concrete a runtime (è il modello d'uso documentato di
-claude-in-chrome: istruzioni in linguaggio naturale, non script Playwright). I selettori NON
-sono codificati nella skill (sarebbero fragili e stack-specific): il flusso resta dichiarato
-come intento, l'esecuzione è adattiva. Questo massimizza robustezza al costo di
-non-determinismo (mitigato da D6/D7).
+**Automation vs reliability trade-off (explicit):** auto-generating steps (selectors, clicks)
+from the SPEC alone is unreliable — the SPEC describes *what* in natural language, not *which
+DOM selectors*. The skill therefore works at the level of **intent** ("fill the login form with
+invalid data and verify the error appears"), leaving the orchestrator+browser to translate into
+concrete actions at runtime (the documented usage model of claude-in-chrome: natural language
+instructions, not Playwright scripts). Selectors are NOT hardcoded in the skill (they would be
+fragile and stack-specific): the flow remains declared as intent, execution is adaptive. This
+maximizes robustness at the cost of non-determinism (mitigated by D6/D7).
 
-### D5 — Output: report markdown `docs/e2e/<date>-<topic>.md` + manifest `artifacts.e2e`
+### D5 — Output: markdown report `docs/e2e/<date>-<topic>.md` + manifest `artifacts.e2e`
 
-La skill scrive **un solo report**: `<project-root>/docs/e2e/YYYY-MM-DD-<topic-slug>.md`
-(crea `docs/e2e/` se assente). Gli screenshot sono salvati accanto, in
-`docs/e2e/assets/YYYY-MM-DD-<topic-slug>/` e referenziati nel markdown con path relativi.
+The skill writes **a single report**: `<project-root>/docs/e2e/YYYY-MM-DD-<topic-slug>.md`
+(creates `docs/e2e/` if absent). Screenshots are saved alongside, in
+`docs/e2e/assets/YYYY-MM-DD-<topic-slug>/` and referenced in markdown with relative paths.
 
-Struttura del report (template in inglese, prosa in italiano — coerente con SPEC/ARCH/ADR):
-- **Header:** data, topic, base_url, modalità server (already-running | started-by-skill),
-  fonte flussi (yaml | derived-confirmed | ad-hoc), esito complessivo (PASS | PARTIAL | FAIL).
-- **Per flusso:** nome, passi eseguiti, esito (`pass` | `fail` | `blocked`), screenshot
-  allegato (almeno 1: stato finale o punto di fallimento), errori console rilevati (filtrati
-  per pattern error/warning, non l'intero dump — guida doc), network failure (status >= 400
-  o request fallite).
-- **Classificazione dei fail (D6):** ogni fail marcato `feature-bug` (errore reale
-  dell'app) | `test-fragile` (selettore/flow non più valido) | `infra` (server giù, dialog
-  bloccante, connessione persa) | `unknown`.
-- **Open questions / verifica manuale residua:** ciò che la skill NON ha potuto verificare
-  (login/CAPTCHA, flussi che richiedono stato esterno).
+Report structure (English template, Italian prose — consistent with SPEC/ARCH/ADR):
+- **Header:** date, topic, base_url, server mode (already-running | started-by-skill),
+  flow source (yaml | derived-confirmed | ad-hoc), overall outcome (PASS | PARTIAL | FAIL).
+- **Per flow:** name, steps executed, outcome (`pass` | `fail` | `blocked`), attached
+  screenshot (at least 1: final state or failure point), console errors detected (filtered
+  for error/warning patterns, not the entire dump — doc guide), network failures (status >= 400
+  or failed requests).
+- **Failure classification (D6):** each failure marked `feature-bug` (real app error) |
+  `test-fragile` (selector/flow no longer valid) | `infra` (server down, blocking dialog,
+  lost connection) | `unknown`.
+- **Open questions / residual manual verification:** what the skill could NOT verify
+  (login/CAPTCHA, flows requiring external state).
 
-**Integrazione manifest:** nuovo campo `artifacts.e2e` (path del report) nello schema
-manifest **1.2** (retrocompat 1.0/1.1: campo opzionale, default null; i manifest 1.0/1.1
-restano validi). Il chain popola `artifacts.e2e` dopo il Gate 6. La skill standalone NON
-tocca alcun manifest (come design-brainstorm scrive solo BRAINSTORM.md).
+**Manifest integration:** new field `artifacts.e2e` (path to the report) in manifest schema
+**1.2** (retrocompat 1.0/1.1: optional field, default null; 1.0/1.1 manifests remain valid).
+The chain populates `artifacts.e2e` after Gate 6. The standalone skill does NOT touch any
+manifest (like design-brainstorm writes only BRAINSTORM.md).
 
-### D6 — Gestione fallimenti: continua-e-raccogli + classificazione + stop-and-ask sui blocchi
+### D6 — Failure handling: continue-and-collect + classification + stop-and-ask on blocks
 
-**Default: continua e raccogli tutti i fail dei flussi** (non si ferma al primo). Un report
-E2E ha valore proprio se elenca *tutti* i flussi rotti, non solo il primo. Eccezione: i
-**blocchi infrastrutturali** (server giù, dialog JS bloccante, connessione browser persa)
-fermano l'esecuzione (stop-and-ask) — D7.
+**Default: continue and collect all flow failures** (does not stop on first failure). An E2E
+report has value precisely if it lists *all* broken flows, not just the first. Exception:
+**infrastructural blocks** (server down, blocking JS dialog, lost browser connection) stop
+execution (stop-and-ask) — D7.
 
-**Classificazione di ogni fail** (euristica, dichiarata nel report):
-- **`feature-bug`:** l'elemento esiste e risponde, ma il comportamento osservato contraddice
-  l'`expect` del flusso (es. submit con dati invalidi → nessun messaggio d'errore), oppure la
-  console mostra un errore applicativo (eccezione JS, 500 sul backend).
-- **`test-fragile`:** l'elemento atteso non è trovato / il flusso non è più mappabile sulla
-  UI corrente (selettore/label cambiato). NON è necessariamente un bug della feature: spesso
-  il flusso dichiarato è stantio. Marcato distintamente per non gridare "bug" a vuoto.
-- **`infra`:** server non raggiungibile, dialog bloccante, "Receiving end does not exist",
-  "No tab available". Non è né bug né test fragile: è ambiente.
-- **`unknown`:** non classificabile con certezza → flaggato per revisione umana.
+**Classification of each failure** (heuristic, declared in report):
+- **`feature-bug`:** the element exists and responds, but the observed behavior contradicts the
+  flow's `expect` (e.g. submit with invalid data -> no error message), or the console shows an
+  application error (JS exception, 500 on backend).
+- **`test-fragile`:** the expected element is not found / the flow can no longer be mapped to
+  the current UI (changed selector/label). NOT necessarily a feature bug: often the declared
+  flow is stale. Marked distinctly to avoid crying "bug" in vain.
+- **`infra`:** server not reachable, blocking dialog, "Receiving end does not exist", "No tab
+  available". Not a bug or fragile test: it is environment.
+- **`unknown`:** not classifiable with certainty -> flagged for human review.
 
-**HITL sui fail:** la skill NON corregge il codice (non è il suo ruolo: è verifica, non
-fix). A fine run presenta il riepilogo e, se ci sono `feature-bug`, **raccomanda** un ciclo
-`review-triage-fix` o un dispatch `debugger` (decisione dell'utente). Nel chain, un esito
-FAIL/PARTIAL al Gate 6 NON blocca il completamento ma viene evidenziato nel report finale.
+**HITL on failures:** the skill does NOT fix the code (not its role: it is verification, not
+fix). At the end of the run it presents the summary and, if there are `feature-bug` entries,
+**recommends** a `review-triage-fix` cycle or a `debugger` dispatch (user's decision). In the
+chain, a FAIL/PARTIAL outcome at Gate 6 does NOT block completion but is highlighted in the
+final report.
 
-### D7 — Anti-rabbit-hole: timeout per-azione, max-tentativi, stop-and-ask dopo N, no-dialog
+### D7 — Anti-rabbit-hole: per-action timeout, max-retries, stop-and-ask after N, no-dialog
 
-Incorpora le guida del system prompt ("Avoid rabbit holes") e i fatti doc su dialog/idle:
+Incorporates the system prompt guide ("Avoid rabbit holes") and doc facts on dialog/idle:
 
-- **`tabs_context` all'avvio:** prima di agire, la skill istruisce l'orchestrator a leggere
-  il contesto delle tab (quali pagine sono disponibili) per non esplorare alla cieca (guida
-  doc: "use a file to discover all available pages before exploring further").
-- **Timeout per-azione:** ogni azione browser (navigate, click, attesa elemento) ha un budget
-  (default ~10s / `action_timeout_s`). Scaduto → marca il passo `blocked`, non ritenta in
-  loop.
-- **Max-tentativi per elemento:** un elemento non trovato/non responsivo → al massimo
-  **2 retry** (es. dopo un breve attesa per rendering async), poi `test-fragile`/`blocked`.
-  Mai loop infinito sullo stesso elemento.
-- **Stop-and-ask dopo N blocchi infra:** dopo **2** blocchi infrastrutturali (dialog,
-  connessione persa, server giù) la skill **si ferma e chiede all'utente** invece di
-  insistere. Coerente col fatto che dialog JS e service-worker-idle richiedono intervento
-  manuale.
-- **No-dialog discipline:** la skill NON tenta di forzare dialog JS bloccanti (la doc dice
-  che bloccano gli eventi e vanno dismessi a mano); se rileva un blocco → stop-and-ask.
-- **Login/CAPTCHA:** non automatizzati (la doc dice che Claude pausa e chiede). La skill li
-  marca come "verifica manuale residua" nel report e prosegue con i flussi che non li
-  richiedono.
-- **Budget globale di sessione:** un wall-clock cap complessivo (`session_timeout_s`, default
-  ~5 min) oltre il quale la skill chiude e scrive un report parziale, per non bruciare
-  context/tempo.
+- **`tabs_context` at startup:** before acting, the skill instructs the orchestrator to read
+  the tab context (which pages are available) to avoid exploring blindly (doc guide: "use a
+  file to discover all available pages before exploring further").
+- **Per-action timeout:** every browser action (navigate, click, wait for element) has a budget
+  (default ~10s / `action_timeout_s`). Expired -> mark the step `blocked`, do not retry in loop.
+- **Max-retries per element:** an element not found/unresponsive -> at most **2 retries** (e.g.
+  after a brief wait for async rendering), then `test-fragile`/`blocked`. Never an infinite loop
+  on the same element.
+- **Stop-and-ask after N infra blocks:** after **2** infrastructural blocks (dialog, lost
+  connection, server down) the skill **stops and asks the user** instead of insisting. Consistent
+  with the fact that JS dialogs and service-worker-idle require manual intervention.
+- **No-dialog discipline:** the skill does NOT attempt to force blocking JS dialogs (the doc says
+  they block events and must be dismissed manually); if it detects a block -> stop-and-ask.
+- **Login/CAPTCHA:** not automated (the doc says Claude pauses and asks). The skill marks them
+  as "residual manual verification" in the report and continues with flows that don't require them.
+- **Global session budget:** an overall wall-clock cap (`session_timeout_s`, default ~5 min)
+  beyond which the skill closes and writes a partial report, to avoid burning context/time.
 
-### D8 — Harness/testabilità: structural anchor sullo SKILL.md + smoke web-detection (no browser reale)
+### D8 — Harness/testability: structural anchor on SKILL.md + web-detection smoke (no real browser)
 
-Una feature che pilota un browser reale **non è testabile headless in modo deterministico**:
-non c'è un browser, né un dev server, né una UI nel harness CI. Onestà come design-brainstorm
-(ADR-0008) e come il gate `ask` di ADR-0009 (si testa il payload, non il rendering).
+A feature that pilots a real browser **is not deterministically testable headless**: there is no
+browser, no dev server, no UI in the CI harness. Honesty as in design-brainstorm (ADR-0008) and
+as with the `ask` gate of ADR-0009 (the payload is tested, not the rendering).
 
-**Cosa verifica il harness (deterministico, headless):**
-1. **Structural anchor sullo SKILL.md** (`tests/run-tests.sh`, bash 3.2-clean, `ok`/`bad`,
-   `PASS=N FAIL=0`): presenza di `name: web-e2e-test`, assenza di
-   `disable-model-invocation: true` (deve essere invocabile dal gate), presenza delle sezioni
-   contratto (web-detection, server lifecycle, anti-rabbit-hole, report contract, `## Lingua`,
-   uso di `tabs_context`, "orchestrator-only").
-2. **Smoke della logica web-detection** (l'unico pezzo *puro* e testabile): se la skill
-   include uno script helper `detect-web.sh` (decisione del plan), il harness lo esercita su
-   fixture `mktemp -d` — `package.json` con `vite` → `web`; SwiftUI fixture (solo `.swift` +
-   `Package.swift`) → `non-web`; CLI fixture → `non-web`; `index.html` → `web`;
-   `.claude/web-e2e.yaml` con `web:false` → `non-web`. Questo è deterministico e protegge il
-   vincolo HARD "no falsi avvii su non-web".
-3. **Anchor nel harness del chain** (concept-to-code): verifica che il Gate 6 sia registrato
-   nello SKILL.md del chain (literal `Gate 6` / `web-e2e`) e che il manifest schema citi
+**What the harness verifies (deterministic, headless):**
+1. **Structural anchor on SKILL.md** (`tests/run-tests.sh`, bash 3.2-clean, `ok`/`bad`,
+   `PASS=N FAIL=0`): presence of `name: web-e2e-test`, absence of
+   `disable-model-invocation: true` (must be invocable from the gate), presence of contract
+   sections (web-detection, server lifecycle, anti-rabbit-hole, report contract, `## Language`,
+   use of `tabs_context`, "orchestrator-only").
+2. **Smoke of web-detection logic** (the only *pure* and testable piece): if the skill includes
+   a helper script `detect-web.sh` (plan decision), the harness exercises it on `mktemp -d`
+   fixtures — `package.json` with `vite` -> `web`; SwiftUI fixture (only `.swift` +
+   `Package.swift`) -> `non-web`; CLI fixture -> `non-web`; `index.html` -> `web`;
+   `.claude/web-e2e.yaml` with `web:false` -> `non-web`. This is deterministic and protects the
+   HARD constraint "no false starts on non-web".
+3. **Anchor in the chain harness** (concept-to-code): verifies that Gate 6 is registered in the
+   chain's SKILL.md (literal `Gate 6` / `web-e2e`) and that the manifest schema cites
    `artifacts.e2e` / `1.2`.
 
-**Cosa NON è verificabile dal harness (resta open question, validabile solo nell'uso reale):**
-- L'esecuzione browser end-to-end (navigate/click/screenshot reali).
-- La readiness del dev server, il teardown, la cattura console/network.
-- La classificazione feature-bug vs test-fragile su una UI reale.
-- L'anti-rabbit-hole effettivo (timeout/retry reali).
+**What is NOT verifiable by the harness (remains open question, validatable only in real use):**
+- The browser end-to-end execution (real navigate/click/screenshot).
+- Dev server readiness, teardown, console/network capture.
+- The feature-bug vs test-fragile classification on a real UI.
+- The actual anti-rabbit-hole behavior (real timeouts/retries).
 
-Questi restano validabili **solo in pilota** con un progetto web reale. Il report del plan
-deve dichiararlo esplicitamente (come per il gate `ask` di ADR-0009).
+These remain validatable **only in a pilot** with a real web project. The plan report must
+declare this explicitly (as for the `ask` gate of ADR-0009).
 
 ---
 
-## Contratto `.claude/web-e2e.yaml` (nuova convenzione, opzionale)
+## `.claude/web-e2e.yaml` Contract (new convention, optional)
 
-Introdotto da questo ADR. Tutti i campi opzionali; in assenza, la skill cade sui default
-di D2/D3/D4. Schema:
+Introduced by this ADR. All fields optional; in their absence, the skill falls back to the
+D2/D3/D4 defaults. Schema:
 
 ```yaml
-# .claude/web-e2e.yaml — opzionale; configura web-e2e-test per questo progetto
-web: true                       # override esplicito web/non-web (default: cascata D2)
-base_url: http://localhost:5173 # URL del dev server (default: probe porte note D3)
-start_cmd: npm run dev          # comando d'avvio (usato solo se nessun server risponde, opt-in)
+# .claude/web-e2e.yaml — optional; configures web-e2e-test for this project
+web: true                       # explicit web/non-web override (default: D2 cascade)
+base_url: http://localhost:5173 # dev server URL (default: probe known ports D3)
+start_cmd: npm run dev          # start command (used only if no server responds, opt-in)
 startup_timeout_s: 30           # readiness polling cap
-action_timeout_s: 10            # timeout per azione browser
-session_timeout_s: 300          # budget globale di sessione
-flows:                          # flussi golden-path dichiarati (preferiti ai derivati)
+action_timeout_s: 10            # timeout per browser action
+session_timeout_s: 300          # global session budget
+flows:                          # declared golden-path flows (preferred over derived)
   - name: login-invalid
     steps:
-      - "vai a /login"
-      - "compila email con 'x' e password vuota, premi Accedi"
-    expect: "appare un messaggio d'errore di validazione"
+      - "go to /login"
+      - "fill email with 'x' and empty password, press Login"
+    expect: "a validation error message appears"
   - name: dashboard-loads
     steps:
-      - "vai a / da utente autenticato"
-    expect: "la dashboard carica senza errori in console"
+      - "go to / as authenticated user"
+    expect: "dashboard loads without console errors"
 ```
 
 ---
 
-## Alternatives considered (per ognuna delle 8 domande)
+## Alternatives considered (for each of the 8 questions)
 
-### D1 — Forma
+### D1 — Form
 
-- **Solo gate nel chain (no skill standalone):** rifiutata. Il gap "verifica UI manuale" si
-  presenta anche fuori dal chain (fix diretti, brownfield, iterazione). Un gate-only
-  lascerebbe scoperti tutti i casi non-chain.
-- **Solo skill standalone (no gate):** rifiutata. Dentro il chain l'E2E dopo il review è il
-  momento naturale; lasciarlo all'utente da invocare a mano romperebbe la continuità
-  "concept→code→verified" che il chain promette.
-- **Sub-agent dedicato `e2e-tester`:** rifiutata. I sub-agent Task-launched non hanno
-  affidabilmente i tool MCP browser (issue documentati): un e2e-tester sub-agent
-  allucinerebbe i risultati (falso verde) — il fallimento peggiore per un test. La capability
-  DEVE girare sull'orchestrator.
+- **Gate-only in the chain (no standalone skill):** rejected. The "manual UI check" gap also
+  presents itself outside the chain (direct fixes, brownfield, iteration). A gate-only would
+  leave all non-chain cases uncovered.
+- **Standalone skill only (no gate):** rejected. Inside the chain, the E2E after review is the
+  natural moment; leaving it to the user to invoke manually would break the continuity
+  "concept->code->verified" that the chain promises.
+- **Dedicated sub-agent `e2e-tester`:** rejected. Task-launched sub-agents do not reliably have
+  MCP browser tools (documented issues): an e2e-tester sub-agent would hallucinate results (false
+  green) — the worst failure for a test. The capability MUST run on the orchestrator.
 
 ### D2 — Web-detection
 
-- **Config esplicita obbligatoria (`web-e2e.yaml` sempre richiesto):** rifiutata. Troppa
-  friction; la feature non si attiverebbe mai su progetti web non ancora configurati,
-  vanificando l'auto-skip intelligente nel chain.
-- **Detection solo via `package.json`:** rifiutata. Esclude i siti statici (`index.html`
-  servito) e i progetti con dev server non-Node. La cascata copre più casi.
-- **Attivare di default e disattivare su non-web (denylist):** rifiutata. Inverte il
-  fail-safe: rischierebbe falsi avvii su native/CLI per assenza di un marker. Il default DEVE
-  essere "non-web"; si attiva solo su segnale positivo.
+- **Mandatory explicit config (`web-e2e.yaml` always required):** rejected. Too much friction;
+  the feature would never activate on web projects not yet configured, defeating the intelligent
+  auto-skip in the chain.
+- **Detection only via `package.json`:** rejected. Excludes static sites (`index.html` served)
+  and projects with non-Node dev server. The cascade covers more cases.
+- **Activate by default and deactivate on non-web (denylist):** rejected. Inverts the fail-safe:
+  would risk false starts on native/CLI for absence of a marker. The default MUST be "non-web";
+  activation only on a positive signal.
 
 ### D3 — Server lifecycle
 
-- **Auto-start sempre (la skill avvia il server sempre):** rifiutata. Un avvio di processo è
-  un side-effect; se il server è già su, raddoppiarlo causa conflitti di porta. Prefer-running
-  + opt-in start è meno sorprendente.
-- **Mai avviare (richiede sempre server già su):** rifiutata. Friction inutile quando l'utente
-  vuole il check completo end-to-end; l'opt-in start con conferma è il compromesso.
-- **Readiness via sleep fisso:** rifiutata. Fragile (server lento → falso "non pronto"; server
-  veloce → tempo sprecato). Polling con timeout è robusto.
+- **Always auto-start (skill always starts the server):** rejected. A process start is a side
+  effect; if the server is already up, duplicating it causes port conflicts. Prefer-running +
+  opt-in start is less surprising.
+- **Never start (always requires pre-running server):** rejected. Unnecessary friction when the
+  user wants the full end-to-end check; opt-in start with confirmation is the compromise.
+- **Fixed sleep for readiness:** rejected. Fragile (slow server -> false "not ready"; fast server
+  -> wasted time). Polling with timeout is robust.
 
-### D4 — Cosa testa
+### D4 — What it tests
 
-- **Auto-generazione cieca dei flussi dallo SPEC (no conferma):** rifiutata. Lo SPEC descrive
-  l'intento in linguaggio naturale, non i selettori; eseguire flussi auto-generati senza
-  conferma produce test fragili e falsi fail. La conferma utente è il gate di affidabilità.
-- **Solo flussi dichiarati in YAML (no derivazione):** rifiutata come unica via. Troppa
-  friction per il primo run; la derivazione-con-conferma abbassa la barriera d'ingresso.
-- **Selettori DOM codificati nella skill:** rifiutata. Stack-specific e fragili; la skill
-  lavora a livello di intento e lascia l'esecuzione adattiva al browser (modello d'uso
-  documentato di claude-in-chrome).
+- **Blind auto-generation of flows from SPEC (no confirmation):** rejected. The SPEC describes
+  intent in natural language, not selectors; executing auto-generated flows without confirmation
+  produces fragile tests and false failures. User confirmation is the reliability gate.
+- **Only declared flows in YAML (no derivation):** rejected as the sole path. Too much friction
+  for the first run; derivation-with-confirmation lowers the entry barrier.
+- **DOM selectors hardcoded in the skill:** rejected. Stack-specific and fragile; the skill works
+  at the intent level and leaves execution adaptive to the browser (documented usage model of
+  claude-in-chrome).
 
 ### D5 — Output
 
-- **Solo output in chat (nessun file):** rifiutata. Un report E2E con screenshot va
-  persistito per audit/condivisione e per integrazione nel manifest del chain.
-- **Report dentro il manifest stesso:** rifiutata. Il manifest è uno stato di macchina, non
-  un documento; gli screenshot non ci stanno. Il manifest punta al report (`artifacts.e2e`).
-- **Schema manifest senza versione nuova (riusare 1.1):** rifiutata. Aggiungere un campo
-  semanticamente nuovo (`artifacts.e2e`) merita il bump a 1.2 per chiarezza di validazione,
-  mantenendo la retrocompat (campo opzionale, 1.0/1.1 restano validi). Coerente col precedente
-  1.0→1.1 di ADR-0008.
+- **Chat output only (no file):** rejected. An E2E report with screenshots must be persisted for
+  audit/sharing and for chain manifest integration.
+- **Report inside the manifest itself:** rejected. The manifest is a state machine, not a document;
+  screenshots do not fit. The manifest points to the report (`artifacts.e2e`).
+- **Manifest schema without new version (reuse 1.1):** rejected. Adding a semantically new field
+  (`artifacts.e2e`) merits the bump to 1.2 for validation clarity, maintaining retrocompat
+  (optional field, 1.0/1.1 remain valid). Consistent with the 1.0->1.1 precedent of ADR-0008.
 
-### D6 — Gestione fallimenti
+### D6 — Failure handling
 
-- **Fermarsi al primo fail (fail-fast):** rifiutata. Un report che elenca un solo flusso rotto
-  costringe a ri-run multipli; raccogliere tutti i fail dei flussi dà più valore in un colpo.
-  (Eccezione: i blocchi infra fermano comunque — D7.)
-- **La skill corregge il codice (auto-fix):** rifiutata. Viola la separazione verifica/fix; un
-  test che si auto-corregge maschera il bug e può introdurre regressioni. La skill verifica e
-  raccomanda; il fix è di `review-triage-fix`/`debugger`/coder, su decisione utente.
-- **Non distinguere feature-bug da test-fragile:** rifiutata. Collasserebbe falsi positivi
-  (selettore cambiato) in "bug della feature", erodendo la fiducia nel report. La
-  classificazione è il discriminator chiave.
+- **Stop on first failure (fail-fast):** rejected. A report listing only one broken flow forces
+  multiple re-runs; collecting all flow failures provides more value at once. (Exception: infra
+  blocks stop anyway — D7.)
+- **The skill fixes the code (auto-fix):** rejected. Violates the verification/fix separation; a
+  test that self-corrects masks the bug and can introduce regressions. The skill verifies and
+  recommends; the fix is for `review-triage-fix`/`debugger`/coder, on user decision.
+- **Do not distinguish feature-bug from test-fragile:** rejected. Would collapse false positives
+  (changed selector) into "feature bug", eroding trust in the report. Classification is the key
+  discriminator.
 
 ### D7 — Anti-rabbit-hole
 
-- **Nessun timeout / retry illimitati:** rifiutata. È esattamente il rabbit-hole che la guida
-  del system prompt mette in guardia; un elemento non responsivo bloccherebbe la sessione.
-- **Tentare di dismettere i dialog JS via script:** rifiutata. La doc dice che i dialog
-  bloccano gli eventi e vanno dismessi manualmente; tentare di forzarli è inaffidabile e
-  rischia loop. Stop-and-ask è la via documentata.
-- **Automatizzare login/CAPTCHA:** rifiutata. La doc dice che Claude pausa e chiede; tentare
-  di automatizzarli viola il design dell'estensione e i permessi sito.
+- **No timeout / unlimited retries:** rejected. This is exactly the rabbit-hole the system prompt
+  guide warns against; an unresponsive element would block the session.
+- **Attempt to dismiss JS dialogs via script:** rejected. The doc says dialogs block events and
+  must be dismissed manually; attempting to force them is unreliable and risks loops. Stop-and-ask
+  is the documented approach.
+- **Automate login/CAPTCHA:** rejected. The doc says Claude pauses and asks; attempting to
+  automate them violates the extension design and site permissions.
 
-### D8 — Harness/testabilità
+### D8 — Harness/testability
 
-- **Harness end-to-end con browser headless reale (Playwright in CI):** rifiutata. Introduce
-  uno stack pesante (Node + Playwright + browser), stack-locked, contro il vincolo bash
-  3.2-clean / zero-dep del sistema, e comunque non testerebbe i tool `claude-in-chrome` reali
-  (che richiedono l'estensione + sessione Claude Code). Il valore non giustifica il costo.
-- **Nessun harness (feature non testabile → niente test):** rifiutata. La parte web-detection
-  è pura e DEVE essere testata (protegge il vincolo HARD "no falsi avvii su non-web"). Lo
-  structural anchor + smoke web-detection è il massimo testabile in modo onesto.
-- **Mock dell'intera sessione browser:** rifiutata. Un mock del browser testerebbe il mock,
-  non la feature; darebbe falsa sicurezza. Meglio dichiarare onestamente cosa resta
-  validabile solo in pilota.
+- **End-to-end harness with real headless browser (Playwright in CI):** rejected. Introduces a
+  heavy stack (Node + Playwright + browser), stack-locked, against the bash 3.2-clean / zero-dep
+  constraint of the system, and in any case would not test the real `claude-in-chrome` tools
+  (which require the extension + Claude Code session). The value does not justify the cost.
+- **No harness (feature not testable -> no tests):** rejected. The web-detection part is pure and
+  MUST be tested (protects the HARD constraint "no false starts on non-web"). The structural anchor
+  + web-detection smoke is the maximum honestly testable.
+- **Mock the entire browser session:** rejected. A browser mock tests the mock, not the feature;
+  it gives false security. Better to honestly declare what remains validatable only in a pilot.
 
 ---
 
@@ -414,70 +402,69 @@ flows:                          # flussi golden-path dichiarati (preferiti ai de
 
 ### Positive
 
-- Chiude il loop "il codice è live e funziona nel browser", non solo "i test unit passano".
-  Colma il gap "verifica UI manuale" per i progetti web.
-- **Riuso pulito:** il Gate 6 invoca la stessa skill standalone (single source of truth,
-  pattern già collaudato da Gate 1b→design-brainstorm e Step 6→review-triage-fix).
-- **Auto-skip su non-web:** nessun falso avvio su rempay (SwiftUI) / CLI / librerie. Il
-  default fail-safe è "non-web".
-- **Report persistente** con screenshot + console + network + esito per flusso, integrato nel
-  manifest (`artifacts.e2e`), utile per audit e per decidere un ciclo di fix.
-- **Classificazione feature-bug vs test-fragile** preserva la fiducia nel report (un selettore
-  cambiato non viene gridato come bug).
-- **Anti-rabbit-hole esplicito** (timeout, max-retry, stop-and-ask, no-dialog) coerente con la
-  guida del system prompt e coi fatti doc su dialog/idle.
+- Closes the loop "the code is live and works in the browser", not just "unit tests pass".
+  Fills the "manual UI check" gap for web projects.
+- **Clean reuse:** Gate 6 invokes the same standalone skill (single source of truth, pattern
+  already proven by Gate 1b->design-brainstorm and Step 6->review-triage-fix).
+- **Auto-skip on non-web:** no false starts on rempay (SwiftUI) / CLI / libraries. The default
+  fail-safe is "non-web".
+- **Persistent report** with screenshots + console + network + per-flow outcome, integrated in
+  the manifest (`artifacts.e2e`), useful for audit and for deciding a fix cycle.
+- **Feature-bug vs test-fragile classification** preserves trust in the report (a changed selector
+  is not cried as a bug).
+- **Explicit anti-rabbit-hole** (timeout, max-retry, stop-and-ask, no-dialog) consistent with
+  the system prompt guide and doc facts on dialog/idle.
 
 ### Negative
 
-- **Non-determinismo intrinseco:** i flussi a livello di intento eseguiti su una UI reale non
-  sono riproducibili al 100%. Mitigato dai flussi dichiarati in YAML (più stabili) e dalla
-  classificazione dei fail, ma resta una caratteristica della feature.
-- **Fragilità dei tool browser:** service worker idle, dialog bloccanti, connessione persa,
-  login/CAPTCHA. Mitigato da stop-and-ask e dalla marcatura "infra"/"verifica manuale", ma può
-  comunque interrompere una run.
-- **Dipendenza da un'assunzione non validata** (tool browser orchestrator-only): se in futuro
-  i sub-agent ereditassero affidabilmente i tool MCP, la scelta resterebbe valida (orchestrator
-  funziona comunque) ma sotto-ottimale (parallelizzazione persa). Documentato come open
-  question.
-- **Testabilità limitata:** il grosso della feature è validabile solo in pilota. Il harness
-  copre solo web-detection + structural anchor. Limite noto, annotato (come ADR-0008/0009).
-- **Setup richiesto:** l'utente deve avere l'estensione Claude in Chrome installata e
-  `--chrome` attivo; senza, la skill non può eseguire (deve rilevarlo e degradare a
-  "prerequisiti mancanti", non fingere un run).
+- **Intrinsic non-determinism:** intent-level flows executed on a real UI are not 100%
+  reproducible. Mitigated by YAML-declared flows (more stable) and failure classification, but
+  it remains a feature characteristic.
+- **Browser tool fragility:** idle service worker, blocking dialogs, lost connection,
+  login/CAPTCHA. Mitigated by stop-and-ask and "infra"/"manual verification" marking, but can
+  still interrupt a run.
+- **Dependency on an unvalidated assumption** (browser tools orchestrator-only): if in the future
+  sub-agents reliably inherited MCP tools, the choice would remain valid (orchestrator works
+  anyway) but sub-optimal (lost parallelization). Documented as open question.
+- **Limited testability:** most of the feature is validatable only in a pilot. The harness covers
+  only web-detection + structural anchor. Known limitation, annotated (as ADR-0008/0009).
+- **Setup required:** the user must have the Claude in Chrome extension installed and `--chrome`
+  active; without it, the skill cannot execute (must detect this and degrade to "prerequisites
+  missing", not fake a run).
 
 ### Neutral
 
-- **Manifest schema 1.2:** nuovo campo opzionale `artifacts.e2e`; 1.0/1.1 restano validi
-  (retrocompat). `manifest-validate.sh` va esteso ad accettare 1.2 (plan).
-- **Nuova convenzione `.claude/web-e2e.yaml`** introdotta da questo ADR; opzionale, va
-  documentata in un eventuale CLAUDE.md di progetto target.
-- **Tool MCP deferred:** i tool browser aumentano il context se "enabled by default"; la skill
-  li carica on-demand (via `/mcp claude-in-chrome` / ToolSearch) solo quando il progetto è web
-  e i flussi sono confermati — non a ogni sessione.
-- Repo `vibe-coding-system` NON-git: i deliverable sono i 3 markdown; il deploy degli artefatti
-  live (`~/.claude/skills/web-e2e-test/`, patch al chain) è un task separato (plan TDD), senza
+- **Manifest schema 1.2:** new optional field `artifacts.e2e`; 1.0/1.1 remain valid
+  (retrocompat). `manifest-validate.sh` must be extended to accept 1.2 (plan).
+- **New convention `.claude/web-e2e.yaml`** introduced by this ADR; optional, should be
+  documented in a target project's CLAUDE.md.
+- **MCP tools deferred:** browser tools increase context if "enabled by default"; the skill loads
+  them on-demand (via `/mcp claude-in-chrome` / ToolSearch) only when the project is web and the
+  flows are confirmed — not on every session.
+- Repo `vibe-coding-system` NON-git: the deliverables are the 3 markdowns; the deploy of the live
+  artifacts (`~/.claude/skills/web-e2e-test/`, chain patch) is a separate task (TDD plan), without
   commit step.
 
 ---
 
 ## References
 
-- ADR-0003 — `docs/architecture/ADR-0003-concept-to-code-chain.md` (chain in cui si innesta il
-  Gate 6; pattern manifest YAML + gate HITL)
-- ADR-0008 — `docs/architecture/ADR-0008-concept-to-code-workflow-v2-brainstorm.md` (precedente
-  di gate opzionale + skill non-terminale invocata dal chain; schema 1.0→1.1; harness
-  structural anchor onesto su skill dialogica)
-- ADR-0005 — `docs/architecture/ADR-0005-vibe-status-skill.md` (skill standalone con report)
-- ADR-0007 — `docs/architecture/ADR-0007-concept-to-code-e2e-smoke.md` (smoke-test del chain)
-- ADR-0009 — `docs/architecture/ADR-0009-db-backup-guardrail.md` (separazione "payload
-  testabile" vs "comportamento runtime validabile solo in pilota"; gap-doc → fail-safe)
-- `~/.claude/skills/concept-to-code/SKILL.md` (state machine; pattern gate→skill riuso)
-- `~/.claude/skills/design-brainstorm/SKILL.md` (skill invocata dal chain, scrive solo il
-  proprio artefatto; structural-anchor harness)
-- Chrome integration: `code.claude.com/docs/en/chrome` (verificato 2026-05-22: localhost,
-  login/CAPTCHA pause, dialog JS bloccanti, service-worker idle, permessi sito ereditati,
-  tool deferred via `/mcp claude-in-chrome`)
-- Sub-agent + MCP: `code.claude.com/docs/en/sub-agents` (inheritance documentata) +
-  anthropics/claude-code issue #7296/#13605/#13898/#34935 (**gap verificato:** Task-launched
-  sub-agents non accedono affidabilmente ai tool MCP → tool browser orchestrator-only)
-- `feedback_bash32-constraint` (harness bash 3.2-clean)
+- ADR-0003 — `docs/architecture/ADR-0003-concept-to-code-chain.md` (chain where Gate 6 is
+  inserted; manifest YAML + HITL gate pattern)
+- ADR-0008 — `docs/architecture/ADR-0008-concept-to-code-workflow-v2-brainstorm.md` (precedent
+  of optional gate + non-terminal skill invoked by the chain; schema 1.0->1.1; honest structural
+  anchor harness on dialogic skill)
+- ADR-0005 — `docs/architecture/ADR-0005-vibe-status-skill.md` (standalone skill with report)
+- ADR-0007 — `docs/architecture/ADR-0007-concept-to-code-e2e-smoke.md` (chain smoke-test)
+- ADR-0009 — `docs/architecture/ADR-0009-db-backup-guardrail.md` (separation "testable payload"
+  vs "runtime behavior validatable only in pilot"; doc-gap -> fail-safe)
+- `~/.claude/skills/concept-to-code/SKILL.md` (state machine; gate->skill reuse pattern)
+- `~/.claude/skills/design-brainstorm/SKILL.md` (skill invoked by the chain, writes only its
+  own artifact; structural-anchor harness)
+- Chrome integration: `code.claude.com/docs/en/chrome` (verified 2026-05-22: localhost,
+  login/CAPTCHA pause, blocking JS dialogs, service-worker idle, inherited site permissions,
+  deferred tools via `/mcp claude-in-chrome`)
+- Sub-agent + MCP: `code.claude.com/docs/en/sub-agents` (documented inheritance) +
+  anthropics/claude-code issues #7296/#13605/#13898/#34935 (**verified gap:** Task-launched
+  sub-agents do not reliably access MCP tools -> browser tools orchestrator-only)
+- `feedback_bash32-constraint` (bash 3.2-clean harness)

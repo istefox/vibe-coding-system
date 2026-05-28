@@ -7,98 +7,98 @@
 **Related:**
 - `docs/superpowers/specs/2026-05-20-coder-preflight-pattern-classifier-design.md`
 - `docs/superpowers/plans/2026-05-20-coder-preflight-pattern-classifier.md`
-- `~/.claude/skills/review-triage-fix/SKILL.md` (v1.2 Add+Remove rule — rete di sicurezza complementare)
+- `~/.claude/skills/review-triage-fix/SKILL.md` (v1.2 Add+Remove rule — complementary safety net)
 - `~/.claude/projects/-Users-stefanoferri-Developer-vibe-coding-system/memory/feedback_micropiano-refactor-cleanup.md` (RESOLVED 2026-05-20)
 
 ---
 
 ## 1. Context
 
-Il sistema multi-agente vibe-coding (sez. 2-3 di `docs/vibe-coding-system.md`) ha un sub-agent
-`coder` (Sonnet, `~/.claude/agents/coder.md`) plan-driven: esegue alla lettera quello che riceve.
-La skill `review-triage-fix` v1.2 (2026-05-20) ha appena introdotto la regola **Add+Remove**
-nello Step 2 del triage, dopo l'osservazione del cycle 2 di `pricing-markup-cli`: il `coder`
-aveva ricevuto un micro-piano formulato come "aggiungi autouse fixture" senza esplicitare
-"rimuovi la fixture preesistente che fa lo stesso lavoro", e aveva agito conservativamente
-lasciando la duplicazione in place — MAJOR al re-review.
+The vibe-coding multi-agent system (sec. 2-3 of `docs/vibe-coding-system.md`) has a `coder`
+sub-agent (Sonnet, `~/.claude/agents/coder.md`) that is plan-driven: it executes exactly what
+it receives. The `review-triage-fix` skill v1.2 (2026-05-20) just introduced the **Add+Remove**
+rule in Step 2 of triage, following the observation during cycle 2 of `pricing-markup-cli`: the
+`coder` had received a micro-plan formulated as "add autouse fixture" without explicitly stating
+"remove the pre-existing fixture that does the same work", and had acted conservatively leaving
+the duplication in place — a MAJOR finding at re-review.
 
-La regola v1.2 risolve **il caso specifico substitution** ma resta:
+The v1.2 rule resolves **the specific substitution case** but the following issues remain:
 
-1. **Reattiva.** Agisce in triage del review *dopo* che il codice duplicato è già stato scritto.
-   Il coder è già passato, il filesystem live ha 2 fixture autouse.
-2. **Single-pattern.** Copre solo SUBSTITUTION. Nessuna leva equivalente per ADD (che potrebbe
-   richiedere "ricorda di scrivere il test"), per REMOVE (che potrebbe richiedere "verifica
-   caller orfani"), per MODIFY (che non richiede nulla di specifico ma è utile classificare
-   per chiarezza dell'intent).
-3. **Non scalabile.** Aggiungere altre invarianti analoghe in v1.3/v1.4 significa accumulare
-   regole prosaiche su SKILL.md Step 2 senza taxonomy esplicita → entropia.
+1. **Reactive.** It acts during triage *after* the duplicated code has already been written.
+   The coder has already passed, the live filesystem has 2 autouse fixtures.
+2. **Single-pattern.** It covers only SUBSTITUTION. No equivalent lever for ADD (which might
+   require "remember to write the test"), for REMOVE (which might require "verify orphan
+   callers"), for MODIFY (which requires nothing specific but is useful to classify for
+   clarity of intent).
+3. **Not scalable.** Adding other analogous invariants in v1.3/v1.4 means accumulating
+   prosaic rules on SKILL.md Step 2 without explicit taxonomy — entropy.
 
-**Problema architetturale:** il `coder` agent non ha un contract esplicito che lo costringa a
-**dichiarare l'intent dell'edit imminente** prima di eseguire il tool call. La disciplina
-"micro-piano = 2-3 righe" copre il *cosa*; manca il *tipo strutturale dell'operazione*.
+**Architectural problem:** the `coder` agent has no explicit contract that forces it to
+**declare the intent of the imminent edit** before executing the tool call. The "micro-plan
+= 2-3 lines" discipline covers the *what*; the *structural type of the operation* is missing.
 
-**Direzione:** introdurre un **pre-flight pattern classifier** che il `coder` deve emettere
-prima di ogni Edit/Write tool call. 4 categorie esaustive e mutuamente esclusive: `ADD`,
-`REMOVE`, `REPLACE`, `MODIFY`. Per `REPLACE` la dichiarazione del pair `Add:`/`Remove:` è
-obbligatoria, promuovendo la regola v1.2 da rete di sicurezza post-hoc a contract pre-edit.
+**Direction:** introduce a **pre-flight pattern classifier** that the `coder` must emit
+before every Edit/Write tool call. 4 exhaustive and mutually exclusive categories: `ADD`,
+`REMOVE`, `REPLACE`, `MODIFY`. For `REPLACE` the declaration of the `Add:`/`Remove:` pair is
+mandatory, promoting the v1.2 rule from a post-hoc safety net to a pre-edit contract.
 
-### Vincoli ereditati
+### Inherited constraints
 
-- **Anchor preservation harness `review-triage-fix`:** il harness in
-  `~/.claude/skills/review-triage-fix/tests/run-tests.sh` deve restare PASS=41/41 minimo
-  (target post-feature: PASS=42/42 con 1 anchor aggiunto a `coder.md` structural sweep —
-  vedi Decision §3.3).
-- **Bash 3.2 compat** per ogni script live in `~/.claude/`.
-- **No backwards-compat shim:** modifiche al `coder` agent sostituiscono pulito.
-- **Coexistenza con v1.2:** la regola Add+Remove in `review-triage-fix` Step 2 resta — è la
-  rete di sicurezza per quando il pattern classifier viene dichiarato male o assente
+- **Anchor preservation harness `review-triage-fix`:** the harness in
+  `~/.claude/skills/review-triage-fix/tests/run-tests.sh` must remain PASS=41/41 minimum
+  (post-feature target: PASS=42/42 with 1 anchor added to `coder.md` structural sweep —
+  see Decision §3.3).
+- **Bash 3.2 compat** for any script live in `~/.claude/`.
+- **No backwards-compat shim:** changes to the `coder` agent replace cleanly.
+- **Coexistence with v1.2:** the Add+Remove rule in `review-triage-fix` Step 2 remains — it
+  is the safety net for when the pattern classifier is declared incorrectly or absent
   (failure mode Q6).
-- **Sub-agent identity invariata:** `coder.md` resta Sonnet, tools immutati
-  (`Read, Edit, Write, Glob, Grep, Bash`), color verde, plan-driven.
+- **Sub-agent identity unchanged:** `coder.md` remains Sonnet, tools unchanged
+  (`Read, Edit, Write, Glob, Grep, Bash`), green color, plan-driven.
 
-### Assunzioni esplicite (non verificate empiricamente)
+### Explicit assumptions (not empirically verified)
 
-- L'LLM `coder` (Sonnet) seguirà un contract di output strutturato del tipo "before every Edit
-  tool call, emit one line `PATTERN: <CATEGORY> | ...`" con la stessa fedeltà con cui segue
-  oggi la disciplina del micro-piano. Plausibile (la disciplina v1.0-v1.2 dei micro-piani 2-3
-  righe funziona), ma non verificato per questa esatta forma di output.
-- La granularità "1 pattern per Step del plan" è il giusto compromesso (vedi Decision §3.3).
-  Validabile solo con un pilota operativo.
-- Il reviewer agent può imparare a fare il check di coerenza "pattern dichiarato vs diff
-  effettivo" leggendo il transcript del coder + git diff (o snapshot pre/post in non-git).
-  Plausibile data l'attuale capacità di scan del reviewer (cita `loc=path:line`), ma è una
-  nuova invariante che richiede aggiunta al `reviewer.md` system prompt.
+- The `coder` LLM (Sonnet) will follow a structured output contract of the type "before every Edit
+  tool call, emit one line `PATTERN: <CATEGORY> | ...`" with the same fidelity with which it
+  follows today the micro-plan discipline. Plausible (the v1.0-v1.2 micro-plan 2-3 line
+  discipline works), but not verified for this exact output form.
+- The granularity "1 pattern per Step of the plan" is the right trade-off (see Decision §3.3).
+  Validatable only with an operational pilot.
+- The reviewer agent can learn to perform the coherence check "declared pattern vs actual diff"
+  by reading the coder transcript + git diff (or pre/post snapshot in non-git).
+  Plausible given the current reviewer scan capability (cites `loc=path:line`), but it is a
+  new invariant that requires addition to the `reviewer.md` system prompt.
 
 ---
 
 ## 2. Decision
 
-Introdurre il **Coder Pre-flight Pattern Classifier** come contract di output del `coder`
-agent, enforced via system prompt (`~/.claude/agents/coder.md`), con validation post-hoc nel
-`reviewer` agent e fallback v1.2 inalterato.
+Introduce the **Coder Pre-flight Pattern Classifier** as an output contract of the `coder`
+agent, enforced via system prompt (`~/.claude/agents/coder.md`), with post-hoc validation in
+the `reviewer` agent and unchanged v1.2 fallback.
 
-### 2.1 Le 4 categorie
+### 2.1 The 4 categories
 
-| Pattern | Significato | Invariante richiesta |
+| Pattern | Meaning | Required invariant |
 |---|---|---|
-| `ADD` | Codice nuovo, nessun pattern precedente da rimuovere (nuovo test, nuova funzione, nuovo file, validazione mancante, edge-case test). | Nessuna struttura aggiuntiva — `ADD: <path:line> <one-line-intent>`. |
-| `REMOVE` | Cancellazione pura (codice morto, file inutilizzato). | Dichiarare `Callers checked: <list or "none">` per evitare orfani. |
-| `REPLACE` | Sostituzione di pattern esistente con pattern nuovo (move import to top-level, extract magic number, consolidate duplicate fixtures, rename helper). | **`Add:` + `Remove:` pair obbligatori.** Forma: `REPLACE \| Add: <path:line> <new> \| Remove: <path:line> <old>`. |
-| `MODIFY` | Edit in-place senza cambio di struttura (typo fix, rename var, refactor interno di un'unica funzione che resta logicamente la stessa, comment update). | `MODIFY: <path:line> <one-line-intent>`. |
+| `ADD` | New code, no prior pattern to remove (new test, new function, new file, missing validation, edge-case test). | No additional structure — `ADD: <path:line> <one-line-intent>`. |
+| `REMOVE` | Pure deletion (dead code, unused file). | Declare `Callers checked: <list or "none">` to avoid orphans. |
+| `REPLACE` | Substitution of existing pattern with new pattern (move import to top-level, extract magic number, consolidate duplicate fixtures, rename helper). | **`Add:` + `Remove:` pair mandatory.** Form: `REPLACE \| Add: <path:line> <new> \| Remove: <path:line> <old>`. |
+| `MODIFY` | In-place edit without structural change (typo fix, rename var, internal refactor of a single function that remains logically the same, comment update). | `MODIFY: <path:line> <one-line-intent>`. |
 
-Le 4 categorie sono esaustive e mutuamente esclusive per costruzione. Edge cases coperti in
+The 4 categories are exhaustive and mutually exclusive by construction. Edge cases covered in
 Decision §2.5.
 
-### 2.2 Forma dell'output (Q1)
+### 2.2 Output form (Q1)
 
-**Self-disciplined output testuale del coder, una riga immediatamente PRIMA del tool call
-Edit/Write.** Format strict:
+**Self-disciplined textual output of the coder, one line immediately BEFORE the Edit/Write tool
+call.** Strict format:
 
 ```
 PATTERN: <CATEGORY> | <category-specific payload>
 ```
 
-Esempi concreti:
+Concrete examples:
 
 ```
 PATTERN: ADD | tests/test_pricing.py:42 add failing test for negative markup
@@ -107,222 +107,219 @@ PATTERN: MODIFY | src/pricing/markup.py:88 rename `mrg` to `margin` for clarity
 PATTERN: REMOVE | src/legacy_util.py (full file) | Callers checked: grep returned 0 hits across src/ and tests/
 ```
 
-Una riga = un tool call. Se un Step del plan ha multipli Edit indipendenti, multipli
-`PATTERN:` headers, uno per ciascun Edit, ciascuno seguito dal suo tool call. Niente JSON,
-niente file di state — il classifier vive nel transcript dell'agent ed è ispezionabile
-direttamente dall'orchestrator e dal reviewer.
+One line = one tool call. If a Step in the plan has multiple independent Edits, multiple
+`PATTERN:` headers, one for each Edit, each followed by its tool call. No JSON, no state files
+— the classifier lives in the agent transcript and is directly inspectable by the orchestrator
+and reviewer.
 
 ### 2.3 Enforcement (Q2)
 
-**Three-layer defense, ognuno facoltativo singolarmente, robusto collettivamente:**
+**Three-layer defense, each individually optional, collectively robust:**
 
-1. **System prompt del `coder.md` agent (primaria, mandatory in v1.0):** la disciplina
-   classifier è specificata come hard contract: "**before every Edit or Write tool call you
-   MUST emit a single-line `PATTERN: ...` header**". Identico statuto della disciplina
-   micro-piano v1.0-v1.2.
-2. **Reviewer post-hoc coerenza check (secondary):** il `reviewer.md` guadagna 1 invariante:
-   "se l'agent che ha generato la diff è `coder`, verifica che il transcript contenga
-   `PATTERN:` headers coerenti con le hunk del diff; flag MINOR `pattern-drift` se il
-   pattern dichiarato non corrisponde al diff effettivo (es. dichiarato `ADD` ma il diff
-   contiene rimozioni non-triviali)". Non bloccante, è un MINOR informativo.
-3. **review-triage-fix v1.2 Add+Remove rule (tertiary, esistente, immutata):** se il pattern
-   classifier fallisce (dichiarato male o omesso) e il bug duplication-by-omission del cycle
-   2 ritorna, la rete v1.2 lo cattura come prima. Coesistenza esplicitamente preservata.
+1. **`coder.md` agent system prompt (primary, mandatory in v1.0):** the classifier
+   discipline is specified as a hard contract: "**before every Edit or Write tool call you
+   MUST emit a single-line `PATTERN: ...` header**". Same status as the micro-plan
+   discipline v1.0-v1.2.
+2. **Reviewer post-hoc coherence check (secondary):** `reviewer.md` gains 1 invariant:
+   "if the agent that generated the diff is `coder`, verify that the transcript contains
+   `PATTERN:` headers coherent with the diff hunks; flag MINOR `pattern-drift` if the
+   declared pattern does not match the actual diff (e.g. declared `ADD` but diff contains
+   non-trivial removals)". Non-blocking, it is an informative MINOR.
+3. **review-triage-fix v1.2 Add+Remove rule (tertiary, existing, unchanged):** if the pattern
+   classifier fails (declared incorrectly or omitted) and the duplication-by-omission bug from
+   cycle 2 returns, the v1.2 net catches it as before. Coexistence explicitly preserved.
 
-**Hook PreToolUse bash come enforcement primario è esplicitamente scartato** (vedi
-Alternatives §3.1.c).
+**Hook PreToolUse bash as primary enforcement is explicitly rejected** (see Alternatives §3.1.c).
 
-### 2.4 Granularità (Q3 + Q5)
+### 2.4 Granularity (Q3 + Q5)
 
-**Granularità = 1 dichiarazione `PATTERN:` per tool call Edit/Write.**
+**Granularity = 1 `PATTERN:` declaration per Edit/Write tool call.**
 
-- Non per task del plan (troppo grossa, perde multi-pattern).
-- Non per "blocco logico" (ambiguo, soggetto a interpretazione).
-- Per ciascun tool call individuale (deterministico, ispezionabile).
+- Not per plan task (too coarse, loses multi-pattern).
+- Not per "logical block" (ambiguous, subject to interpretation).
+- Per individual tool call (deterministic, inspectable).
 
-**Interazione con plan TDD a 5-7 task:** ciascun Step `- [ ]` del plan è un blocco di esecuzione
-che tipicamente contiene 1-3 Edit. Il pattern dominante è derivabile dallo Step (red phase →
-solitamente `ADD`; green phase → `ADD` o `MODIFY`; sync deliverable → `MODIFY`), ma la
-classificazione finale è **run-time, dal coder, per ciascun Edit**, perché:
+**Interaction with TDD plan with 5-7 tasks:** each `- [ ]` Step of the plan is an execution
+block that typically contains 1-3 Edits. The dominant pattern is derivable from the Step (red
+phase -> usually `ADD`; green phase -> `ADD` or `MODIFY`; sync deliverable -> `MODIFY`), but
+the final classification is **run-time, by the coder, for each Edit**, because:
 
-- La realtà di implementazione può deviare dal plan (e in quel caso classification a freddo
-  pre-plan mente).
-- Pattern multipli legittimi in uno Step (es. green phase richiede ADD nuova funzione +
-  MODIFY caller esistente) devono essere ciascuno classificato.
+- The implementation reality may deviate from the plan (and in that case pre-plan cold
+  classification lies).
+- Multiple legitimate patterns in one Step (e.g. green phase requires ADD new function +
+  MODIFY existing caller) must each be classified.
 
-Il **plan scritto dall'architect NON deve pre-dichiarare i pattern per step**, perché
-forzerebbe il coder a un'aderenza che potrebbe nascondere drift legittimi. L'architect resta
-agnostico; il coder classifica.
+The **plan written by the architect MUST NOT pre-declare patterns per step**, because
+it would force the coder into compliance that might hide legitimate drift. The architect remains
+agnostic; the coder classifies.
 
-### 2.5 Edge cases della classificazione (Q4 espanso + cover di edge cases)
+### 2.5 Classification edge cases (Q4 expanded + edge case coverage)
 
-- **REPLACE quando il file nuovo non esiste ancora** (es. `Add:` punta a `tests/conftest.py`
-  appena creato): il coder usa il filename + 1-line description del pattern come
-  identificatore — `Add: tests/conftest.py (new file) _isolate_user_config autouse fixture`.
-- **REPLACE che tocca >1 location di Remove** (consolidate 3 fixtures duplicate in 1):
-  `Remove:` è una lista comma-separated di `path:line` — `Remove: tests/test_a.py:8,
+- **REPLACE when the new file does not yet exist** (e.g. `Add:` points to newly created
+  `tests/conftest.py`): the coder uses the filename + 1-line description of the pattern as
+  identifier — `Add: tests/conftest.py (new file) _isolate_user_config autouse fixture`.
+- **REPLACE that touches >1 Remove locations** (consolidate 3 duplicate fixtures into 1):
+  `Remove:` is a comma-separated list of `path:line` — `Remove: tests/test_a.py:8,
   tests/test_b.py:12, tests/test_c.py:5`.
-- **MODIFY che diventa REPLACE in corsa** (es. rename var ma il coder realizza che
-  contemporaneamente sta rimuovendo il vecchio nome in 5 altri file): emette un secondo
-  `PATTERN:` aggiornato prima del tool call successivo. Non c'è penalty per la
-  ri-classificazione: il transcript è la fonte di verità.
-- **Edit a un file di doc/markdown** (sync deliverable in plan): si applica lo stesso schema.
-  `MODIFY` di solito (sync ref number); `ADD` per nuove sezioni; `REPLACE` raro ma plausibile
-  (es. cambio di policy in CLAUDE.md project).
-- **Bash tool call NON è classificato.** Solo `Edit` e `Write` tool calls richiedono
-  `PATTERN:` header. Il `Read`, `Grep`, `Glob`, `Bash` sono read-only o execution-only e
-  escludono la classificazione (allineato con il fatto che la disciplina è sull'intent di
-  *mutazione*).
+- **MODIFY that becomes REPLACE mid-stream** (e.g. rename var but coder realizes it is
+  simultaneously removing the old name in 5 other files): emits an updated second `PATTERN:`
+  before the next tool call. No penalty for re-classification: the transcript is the source of
+  truth.
+- **Edit to a doc/markdown file** (sync deliverable in plan): the same schema applies.
+  `MODIFY` usually (sync ref number); `ADD` for new sections; `REPLACE` rare but plausible
+  (e.g. policy change in CLAUDE.md project).
+- **Bash tool call is NOT classified.** Only `Edit` and `Write` tool calls require
+  a `PATTERN:` header. `Read`, `Grep`, `Glob`, `Bash` are read-only or execution-only and
+  are excluded from classification (aligned with the fact that the discipline is about the
+  intent of *mutation*).
 
 ### 2.6 Failure mode (Q6)
 
-Cosa succede se il coder dichiara `ADD` ma il diff effettivo contiene rimozioni
-non-triviali?
+What happens if the coder declares `ADD` but the actual diff contains non-trivial removals?
 
-1. **Reviewer post-hoc invariante (§2.3 layer 2)** lo flagga come MINOR `pattern-drift`.
-   Routato a `coder` come micro-piano standard "re-emit classification coerente; se
-   classificazione corretta è REPLACE, applica regola Add+Remove (v1.2)".
-2. **Se il drift causa duplication-by-omission** (es. dichiarato ADD ma era REPLACE e
-   l'old pattern è rimasto): cattura v1.2 Add+Remove rule al ciclo successivo come MAJOR.
+1. **Reviewer post-hoc invariant (§2.3 layer 2)** flags it as MINOR `pattern-drift`.
+   Routed to `coder` as a standard micro-plan "re-emit coherent classification; if the
+   correct classification is REPLACE, apply Add+Remove rule (v1.2)".
+2. **If the drift causes duplication-by-omission** (e.g. declared ADD but it was REPLACE and
+   the old pattern remained): v1.2 Add+Remove rule catches it in the next cycle as MAJOR.
 
-Non c'è auto-revert. Non c'è hook che blocca. La filosofia è triple-layer detection con
-escalation umana (HITL) come gate finale (allineato `~/.claude/CLAUDE.md` invariante "HITL
-gate sempre prima di commit, deploy, modifica schema").
+No auto-revert. No blocking hook. The philosophy is triple-layer detection with
+human escalation (HITL) as the final gate (aligned with `~/.claude/CLAUDE.md` invariant "HITL
+gate always before commit, deploy, schema modification").
 
-### 2.7 Modifiche puntuali ai file
+### 2.7 Precise file changes
 
-- **Modify `~/.claude/agents/coder.md`** — aggiungere sezione "Pre-flight Pattern Classifier"
-  con la tabella delle 4 categorie e gli esempi di output, inserita dopo "Core
-  Responsibilities" e prima di "Process". Modifica sostitutiva (no shim deprecated).
-- **Modify `~/.claude/agents/reviewer.md`** — aggiungere bullet "pattern-drift check" alla
-  sezione "Core Responsibilities" o "Process", con severity MINOR e categoria di finding
+- **Modify `~/.claude/agents/coder.md`** — add a "Pre-flight Pattern Classifier" section
+  with the 4-category table and output examples, inserted after "Core
+  Responsibilities" and before "Process". Substitutive modification (no deprecated shim).
+- **Modify `~/.claude/agents/reviewer.md`** — add "pattern-drift check" bullet to the
+  "Core Responsibilities" or "Process" section, with MINOR severity and finding category
   `pattern-drift`.
-- **Modify `~/.claude/skills/review-triage-fix/tests/run-tests.sh`** — aggiungere 1 anchor
-  structural test che verifica la presenza del literal `Pattern Classifier` in
-  `~/.claude/agents/coder.md`. Harness PASS=41 → PASS=42.
+- **Modify `~/.claude/skills/review-triage-fix/tests/run-tests.sh`** — add 1 structural
+  anchor test that verifies the presence of the literal `Pattern Classifier` in
+  `~/.claude/agents/coder.md`. Harness PASS=41 -> PASS=42.
 
-  Nota architetturale: il harness `review-triage-fix` è oggi single-target (legge solo
-  `SKILL.md`). Estenderlo a leggere un secondo file (`coder.md`) è una **decisione
-  architettonica minore ma esplicita**: la skill `review-triage-fix` ha autorità sulla
-  qualità del proprio stack (incluso il `coder` che dispatcha). Alternative scartate in §3.3.
-- **NO modify `~/.claude/skills/review-triage-fix/SKILL.md`** — la skill resta invariata.
-  La regola Add+Remove v1.2 in Step 2 è coerente per costruzione con il classifier (il
-  classifier la rende pre-flight, ma la post-hoc rule resta come safety net).
+  Architectural note: the `review-triage-fix` harness today is single-target (reads only
+  `SKILL.md`). Extending it to read a second file (`coder.md`) is a **minor but explicit
+  architectural decision**: the `review-triage-fix` skill has authority over the quality of
+  its own stack (including the `coder` it dispatches). Alternatives rejected in §3.3.
+- **NO modify `~/.claude/skills/review-triage-fix/SKILL.md`** — the skill remains unchanged.
+  The Add+Remove v1.2 rule in Step 2 is coherent by construction with the classifier (the
+  classifier makes it pre-flight, but the post-hoc rule remains as safety net).
 
-### 2.8 Lingua
+### 2.8 Language
 
-System prompt del `coder.md` e `reviewer.md` in inglese (codice/contract). Spec, plan e
-memory in italiano. Tabella categorie e esempi in inglese (sono interface contract). Allineato
-con global rule "codice e commit in inglese; testo all'utente in italiano".
+System prompt of `coder.md` and `reviewer.md` in English (code/contract). Spec, plan and
+memory in Italian. Category table and examples in English (they are interface contract). Aligned
+with global rule "code and commits in English; text to user in Italian".
 
 ---
 
 ## 3. Alternatives considered
 
-### 3.1 Dove vive la dichiarazione (Q1)
+### 3.1 Where does the declaration live (Q1)
 
-**a) Self-disciplined output testuale del coder (CHOSEN).** Zero infrastructure, leggibile nel
-transcript orchestrator, allineato con disciplina micro-piano. Rischio: drift LLM
-(classifier dichiarato male o omesso); mitigato da reviewer post-hoc layer + v1.2 safety net.
+**a) Self-disciplined textual output of the coder (CHOSEN).** Zero infrastructure, readable in
+orchestrator transcript, aligned with micro-plan discipline. Risk: LLM drift
+(classifier declared incorrectly or omitted); mitigated by reviewer post-hoc layer + v1.2 safety
+net.
 
-**b) File JSON di state `.claude/.pattern-classifier-current.json`** — *Rejected*. Richiede
-I/O scaffolding (lock file? cleanup tra cycle? snapshot pre/post?), aggiunge complessità a un
-problema che è fondamentalmente di disciplina dichiarativa. Non risolve il vero rischio
-(drift LLM): l'LLM può scrivere male il JSON tanto quanto scrivere male la riga
-`PATTERN: ...`. State file aggiunge un punto di failure (stale state, race con dispatch
-paralleli) senza benefit proporzionato.
+**b) JSON state file `.claude/.pattern-classifier-current.json`** — *Rejected*. Requires
+I/O scaffolding (lock file? cleanup between cycles? pre/post snapshot?), adds complexity to a
+problem that is fundamentally declarative discipline. Does not resolve the real risk
+(LLM drift): the LLM can write the JSON incorrectly just as it can write the `PATTERN: ...`
+line incorrectly. State file adds a failure point (stale state, race with parallel dispatches)
+without proportional benefit.
 
-**c) Hook PreToolUse bash intercetta il tool call Edit/Write** — *Rejected*. Tre ragioni:
-(i) gli hook PreToolUse di Claude Code ricevono `tool_input` JSON, non il testo del response
-precedente — l'hook bash non può "vedere" il `PATTERN: ...` header senza side-channel state
-file (re-introduce 3.1.b); (ii) violerebbe il vincolo bash 3.2 con scrittura/lettura JSON
-robusta; (iii) un hook che blocca un Edit perché manca il pattern viola la filosofia
-"l'enforcement primario è disciplina + reviewer post-hoc, non gate hard al filesystem"
-(allineato al fatto che anche v1.2 è prose-discipline, non hook-enforcement).
+**c) Hook PreToolUse bash intercepts the Edit/Write tool call** — *Rejected*. Three reasons:
+(i) Claude Code PreToolUse hooks receive `tool_input` JSON, not the text of the preceding
+response — the bash hook cannot "see" the `PATTERN: ...` header without a side-channel state
+file (re-introduces 3.1.b); (ii) would violate the bash 3.2 constraint with robust JSON
+writing/reading; (iii) a hook that blocks an Edit because the pattern is missing violates the
+philosophy "primary enforcement is discipline + reviewer post-hoc, not hard gate at filesystem"
+(aligned with the fact that even v1.2 is prose-discipline, not hook-enforcement).
 
-### 3.2 Chi enforca (Q2)
+### 3.2 Who enforces (Q2)
 
-**a) Self-discipline via system prompt (CHOSEN, primary layer).** Lo stesso meccanismo
-funziona già per micro-piano discipline v1.0-v1.2. Il `coder` plan-driven segue contract
-testuali con alta fedeltà se il contract è chiaro e con esempi.
+**a) Self-discipline via system prompt (CHOSEN, primary layer).** The same mechanism
+already works for micro-plan discipline v1.0-v1.2. The plan-driven `coder` follows textual
+contracts with high fidelity if the contract is clear and has examples.
 
-**b) Hook PreToolUse bash blocca Edit se manca pattern** — *Rejected* (vedi §3.1.c).
+**b) Hook PreToolUse bash blocks Edit if pattern is missing** — *Rejected* (see §3.1.c).
 
-**c) Solo reviewer post-hoc, senza system prompt** — *Rejected*. Sposta tutto il carico al
-reviewer (che già fa molto), e perde la leva proattiva: il coder *prima* di scrivere il
-codice trae beneficio cognitivo dal classificare l'intent (specialmente REPLACE → forzato a
-pensare al pair). Reviewer post-hoc resta come secondary layer, non primary.
+**c) Only reviewer post-hoc, without system prompt** — *Rejected*. Shifts all the load to the
+reviewer (which already does a lot), and loses the proactive lever: the coder *before* writing
+the code benefits cognitively from classifying intent (especially REPLACE -> forced to think
+about the pair). Reviewer post-hoc remains as secondary layer, not primary.
 
-**Scelto layer-stack:** primary = system prompt; secondary = reviewer pattern-drift check;
-tertiary = v1.2 Add+Remove rule come safety net duplicato-cattura.
+**Chosen layer-stack:** primary = system prompt; secondary = reviewer pattern-drift check;
+tertiary = v1.2 Add+Remove rule as duplicate-catch safety net.
 
-### 3.3 Granularità (Q3 + Q5)
+### 3.3 Granularity (Q3 + Q5)
 
-**a) Per tool call (CHOSEN).** Deterministico, ispezionabile, segue il "naturale ritmo" del
-lavoro del coder. Pattern multipli per Step del plan = multipli headers, normale.
+**a) Per tool call (CHOSEN).** Deterministic, inspectable, follows the "natural rhythm" of
+the coder's work. Multiple patterns per Step of the plan = multiple headers, normal.
 
-**b) Per task del plan** — *Rejected*. Troppo grossa: un task TDD red+green+sync
-contiene 3-5 Edit con pattern potenzialmente diversi (es. red ADD, green ADD+MODIFY, sync
-MODIFY). Un singolo pattern per task forzerebbe il "pattern dominante" e maschererebbe i
-sotto-pattern, perdendo proprio il valore della classificazione.
+**b) Per plan task** — *Rejected*. Too coarse: a TDD red+green+sync task
+contains 3-5 Edits with potentially different patterns (e.g. red ADD, green ADD+MODIFY, sync
+MODIFY). A single pattern per task would force the "dominant pattern" and mask sub-patterns,
+losing precisely the value of the classification.
 
-**c) Per blocco logico (3-5 Edit correlati)** — *Rejected*. "Blocco logico" è ambiguo, non
-testabile, non ispezionabile. Lascerebbe spazio di interpretazione che la classificazione
-deve invece chiudere. Anti-pattern di design.
+**c) Per logical block (3-5 correlated Edits)** — *Rejected*. "Logical block" is ambiguous,
+not testable, not inspectable. It would leave room for interpretation that the classification
+should instead close. Design anti-pattern.
 
-### 3.3 (sub-question) Harness extension cross-file (per anchor test su `coder.md`)
+### 3.3 (sub-question) Harness extension cross-file (for anchor test on `coder.md`)
 
-**a) Estendere harness `review-triage-fix` ad assertare anchor su `coder.md` (CHOSEN).** La
-skill `review-triage-fix` ha già autorità sulla qualità del coder agent che dispatcha (`debugger`,
-`refactorer`, `coder` ne sono i dispatch target). Il harness aggiunge 1 funzione helper
-`g_file(file, str, label)` (generalizzazione della `g()` esistente) e 1 assertion finale.
-Costo: ~5 righe bash. Beneficio: 1 anchor in più che protegge la "Pattern Classifier" section
-del coder.md da rimozioni accidentali future. PASS=41 → PASS=42.
+**a) Extend `review-triage-fix` harness to assert anchor on `coder.md` (CHOSEN).** The
+`review-triage-fix` skill already has authority over the quality of the coder agent it dispatches
+(`debugger`, `refactorer`, `coder` are its dispatch targets). The harness adds 1 helper function
+`g_file(file, str, label)` (generalization of the existing `g()`) and 1 final assertion.
+Cost: ~5 bash lines. Benefit: 1 additional anchor that protects the "Pattern Classifier" section
+of coder.md from accidental future removal. PASS=41 -> PASS=42.
 
-**b) Creare un harness separato dedicato al `coder.md`** — *Rejected*. Ridondante:
-duplicherebbe la stessa logica `grep -q literal in file`. Aggiungerebbe un nuovo
-deployment point in `~/.claude/agents/` o simile, contrario al principio "minimal moving
-parts".
+**b) Create a separate harness dedicated to `coder.md`** — *Rejected*. Redundant:
+would duplicate the same logic `grep -q literal in file`. Would add a new deployment point
+in `~/.claude/agents/` or similar, contrary to the "minimal moving parts" principle.
 
-**c) Nessun structural anchor test** — *Rejected*. Senza anchor, una refactor accidentale del
-coder.md (es. consolidare sezioni, riscrivere) potrebbe far perdere la disciplina classifier
-silenziosamente, senza alert. Anchor è la rete di sicurezza standard del sistema (la stessa
-filosofia di v1.0-v1.2 di review-triage-fix harness).
+**c) No structural anchor test** — *Rejected*. Without an anchor, an accidental refactor of
+coder.md (e.g. consolidating sections, rewriting) could silently lose the classifier
+discipline, without alert. Anchor is the standard safety net of the system (same
+philosophy as v1.0-v1.2 of review-triage-fix harness).
 
-### 3.4 Cosa fa REPLACE (Q4)
+### 3.4 What REPLACE does (Q4)
 
-**a) Pair `Add:` + `Remove:` esplicito obbligatorio (CHOSEN).** Promuove la regola v1.2 da
-post-hoc a pre-flight. Format strict `REPLACE | Add: <loc> | Remove: <loc>`. Force il coder a
-*pensare* alla rimozione mentre pensa all'aggiunta — la cognitive leverage è la chiave
-dell'intervento.
+**a) Explicit mandatory `Add:` + `Remove:` pair (CHOSEN).** Promotes the v1.2 rule from
+post-hoc to pre-flight. Strict format `REPLACE | Add: <loc> | Remove: <loc>`. Forces the coder
+to *think* about the removal while thinking about the addition — the cognitive leverage is the
+key of the intervention.
 
-**b) Flag promemoria "ricorda Add+Remove" senza format strict** — *Rejected*. Reintroduce il
-fail mode v1.1 (il coder può "ricordare" senza esplicitare e poi non agire). La regola v1.2
-ha appena risolto questo, sarebbe un regresso semantico.
+**b) Reminder flag "remember Add+Remove" without strict format** — *Rejected*. Reintroduces the
+v1.1 failure mode (the coder can "remember" without being explicit and then not act). The v1.2
+rule just resolved this; it would be a semantic regression.
 
-**c) Checklist auto generata dal sistema** — *Rejected*. Richiede infrastructure (vedi
-§3.1.b state file). Non scala (chi popola la checklist? in che linguaggio?).
+**c) Auto-generated checklist from the system** — *Rejected*. Requires infrastructure (see
+§3.1.b state file). Does not scale (who populates the checklist? in what language?).
 
-### 3.5 Interazione TDD plan (Q5)
+### 3.5 Interaction with TDD plan (Q5)
 
-**a) Run-time per-tool-call (CHOSEN, già motivato in §2.4).** L'architect/plan non
-pre-dichiara pattern; il coder classifica a runtime.
+**a) Run-time per-tool-call (CHOSEN, already motivated in §2.4).** The architect/plan does not
+pre-declare patterns; the coder classifies at runtime.
 
-**b) Plan pre-dichiara il pattern di ciascuno Step** — *Rejected*. Forzerebbe aderenza a un
-contract scritto a freddo dall'architect. La realtà di implementazione può legittimamente
-deviare, e in quel caso il coder dovrebbe poter ri-classificare senza chiedere amendment al
-plan.
+**b) Plan pre-declares the pattern for each Step** — *Rejected*. Would force compliance with a
+contract written cold by the architect. The implementation reality can legitimately deviate, and
+in that case the coder should be able to re-classify without requesting an amendment to the plan.
 
 ### 3.6 Failure mode (Q6)
 
-**a) Reviewer post-hoc invariante + v1.2 safety net (CHOSEN).** Triple-layer
-(system-prompt → reviewer → v1.2). Nessun gate hard, escalation HITL come ultima.
+**a) Reviewer post-hoc invariant + v1.2 safety net (CHOSEN).** Triple-layer
+(system-prompt -> reviewer -> v1.2). No hard gate, HITL escalation as last resort.
 
-**b) Hook che diff-controlla declared-vs-actual** — *Rejected* (vedi §3.1.c).
+**b) Hook that diff-checks declared-vs-actual** — *Rejected* (see §3.1.c).
 
-**c) Solo v1.2 safety net senza reviewer invariante** — *Rejected*. v1.2 cattura
-duplication-by-omission per substitution, ma NON cattura altri pattern-drift (es. dichiarato
-ADD ma diff è REMOVE non-triviale). Reviewer invariante è il caso generale.
+**c) Only v1.2 safety net without reviewer invariant** — *Rejected*. v1.2 catches
+duplication-by-omission for substitution, but does NOT catch other pattern-drift (e.g. declared
+ADD but diff is non-trivial REMOVE). Reviewer invariant handles the general case.
 
 ---
 
@@ -330,67 +327,67 @@ ADD ma diff è REMOVE non-triviale). Reviewer invariante è il caso generale.
 
 ### 4.1 Positive
 
-- **Cognitive leverage proattiva.** Il coder, costretto a classificare prima di scrivere,
-  pensa meglio all'intent. Specialmente REPLACE → forza il pair Add+Remove al *punto
-  giusto* (pre-edit), spostando v1.2 da rete di sicurezza a contract.
-- **Scalabilità del modello.** Se in v1.3 vogliamo aggiungere "REMOVE deve dichiarare
-  caller-check", "ADD deve dichiarare test paired", etc., aggiungiamo righe alla tabella
-  delle 4 categorie senza riscrivere il framework.
-- **Trasparenza per orchestrator + reviewer.** Il transcript del coder è auto-documentato:
-  scrolling delle righe `PATTERN: ...` produce un audit log dell'intent.
-- **Tre layer di difesa contro duplication-by-omission.** v1.2 alone cattura solo a
-  re-review post-fix; classifier pre-flight cattura *prima* dell'edit; reviewer pattern-drift
-  cattura mid-cycle.
-- **Anchor preservato.** PASS=41 → PASS=42 (additivo, no regressione).
-- **Zero nuove dipendenze.** Solo system prompt edits + 1 anchor test bash 3.2-clean.
+- **Proactive cognitive leverage.** The coder, forced to classify before writing, thinks better
+  about intent. Especially REPLACE -> forces the Add+Remove pair at the *right point*
+  (pre-edit), moving v1.2 from safety net to contract.
+- **Model scalability.** If in v1.3 we want to add "REMOVE must declare caller-check",
+  "ADD must declare paired test", etc., we add rows to the 4-category table without
+  rewriting the framework.
+- **Transparency for orchestrator + reviewer.** The coder transcript is self-documented:
+  scrolling the `PATTERN: ...` lines produces an audit log of intent.
+- **Three layers of defense against duplication-by-omission.** v1.2 alone catches only at
+  re-review post-fix; classifier pre-flight catches *before* the edit; reviewer pattern-drift
+  catches mid-cycle.
+- **Anchor preserved.** PASS=41 -> PASS=42 (additive, no regression).
+- **Zero new dependencies.** Only system prompt edits + 1 anchor test bash 3.2-clean.
 
 ### 4.2 Negative
 
-- **Overhead testuale nel transcript del coder.** Ogni Edit/Write è preceduto da 1 riga
-  `PATTERN: ...`. Per task con 10 Edit, +10 righe. Non bloccante (cheap tokens), ma
-  rumoroso.
-- **Rischio di drift dell'LLM.** Il coder potrebbe omettere il pattern header in stress
-  conditions (context window pieno, prompt lungo). Mitigato da reviewer post-hoc, ma non
-  eliminato.
-- **Dipendenza dal reviewer agent per il check secondary.** Se review-triage-fix non viene
-  invocata su un cycle, il pattern-drift check è bypassato. Mitigato da v1.2 safety net (che
-  resta attiva nei prossimi review-triage-fix invocati).
-- **Couplig minore tra `review-triage-fix/tests/run-tests.sh` e `~/.claude/agents/coder.md`.**
-  Il harness ora legge 2 file. Se in futuro splittiamo o rinominiamo coder.md, anchor va
-  aggiornato. Costo accettabile (1 path string da aggiornare).
+- **Textual overhead in the coder transcript.** Each Edit/Write is preceded by 1
+  `PATTERN: ...` line. For tasks with 10 Edits, +10 lines. Not blocking (cheap tokens), but
+  noisy.
+- **Risk of LLM drift.** The coder might omit the pattern header under stress
+  conditions (full context window, long prompt). Mitigated by reviewer post-hoc, but not
+  eliminated.
+- **Dependency on the reviewer agent for the secondary check.** If review-triage-fix is not
+  invoked in a cycle, the pattern-drift check is bypassed. Mitigated by the v1.2 safety net
+  (which remains active in subsequent review-triage-fix invocations).
+- **Minor coupling between `review-triage-fix/tests/run-tests.sh` and `~/.claude/agents/coder.md`.**
+  The harness now reads 2 files. If in the future we split or rename coder.md, the anchor needs
+  to be updated. Acceptable cost (1 path string to update).
 
 ### 4.3 Neutral
 
-- Il plan TDD scritto dall'architect resta agnostico al classifier — nessun cambio
-  workflow per architect agent.
-- La memory `feedback_micropiano-refactor-cleanup.md` resta RESOLVED (v1.2 chiude la causa,
-  il classifier è additivo).
-- L'orchestrator non cambia: dispatcha `coder` come prima, riceve summary, ispeziona
-  transcript come prima — solo che ora il transcript ha i `PATTERN:` headers.
+- The TDD plan written by the architect remains agnostic to the classifier — no workflow change
+  for the architect agent.
+- The memory `feedback_micropiano-refactor-cleanup.md` remains RESOLVED (v1.2 closes the cause,
+  the classifier is additive).
+- The orchestrator does not change: dispatches `coder` as before, receives summary, inspects
+  transcript as before — except that now the transcript has `PATTERN:` headers.
 
 ### 4.4 Open questions (validation pending)
 
-- **L'LLM segue il contract `PATTERN: ...` con la stessa fedeltà di micro-piano?**
-  Validabile solo con pilota operativo (es. invocare il coder su un task realistico, contare
-  hit-rate dei headers). Confidence iniziale: media — il contract è simile a micro-piano ma
-  più strutturato.
-- **Quanti drift il reviewer pattern-drift check cattura realmente?** Validabile con un
-  pilota di 3-5 cicli review-triage-fix dopo il deploy.
-- **Granularità "1 pattern per tool call" produce headers troppi in plan grossi?**
-  Validabile con metriche dal pilota.
+- **Does the LLM follow the `PATTERN: ...` contract with the same fidelity as the micro-plan?**
+  Validatable only with an operational pilot (e.g. invoke the coder on a realistic task, count
+  the header hit-rate). Initial confidence: medium — the contract is similar to the micro-plan
+  but more structured.
+- **How many drifts does the reviewer pattern-drift check actually catch?** Validatable with a
+  pilot of 3-5 review-triage-fix cycles after deployment.
+- **Does "1 pattern per tool call" granularity produce too many headers in large plans?**
+  Validatable with metrics from the pilot.
 
 ---
 
 ## 5. References
 
-- `~/.claude/agents/coder.md` (target di modifica primaria)
-- `~/.claude/agents/reviewer.md` (target di modifica secondaria)
-- `~/.claude/skills/review-triage-fix/SKILL.md` (v1.2, complement; non modificato)
+- `~/.claude/agents/coder.md` (primary modification target)
+- `~/.claude/agents/reviewer.md` (secondary modification target)
+- `~/.claude/skills/review-triage-fix/SKILL.md` (v1.2, complement; not modified)
 - `~/.claude/skills/review-triage-fix/tests/run-tests.sh` (target +1 anchor)
-- `docs/vibe-coding-system.md` sez. 3.x (8 sub-agent) e sez. 11 (workflow concept→code)
-- `docs/superpowers/specs/2026-05-19-review-triage-fix-design.md` (v1.0 → v1.2 history)
+- `docs/vibe-coding-system.md` sec. 3.x (8 sub-agents) and sec. 11 (workflow concept->code)
+- `docs/superpowers/specs/2026-05-19-review-triage-fix-design.md` (v1.0 -> v1.2 history)
 - `docs/superpowers/specs/2026-05-20-review-triage-fix-v1.2-addremove-design.md`
 - `docs/superpowers/plans/2026-05-20-review-triage-fix-v1.2-addremove.md`
 - Memory `feedback_micropiano-refactor-cleanup.md` (RESOLVED 2026-05-20)
-- Memory `feedback_bash32-constraint.md` (vincolo per harness)
-- Field test `docs/field-test-2026-05-18.md` (storia pilota)
+- Memory `feedback_bash32-constraint.md` (constraint for harness)
+- Field test `docs/field-test-2026-05-18.md` (pilot history)

@@ -1,4 +1,4 @@
-# ADR-0002 — Behavior-preservation Snapshot Harness per il refactorer agent
+# ADR-0002 — Behavior-preservation Snapshot Harness for the refactorer agent
 
 **Status:** Accepted — 2026-05-20 (implemented via plan 2026-05-20-refactor-snapshot-harness.md; harness PASS=45; skill self-test PASS=11)
 **Authors:** Adriano (architect agent) per Stefano Ferri
@@ -7,120 +7,118 @@
 **Related:**
 - `docs/superpowers/specs/2026-05-20-refactor-snapshot-harness-design.md`
 - `docs/superpowers/plans/2026-05-20-refactor-snapshot-harness.md`
-- `~/.claude/agents/refactorer.md` (target di modifica primaria)
-- `~/.claude/skills/review-triage-fix/SKILL.md` (v1.2 Add+Remove rule — non toccata)
+- `~/.claude/agents/refactorer.md` (primary modification target)
+- `~/.claude/skills/review-triage-fix/SKILL.md` (v1.2 Add+Remove rule — not modified)
 - `~/.claude/skills/review-triage-fix/tests/run-tests.sh` (anchor harness target, PASS=43 post ADR-0001)
-- `~/.claude/hooks/approve-test-cmd.sh` (TOFU + 3-tier per `.claude/test-cmd` — riuso del contract)
-- `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` (Accepted 2026-05-20, ortogonale)
-- Memory `feedback_bash32-constraint.md` (vincolo hard per harness)
-- Memory `feedback_micropiano-refactor-cleanup.md` (cycle 2 MAJOR causato da refactor cieco; razionale)
+- `~/.claude/hooks/approve-test-cmd.sh` (TOFU + 3-tier for `.claude/test-cmd` — contract reuse)
+- `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` (Accepted 2026-05-20, orthogonal)
+- Memory `feedback_bash32-constraint.md` (hard constraint for harness)
+- Memory `feedback_micropiano-refactor-cleanup.md` (cycle 2 MAJOR caused by blind refactor; rationale)
 
 ---
 
 ## 1. Context
 
-Il sub-agent `refactorer` (`~/.claude/agents/refactorer.md`, Sonnet, tools `Read, Edit, Glob,
-Grep, Bash`, color giallo) ha oggi un contract di behavior-preservation puramente
-prosaico: "Make behavior-preserving changes only. Run the existing test suite and record
-the baseline (must be green to start). Re-run tests; confirm identical results." Il check
-è un boolean (green → green) e non cattura regressioni silenziose dove il test suite resta
-verde *perché incomplete* ma il comportamento osservabile cambia (output formattato
-diverso, exit code identico ma stdout silenziosamente alterato, error message ricomposto).
+The `refactorer` sub-agent (`~/.claude/agents/refactorer.md`, Sonnet, tools `Read, Edit, Glob,
+Grep, Bash`, yellow color) currently has a purely prosaic behavior-preservation contract: "Make
+behavior-preserving changes only. Run the existing test suite and record the baseline (must be
+green to start). Re-run tests; confirm identical results." The check is a boolean (green -> green)
+and does not catch silent regressions where the test suite stays green *because it is incomplete*
+but the observable behavior changes (differently formatted output, identical exit code but
+silently altered stdout, recomposed error message).
 
-Tre evidenze convergenti motivano l'intervento:
+Three converging pieces of evidence motivate the intervention:
 
-1. **Memory dell'utente.** Il `refactorer` è oggi il sub-agent **meno usato** del sistema.
-   La causa esplicita (memory + brief): l'utente non si fida di delegare refactor
-   non-triviali perché non c'è garanzia *empirica* di non-regressione behavior-preserving.
-   Il green→green check è necessario ma non sufficiente.
+1. **User memory.** The `refactorer` is today the **least used** sub-agent in the system.
+   The explicit reason (memory + brief): the user does not trust delegating non-trivial refactors
+   because there is no *empirical* guarantee of non-regression behavior-preservation. The
+   green->green check is necessary but not sufficient.
 
-2. **Cycle 2 di `pricing-markup-cli` (MAJOR M-1).** Un refactor di consolidazione fixture
-   autouse ha *aggiunto* comportamento (duplicazione autouse). Il refactor passava il
-   green→green check perché entrambe le fixture facevano lo stesso lavoro (idempotenza
-   apparente), ma il *blast radius* mostrava 2 fixture al posto di 1. Un check di
-   behavior-preservation snapshot-based avrebbe catched il delta nel runtime layer
-   (stesso output ma più side effects nel transcript), o avrebbe richiesto al refactorer
-   di esplicitare il REPLACE pre-edit (ortogonale ad ADR-0001).
+2. **Cycle 2 of `pricing-markup-cli` (MAJOR M-1).** A fixture consolidation refactor had
+   *added* behavior (autouse duplication). The refactor passed the green->green check because
+   both fixtures did the same work (apparent idempotency), but the *blast radius* showed 2
+   fixtures instead of 1. A snapshot-based behavior-preservation check would have caught the
+   delta in the runtime layer (same output but more side effects in the transcript), or would
+   have required the refactorer to explicitly state REPLACE pre-edit (orthogonal to ADR-0001).
 
-3. **Pattern v1.2 + ADR-0001 deployati oggi (2026-05-20).** Sono due interventi sullo
-   stesso problema (drift dell'intent vs codice) dal lato coder. Il refactorer è il
-   *terzo angolo*: drift implicito (silent regression) anziché esplicito (intent
-   mismatch). Triple-angle coverage del rischio "code change non corrisponde a intent
-   dichiarato".
+3. **Pattern v1.2 + ADR-0001 deployed today (2026-05-20).** These are two interventions on the
+   same problem (intent vs code drift) from the coder side. The refactorer is the *third angle*:
+   implicit drift (silent regression) rather than explicit (intent mismatch). Triple-angle
+   coverage of the risk "code change does not correspond to declared intent".
 
-### Problema architetturale
+### Architectural problem
 
-Il refactor è definito come "behavior-preserving" ma il sistema non ha mai *strumentato*
-questa proprietà. Il refactorer si auto-certifica via "tests green before, tests green
-after" — un proxy debole. Serve un meccanismo **deterministico e ispezionabile** che
-catturi l'output osservabile del codice *prima* del refactor, lo confronti dopo, e fallisca
-loud se la differenza è non-zero.
+The refactor is defined as "behavior-preserving" but the system has never *instrumented* this
+property. The refactorer self-certifies via "tests green before, tests green after" — a weak
+proxy. A **deterministic and inspectable** mechanism is needed that captures the observable
+output of the code *before* the refactor, compares it after, and fails loudly if the difference
+is non-zero.
 
-### Direzione
+### Direction
 
-Introdurre un **Behavior-preservation Snapshot Harness**: una skill bash 3.2-clean
-(`~/.claude/skills/refactor-snapshot/`) che il `refactorer` agent invoca come gate
-nel suo Process. Lo snapshot è l'output testuale (stdout + stderr + exit-code) dei test
-case del progetto, eseguiti dal test command già contrattualizzato in `.claude/test-cmd`
-(stesso file letto da `~/.claude/hooks/approve-test-cmd.sh`). Diff non-zero ⇒ refactor
-ha cambiato comportamento ⇒ refactorer interrompe e segnala.
+Introduce a **Behavior-preservation Snapshot Harness**: a bash 3.2-clean skill
+(`~/.claude/skills/refactor-snapshot/`) that the `refactorer` agent invokes as a gate
+in its Process. The snapshot is the textual output (stdout + stderr + exit-code) of the test
+cases of the project, executed from the test command already contracted in `.claude/test-cmd`
+(same file read by `~/.claude/hooks/approve-test-cmd.sh`). Non-zero diff => refactor
+has changed behavior => refactorer stops and reports.
 
-L'obiettivo è **abilitare la delega di refactor non-triviali al refactorer agent con
-fiducia**, sbloccando il sub-agent meno usato del sistema.
+The objective is to **enable delegation of non-trivial refactors to the refactorer agent with
+confidence**, unblocking the least used sub-agent in the system.
 
-### Vincoli ereditati (HARD)
+### Inherited constraints (HARD)
 
 - **Anchor preservation harness `review-triage-fix`:** PASS=43 post ADR-0001
-  (2026-05-20). Mai scendere. Target post-feature: PASS=45 (+2 anchor su
-  `refactorer.md` structural sweep — vedi Decision §2.7).
-- **Bash 3.2.57** per ogni script in `~/.claude/`. Niente assoc array, niente `mapfile`,
-  niente `${v^^}`, niente `<()` process substitution. Pattern già consolidato dai 43
-  anchor del harness review-triage-fix e dagli helper `verify.sh`, `weakening-scan.sh`,
-  `triage-state.sh`.
-- **Coesistenza con feature deployati 2026-05-20:** ADR-0001 (Pre-flight Pattern
-  Classifier per coder) + review-triage-fix v1.2 Add+Remove rule restano intatti.
-  Snapshot harness è **ortogonale** ad entrambi: opera sul refactorer (post-edit
-  verification), non sul coder/reviewer (pre-edit declaration / post-edit triage).
-- **No backwards-compat shim:** modifiche al `refactorer.md` sostituiscono pulito.
-- **Repo NON-git:** vibe-coding-system blueprint repo è non-git per scelta dell'utente;
-  `~/.claude/` non è git. Plan non propone operazioni git. Integrazione CI/CD del
-  progetto-target è scope futuro.
-- **Sub-agent identity invariata:** `refactorer.md` resta Sonnet, tools immutati
-  (`Read, Edit, Glob, Grep, Bash`), color giallo.
-- **Lingua:** system prompt + skill in inglese (contract); ADR/spec/plan in italiano;
-  commit/code in inglese.
+  (2026-05-20). Never decrease. Post-feature target: PASS=45 (+2 anchors on
+  `refactorer.md` structural sweep — see Decision §2.7).
+- **Bash 3.2.57** for every script in `~/.claude/`. No assoc array, no `mapfile`,
+  no `${v^^}`, no `<()` process substitution. Pattern already consolidated by the 43
+  anchors of the review-triage-fix harness and by the `verify.sh`, `weakening-scan.sh`,
+  `triage-state.sh` helpers.
+- **Coexistence with features deployed 2026-05-20:** ADR-0001 (Pre-flight Pattern
+  Classifier for coder) + review-triage-fix v1.2 Add+Remove rule remain intact.
+  Snapshot harness is **orthogonal** to both: it operates on the refactorer (post-edit
+  verification), not on the coder/reviewer (pre-edit declaration / post-edit triage).
+- **No backwards-compat shim:** changes to `refactorer.md` replace cleanly.
+- **NON-git repo:** vibe-coding-system blueprint repo is non-git by user choice;
+  `~/.claude/` is not git. Plan does not propose git operations. CI/CD integration of the
+  target project is future scope.
+- **Sub-agent identity unchanged:** `refactorer.md` remains Sonnet, tools unchanged
+  (`Read, Edit, Glob, Grep, Bash`), yellow color.
+- **Language:** system prompt + skill in English (contract); ADR/spec/plan in Italian;
+  commits/code in English.
 
-### Assunzioni esplicite (non verificate empiricamente)
+### Explicit assumptions (not empirically verified)
 
-- La `.claude/test-cmd` contract (riuso dal hook TOFU) è disponibile nei progetti target
-  dove il refactorer viene invocato. Verificato per i pilota recenti (swarm-testcmd
-  deployato 2026-05-19). Non verificato per progetti nuovi.
-- L'output testuale del test command è sufficientemente deterministico (no timestamp,
-  no random IDs, no path assoluti incorporati) per produrre snapshot stabili. Per il
-  caso non-deterministico esiste override esplicito (vedi Decision §2.8).
-- Il `refactorer` LLM (Sonnet) seguirà il contract "pre-snapshot before edit, post-snapshot
-  after edit, abort on non-zero diff" con la stessa fedeltà con cui segue oggi
-  "tests green before, tests green after". Plausibile (la disciplina test-baseline funziona);
-  non verificato per questa esatta sequenza.
-- Il blast radius computato come "file modificati nell'edit + loro caller via `grep -rln`"
-  è una proxy ragionevole per "test rilevanti". Edge: caller indiretti via reflection /
-  dispatch dinamico non catturati — accettato come trade-off MVP.
+- The `.claude/test-cmd` contract (reuse from the TOFU hook) is available in the target projects
+  where the refactorer is invoked. Verified for recent pilots (swarm-testcmd
+  deployed 2026-05-19). Not verified for new projects.
+- The textual output of the test command is sufficiently deterministic (no timestamps,
+  no random IDs, no embedded absolute paths) to produce stable snapshots. For the
+  non-deterministic case an explicit override exists (see Decision §2.8).
+- The `refactorer` LLM (Sonnet) will follow the contract "pre-snapshot before edit, post-snapshot
+  after edit, abort on non-zero diff" with the same fidelity with which it follows today
+  "tests green before, tests green after". Plausible (the test-baseline discipline works);
+  not verified for this exact sequence.
+- The blast radius computed as "files modified in the edit + their callers via `grep -rln`"
+  is a reasonable proxy for "relevant tests". Edge: indirect callers via reflection /
+  dynamic dispatch not captured — accepted as MVP trade-off.
 
 ---
 
 ## 2. Decision
 
-Introdurre il **Behavior-preservation Snapshot Harness** come skill bash 3.2-clean
-`~/.claude/skills/refactor-snapshot/`, invocata dal `refactorer` agent come gate
-nel suo Process. Three-state outcome: PASS (snapshot diff vuoto), FAIL (diff non-zero,
-refactor cambia comportamento), UNVERIFIED (test command assente / non-deterministico).
-Triple-layer defense con il green→green check esistente come secondary.
+Introduce the **Behavior-preservation Snapshot Harness** as a bash 3.2-clean skill
+`~/.claude/skills/refactor-snapshot/`, invoked by the `refactorer` agent as a gate
+in its Process. Three-state outcome: PASS (empty snapshot diff), FAIL (non-zero diff,
+refactor changes behavior), UNVERIFIED (test command absent / non-deterministic).
+Triple-layer defense with the existing green->green check as secondary.
 
-### 2.1 Cosa è uno snapshot (Q1)
+### 2.1 What a snapshot is (Q1)
 
-**Lo snapshot è l'output testuale del test command del progetto target.**
+**The snapshot is the textual output of the target project's test command.**
 
-Formato concreto del file snapshot (`.claude/.refactor-snapshot.txt`):
+Concrete format of the snapshot file (`.claude/.refactor-snapshot.txt`):
 
 ```
 EXIT=<exit-code>
@@ -132,189 +130,188 @@ STDERR-SHA256=<hex>
 <full stderr>
 ```
 
-Razionale:
-- **Output testuale** è il proxy più diretto del comportamento osservabile esterno
-  (output) + correttezza (exit code). Allineato con la definizione di
-  behavior-preservation del refactorer.md attuale ("public outputs and side effects
-  identical").
-- **stdout/stderr/exit-code** è il triplet canonico di Unix process semantics:
+Rationale:
+- **Textual output** is the most direct proxy for observable external behavior
+  (output) + correctness (exit code). Aligned with the current refactorer.md definition of
+  behavior-preservation ("public outputs and side effects identical").
+- **stdout/stderr/exit-code** is the canonical Unix process semantics triplet:
   stack-agnostic, no parsing.
-- **SHA256** dei due stream è la baseline rapida del diff (un confronto su 2 hex
-  basta per il PASS/FAIL primario; il payload full-text è preservato per diagnostica
-  in caso di FAIL).
-- **Pure function return values** (Q1 sub-option) sono *deferred* — richiedono
-  scaffolding per-stack (importer Python, runner Swift) e duplicano test framework
-  esistenti. Scope futuro se MVP risulta insufficiente.
-- **AST signatures / call graphs** sono *rejected* — proxy fragili (un refactor
-  legittimo cambia call graph) e stack-locked (richiedono parser per linguaggio).
-  Vedi Alternatives §3.1.
+- **SHA256** of the two streams is the fast baseline of the diff (a comparison of 2 hex
+  values suffices for the primary PASS/FAIL; the full-text payload is preserved for
+  diagnostics in case of FAIL).
+- **Pure function return values** (Q1 sub-option) are *deferred* — they require
+  per-stack scaffolding (Python importer, Swift runner) and duplicate existing test
+  frameworks. Future scope if MVP proves insufficient.
+- **AST signatures / call graphs** are *rejected* — fragile proxies (a legitimate refactor
+  changes call graphs) and stack-locked (require a parser per language).
+  See Alternatives §3.1.
 
 ### 2.2 Tool: build (bespoke bash) vs buy (Q2)
 
 **CHOSEN: bespoke bash 3.2 harness `~/.claude/skills/refactor-snapshot/`.**
 
-Criteri di scelta:
+Selection criteria:
 
-| Opzione | Multi-stack | Zero dep | Multi-agente integr. | Costo manuten. | Verdict |
+| Option | Multi-stack | Zero dep | Multi-agent integr. | Maint. cost | Verdict |
 |---|---|---|---|---|---|
-| pytest-snapshot / syrupy | Python only | No (pip dep) | Bridge necessario | Medio | Reject |
-| inline-snapshot | Python only | No (pip dep) | Bridge necessario | Medio | Reject |
-| jest snapshot | JS/TS only | No (npm dep) | Bridge necessario | Medio | Reject |
-| swift-snapshot-testing | Swift only | No (Swift Package) | Bridge necessario | Medio | Reject |
-| golden file pattern | Stack-agnostic | Sì | Mediato dall'agent | Basso | Pattern, non tool |
-| **Bespoke bash 3.2** | **Stack-agnostic** | **Sì** | **Native** | **Basso** | **CHOSEN** |
+| pytest-snapshot / syrupy | Python only | No (pip dep) | Bridge needed | Medium | Reject |
+| inline-snapshot | Python only | No (pip dep) | Bridge needed | Medium | Reject |
+| jest snapshot | JS/TS only | No (npm dep) | Bridge needed | Medium | Reject |
+| swift-snapshot-testing | Swift only | No (Swift Package) | Bridge needed | Medium | Reject |
+| golden file pattern | Stack-agnostic | Yes | Mediated by agent | Low | Pattern, not tool |
+| **Bespoke bash 3.2** | **Stack-agnostic** | **Yes** | **Native** | **Low** | **CHOSEN** |
 
-Razionale:
-- Il sistema multi-agente è esplicitamente multi-stack (`~/.claude/skills/` contiene
-  `fastapi-react-vibe`, `swift-vibe`, `swiftui-pro`). Tool stack-locked richiedono
-  matrix di adapter, contro il principio "minimal moving parts".
-- Bespoke bash riusa il contract `.claude/test-cmd` già live (deploy 2026-05-19
-  swarm-testcmd, validato cross-stack). Zero scaffolding aggiuntivo per consumer.
-- Il pattern golden file è quello *adottato*, non un tool da installare. Bespoke bash
-  ne è l'implementazione minimale.
-- Allineato allo stile review-triage-fix (3.2-clean, ok/bad helpers, anchor harness).
-  Consistency cognitiva per Stefano + per gli agent.
+Rationale:
+- The multi-agent system is explicitly multi-stack (`~/.claude/skills/` contains
+  `fastapi-react-vibe`, `swift-vibe`, `swiftui-pro`). Stack-locked tools require
+  a matrix of adapters, against the "minimal moving parts" principle.
+- Bespoke bash reuses the `.claude/test-cmd` contract already live (deployed 2026-05-19
+  swarm-testcmd, validated cross-stack). Zero additional scaffolding for consumers.
+- The golden file pattern is the one *adopted*, not a tool to install. Bespoke bash
+  is its minimal implementation.
+- Aligned with review-triage-fix style (3.2-clean, ok/bad helpers, anchor harness).
+  Cognitive consistency for Stefano + for the agents.
 
-Alternative scartate dettagliate in §3.2.
+Rejected alternatives detailed in §3.2.
 
-### 2.3 Dove vivono gli snapshot (Q3)
+### 2.3 Where snapshots live (Q3)
 
-**CHOSEN: `.claude/.refactor-snapshot.txt` nel progetto target, gitignored.**
+**CHOSEN: `.claude/.refactor-snapshot.txt` in the target project, gitignored.**
 
-Razionale:
-- **Per-progetto** (non centralizzato in `~/.claude/cache/`): traceability con il progetto,
-  no race tra worktree/dispatch paralleli, lifecycle legato al lavoro del refactorer
-  nel checkout corrente.
-- **Gitignored** (non versionato): è un artifact transient del cycle refactor.
-  Versionarlo polluiterebbe il repo con file binary-like che cambiano a ogni run.
-- **File singolo `.refactor-snapshot.txt`** (non un directory per-test-case): MVP
-  semplice; il payload è già un bundle (full stdout/stderr). Granularità file-per-test
-  è speculativa — la blast radius (§2.4) seleziona già quali test eseguire.
-- **Path identico al pattern v1.2 `.claude/.triage-fix-last.json`**: stessa convenzione
-  del repo target per cross-cycle state file. Consistency con il pattern già live.
-- Il refactorer aggiunge `.claude/.refactor-snapshot.txt` a `.gitignore` se il progetto è
-  git (idempotent, identico al pattern `triage-state.sh` commit). Se non-git, nessun
+Rationale:
+- **Per-project** (not centralized in `~/.claude/cache/`): traceability with the project,
+  no race between worktree/parallel dispatches, lifecycle tied to the refactorer's work
+  in the current checkout.
+- **Gitignored** (not versioned): it is a transient artifact of the refactor cycle.
+  Versioning it would pollute the repo with binary-like files that change on every run.
+- **Single file `.refactor-snapshot.txt`** (not a per-test-case directory): simple MVP;
+  the payload is already a bundle (full stdout/stderr). Per-test granularity is speculative
+  — the blast radius (§2.4) already selects which tests to run.
+- **Path identical to the v1.2 pattern `.claude/.triage-fix-last.json`**: same convention
+  in the target repo for cross-cycle state files. Consistency with the already live pattern.
+- The refactorer adds `.claude/.refactor-snapshot.txt` to `.gitignore` if the project is
+  git (idempotent, identical to the `triage-state.sh` commit pattern). If non-git, no
   side effect (idempotent no-op).
 
-Alternative scartate (§3.3): versionato in repo (pollution), `~/.claude/cache/` esterno
-(perde traceability, race condition).
+Rejected alternatives (§3.3): versioned in repo (pollution), `~/.claude/cache/` external
+(loses traceability, race condition).
 
-### 2.4 Granularità: blast radius (Q4)
+### 2.4 Granularity: blast radius (Q4)
 
-**CHOSEN: blast radius = file modificati nel refactor + loro caller diretti via grep.**
+**CHOSEN: blast radius = files modified in the refactor + their direct callers via grep.**
 
-Definizione operativa:
-- Pre-edit: il refactorer dichiara l'insieme dei file che sta per modificare (set $F$).
-- Caller set $C$ = `grep -rln <module-name>` per ciascun file in $F$, intersezione con file
-  test (path matching `test`, `spec`, `tests/`, `__tests__/`).
-- Snapshot scope = test command eseguito con env var `RFS_FILTER` (vedi §2.7) per
-  restringere ai test che importano/usano $F \cup C$. Se il test command non supporta
-  filtering, fallback a test command full (overshoot accettato).
+Operational definition:
+- Pre-edit: the refactorer declares the set of files it is about to modify (set $F$).
+- Caller set $C$ = `grep -rln <module-name>` for each file in $F$, intersection with test
+  files (path matching `test`, `spec`, `tests/`, `__tests__/`).
+- Snapshot scope = test command executed with env var `RFS_FILTER` (see §2.7) to
+  restrict to tests that import/use $F \cup C$. If the test command does not support
+  filtering, fall back to full test command (overshoot accepted).
 
-Razionale:
-- **Per singolo test** (rejected): troppo fine, richiede parser per individuare singolo
-  test case in N framework diversi. Non scala multi-stack.
-- **Per modulo** (rejected): proxy ragionevole ma legato a definizione "modulo"
-  per-linguaggio. Tossico cross-stack.
-- **Per progetto intero** (rejected): overshoot massivo. Refactor di 1 file richiede
-  re-eseguire 1000 test se il progetto è grande. Tempo proibitivo.
-- **Per blast radius** (CHOSEN): proxy ragionevole, computabile via grep stack-agnostic,
-  bounded dal lavoro effettivo del refactor.
+Rationale:
+- **Per single test** (rejected): too fine, requires a parser to identify individual
+  test cases in N different frameworks. Does not scale multi-stack.
+- **Per module** (rejected): reasonable proxy but tied to "module" definition
+  per-language. Toxic cross-stack.
+- **Per entire project** (rejected): maximum overshoot. Refactoring 1 file requires
+  re-running 1000 tests if the project is large. Prohibitive time.
+- **Per blast radius** (CHOSEN): reasonable proxy, computable via stack-agnostic grep,
+  bounded by the actual refactor work.
 
-Edge: caller indiretti (reflection, plugin, factory) non catturati da grep statico.
-**Mitigazione:** se il refactorer rileva uso di reflection/dispatch dinamico nei file in
-$F$, escalate a "full project snapshot" (override esplicito, env var `RFS_FULL=1`).
-Audit trail: dichiarazione nel report del refactor "blast radius widened to full
+Edge: indirect callers (reflection, plugins, factory) not captured by static grep.
+**Mitigation:** if the refactorer detects use of reflection/dynamic dispatch in the files in
+$F$, escalate to "full project snapshot" (explicit override, env var `RFS_FULL=1`).
+Audit trail: declaration in the refactor report "blast radius widened to full
 because reflection detected in <file>".
 
-### 2.5 Coverage check: quali test eseguire (Q5)
+### 2.5 Coverage check: which tests to run (Q5)
 
-**CHOSEN: tutti i test del progetto via `.claude/test-cmd` (default), con narrowing via
-blast radius solo se il refactorer dichiara overhead temporale problematico.**
+**CHOSEN: all project tests via `.claude/test-cmd` (default), with narrowing via
+blast radius only if the refactorer declares problematic time overhead.**
 
-Razionale operativo:
-- **Tutti i test (default)**: safe overshoot, no coverage tooling stack-locked, riuso
-  diretto del contract `.claude/test-cmd` già live.
-- **Top-N coverage** (rejected): richiede coverage tooling per-stack (pytest-cov,
+Operational rationale:
+- **All tests (default)**: safe overshoot, no stack-locked coverage tooling, direct
+  reuse of the `.claude/test-cmd` contract already live.
+- **Top-N coverage** (rejected): requires per-stack coverage tooling (pytest-cov,
   jest --coverage, swift coverage). Multi-stack matrix.
-- **Test che toccano file modificati** (rejected come default, ammesso come narrowing
-  opt-in): richiede coverage map per-progetto. Non disponibile by default.
-- **Heuristica AST-based** (rejected): parser stack-locked.
+- **Tests that touch modified files** (rejected as default, admitted as opt-in narrowing):
+  requires per-project coverage map. Not available by default.
+- **AST-based heuristic** (rejected): stack-locked parser.
 
-**Override per progetti con test slow:** il refactorer può dichiarare `RFS_FILTER=<pattern>`
-nel env del test command per restringere (es. `pytest -k <module>`). Decisione runtime del
-refactorer in base a baseline time del pre-snapshot (se >60s, considera filtering).
+**Override for projects with slow tests:** the refactorer can declare `RFS_FILTER=<pattern>`
+in the test command env to restrict (e.g. `pytest -k <module>`). Runtime decision by
+the refactorer based on pre-snapshot baseline time (if >60s, consider filtering).
 
-### 2.6 Flusso TDD del refactorer aggiornato (Q6)
+### 2.6 Updated TDD flow of the refactorer (Q6)
 
-Sostituisce la sezione "Process" di `refactorer.md` con questa sequenza:
+Replaces the "Process" section of `refactorer.md` with this sequence:
 
-1. **Baseline check.** Esegui `.claude/test-cmd`. Se non-zero → STOP, report "tests red
-   at baseline, refactor unsafe". (Invariante esistente, preservato.)
-2. **Pre-snapshot.** Invoca `~/.claude/skills/refactor-snapshot/scripts/capture.sh PRE`.
-   Scrive `.claude/.refactor-snapshot.txt` con EXIT/STDOUT-SHA256/STDERR-SHA256/payload.
-3. **Determinism check.** Re-esegui pre-snapshot N=2 volte (totale 3). Se SHA256 stdout
-   o stderr cambia tra runs → STOP, output `UNVERIFIED non-deterministic test output`,
-   report al user con suggerimento "investigate test flakiness or use RFS_OVERRIDE".
-4. **Apply refactor.** Edit focused (≤200 righe per pass, invariante esistente preservato).
-5. **Post-snapshot.** Invoca `capture.sh POST`. Scrive `.claude/.refactor-snapshot.txt.post`.
-6. **Diff.** Invoca `~/.claude/skills/refactor-snapshot/scripts/diff.sh`. Confronta
-   EXIT + SHA256-STDOUT + SHA256-STDERR. Output `PASS` se identici, `FAIL` se diversi.
-7. **On FAIL.** STOP. Report al user con `loc=path:line` per ciascuno dei tre delta
-   (exit/stdout/stderr) + estratto diff `diff -u` dei payload. Refactor *non* viene
-   committed (no-op rispetto al filesystem: l'edit è già su disco, ma il refactorer
-   dichiara FAIL e raccomanda revert). HITL gate: l'utente decide se accettare il
-   change come "intentional behavior change" (e quindi non era un refactor) o ribaltare.
-8. **On PASS.** Refactor è behavior-preserving. Report success: `lines changed`,
-   `tests passed`, `snapshot PASS`. Cleanup: rimuovi `.claude/.refactor-snapshot.txt.post`
-   (la `.refactor-snapshot.txt` resta come baseline del prossimo cycle, opzionale —
-   nel MVP rimuoviamo entrambi per pulizia, lascio scelta nel plan).
+1. **Baseline check.** Execute `.claude/test-cmd`. If non-zero -> STOP, report "tests red
+   at baseline, refactor unsafe". (Existing invariant, preserved.)
+2. **Pre-snapshot.** Invoke `~/.claude/skills/refactor-snapshot/scripts/capture.sh PRE`.
+   Writes `.claude/.refactor-snapshot.txt` with EXIT/STDOUT-SHA256/STDERR-SHA256/payload.
+3. **Determinism check.** Re-run pre-snapshot N=2 more times (3 total). If SHA256 stdout
+   or stderr changes between runs -> STOP, output `UNVERIFIED non-deterministic test output`,
+   report to user with suggestion "investigate test flakiness or use RFS_OVERRIDE".
+4. **Apply refactor.** Focused Edit (<=200 lines per pass, existing invariant preserved).
+5. **Post-snapshot.** Invoke `capture.sh POST`. Writes `.claude/.refactor-snapshot.txt.post`.
+6. **Diff.** Invoke `~/.claude/skills/refactor-snapshot/scripts/diff.sh`. Compares
+   EXIT + SHA256-STDOUT + SHA256-STDERR. Output `PASS` if identical, `FAIL` if different.
+7. **On FAIL.** STOP. Report to user with `loc=path:line` for each of the three deltas
+   (exit/stdout/stderr) + `diff -u` extract of the payloads. Refactor is *not*
+   committed (no-op relative to filesystem: the edit is already on disk, but the refactorer
+   declares FAIL and recommends revert). HITL gate: the user decides whether to accept the
+   change as "intentional behavior change" (and thus it was not a refactor) or reverse it.
+8. **On PASS.** Refactor is behavior-preserving. Report success: `lines changed`,
+   `tests passed`, `snapshot PASS`. Cleanup: remove `.claude/.refactor-snapshot.txt.post`
+   (the `.refactor-snapshot.txt` remains as baseline for the next cycle, optional —
+   in MVP we remove both for cleanliness, the choice is left to the plan).
 
-Step 1 e 4 sono invarianti esistenti del refactorer.md. Step 2, 3, 5, 6, 7 sono nuovi.
-Step 8 è arricchimento dell'esistente "Output Format".
+Steps 1 and 4 are existing invariants of refactorer.md. Steps 2, 3, 5, 6, 7 are new.
+Step 8 enriches the existing "Output Format".
 
 ### 2.7 Multi-language strategy (Q7)
 
-**CHOSEN: stack-agnostic single harness, no per-stack adapter, detection automatica via
+**CHOSEN: stack-agnostic single harness, no per-stack adapter, automatic detection via
 `.claude/test-cmd`.**
 
-Razionale:
-- Il contract `.claude/test-cmd` (deploy swarm-testcmd 2026-05-19) è già il punto di
-  detection stack: il progetto target dichiara il proprio test command (es. `pytest -q`,
-  `npm test`, `swift test`). Il harness *non sa* qual è lo stack — esegue il comando e
-  cattura output.
-- **Per-stack adapter** (rejected): introdurrebbe matrix Python/JS/Swift/Go/Rust... senza
-  benefit proporzionato. Se in futuro un singolo stack richiede semantic snapshot
-  (es. JSON normalizzato per JS), si può aggiungere helper opzionale post-pilota.
-- **Auto-detection del stack** (rejected): tentativo di indovinare `pytest` vs `npm test`
-  via file presence è fragile e duplica il lavoro che `.claude/test-cmd` già fa.
+Rationale:
+- The `.claude/test-cmd` contract (swarm-testcmd deploy 2026-05-19) is already the stack
+  detection point: the target project declares its own test command (e.g. `pytest -q`,
+  `npm test`, `swift test`). The harness does *not know* the stack — it executes the command and
+  captures output.
+- **Per-stack adapter** (rejected): would introduce a Python/JS/Swift/Go/Rust... matrix without
+  proportional benefit. If in the future a single stack requires semantic snapshot
+  (e.g. normalized JSON for JS), an optional helper can be added post-pilot.
+- **Stack auto-detection** (rejected): attempting to guess `pytest` vs `npm test`
+  via file presence is fragile and duplicates the work that `.claude/test-cmd` already does.
 
-Estensibilità futura (out of scope MVP):
-- Helper opzionali `normalize-python.sh`, `normalize-js.sh` che pre-processano lo stdout
-  prima dello SHA256 (es. strip timestamp `\d{4}-\d{2}-\d{2}T...`). Hook via env var
-  `RFS_NORMALIZE=<helper-path>`. Non MVP.
+Future extensibility (out of MVP scope):
+- Optional helpers `normalize-python.sh`, `normalize-js.sh` that pre-process stdout
+  before the SHA256 (e.g. strip timestamps `\d{4}-\d{2}-\d{2}T...`). Hook via env var
+  `RFS_NORMALIZE=<helper-path>`. Not MVP.
 
 ### 2.8 Failure mode + override (Q8)
 
-Tre stati di esito del harness:
+Three harness outcome states:
 
-| Stato | Significato | Azione refactorer |
+| State | Meaning | Refactorer action |
 |---|---|---|
-| `PASS` | SHA256 stdout+stderr+exit identici pre/post | Refactor OK, report success |
-| `FAIL` | SHA256 diversi su almeno uno dei tre canali | STOP, report drift al user (HITL) |
-| `UNVERIFIED` | Pre-snapshot non-deterministico (3 run diversi) | STOP, report flakiness; override possibile |
+| `PASS` | SHA256 stdout+stderr+exit identical pre/post | Refactor OK, report success |
+| `FAIL` | SHA256 different on at least one of the three channels | STOP, report drift to user (HITL) |
+| `UNVERIFIED` | Pre-snapshot non-deterministic (3 different runs) | STOP, report flakiness; override possible |
 
-**Distinguere bug vs snapshot stale:**
+**Distinguishing bug vs stale snapshot:**
 
-Il determinism check (§2.6 step 3) è il discriminator. Se i 3 pre-snapshot consecutivi
-producono SHA256 identici → snapshot deterministico, ogni successivo drift è bug del
-refactor. Se i 3 pre-snapshot producono SHA256 diversi → snapshot è stale (test flaky,
-timestamp, random) → `UNVERIFIED` con flag.
+The determinism check (§2.6 step 3) is the discriminator. If the 3 consecutive pre-snapshots
+produce identical SHA256 values -> snapshot deterministic, any subsequent drift is a refactor bug.
+If the 3 pre-snapshots produce different SHA256 values -> snapshot is stale (flaky tests,
+timestamp, random) -> `UNVERIFIED` with flag.
 
-**Override esplicito:**
+**Explicit override:**
 
-File `.claude/refactor-snapshot-override` (opzionale, presente solo se utente lo crea
-deliberatamente). Format:
+File `.claude/refactor-snapshot-override` (optional, present only if user creates it
+deliberately). Format:
 
 ```
 REASON: <one-line justification>
@@ -322,206 +319,200 @@ SCOPE: <stdout|stderr|exit|all>
 EXPIRES: <YYYY-MM-DD>
 ```
 
-Se presente, il harness ignora la differenza nei canali dichiarati in SCOPE e fa
-override a `PASS` con flag `OVERRIDE-ACTIVE`. Audit trail: il refactorer cita il file +
-REASON nel report.
+If present, the harness ignores the difference in the channels declared in SCOPE and
+overrides to `PASS` with flag `OVERRIDE-ACTIVE`. Audit trail: the refactorer cites the file +
+REASON in the report.
 
-**No auto-override:** il file va creato dall'utente (HITL gate). Il refactorer *non* lo
-crea mai. Il refactorer può *suggerire* la creazione nel suo report di FAIL ("se la
-differenza è un timestamp atteso, considera override con SCOPE: stdout").
+**No auto-override:** the file must be created by the user (HITL gate). The refactorer *never*
+creates it. The refactorer can *suggest* creation in its FAIL report ("if the difference is an
+expected timestamp, consider override with SCOPE: stdout").
 
 **Audit trail:**
 
-Il file `.claude/.refactor-snapshot.txt` (pre-snapshot) sopravvive a un PASS come
-baseline del prossimo cycle (opzionalmente — cleanup MVP rimuove entrambi). In caso di
-FAIL, il file `.refactor-snapshot.txt.post` resta su disco per ispezione user, e il
-refactorer lo cita nel report con path assoluto.
+The file `.claude/.refactor-snapshot.txt` (pre-snapshot) survives a PASS as the baseline for
+the next cycle (optionally — MVP cleanup removes both). In case of FAIL, the
+`.refactor-snapshot.txt.post` file stays on disk for user inspection, and the refactorer cites
+it in the report with absolute path.
 
-### 2.9 Modifiche puntuali ai file
+### 2.9 Precise file changes
 
 - **Create skill `~/.claude/skills/refactor-snapshot/`:**
-  - `SKILL.md` — frontmatter + body con invocation contract.
-  - `scripts/capture.sh` — bash 3.2, esegue `.claude/test-cmd`, scrive snapshot file.
-  - `scripts/diff.sh` — bash 3.2, confronta pre/post snapshot, exit 0/1/2 per
+  - `SKILL.md` — frontmatter + body with invocation contract.
+  - `scripts/capture.sh` — bash 3.2, executes `.claude/test-cmd`, writes snapshot file.
+  - `scripts/diff.sh` — bash 3.2, compares pre/post snapshot, exit 0/1/2 for
     PASS/FAIL/UNVERIFIED.
-  - `tests/run-tests.sh` — bash 3.2, harness self-test della skill (anchor preservation
-    pattern, identico stile review-triage-fix).
-- **Modify `~/.claude/agents/refactorer.md`:** sostituisci la sezione `## Process`
-  (righe 25-31 attuali) con la sequenza §2.6 (8 step). Append sezione `## Snapshot
-  Harness Integration` con riferimento alla skill. Aggiorna `## Edge Cases` con la
-  voce "Snapshot UNVERIFIED — non-deterministic test output".
-- **Modify `~/.claude/skills/review-triage-fix/tests/run-tests.sh`:** append nuovo
-  blocco `# --- Task 7: refactorer.md snapshot harness section ---` con 2 anchor su
-  `refactorer.md` (presence di `Snapshot Harness Integration` literal + presence di
-  `refactor-snapshot` skill reference). Cumulative PASS=43 → PASS=45.
+  - `tests/run-tests.sh` — bash 3.2, skill self-test harness (anchor preservation
+    pattern, identical style to review-triage-fix).
+- **Modify `~/.claude/agents/refactorer.md`:** replace the `## Process` section
+  (current lines 25-31) with the §2.6 sequence (8 steps). Append section `## Snapshot
+  Harness Integration` with reference to the skill. Update `## Edge Cases` with the
+  entry "Snapshot UNVERIFIED — non-deterministic test output".
+- **Modify `~/.claude/skills/review-triage-fix/tests/run-tests.sh`:** append new
+  block `# --- Task 7: refactorer.md snapshot harness section ---` with 2 anchors on
+  `refactorer.md` (presence of `Snapshot Harness Integration` literal + presence of
+  `refactor-snapshot` skill reference). Cumulative PASS=43 -> PASS=45.
 
-**Nota architetturale:** estendere il harness `review-triage-fix` a leggere un terzo
-file (`refactorer.md`, dopo `SKILL.md` e `coder.md`) è coerente con il precedente di
-ADR-0001 §3.3 (sub-question). La skill `review-triage-fix` ha già autorità sulla qualità
-degli agent che dispatcha (debugger, refactorer, coder); aggiungere structural anchor
-su `refactorer.md` è naturale.
+**Architectural note:** extending the `review-triage-fix` harness to read a third
+file (`refactorer.md`, after `SKILL.md` and `coder.md` from ADR-0001) is consistent with the
+precedent of ADR-0001 §3.3 (sub-question). The `review-triage-fix` skill already has authority
+over the quality of the agents it dispatches (debugger, refactorer, coder); adding a structural
+anchor on `refactorer.md` is natural.
 
-### 2.10 Modifiche NON fatte
+### 2.10 Changes NOT made
 
 - **NO modify `~/.claude/skills/review-triage-fix/SKILL.md`** — v1.2 Add+Remove rule
-  resta. Ortogonale al snapshot harness (regola del coder, non del refactorer).
+  remains. Orthogonal to the snapshot harness (coder rule, not refactorer).
 - **NO modify `~/.claude/agents/coder.md`** — ADR-0001 Pre-flight Pattern Classifier
-  invariato. Il coder non usa snapshot.
-- **NO modify `~/.claude/agents/reviewer.md`** — Pattern-drift check ADR-0001 invariato.
-  Il reviewer non usa snapshot direttamente (ma può citare il report del refactorer
-  come evidenza in review).
-- **NO modify `~/.claude/agents/debugger.md`** — il debugger opera su bug, non su
-  refactor. Snapshot non applicabile.
-- **NO modify `~/.claude/hooks/approve-test-cmd.sh`** — il harness *riusa* il contract
-  `.claude/test-cmd` ma non interagisce con TOFU. Il file `.claude/test-cmd` deve
-  pre-esistere ed essere già approvato (TOFU + 3-tier deploy 2026-05-19); se assente,
+  unchanged. The coder does not use snapshots.
+- **NO modify `~/.claude/agents/reviewer.md`** — Pattern-drift check ADR-0001 unchanged.
+  The reviewer does not use snapshots directly (but can cite the refactorer report
+  as evidence in review).
+- **NO modify `~/.claude/agents/debugger.md`** — the debugger operates on bugs, not on
+  refactors. Snapshot not applicable.
+- **NO modify `~/.claude/hooks/approve-test-cmd.sh`** — the harness *reuses* the
+  `.claude/test-cmd` contract but does not interact with TOFU. The file `.claude/test-cmd`
+  must pre-exist and already be approved (TOFU + 3-tier deploy 2026-05-19); if absent,
   snapshot UNVERIFIED + abort.
-- **NO modify `~/.claude/settings.json`** — nessun hook nuovo, nessun permission rule
-  nuovo.
-- **NO modify `.mcp.json`** — nessun MCP nuovo.
+- **NO modify `~/.claude/settings.json`** — no new hook, no new permission rule.
+- **NO modify `.mcp.json`** — no new MCP.
 
-### 2.11 Lingua
+### 2.11 Language
 
-System prompt `refactorer.md` e skill files (`SKILL.md`, `capture.sh`, `diff.sh`,
-`run-tests.sh`) in inglese (contract). ADR, spec, plan, memory entry in italiano.
-Allineato a global rule "codice e commit in inglese; testo all'utente in italiano".
+System prompt `refactorer.md` and skill files (`SKILL.md`, `capture.sh`, `diff.sh`,
+`run-tests.sh`) in English (contract). ADR, spec, plan, memory entry in Italian.
+Aligned with global rule "code and commits in English; text to user in Italian".
 
 ---
 
 ## 3. Alternatives considered
 
-### 3.1 Cosa è uno snapshot (Q1)
+### 3.1 What a snapshot is (Q1)
 
-**a) Test output testuale (stdout/stderr/exit-code) (CHOSEN).** Stack-agnostic, proxy
-diretto di behavior osservabile, riuso `.claude/test-cmd`. Rischio: test non
-deterministici (mitigato da determinism check + override).
+**a) Textual test output (stdout/stderr/exit-code) (CHOSEN).** Stack-agnostic, direct proxy of
+observable behavior, reuse `.claude/test-cmd`. Risk: non-deterministic tests (mitigated by
+determinism check + override).
 
-**b) Pure function return values** — *Rejected come MVP, deferred*. Richiede scaffolding
-per-stack (importer Python via `importlib`, runner Swift via `swift run`). Duplica il
-test framework esistente. Possibile estensione post-pilota se MVP risulta insufficiente
-per casi edge (es. progetti library-only senza test integration).
+**b) Pure function return values** — *Rejected as MVP, deferred*. Requires per-stack scaffolding
+(Python importer via `importlib`, Swift runner via `swift run`). Duplicates the existing test
+framework. Possible post-pilot extension if MVP proves insufficient for edge cases (e.g.
+library-only projects without integration tests).
 
-**c) AST signatures** — *Rejected*. Refactor legittimi *cambiano* l'AST (extract
-method, rename var, inline function). AST signature è una proxy non-allineata con la
-definizione di behavior-preserving (preserva *behavior*, non *struttura*). Stack-locked
-(richiede parser per linguaggio).
+**c) AST signatures** — *Rejected*. Legitimate refactors *change* the AST (extract method,
+rename var, inline function). AST signature is a proxy misaligned with the definition of
+behavior-preserving (preserves *behavior*, not *structure*). Stack-locked (requires a parser
+per language).
 
-**d) Function call graphs** — *Rejected*. Cambiano legittimamente in refactor (call
-graph è proprio il target del refactor). Same problem di (c).
+**d) Function call graphs** — *Rejected*. Legitimately change in refactors (call graphs are
+exactly the target of the refactor). Same problem as (c).
 
-**e) Combinazione di (a) + (b) + (c)** — *Rejected come MVP*. Over-engineering. (a) è
-sufficiente per il MVP; estensioni successive se evidenza pilota lo richiede.
+**e) Combination of (a) + (b) + (c)** — *Rejected as MVP*. Over-engineering. (a) is
+sufficient for the MVP; subsequent extensions if pilot evidence requires it.
 
 ### 3.2 Tool: buy vs build (Q2)
 
-**a) Bespoke bash 3.2 stack-agnostic (CHOSEN).** Vedi tabella §2.2.
+**a) Bespoke bash 3.2 stack-agnostic (CHOSEN).** See table §2.2.
 
 **b) pytest-snapshot / syrupy (Python)** — *Rejected*. Stack-locked (Python only).
-Matrix di adapter cross-stack proibitiva. Richiede pip dep nel progetto target.
+Cross-stack adapter matrix prohibitive. Requires pip dep in target project.
 
-**c) inline-snapshot (Python)** — *Rejected*. Stack-locked. Modifica il sorgente del
-progetto target inserendo snapshot inline — invasivo, non-removable senza VCS.
-Inadatto per behavior-preservation gate (modifica il sorgente che dovrebbe restare
-identico).
+**c) inline-snapshot (Python)** — *Rejected*. Stack-locked. Modifies the source of the
+target project by inserting inline snapshots — invasive, non-removable without VCS.
+Unsuitable for behavior-preservation gate (modifies the source that should remain identical).
 
-**d) jest snapshot (JS/TS)** — *Rejected*. Stack-locked. Stesso problema di (b).
+**d) jest snapshot (JS/TS)** — *Rejected*. Stack-locked. Same problem as (b).
 
-**e) swift-snapshot-testing (Swift)** — *Rejected*. Stack-locked. Richiede Swift Package
-dep. Inadatto per Python/JS progetti.
+**e) swift-snapshot-testing (Swift)** — *Rejected*. Stack-locked. Requires Swift Package dep.
+Unsuitable for Python/JS projects.
 
-**f) Pattern golden file generico (Go-style)** — *Adopted come pattern, non come tool*.
-La scelta CHOSEN (bash 3.2) *è* l'implementazione minimale del golden file pattern.
+**f) Generic golden file pattern (Go-style)** — *Adopted as pattern, not as tool*.
+The CHOSEN option (bash 3.2) *is* the minimal implementation of the golden file pattern.
 
-### 3.3 Dove vivono gli snapshot (Q3)
+### 3.3 Where snapshots live (Q3)
 
-**a) `.claude/.refactor-snapshot.txt` per-progetto gitignored (CHOSEN).** Consistency
-con `.claude/.triage-fix-last.json` (review-triage-fix). Lifecycle legato al progetto.
+**a) `.claude/.refactor-snapshot.txt` per-project gitignored (CHOSEN).** Consistency
+with `.claude/.triage-fix-last.json` (review-triage-fix). Lifecycle tied to the project.
 
-**b) Versionato in repo target** — *Rejected*. Snapshot è transient (cambia a ogni
-cycle refactor). Pollution del VCS history con artifact binary-like. Anti-pattern
-golden file (golden file *test fixture* sì, golden file *transient cycle artifact* no).
+**b) Versioned in target repo** — *Rejected*. Snapshot is transient (changes with every
+refactor cycle). VCS history pollution with binary-like artifacts. Anti-pattern for golden
+files (golden file *test fixture* yes, golden file *transient cycle artifact* no).
 
-**c) `~/.claude/cache/refactor-snapshot/<project-hash>/`** — *Rejected*. Cache esterna
-perde traceability (chi guarda `~/.claude/cache/` quando il refactor fallisce?). Race
-condition con worktree paralleli sullo stesso project hash. Lifecycle disaccoppiato dal
-progetto (cleanup quando?).
+**c) `~/.claude/cache/refactor-snapshot/<project-hash>/`** — *Rejected*. External cache loses
+traceability (who looks in `~/.claude/cache/` when the refactor fails?). Race condition with
+parallel worktrees on the same project hash. Lifecycle decoupled from the project (when to clean?).
 
-**d) `/tmp/refactor-snapshot-<pid>/`** — *Rejected*. Volatile (perso al reboot, allo
-shutdown del dispatch session). Inadatto per cross-cycle baseline.
+**d) `/tmp/refactor-snapshot-<pid>/`** — *Rejected*. Volatile (lost on reboot, on
+dispatch session shutdown). Unsuitable for cross-cycle baseline.
 
-### 3.4 Granularità (Q4)
+### 3.4 Granularity (Q4)
 
-**a) Blast radius = file modificati + caller diretti via grep (CHOSEN).** Bounded dal
-lavoro effettivo, computabile stack-agnostic, proxy ragionevole.
+**a) Blast radius = modified files + direct callers via grep (CHOSEN).** Bounded by actual
+work, computable stack-agnostic, reasonable proxy.
 
-**b) Per singolo test case** — *Rejected*. Richiede parser per individuare test case.
-Stack-locked.
+**b) Per single test case** — *Rejected*. Requires a parser to identify test cases. Stack-locked.
 
-**c) Per modulo** — *Rejected*. "Modulo" è concept stack-specifico (Python module vs
-JS module vs Swift module). Tossico cross-stack.
+**c) Per module** — *Rejected*. "Module" is a stack-specific concept (Python module vs
+JS module vs Swift module). Toxic cross-stack.
 
-**d) Per progetto intero** — *Rejected come default*. Overshoot temporale (re-eseguire
-1000 test per modificare 1 file). Ammesso come fallback override (`RFS_FULL=1`) per
-casi reflection.
+**d) Per entire project** — *Rejected as default*. Time overshoot (re-running 1000 tests
+to modify 1 file). Admitted as fallback override (`RFS_FULL=1`) for reflection cases.
 
-**e) Per file modificati (no caller expansion)** — *Rejected*. Troppo stretto: refactor
-del file $f$ può rompere comportamento dei caller di $f$, e i test che testano i caller
-sono il vero gate.
+**e) Per modified files (no caller expansion)** — *Rejected*. Too narrow: refactoring
+file $f$ can break the behavior of callers of $f$, and the tests that test the callers
+are the real gate.
 
 ### 3.5 Coverage check (Q5)
 
-**a) Tutti i test (CHOSEN come default).** Safe overshoot. Riuso `.claude/test-cmd`.
+**a) All tests (CHOSEN as default).** Safe overshoot. Reuse `.claude/test-cmd`.
 
-**b) Top-N test per coverage statement** — *Rejected*. Coverage tooling stack-locked
+**b) Top-N tests by statement coverage** — *Rejected*. Stack-locked coverage tooling
 (pytest-cov, jest --coverage). Matrix.
 
-**c) Test che toccano file modificati (via coverage map)** — *Rejected come default,
-ammesso come narrowing opt-in*. Richiede coverage map pre-computata. Non disponibile
-by default.
+**c) Tests touching modified files (via coverage map)** — *Rejected as default,
+admitted as opt-in narrowing*. Requires pre-computed coverage map. Not available by default.
 
-**d) Heuristica AST-based** — *Rejected*. Parser stack-locked.
+**d) AST-based heuristic** — *Rejected*. Stack-locked parser.
 
-### 3.6 Flusso TDD (Q6)
+### 3.6 TDD flow (Q6)
 
-**a) Sequenza 8-step §2.6 (CHOSEN).** Esplicita determinism check (step 3) e on-FAIL
+**a) 8-step sequence §2.6 (CHOSEN).** Explicit determinism check (step 3) and on-FAIL
 HITL gate (step 7).
 
-**b) Sequenza minimale (baseline → refactor → diff)** — *Rejected*. Manca determinism
-check → falso negativo (test flaky catalogati come "refactor changed behavior" senza
-distinguere).
+**b) Minimal sequence (baseline -> refactor -> diff)** — *Rejected*. Missing determinism
+check -> false negative (flaky tests catalogued as "refactor changed behavior" without
+distinguishing).
 
-**c) Snapshot post-only, confronto con repo VCS history** — *Rejected*. Richiede git
-+ history pulito. Non applicabile a progetti non-git o con dirty working tree.
+**c) Post-only snapshot, comparison with VCS history** — *Rejected*. Requires git
++ clean history. Not applicable to non-git projects or dirty working trees.
 
 ### 3.7 Multi-language strategy (Q7)
 
-**a) Stack-agnostic single harness via `.claude/test-cmd` (CHOSEN).** Riuso contract
-già live. Zero scaffolding per-stack.
+**a) Stack-agnostic single harness via `.claude/test-cmd` (CHOSEN).** Reuse of already live
+contract. Zero per-stack scaffolding.
 
-**b) Per-stack adapter Python + Swift + JS** — *Rejected come MVP*. Matrix
-maintenance. Possibile estensione futura solo se MVP risulta insufficiente.
+**b) Per-stack adapter Python + Swift + JS** — *Rejected as MVP*. Matrix maintenance. Possible
+future extension only if MVP proves insufficient.
 
-**c) Auto-detection del stack via file presence** — *Rejected*. Fragile, duplica il
-lavoro di `.claude/test-cmd`. Anti-pattern.
+**c) Stack auto-detection via file presence** — *Rejected*. Fragile, duplicates the work of
+`.claude/test-cmd`. Anti-pattern.
 
 ### 3.8 Failure mode + override (Q8)
 
 **a) Three-state PASS/FAIL/UNVERIFIED + override file `.claude/refactor-snapshot-override`
 (CHOSEN).** Triple discriminator (determinism check + diff check + manual override).
 
-**b) Boolean PASS/FAIL senza UNVERIFIED** — *Rejected*. Confonde test flakiness con
-refactor regression. Falsi positivi sui progetti con test non-deterministici.
+**b) Boolean PASS/FAIL without UNVERIFIED** — *Rejected*. Confuses test flakiness with
+refactor regression. False positives on projects with non-deterministic tests.
 
-**c) Auto-override quando il refactorer rileva timestamp / random ID nello stdout** —
-*Rejected*. Rischio di auto-override silente che maschera regressioni reali. HITL gate
-è il pattern corretto (allineato a CLAUDE.md global "HITL gate sempre prima di ...
-modifica schema DB, eliminazioni permanenti").
+**c) Auto-override when the refactorer detects timestamps / random IDs in stdout** —
+*Rejected*. Risk of silent auto-override that masks real regressions. HITL gate is the correct
+pattern (aligned with CLAUDE.md global "HITL gate always before ... DB schema modification,
+permanent deletions").
 
-**d) Hook PreToolUse che blocca Edit se snapshot non capturato** — *Rejected*. Stesso
-razionale di ADR-0001 §3.1.c: hook bash 3.2 non può ispezionare il response LLM, e gli
-hook PreToolUse Edit ricevono `tool_input` JSON. Filosofia "enforcement primario è
-disciplina + gate skill-based, non hook hard al filesystem" (consistente con tutto il
-resto del sistema).
+**d) Hook PreToolUse that blocks Edit if snapshot not captured** — *Rejected*. Same
+rationale as ADR-0001 §3.1.c: bash 3.2 hook cannot inspect the LLM response, and
+PreToolUse Edit hooks receive `tool_input` JSON. Philosophy "primary enforcement is
+discipline + skill-based gate, not hard hook at filesystem" (consistent with the rest of the
+system).
 
 ---
 
@@ -529,97 +520,92 @@ resto del sistema).
 
 ### 4.1 Positive
 
-- **Sblocca delega di refactor non-triviali al refactorer.** Risolve la causa root
-  (memory dell'utente): non c'è garanzia di non-regressione. Snapshot harness *è* la
-  garanzia, deterministica e ispezionabile.
-- **Cattura il fail mode cycle 2 pricing-markup-cli alla source.** Refactor che cambia
-  comportamento → SHA256 diversi → FAIL. Triple-angle coverage (coder pre-flight
-  classifier ADR-0001 + reviewer Add+Remove triage v1.2 + refactorer snapshot
-  ADR-0002).
-- **Pattern riusabile per altri agent.** Se in futuro vogliamo un "behavior-preservation
-  check" anche per `debugger` (fix non deve cambiare comportamento di codice non
-  bug-target) o `tester` (nuovo test non deve influenzare run di test esistenti),
-  la skill `refactor-snapshot` si può adattare.
-- **Stack-agnostic by construction.** Riuso `.claude/test-cmd` contract già validato
+- **Unblocks delegation of non-trivial refactors to the refactorer.** Resolves the root cause
+  (user memory): no non-regression guarantee exists. Snapshot harness *is* the guarantee,
+  deterministic and inspectable.
+- **Catches the cycle 2 pricing-markup-cli failure mode at the source.** Refactor that changes
+  behavior -> different SHA256 -> FAIL. Triple-angle coverage (coder pre-flight
+  classifier ADR-0001 + reviewer Add+Remove triage v1.2 + refactorer snapshot ADR-0002).
+- **Reusable pattern for other agents.** If in the future we want a "behavior-preservation
+  check" also for `debugger` (fix must not change behavior of non-bug-target code) or `tester`
+  (new test must not influence existing test runs), the `refactor-snapshot` skill can be adapted.
+- **Stack-agnostic by construction.** Reuse `.claude/test-cmd` contract already validated
   cross-stack (Python pricing-markup-cli, Swift swift-vibe, JS fastapi-react-vibe).
-- **Zero nuove dipendenze.** Solo bash 3.2, `sha256sum` (o `shasum -a 256` su macOS),
-  `diff` (POSIX). Niente pip/npm/swift pkg deps.
-- **Anchor preservation rispettato.** PASS=43 → PASS=45 (+2 anchor structural per
-  `refactorer.md`). Additivo, no regressione.
-- **Coexistenza pulita con ADR-0001 + v1.2.** Ortogonali (operano su agent diversi).
-  Nessuna race condition.
-- **Audit trail completo.** `.refactor-snapshot.txt`, `.refactor-snapshot.txt.post`,
-  `.refactor-snapshot-override` (se presente), report del refactorer — quattro
-  artefatti ispezionabili per ricostruire ogni cycle.
+- **Zero new dependencies.** Only bash 3.2, `sha256sum` (or `shasum -a 256` on macOS),
+  `diff` (POSIX). No pip/npm/swift pkg deps.
+- **Anchor preservation respected.** PASS=43 -> PASS=45 (+2 structural anchors for
+  `refactorer.md`). Additive, no regression.
+- **Clean coexistence with ADR-0001 + v1.2.** Orthogonal (operate on different agents).
+  No race conditions.
+- **Complete audit trail.** `.refactor-snapshot.txt`, `.refactor-snapshot.txt.post`,
+  `.refactor-snapshot-override` (if present), refactorer report — four inspectable artifacts
+  to reconstruct every cycle.
 
 ### 4.2 Negative
 
-- **Overhead temporale per cycle refactor.** Determinism check richiede 3 run del test
-  command + 1 post-run = 4 run totali per cycle. Su progetti con test slow (>30s) il
-  refactor cycle passa da ~30s (1 run baseline + 1 post-run) a ~2 min. Mitigazione:
-  `RFS_FILTER` narrow scope (§2.5 override). Non eliminato.
-- **Falsi positivi su test non-deterministici.** Progetti con test che includono
-  timestamp / random ID / path assoluti producono `UNVERIFIED`. Il refactorer deve
-  abortire o l'utente deve creare override. Friction-inducing finché il pilota non
-  produce best-practice "test cleanup pre-refactor". Severity: medium.
-- **Dipendenza da `.claude/test-cmd` pre-esistente.** Se il progetto target non ha
-  test-cmd configurato (TOFU not done), snapshot UNVERIFIED → refactor abortito.
-  Forza il user a deployare test-cmd prima. Allineato pratica esistente (
-  approve-test-cmd hook) ma è gate aggiuntivo.
-- **Coupling minore harness `review-triage-fix` ↔ `refactorer.md`.** Il harness ora
-  legge 3 file (`SKILL.md`, `coder.md`, `refactorer.md`). Se in futuro rinominiamo
-  refactorer.md, 2 anchor da aggiornare. Costo accettabile (consistency con coupling
-  coder.md già stabilito in ADR-0001).
-- **MVP non gestisce snapshot per pure function return values.** Progetti library-only
-  senza test integration (es. tiny util library) non beneficiano. Deferred (vedi §3.1).
-- **Blast radius via grep miss caller indiretti via reflection.** Override `RFS_FULL=1`
-  esiste ma richiede giudizio refactorer. Possibile falso negativo se refactorer non
-  rileva reflection. Severity: medium.
+- **Time overhead for the refactor cycle.** Determinism check requires 3 test command runs
+  + 1 post-run = 4 total runs per cycle. On projects with slow tests (>30s) the
+  refactor cycle goes from ~30s (1 baseline run + 1 post-run) to ~2 min. Mitigation:
+  `RFS_FILTER` narrow scope (§2.5 override). Not eliminated.
+- **False positives on non-deterministic tests.** Projects with tests that include
+  timestamps / random IDs / absolute paths produce `UNVERIFIED`. The refactorer must
+  abort or the user must create an override. Friction-inducing until the pilot produces
+  best-practice "test cleanup pre-refactor". Severity: medium.
+- **Dependency on pre-existing `.claude/test-cmd`.** If the target project does not have
+  test-cmd configured (TOFU not done), snapshot UNVERIFIED -> refactor aborted.
+  Forces the user to deploy test-cmd first. Aligned with existing practice
+  (approve-test-cmd hook) but is an additional gate.
+- **Minor coupling harness `review-triage-fix` <-> `refactorer.md`.** The harness now
+  reads 3 files (`SKILL.md`, `coder.md`, `refactorer.md`). If in the future we rename
+  refactorer.md, 2 anchors to update. Acceptable cost (consistency with coder.md coupling
+  already established in ADR-0001).
+- **MVP does not handle snapshots for pure function return values.** Library-only projects
+  without integration tests (e.g. tiny util library) do not benefit. Deferred (see §3.1).
+- **Blast radius via grep misses indirect callers via reflection.** Override `RFS_FULL=1`
+  exists but requires refactorer judgment. Possible false negative if refactorer does not
+  detect reflection. Severity: medium.
 
 ### 4.3 Neutral
 
-- **Plan TDD scritto dall'architect resta agnostico al snapshot.** Architect non
-  pre-dichiara snapshot expectation negli step del plan; è runtime, dal refactorer.
-  Allineato a pattern ADR-0001 (architect agnostico al classifier).
-- **MEMORY.md aggiornato.** Nuova voce "Refactor snapshot harness" in sezione Project.
-- **Orchestrator invariato.** Dispatcha `refactorer` come prima; il refactorer ora
-  produce report più ricco (PASS/FAIL/UNVERIFIED + audit artifacts).
-- **Sub-agent identity invariata.** Refactorer resta Sonnet, tools immutati, color
-  giallo.
+- **TDD plan written by the architect remains agnostic to the snapshot.** Architect does not
+  pre-declare snapshot expectations in plan steps; it is runtime, by the refactorer.
+  Aligned with ADR-0001 pattern (architect agnostic to the classifier).
+- **MEMORY.md updated.** New entry "Refactor snapshot harness" in the Project section.
+- **Orchestrator unchanged.** Dispatches `refactorer` as before; the refactorer now
+  produces a richer report (PASS/FAIL/UNVERIFIED + audit artifacts).
+- **Sub-agent identity unchanged.** Refactorer remains Sonnet, tools unchanged, yellow color.
 
 ### 4.4 Open questions (validation pending)
 
-- **Hit-rate compliance:** % di cycle refactor in cui il refactorer effettivamente
-  invoca capture.sh prima/dopo edit. Target: >95%. Validabile solo nell'uso organico.
-- **Falso positivo rate su test non-deterministici:** quanti progetti pilota hanno test
-  flaky tali da forzare `UNVERIFIED` o override? Validabile su 3-5 cycle pilota.
-- **Blast radius narrow scope efficacia:** quanto tempo risparmia `RFS_FILTER` rispetto a
-  full test command? Target: ≥3x speedup sui progetti grandi. Validabile con metriche
-  pilota.
-- **Reflection / dispatch dinamico false negative rate:** quanti refactor passano
-  snapshot ma rompono behavior in caller indiretti? Validabile post-pilota con review
-  dei MAJOR successivi.
-- **Override file `.refactor-snapshot-override` usage rate:** se troppi cycle richiedono
-  override, il harness è troppo strict. Se nessun cycle lo usa, è una feature non
-  necessaria. Target sweet spot: 5-15% dei cycle. Validabile post-pilota.
+- **Compliance hit-rate:** % of refactor cycles in which the refactorer actually
+  invokes capture.sh before/after edit. Target: >95%. Validatable only in organic use.
+- **False positive rate on non-deterministic tests:** how many pilot projects have flaky
+  tests that force `UNVERIFIED` or override? Validatable over 3-5 pilot cycles.
+- **Blast radius narrow scope effectiveness:** how much time does `RFS_FILTER` save compared to
+  full test command? Target: >=3x speedup on large projects. Validatable with pilot metrics.
+- **Reflection / dynamic dispatch false negative rate:** how many refactors pass the
+  snapshot but break behavior in indirect callers? Validatable post-pilot with review of
+  subsequent MAJORs.
+- **Override file `.refactor-snapshot-override` usage rate:** if too many cycles require
+  override, the harness is too strict. If no cycle uses it, it is an unnecessary feature.
+  Target sweet spot: 5-15% of cycles. Validatable post-pilot.
 
 ---
 
 ## 5. References
 
-- `~/.claude/agents/refactorer.md` (target di modifica primaria)
-- `~/.claude/skills/refactor-snapshot/` (skill da creare)
-- `~/.claude/skills/review-triage-fix/tests/run-tests.sh` (target +2 anchor)
-- `~/.claude/hooks/approve-test-cmd.sh` (contract `.claude/test-cmd` riuso)
-- `docs/vibe-coding-system.md` sez. 3.x (8 sub-agent), sez. 8 (skill), sez. 11
-  (workflow concept→code)
+- `~/.claude/agents/refactorer.md` (primary modification target)
+- `~/.claude/skills/refactor-snapshot/` (skill to create)
+- `~/.claude/skills/review-triage-fix/tests/run-tests.sh` (target +2 anchors)
+- `~/.claude/hooks/approve-test-cmd.sh` (`.claude/test-cmd` contract reuse)
+- `docs/vibe-coding-system.md` sec. 3.x (8 sub-agents), sec. 8 (skill), sec. 11
+  (workflow concept->code)
 - `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` (Accepted
-  2026-05-20, ortogonale)
-- `docs/superpowers/specs/2026-05-19-swarm-testcmd-design.md` (TOFU + 3-tier per
+  2026-05-20, orthogonal)
+- `docs/superpowers/specs/2026-05-19-swarm-testcmd-design.md` (TOFU + 3-tier for
   `.claude/test-cmd`)
-- `docs/superpowers/specs/2026-05-19-review-triage-fix-design.md` (pattern anchor
-  harness)
-- Memory `feedback_micropiano-refactor-cleanup.md` (RESOLVED 2026-05-20; razionale
-  cycle 2 MAJOR)
-- Memory `feedback_bash32-constraint.md` (vincolo bash 3.2 invariante)
-- Field test `docs/field-test-2026-05-18.md` (storia pilota)
+- `docs/superpowers/specs/2026-05-19-review-triage-fix-design.md` (anchor harness pattern)
+- Memory `feedback_micropiano-refactor-cleanup.md` (RESOLVED 2026-05-20; cycle 2 MAJOR
+  rationale)
+- Memory `feedback_bash32-constraint.md` (bash 3.2 invariant constraint)
+- Field test `docs/field-test-2026-05-18.md` (pilot history)

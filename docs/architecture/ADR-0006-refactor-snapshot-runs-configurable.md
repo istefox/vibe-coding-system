@@ -1,78 +1,74 @@
-# ADR-0006 — `RFS_RUNS=N` configurable determinism check per refactor-snapshot
+# ADR-0006 — `RFS_RUNS=N` configurable determinism check for refactor-snapshot
 
-**Status:** Accepted — 2026-05-20 (implemented; refactor-snapshot harness PASS=11→18, +7 anchor; RFS_DETERMINISM_RUNS dead code eliminated; smoke 4/4 scenarios OK)
+**Status:** Accepted — 2026-05-20 (implemented; refactor-snapshot harness PASS=11->18, +7 anchors; RFS_DETERMINISM_RUNS dead code eliminated; smoke 4/4 scenarios OK)
 **Authors:** Adriano (architect agent) per Stefano Ferri
 **Supersedes:** none
 **Superseded by:** none
 **Related:**
-- `docs/architecture/ADR-0002-refactor-snapshot-harness.md` (Accepted 2026-05-20, est. dei 3 PRE run hardcoded)
+- `docs/architecture/ADR-0002-refactor-snapshot-harness.md` (Accepted 2026-05-20, established the 3 hardcoded PRE runs)
 - `docs/superpowers/specs/2026-05-20-refactor-snapshot-runs-configurable-design.md`
 - `docs/superpowers/plans/2026-05-20-refactor-snapshot-runs-configurable.md`
 - `~/.claude/agents/refactorer.md` (Step 3 hardcoded "re-run pre-snapshot 2 more times (3 total)")
-- `~/.claude/skills/refactor-snapshot/SKILL.md` (cita già `RFS_DETERMINISM_RUNS` ma non implementato)
-- `~/.claude/skills/refactor-snapshot/scripts/capture.sh` (single-shot, non itera)
+- `~/.claude/skills/refactor-snapshot/SKILL.md` (already cites `RFS_DETERMINISM_RUNS` but not implemented)
+- `~/.claude/skills/refactor-snapshot/scripts/capture.sh` (single-shot, does not iterate)
 - Memory `feedback_bash32-constraint.md`
 
 ---
 
 ## 1. Context
 
-Il refactor-snapshot harness (ADR-0002, deployato 2026-05-20) impone al refactorer
-3 esecuzioni del PRE snapshot (Step 3 di `refactorer.md`: "Re-run pre-snapshot 2
-more times (3 total). If SHA256 differs across runs → STOP"). Il numero **3** è
-hardcoded nel prompt; `capture.sh` non sa nulla del concetto di "run set" — è
+The refactor-snapshot harness (ADR-0002, deployed 2026-05-20) requires the refactorer
+to perform 3 executions of the PRE snapshot (Step 3 of `refactorer.md`: "Re-run pre-snapshot 2
+more times (3 total). If SHA256 differs across runs -> STOP"). The number **3** is
+hardcoded in the prompt; `capture.sh` knows nothing about the concept of a "run set" — it is
 single-shot.
 
-Tre evidenze convergenti motivano l'intervento.
+Three converging pieces of evidence motivate the intervention.
 
-1. **Discrepanza già presente nel codice.** `SKILL.md` cita la env var
-   `RFS_DETERMINISM_RUNS` (default 3) come *parte del contract pubblico*, ma né
-   `capture.sh` né `refactorer.md` la onorano. È un contratto dichiarato e non
-   implementato — un bug latente di documentazione.
+1. **Discrepancy already present in the code.** `SKILL.md` cites the env var
+   `RFS_DETERMINISM_RUNS` (default 3) as *part of the public contract*, but neither
+   `capture.sh` nor `refactorer.md` honors it. It is a declared but unimplemented contract
+   — a latent documentation bug.
 
-2. **Test suite lente.** Su progetti reali (pricing-markup-cli ha test-cmd da
-   ~90s; il blueprint vibe-coding-system ha harness aggregati >120s) un PRE da 3
-   esecuzioni vale 4.5–6 minuti *prima* del refactor + 1 POST = 6–8 minuti per
-   ogni *pass* di refactor (≤200 lines), tipicamente 3-5 pass per feature → 30-40
-   minuti di friction. Quando il test è notoriamente deterministico, l'utente
-   vuole abbassare a `RFS_RUNS=1` (skip determinism, accettare il rischio).
+2. **Slow test suites.** On real projects (pricing-markup-cli has a test-cmd of
+   ~90s; the vibe-coding-system blueprint has aggregated harnesses >120s) a PRE with 3
+   executions costs 4.5-6 minutes *before* the refactor + 1 POST = 6-8 minutes for
+   every *pass* of refactor (<=200 lines), typically 3-5 passes per feature -> 30-40
+   minutes of friction. When the test is notoriously deterministic, the user wants to
+   lower to `RFS_RUNS=1` (skip determinism, accept the risk).
 
-3. **Test flaky.** I test che falliscono 1/10 hanno solo
-   `1 - (0.9)^3 ≈ 27%` chance di essere catturati a 3 run. Per progetti con
-   suite note-flaky (test integration, async I/O) servono 5-10 run per ridurre
-   il false-negative rate a <5%. Hardcoded 3 dà un *false sense of security*.
+3. **Flaky tests.** Tests that fail 1/10 times have only
+   `1 - (0.9)^3 ~= 27%` chance of being caught at 3 runs. For projects with
+   known-flaky suites (integration tests, async I/O) 5-10 runs are needed to reduce
+   the false-negative rate to <5%. Hardcoded 3 gives a *false sense of security*.
 
-### Problema architetturale
+### Architectural problem
 
-Il valore "3" è una *policy* (compromesso costo/coverage) hardcoded in un *prompt*
-(`refactorer.md`) e ignorato dal layer eseguibile (`capture.sh`). Mancano sia la
-configurabilità sia il single source of truth: il numero di run vive in due posti
-(prompt + SKILL.md cita ma non honors) e in nessuno dei due è autoritativo
-runtime.
+The value "3" is a *policy* (cost/coverage trade-off) hardcoded in a *prompt*
+(`refactorer.md`) and ignored by the executable layer (`capture.sh`). Both configurability
+and a single source of truth are missing: the number of runs lives in two places
+(prompt + SKILL.md cites but does not honor) and is authoritative at runtime in neither.
 
-### Direzione
+### Direction
 
-Implementare `RFS_RUNS=N` come *vera* env var:
+Implement `RFS_RUNS=N` as a *true* env var:
 
-- Letta da un **nuovo wrapper script** `pre-runs.sh` (sibling di `capture.sh`,
-  `diff.sh`).
-- Default 3, range valido [1, 10], validazione esplicita (fail loud).
-- Il refactorer chiama il wrapper *una sola volta* invece di 3 invocazioni a
-  `capture.sh PRE`.
-- Audit trail: l'output del wrapper include `RUNS=N` esplicito; il report del
-  refactorer cita il valore effettivo usato.
+- Read by a **new wrapper script** `pre-runs.sh` (sibling of `capture.sh`, `diff.sh`).
+- Default 3, valid range [1, 10], explicit validation (fail loud).
+- The refactorer calls the wrapper *once* instead of 3 invocations of `capture.sh PRE`.
+- Audit trail: the wrapper output includes `RUNS=N` explicitly; the refactorer report
+  cites the effective value used.
 
-Rinominata `RFS_DETERMINISM_RUNS` → `RFS_RUNS` (breve, allineato a
-`RFS_TIMEOUT`/`RFS_FILTER`/`RFS_FULL`). La var `RFS_DETERMINISM_RUNS` non era mai
-stata onorata dal codice eseguibile, quindi questo è un cambio del SKILL.md ma
-non un breaking change runtime.
+Renamed `RFS_DETERMINISM_RUNS` -> `RFS_RUNS` (short, aligned with
+`RFS_TIMEOUT`/`RFS_FILTER`/`RFS_FULL`). The var `RFS_DETERMINISM_RUNS` was never honored
+by the executable code, so this is a change to SKILL.md but not a runtime breaking change.
 
 ---
 
 ## 2. Decision
 
-Introdurre un nuovo script eseguibile
-`~/.claude/skills/refactor-snapshot/scripts/pre-runs.sh` (bash 3.2-clean) con
+Introduce a new executable script
+`~/.claude/skills/refactor-snapshot/scripts/pre-runs.sh` (bash 3.2-clean) with
 contract:
 
 ```
@@ -84,31 +80,30 @@ bash pre-runs.sh
 # Exit: 0 PASS, 2 UNVERIFIED, 1 invalid RFS_RUNS, 3 capture.sh failure
 ```
 
-Comportamento dettagliato:
+Detailed behavior:
 
-- `RFS_RUNS=N` validato come intero in [1, 10]. Out-of-range o non-numerico →
+- `RFS_RUNS=N` validated as integer in [1, 10]. Out-of-range or non-numeric ->
   exit 1, stderr `ERROR: RFS_RUNS=<val> invalid, must be integer in [1,10]`.
-  **Fail loud, NO clamp silenzioso.**
-- `N=1` esegue 1 capture, emette `STATUS=PASS` automaticamente (nessun
-  determinism check possibile a N=1, ma è una scelta esplicita dell'utente —
-  audit trail nel report dirà `RUNS=1 (determinism check skipped)`).
-- `N≥2` esegue N capture; dopo ogni capture salva il file in tmp con SHA256
-  calcolato; confronta tutti contro il primo. Se anche solo uno differisce →
-  `STATUS=UNVERIFIED`, exit 2. Tutti uguali → `STATUS=PASS`, exit 0. Il file
-  PRE finale (`.claude/.refactor-snapshot.txt`) è quello dell'ULTIMA run (più
-  recente = baseline più aggiornata).
-- Se una singola `capture.sh` interna fallisce (exit≠0, es. missing test-cmd,
-  timeout) → propagato come exit 3, stderr include la run number che ha
-  fallito.
+  **Fail loud, NO silent clamp.**
+- `N=1` executes 1 capture, emits `STATUS=PASS` automatically (no determinism
+  check possible at N=1, but it is an explicit user choice — audit trail in report
+  will say `RUNS=1 (determinism check skipped)`).
+- `N>=2` executes N captures; after each capture saves the file in tmp with SHA256
+  computed; compares all against the first. If even one differs ->
+  `STATUS=UNVERIFIED`, exit 2. All equal -> `STATUS=PASS`, exit 0. The final PRE
+  file (`.claude/.refactor-snapshot.txt`) is that of the LAST run (most recent = most
+  up-to-date baseline).
+- If a single internal `capture.sh` fails (exit!=0, e.g. missing test-cmd,
+  timeout) -> propagated as exit 3, stderr includes the run number that failed.
 
-Wording `refactorer.md` Step 3 cambia da:
+Wording of `refactorer.md` Step 3 changes from:
 
 ```
 3. Determinism check. Re-run pre-snapshot 2 more times (3 total). If SHA256
-   differs across runs → STOP, output `UNVERIFIED non-deterministic test output`...
+   differs across runs -> STOP, output `UNVERIFIED non-deterministic test output`...
 ```
 
-a:
+to:
 
 ```
 3. PRE capture + determinism check. Invoke
@@ -118,95 +113,93 @@ a:
    stdout in the final report.
 ```
 
-Le invocazioni precedenti `capture.sh PRE` (Step 2 e Step 3) collassano in
-*una sola invocazione* di `pre-runs.sh`. Il refactor lifecycle diventa:
+The previous `capture.sh PRE` invocations (Steps 2 and 3) collapse into
+*a single invocation* of `pre-runs.sh`. The refactor lifecycle becomes:
 
 ```
-pre-runs.sh                         # PRE + determinism (Steps 2+3 fusi)
+pre-runs.sh                         # PRE + determinism (Steps 2+3 merged)
 # ... refactor edits ...
 capture.sh POST
 diff.sh
 ```
 
-### 2.1 Coexistence con altre env var
+### 2.1 Coexistence with other env vars
 
-`RFS_RUNS` coesiste ortogonalmente con `RFS_TIMEOUT`, `RFS_FILTER`, `RFS_FULL`:
+`RFS_RUNS` coexists orthogonally with `RFS_TIMEOUT`, `RFS_FILTER`, `RFS_FULL`:
 
-- `RFS_TIMEOUT` è **per-run** (no cambiamento — ogni invocazione di `capture.sh`
-  dentro `pre-runs.sh` rispetta il proprio timeout). Wallclock totale worst-case
-  ≈ `N * RFS_TIMEOUT`.
-- `RFS_FILTER` / `RFS_FULL` sono **per-capture**, identici per tutte le N run
-  (no random selection — tutte le run usano la stessa scope altrimenti il
-  determinism check è impossibile).
-- Audit trail nel report del refactorer: cita esplicitamente `RUNS=N`,
-  `TIMEOUT=...`, `FILTER=...`/`FULL=...` quando non-default.
+- `RFS_TIMEOUT` is **per-run** (no change — every invocation of `capture.sh`
+  inside `pre-runs.sh` respects its own timeout). Worst-case total wallclock
+  ~= `N * RFS_TIMEOUT`.
+- `RFS_FILTER` / `RFS_FULL` are **per-capture**, identical for all N runs
+  (no random selection — all runs use the same scope, otherwise the determinism
+  check is impossible).
+- Audit trail in the refactorer report: explicitly cites `RUNS=N`,
+  `TIMEOUT=...`, `FILTER=...`/`FULL=...` when non-default.
 
-### 2.2 Risposte alle 4 domande architetturali
+### 2.2 Answers to the 4 architectural questions
 
-1. **Granularità del controllo:** env var globale `RFS_RUNS` *sessione-only*.
-   No file di config per-progetto in questa iterazione (YAGNI: il refactorer
-   è invocato in sessione interattiva, l'utente sa quale progetto sta toccando
-   e può prefissare `RFS_RUNS=5 ` al dispatch). File di config aggiunge
-   parsing logic + casi di precedence (env > file > default) per zero
-   beneficio dimostrato.
+1. **Control granularity:** global env var `RFS_RUNS` *session-only*.
+   No per-project config file in this iteration (YAGNI: the refactorer
+   is invoked in an interactive session, the user knows which project it is working on
+   and can prefix `RFS_RUNS=5 ` to the dispatch). Config file adds
+   parsing logic + precedence cases (env > file > default) for zero
+   demonstrated benefit.
 
-2. **Validazione di N:** **fail loud, no clamp.** `RFS_RUNS=0` e `RFS_RUNS=11`
-   sono errori espliciti (exit 1). Razionale: clamp silenzioso nasconde bug
-   nel call site; "0 = skip determinism" è un'ambiguità (è skip o è errore?).
-   Il caso "skip determinism" è esplicito come `RFS_RUNS=1` (vedi sopra).
+2. **Validation of N:** **fail loud, no clamp.** `RFS_RUNS=0` and `RFS_RUNS=11`
+   are explicit errors (exit 1). Rationale: silent clamp hides bugs in the
+   call site; "0 = skip determinism" is an ambiguity (is it skip or is it error?).
+   The "skip determinism" case is explicit as `RFS_RUNS=1` (see above).
 
-3. **Wording Step 3 + audit trail:** report del refactorer cita
-   `RUNS=N` letteralmente da stdout del wrapper. Default 3 = cita "RUNS=3
-   (default)"; override = cita "RUNS=5 (env override)". Il file
-   `.claude/.refactor-snapshot.txt` NON contiene il valore N (resta byte-for-byte
-   compatibile con ADR-0002 format: EXIT/SHA/SHA/---/---/). Audit trail vive
-   nel report markdown del refactorer, non nello snapshot file (separation of
+3. **Step 3 wording + audit trail:** refactorer report cites
+   `RUNS=N` literally from wrapper stdout. Default 3 = cites "RUNS=3
+   (default)"; override = cites "RUNS=5 (env override)". The file
+   `.claude/.refactor-snapshot.txt` does NOT contain the N value (remains byte-for-byte
+   compatible with ADR-0002 format: EXIT/SHA/SHA/---/---/). Audit trail lives
+   in the refactorer markdown report, not in the snapshot file (separation of
    concerns: snapshot = byte-faithful behavior; report = process metadata).
 
-4. **Cohesion con altri flag:** vedi §2.1. Coesistono per design; nessun
-   cross-effect. `RFS_RUNS=10 + RFS_TIMEOUT=120` = worst-case 20 minuti su
-   PRE — è una scelta consapevole, l'utente lo vede.
+4. **Cohesion with other flags:** see §2.1. They coexist by design; no
+   cross-effect. `RFS_RUNS=10 + RFS_TIMEOUT=120` = worst-case 20 minutes on
+   PRE — it is a conscious choice, the user can see it.
 
 ---
 
 ## 3. Alternatives considered
 
-### Alt-A — Mutare `capture.sh` con loop interno (RIFIUTATA)
+### Alt-A — Mutate `capture.sh` with internal loop (REJECTED)
 
-Aggiungere il loop dentro `capture.sh PRE` quando `RFS_RUNS≥2`.
+Add the loop inside `capture.sh PRE` when `RFS_RUNS>=2`.
 
-**Rifiuto:**
-- Viola single-responsibility: `capture.sh` oggi cattura *uno* snapshot.
-  Cambiarlo in "1 o N a seconda di env var" lo rende stateful.
-- Rompe il contract dichiarato in `SKILL.md` invocazione contract (3 chiamate
-  esplicite). Devo riscrivere comunque sia SKILL.md sia agente — meno isolato
-  del wrapper.
-- I 10 test self-test esistenti di `capture.sh` dovrebbero essere riveduti
-  uno-a-uno; wrapper isolato preserva l'anchor self-test esistente intatto.
+**Rejection:**
+- Violates single-responsibility: `capture.sh` today captures *one* snapshot.
+  Changing it to "1 or N depending on env var" makes it stateful.
+- Breaks the declared contract in `SKILL.md` invocation contract (3 explicit calls). Must
+  rewrite both SKILL.md and the agent anyway — less isolated than the wrapper.
+- The 10 existing self-tests of `capture.sh` would need to be revised one by one;
+  isolated wrapper preserves the existing anchor self-test intact.
 
-### Alt-B — Loop nel prompt del refactorer, leggere `RFS_RUNS` come testo (RIFIUTATA)
+### Alt-B — Loop in the refactorer prompt, read `RFS_RUNS` as text (REJECTED)
 
-Il prompt `refactorer.md` Step 3 dice "execute `capture.sh PRE` $RFS_RUNS times,
-compare SHA256 by reading the files". Lo Claude-agent interpreta il loop.
+The `refactorer.md` Step 3 prompt says "execute `capture.sh PRE` $RFS_RUNS times,
+compare SHA256 by reading the files". The Claude agent interprets the loop.
 
-**Rifiuto:**
-- Non-deterministico: l'agente potrebbe sbagliare il count, dimenticare il
-  confronto, etc. Spostare logica deterministica in un agente probabilistico
-  è anti-pattern (lezione di ADR-0002: il valore aggiunto del harness è la
-  *deterministica* del check).
-- Non testabile via bash harness: il loop non esiste fisicamente in un file
-  eseguibile. ZERO copertura possibile dal self-test.
+**Rejection:**
+- Non-deterministic: the agent might get the count wrong, forget the comparison, etc.
+  Shifting deterministic logic into a probabilistic agent is an anti-pattern (lesson of
+  ADR-0002: the added value of the harness is the *determinism* of the check).
+- Not testable via bash harness: the loop does not physically exist in an executable file.
+  ZERO coverage possible from the self-test.
 
-### Alt-C — File di config `.claude/refactor-snapshot.config` (RIFIUTATA per ora)
+### Alt-C — Config file `.claude/refactor-snapshot.config` (REJECTED for now)
 
-Override per-progetto via file YAML con `runs: 5`.
+Per-project override via YAML file with `runs: 5`.
 
-**Rifiuto:**
-- YAGNI: nessuna evidenza di richiesta. Aggiunge parser YAML in bash 3.2
-  (costoso). L'env var copre 100% del caso d'uso identificato (sessione interattiva).
-- Precedence rules (file > env > default? env > file? per-cwd o per-user?)
-  introducono complessità senza beneficio dimostrato. Riapribile in ADR
-  successivo se emerge il use case.
+**Rejection:**
+- YAGNI: no evidence of demand. Adding YAML parser in bash 3.2 (costly). The env var
+  covers 100% of the identified use case (interactive session).
+- Precedence rules (file > env > default? env > file? per-cwd or per-user?) introduce
+  complexity without demonstrated benefit. Reopenable in a subsequent ADR if the use case
+  emerges.
 
 ---
 
@@ -214,36 +207,36 @@ Override per-progetto via file YAML con `runs: 5`.
 
 ### Positive
 
-- Refactor su suite lente diventa praticabile (`RFS_RUNS=1`).
-- Refactor su suite flaky diventa rigoroso (`RFS_RUNS=8`).
-- SKILL.md torna coerente con il codice (single source of truth: `pre-runs.sh`).
-- Una sola invocazione (`pre-runs.sh`) sostituisce 3 (`capture.sh PRE` ×3) →
-  refactorer prompt più semplice, meno scope per errori interpretativi.
-- Audit trail esplicito (`RUNS=N` nel report del refactorer).
+- Refactor on slow suites becomes practical (`RFS_RUNS=1`).
+- Refactor on flaky suites becomes rigorous (`RFS_RUNS=8`).
+- SKILL.md is consistent with the code again (single source of truth: `pre-runs.sh`).
+- A single invocation (`pre-runs.sh`) replaces 3 (`capture.sh PRE` x3) ->
+  simpler refactorer prompt, less scope for interpretive errors.
+- Explicit audit trail (`RUNS=N` in the refactorer report).
 
 ### Negative
 
-- Nuovo file eseguibile da mantenere (`pre-runs.sh`). +1 superficie di test
-  (target: +6 PASS al self-test refactor-snapshot, 11 → 17).
-- Refactorer.md cambia → un altro Edit sul prompt critico (ma minimo: 2 righe).
+- New executable file to maintain (`pre-runs.sh`). +1 test surface
+  (target: +6 PASS to the refactor-snapshot self-test, 11 -> 17).
+- Refactorer.md changes -> another Edit to the critical prompt (but minimal: 2 lines).
 
 ### Neutral
 
-- `RFS_DETERMINISM_RUNS` (citata in SKILL.md ma mai onorata) viene rinominata
-  in `RFS_RUNS`. Non è un breaking change runtime (la vecchia var non faceva
-  nulla); è un cambio di documentazione.
-- Il file `.claude/.refactor-snapshot.txt` finale è quello dell'ultima run
-  (non della prima). Equivalente quando determinism PASS; più informativo
-  quando UNVERIFIED (ultimo stato osservato).
+- `RFS_DETERMINISM_RUNS` (cited in SKILL.md but never honored) is renamed
+  to `RFS_RUNS`. Not a runtime breaking change (the old var did nothing);
+  it is a documentation change.
+- The final `.claude/.refactor-snapshot.txt` file is that of the last run
+  (not the first). Equivalent when determinism PASS; more informative
+  when UNVERIFIED (last observed state).
 
 ---
 
 ## 5. References
 
-- `~/.claude/skills/refactor-snapshot/scripts/capture.sh` (single-shot, da non
-  modificare)
-- `~/.claude/skills/refactor-snapshot/scripts/diff.sh` (orthogonale)
-- `~/.claude/skills/refactor-snapshot/tests/run-tests.sh` (anchor; ne aggiungiamo
-  test, non ne tocchiamo di esistenti)
-- ADR-0002 §2 (3 PRE run hardcoded — soft-superseded dal default 3 di
+- `~/.claude/skills/refactor-snapshot/scripts/capture.sh` (single-shot, not to
+  be modified)
+- `~/.claude/skills/refactor-snapshot/scripts/diff.sh` (orthogonal)
+- `~/.claude/skills/refactor-snapshot/tests/run-tests.sh` (anchor; tests added,
+  no existing tests touched)
+- ADR-0002 §2 (3 PRE runs hardcoded — soft-superseded by the default 3 of
   `RFS_RUNS`)

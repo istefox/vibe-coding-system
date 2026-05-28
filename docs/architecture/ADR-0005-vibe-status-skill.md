@@ -7,110 +7,109 @@
 **Related:**
 - `docs/superpowers/specs/2026-05-20-vibe-status-skill-design.md`
 - `docs/superpowers/plans/2026-05-20-vibe-status-skill.md`
-- `~/.claude/skills/concept-to-code/` (pattern skill markdown + scripts come reference)
-- `~/.claude/skills/refactor-snapshot/` (pattern skill recente)
+- `~/.claude/skills/concept-to-code/` (pattern skill markdown + scripts as reference)
+- `~/.claude/skills/refactor-snapshot/` (recent skill pattern)
 - Memory `feedback_bash32-constraint.md`
 
 ---
 
 ## 1. Context
 
-Il sistema vibe-coding (`docs/vibe-coding-system.md`) è ora composto da 8 sub-agent + ~12
-skill + 4 hook + 3 ADR (0001-0003) + un livello memory persistente. **Lo stato corrente
-del sistema non è ispezionabile in modo aggregato**: per sapere "è tutto sano?" oggi
-serve manualmente:
+The vibe-coding system (`docs/vibe-coding-system.md`) is now composed of 8 sub-agents + ~12
+skills + 4 hooks + 3 ADRs (0001-0003) + a persistent memory layer. **The current state of the
+system is not aggregately inspectable**: to know "is everything healthy?" today requires manually:
 
-1. `bash ~/.claude/skills/review-triage-fix/tests/run-tests.sh` → PASS=47
-2. `bash ~/.claude/skills/concept-to-code/tests/run-tests.sh` → PASS=10
-3. `bash ~/.claude/skills/refactor-snapshot/tests/run-tests.sh` → PASS=11
-4. `ls docs/architecture/` (per ADR e status)
-5. `ls docs/manifests/` (per manifest concept-to-code in flight, se presente)
+1. `bash ~/.claude/skills/review-triage-fix/tests/run-tests.sh` -> PASS=47
+2. `bash ~/.claude/skills/concept-to-code/tests/run-tests.sh` -> PASS=10
+3. `bash ~/.claude/skills/refactor-snapshot/tests/run-tests.sh` -> PASS=11
+4. `ls docs/architecture/` (for ADR and status)
+5. `ls docs/manifests/` (for in-flight concept-to-code manifest, if present)
 6. `cat ~/.claude/projects/-Users-stefanoferri-Developer-vibe-coding-system/memory/MEMORY.md`
-7. `cat .triage-fix-last.json` (se presente — output ultimo review-triage-fix)
-8. Verificare `~/.claude/settings.json` per hook configurati
+7. `cat .triage-fix-last.json` (if present — output of last review-triage-fix)
+8. Verify `~/.claude/settings.json` for configured hooks
 
-**8 punti di lookup separati.** Audit del sistema 2026-05-20: l'unica "skill aggregator"
-non esiste. Friction operativa misurabile (3-5 min per audit completo manuale).
+**8 separate lookup points.** System audit 2026-05-20: the only "skill aggregator" does not
+exist. Measurable operational friction (3-5 min for a complete manual audit).
 
-**Direzione:** introdurre **skill markdown `vibe-status`** invocabile dall'orchestrator
-come `/skill vibe-status`, che produce un singolo report Markdown con:
+**Direction:** introduce **markdown skill `vibe-status`** callable by the orchestrator
+as `/skill vibe-status`, producing a single Markdown report with:
 
-- Stato dei N harness (PASS/FAIL count, durata)
-- Manifest in flight (`docs/manifests/` se presente in cwd)
-- ADR esistenti e loro status (parsing prima riga `**Status:**`)
-- Skill custom installate (ls `~/.claude/skills/`)
-- Hook configurati in `~/.claude/settings.json`
-- Recente ciclo review-triage-fix (`.triage-fix-last.json` se presente)
-- Memory entries attive (head di MEMORY.md)
+- State of N harnesses (PASS/FAIL count, duration)
+- In-flight manifests (`docs/manifests/` if present in cwd)
+- Existing ADRs and their status (parsing first line `**Status:**`)
+- Installed custom skills (ls `~/.claude/skills/`)
+- Hooks configured in `~/.claude/settings.json`
+- Recent review-triage-fix cycle (`.triage-fix-last.json` if present)
+- Active memory entries (head of MEMORY.md)
 
-Report stampato a stdout, Markdown ben formato per chat rendering, <10s typical.
+Report printed to stdout, well-formatted Markdown for chat rendering, <10s typical.
 
-### Vincoli ereditati
+### Inherited constraints
 
-- **Anchor preservation `review-triage-fix`:** PASS=47 deve restare ≥ 47.
-- **Bash 3.2.57 compat** per script aggregator.
-- **Read-only:** skill NON modifica nessun file di sistema. Solo legge.
+- **Anchor preservation `review-triage-fix`:** PASS=47 must remain >= 47.
+- **Bash 3.2.57 compat** for aggregator script.
+- **Read-only:** skill does NOT modify any system file. Read only.
 - **Performance target:** <10s typical case.
-- **No HITL nel design phase.**
-- **Repo NON-git:** no commit step.
+- **No HITL in design phase.**
+- **NON-git repo:** no commit step.
 
-### Assunzioni esplicite (non verificate empiricamente)
+### Explicit assumptions (not empirically verified)
 
-- **L'invocazione `/skill vibe-status` da orchestrator carica `SKILL.md` ed esegue gli
-  step descritti** (allineato al pattern di `concept-to-code` e `refactor-snapshot`).
-  Verificato per i 2 skill esistenti.
-- **Lo skill può eseguire script bash (`scripts/aggregate.sh`) come parte degli step**
-  (pattern di `concept-to-code/scripts/`).
-- **Il typical caso ha ≤5 harness attivi** (oggi 3, crescita a 5-6 prevista in 2026 Q3).
-  Performance budget 10s = 2s per harness × 5 harness + overhead 0-fluff.
-- **Lo skill è cwd-sensitive:** lo invocatore è in `$PWD = current project`. Discovery
-  globale di `~/.claude/skills/*/tests/` + discovery locale di `./docs/manifests/`,
-  `./docs/architecture/`, `./.triage-fix-last.json` se presenti.
+- **The `/skill vibe-status` invocation from orchestrator loads `SKILL.md` and executes the
+  steps described** (aligned with the pattern of `concept-to-code` and `refactor-snapshot`).
+  Verified for the 2 existing skills.
+- **The skill can execute bash scripts (`scripts/aggregate.sh`) as part of its steps**
+  (pattern of `concept-to-code/scripts/`).
+- **The typical case has <=5 active harnesses** (today 3, growth to 5-6 expected in 2026 Q3).
+  Performance budget 10s = 2s per harness x 5 harnesses + 0-fluff overhead.
+- **The skill is cwd-sensitive:** the invoker is in `$PWD = current project`. Global discovery
+  of `~/.claude/skills/*/tests/` + local discovery of `./docs/manifests/`,
+  `./docs/architecture/`, `./.triage-fix-last.json` if present.
 
 ---
 
 ## 2. Decision
 
-Introdurre la skill **`vibe-status`** in `~/.claude/skills/vibe-status/` con la
-struttura standard (SKILL.md + scripts + tests), invocabile come `/skill vibe-status`.
-Produce report Markdown su stdout in <10s typical.
+Introduce the skill **`vibe-status`** in `~/.claude/skills/vibe-status/` with the
+standard structure (SKILL.md + scripts + tests), callable as `/skill vibe-status`.
+Produces Markdown report to stdout in <10s typical.
 
-### 2.1 Risposta alle 6 domande architetturali
+### 2.1 Answers to the 6 architectural questions
 
-#### Q1 — Forma: skill markdown vs bash standalone
+#### Q1 — Form: markdown skill vs standalone bash
 
-**Skill markdown in `~/.claude/skills/vibe-status/SKILL.md` con `scripts/aggregate.sh`
+**Markdown skill in `~/.claude/skills/vibe-status/SKILL.md` with `scripts/aggregate.sh`
 helper.**
 
-Razionale:
-- Coerente con `concept-to-code`, `refactor-snapshot`, `review-triage-fix` (pattern
-  stabilito).
-- L'invocazione `/skill vibe-status` è discoverable nel CLI tab-completion.
-- Lo SKILL.md può fornire context interpretativo all'LLM (es. "se 1 harness fail,
-  flagga MAJOR; se tutti pass, dichiara HEALTHY") oltre al raw output dello script.
-- `~/.claude/bin/vibe-status` standalone bash sarebbe alternative ma rompe la convenzione
-  (mai usato pattern nel sistema attuale, non discoverable dall'orchestrator senza
-  documentazione separata).
+Rationale:
+- Consistent with `concept-to-code`, `refactor-snapshot`, `review-triage-fix` (established
+  pattern).
+- The `/skill vibe-status` invocation is discoverable in CLI tab-completion.
+- The SKILL.md can provide interpretive context to the LLM (e.g. "if 1 harness fails,
+  flag MAJOR; if all pass, declare HEALTHY") beyond the raw output of the script.
+- `~/.claude/bin/vibe-status` standalone bash would be an alternative but breaks the
+  convention (never used pattern in the current system, not discoverable by the orchestrator
+  without separate documentation).
 
-**Pattern hybrid:** SKILL.md orchestra; `scripts/aggregate.sh` fa il lavoro pesante
-(harness invoke + manifest scan + ADR parse) producendo Markdown raw. SKILL.md può
-aggiungere semantic layer top (HEALTHY/DEGRADED/CRITICAL header) post-hoc se l'LLM
-sceglie di interpretare.
+**Hybrid pattern:** SKILL.md orchestrates; `scripts/aggregate.sh` does the heavy lifting
+(harness invoke + manifest scan + ADR parse) producing raw Markdown. SKILL.md can add
+a semantic layer on top (HEALTHY/DEGRADED/CRITICAL header) post-hoc if the LLM chooses
+to interpret.
 
-#### Q2 — Discovery dei file da aggregare
+#### Q2 — Discovery of files to aggregate
 
-**Hybrid: auto-discovery con convention + override via manifest opzionale.**
+**Hybrid: auto-discovery with convention + optional override via manifest.**
 
 Default behavior (no manifest):
-- **Harness:** glob `~/.claude/skills/*/tests/run-tests.sh` (3.2-portable via `for f in
+- **Harnesses:** glob `~/.claude/skills/*/tests/run-tests.sh` (3.2-portable via `for f in
   ~/.claude/skills/*/tests/run-tests.sh; do ... done`).
-- **ADR:** glob `<cwd>/docs/architecture/ADR-*.md` (cwd-local).
-- **Manifests:** glob `<cwd>/docs/manifests/*.yaml` se directory esiste.
-- **Triage state:** `<cwd>/.triage-fix-last.json` se file esiste.
-- **Hook:** parse `~/.claude/settings.json` con jq.
-- **Memory:** head di `~/.claude/projects/<encoded-cwd>/memory/MEMORY.md` se esiste.
+- **ADRs:** glob `<cwd>/docs/architecture/ADR-*.md` (cwd-local).
+- **Manifests:** glob `<cwd>/docs/manifests/*.yaml` if directory exists.
+- **Triage state:** `<cwd>/.triage-fix-last.json` if file exists.
+- **Hooks:** parse `~/.claude/settings.json` with jq.
+- **Memory:** head of `~/.claude/projects/<encoded-cwd>/memory/MEMORY.md` if it exists.
 
-Override opzionale via `<cwd>/.claude/vibe-status.yaml` (se presente):
+Optional override via `<cwd>/.claude/vibe-status.yaml` (if present):
 ```yaml
 harness:
   - path: ~/.claude/skills/custom/tests/run-tests.sh
@@ -120,55 +119,54 @@ adr_dir: docs/architecture
 manifests_dir: docs/manifests
 ```
 
-Trade-off: hardcoded list nel SKILL.md sarebbe più semplice (3 harness today) ma non
-scala (un nuovo harness richiede edit a SKILL.md). Auto-discovery è write-once,
-self-updating.
+Trade-off: hardcoded list in SKILL.md would be simpler (3 harnesses today) but does not
+scale (a new harness requires editing SKILL.md). Auto-discovery is write-once, self-updating.
 
-#### Q3 — Cwd sensitivity: globale vs locale
+#### Q3 — Cwd sensitivity: global vs local
 
-**Hybrid: globale (sempre) + locale (se path esistono in cwd).**
+**Hybrid: global (always) + local (if paths exist in cwd).**
 
-Comportamento:
-- **Sempre legge (globale):**
-  - `~/.claude/skills/*/tests/run-tests.sh` (harness)
+Behavior:
+- **Always reads (global):**
+  - `~/.claude/skills/*/tests/run-tests.sh` (harnesses)
   - `~/.claude/skills/*/SKILL.md` (skill list)
   - `~/.claude/settings.json` (hook config)
   - `~/.claude/agents/*.md` (agent list)
-- **Conditionally legge (locale):**
-  - `<cwd>/docs/architecture/ADR-*.md` se directory esiste — altrimenti sezione ADR del
-    report mostra `(no project ADR directory)`.
-  - `<cwd>/docs/manifests/*.yaml` se directory esiste — altrimenti sezione manifest mostra
+- **Conditionally reads (local):**
+  - `<cwd>/docs/architecture/ADR-*.md` if directory exists — otherwise ADR section of the
+    report shows `(no project ADR directory)`.
+  - `<cwd>/docs/manifests/*.yaml` if directory exists — otherwise manifest section shows
     `(no in-flight manifests)`.
-  - `<cwd>/.triage-fix-last.json` se file esiste — altrimenti `(no recent triage cycle)`.
-  - `~/.claude/projects/<encoded-cwd>/memory/MEMORY.md` se file esiste.
+  - `<cwd>/.triage-fix-last.json` if file exists — otherwise `(no recent triage cycle)`.
+  - `~/.claude/projects/<encoded-cwd>/memory/MEMORY.md` if file exists.
 
-Se `$PWD = ~` (home, no project context), la sezione locale degrada a "(no project
-context)" senza erroring.
+If `$PWD = ~` (home, no project context), the local section degrades to "(no project
+context)" without erroring.
 
 #### Q4 — Performance + parallel/cache
 
-**Parallelizzazione harness con timeout per-harness + cache opzionale.**
+**Harness parallelization with per-harness timeout + optional cache.**
 
 Default v1.0:
-- Harness eseguiti **in parallelo** via background subshell + wait (3.2-portable):
+- Harnesses executed **in parallel** via background subshell + wait (3.2-portable):
   ```bash
   for h in "$@"; do
     ( bash "$h" >"$TMP/$(basename $(dirname $(dirname $h)))" 2>&1; echo $? > "$TMP/rc.$$" ) &
   done
   wait
   ```
-- **Timeout per-harness:** 8s default, configurable via env `VIBE_STATUS_HARNESS_TIMEOUT`.
-- Se >timeout: skip + flag `TIMEOUT` nel report (non blocca altre sections).
-- **No cache v1.0.** Premature: 3 harness paralleli in 8s = walltime ≤8s, sotto budget.
-  Cache richiede invalidation (file mtime? sha?), defer to v1.1 se metriche pilota
-  mostrano slowness ricorrente.
+- **Per-harness timeout:** 8s default, configurable via env `VIBE_STATUS_HARNESS_TIMEOUT`.
+- If >timeout: skip + flag `TIMEOUT` in report (does not block other sections).
+- **No cache v1.0.** Premature: 3 harnesses in parallel in 8s = walltime <=8s, under budget.
+  Cache requires invalidation (file mtime? sha?), deferred to v1.1 if pilot metrics show
+  recurring slowness.
 
-Skip-flag opt-in: `--skip-harness` produce report senza eseguire harness (solo metadata
+Skip-flag opt-in: `--skip-harness` produces report without executing harnesses (metadata-only
 scan, <1s).
 
 #### Q5 — Output format
 
-**Default: Markdown su stdout. Flag `--json` per JSON. Flag `--plain` per plain text.**
+**Default: Markdown to stdout. Flag `--json` for JSON. Flag `--plain` for plain text.**
 
 Default (Markdown):
 
@@ -206,153 +204,151 @@ Default (Markdown):
 - 3 feedback entries (all active)
 ```
 
-`--json` flag emette il medesimo content come strutturato per programmatic consumption
+The `--json` flag emits the same content as structured for programmatic consumption
 (future skill chaining).
 
-Output esclusivamente a stdout — nessun file scritto (vincolo read-only).
+Output exclusively to stdout — no file written (read-only constraint).
 
 #### Q6 — Failure mode
 
-**Skip-and-flag, mai block-entire-report.**
+**Skip-and-flag, never block entire report.**
 
-Casi:
-- **1 harness timeout:** sezione harness mostra `TIMEOUT` row; altri harness completi;
-  overall status `DEGRADED` (non `CRITICAL`).
-- **1 harness FAIL:** mostra PASS/FAIL count; overall status `DEGRADED`.
-- **1 harness crash (exit 127, file not found, etc.):** sezione harness mostra `ERROR`
-  row con tail di stderr (last 80 char); overall status `DEGRADED`.
-- **`~/.claude/settings.json` malformato (jq parse error):** sezione hook mostra
+Cases:
+- **1 harness timeout:** harness section shows `TIMEOUT` row; other harnesses complete;
+  overall status `DEGRADED` (not `CRITICAL`).
+- **1 harness FAIL:** shows PASS/FAIL count; overall status `DEGRADED`.
+- **1 harness crash (exit 127, file not found, etc.):** harness section shows `ERROR`
+  row with tail of stderr (last 80 chars); overall status `DEGRADED`.
+- **`~/.claude/settings.json` malformed (jq parse error):** hook section shows
   `(unable to parse settings.json)`; overall status `DEGRADED`.
-- **`<cwd>/docs/architecture/` non esiste:** sezione ADR `(no project ADR directory)`;
-  overall status invariato (locale, non penalizza).
+- **`<cwd>/docs/architecture/` does not exist:** ADR section `(no project ADR directory)`;
+  overall status unchanged (local, does not penalize).
 
 Overall status legend:
-- **HEALTHY:** tutti harness PASS, no error nei metadata.
-- **DEGRADED:** ≥1 harness FAIL/TIMEOUT/ERROR oppure metadata parse error.
-- **CRITICAL:** ≥2 harness FAIL contemporanei oppure tutti i harness ERROR.
+- **HEALTHY:** all harnesses PASS, no errors in metadata.
+- **DEGRADED:** >=1 harness FAIL/TIMEOUT/ERROR or metadata parse error.
+- **CRITICAL:** >=2 harnesses FAIL simultaneously or all harnesses ERROR.
 
-Status legend stampato in footer del report per chiarezza.
+Status legend printed in footer of report for clarity.
 
-### 2.2 Architettura della skill
+### 2.2 Skill architecture
 
 ```
 ~/.claude/skills/vibe-status/
-├── SKILL.md                          # orchestrator markdown, ~80 righe
+├── SKILL.md                          # orchestrator markdown, ~80 lines
 ├── scripts/
-│   ├── aggregate.sh                  # main entry, 3.2-clean, ~200 righe
-│   ├── harness-runner.sh             # invoke single harness con timeout
+│   ├── aggregate.sh                  # main entry, 3.2-clean, ~200 lines
+│   ├── harness-runner.sh             # invoke single harness with timeout
 │   └── render-markdown.sh            # format output
 └── tests/
-    └── run-tests.sh                  # harness anchor + smoke test, ~50 anchor target
+    └── run-tests.sh                  # anchor + smoke test, ~50 anchor target
 
-# Anchor structural in review-triage-fix harness:
-~/.claude/skills/review-triage-fix/tests/run-tests.sh  # +1 anchor: presenza skill vibe-status
+# Structural anchor in review-triage-fix harness:
+~/.claude/skills/review-triage-fix/tests/run-tests.sh  # +1 anchor: vibe-status skill presence
 ```
 
-### 2.3 Coesistenza con harness `review-triage-fix`
+### 2.3 Coexistence with `review-triage-fix` harness
 
-Il harness `review-triage-fix` (PASS=47) acquisisce **+1 anchor** che verifica la
-presenza del file `~/.claude/skills/vibe-status/SKILL.md` e del literal `Vibe-Coding System Status`
-nel SKILL.md. Trade-off: lega review-triage-fix a un quarto file (oltre `SKILL.md` proprio,
-`coder.md` da ADR-0001, `settings.json` da ADR-0004), ma il principio "review-triage-fix
-ha autorità sulla qualità dello stack" si estende coerentemente.
+The `review-triage-fix` harness (PASS=47) acquires **+1 anchor** that verifies the presence
+of the file `~/.claude/skills/vibe-status/SKILL.md` and the literal `Vibe-Coding System Status`
+in the SKILL.md. Trade-off: ties review-triage-fix to a fourth file (after its own `SKILL.md`,
+`coder.md` from ADR-0001, `settings.json` from ADR-0004), but the principle "review-triage-fix
+has authority over the quality of the stack" extends consistently.
 
-**Harness PASS=47 → PASS=48** (con ADR-0004 = PASS=49 cumulativo se entrambi deployati;
-ognuno indipendente porta +1).
+**Harness PASS=47 -> PASS=48** (with ADR-0004 = PASS=49 cumulative if both deployed;
+each independently contributes +1).
 
-### 2.4 La skill ha proprio harness?
+### 2.4 Does the skill have its own harness?
 
-**Sì, dedicato in `~/.claude/skills/vibe-status/tests/run-tests.sh`.** Pattern di
-`concept-to-code/tests` e `refactor-snapshot/tests`. Anchor:
-- presenza SKILL.md
-- presenza scripts/aggregate.sh executable
-- smoke test: invoke aggregate.sh su mock tmp env produce Markdown well-formed
-  (head ha `# Vibe-Coding System Status`)
-- harness discovery: glob `~/.claude/skills/*/tests/run-tests.sh` returns ≥3 files
-- ADR parsing: parse di un ADR fixture estrae title e status
-- timeout: harness fixture che sleep 30s viene killed in 8s
+**Yes, dedicated in `~/.claude/skills/vibe-status/tests/run-tests.sh`.** Pattern of
+`concept-to-code/tests` and `refactor-snapshot/tests`. Anchors:
+- presence of SKILL.md
+- presence of scripts/aggregate.sh executable
+- smoke test: invoke aggregate.sh on mock tmp env produces well-formed Markdown
+  (head has `# Vibe-Coding System Status`)
+- harness discovery: glob `~/.claude/skills/*/tests/run-tests.sh` returns >=3 files
+- ADR parsing: parse of a fixture ADR extracts title and status
+- timeout: fixture harness that sleeps 30s is killed in 8s
 
-Target PASS=8-10 anchor nel proprio harness. Quel harness diventa il 4° in
-auto-discovery di `vibe-status` stessa (self-referential, idempotente).
+Target PASS=8-10 anchors in its own harness. That harness becomes the 4th in
+auto-discovery of `vibe-status` itself (self-referential, idempotent).
 
-### 2.5 Lingua
+### 2.5 Language
 
-SKILL.md in inglese (system contract). Script bash con comment in inglese. Reason field
-e log in italiano (utente-facing). Spec, plan, memory, ADR in italiano. Allineato a
+SKILL.md in English (system contract). Bash scripts with comments in English. Reason field
+and logs in Italian (user-facing). Spec, plan, memory, ADR in Italian. Aligned with
 global rule.
 
 ---
 
 ## 3. Alternatives considered
 
-### 3.1 Forma: skill vs bash standalone (Q1)
+### 3.1 Form: skill vs standalone bash (Q1)
 
-**a) Skill markdown + scripts (CHOSEN).** Coerente con `concept-to-code`, `refactor-snapshot`.
-Discoverable, contestualizzabile dall'LLM, segue convention.
+**a) Markdown skill + scripts (CHOSEN).** Consistent with `concept-to-code`, `refactor-snapshot`.
+Discoverable, contextualizable by the LLM, follows convention.
 
-**b) Bash standalone `~/.claude/bin/vibe-status`** — *Rejected*. Mai usato pattern,
-duplicherebbe la directory structure. Non discoverable senza alias o doc esterna. Non
-permette l'LLM di interpretare l'output (es. "il sistema è DEGRADED perché..."), solo
-raw dump.
+**b) Standalone bash `~/.claude/bin/vibe-status`** — *Rejected*. Never used pattern, would
+duplicate directory structure. Not discoverable without alias or external doc. Does not allow
+the LLM to interpret the output (e.g. "the system is DEGRADED because..."), only a raw dump.
 
-**c) Sub-agent dedicato `vibe-monitor`** — *Rejected*. 8 sub-agent già coprono lo
-spettro; aggiungere un 9° per status reporting è overkill (sub-agent = role con system
-prompt complex, qui basta uno skill aggregator).
+**c) Dedicated sub-agent `vibe-monitor`** — *Rejected*. 8 sub-agents already cover the
+spectrum; adding a 9th for status reporting is overkill (sub-agent = role with complex system
+prompt, a skill aggregator suffices here).
 
 ### 3.2 Discovery (Q2)
 
-**a) Auto-discovery + manifest override opzionale (CHOSEN).** Scala self-updating; override
-copre edge case (skill di test interni, harness sperimentali da skip).
+**a) Auto-discovery + optional manifest override (CHOSEN).** Self-updating scaling; override
+covers edge cases (internal test skills, experimental harnesses to skip).
 
-**b) Hardcoded list nel SKILL.md** — *Rejected*. Non scala. Un nuovo harness richiede
-edit a SKILL.md. Stale-by-design.
+**b) Hardcoded list in SKILL.md** — *Rejected*. Does not scale. A new harness requires
+editing SKILL.md. Stale-by-design.
 
-**c) Manifest hardcoded obbligatorio** — *Rejected*. Force every project a maintain
-config file. Friction sproporzionata al benefit (default funziona per 95% dei casi).
+**c) Mandatory hardcoded manifest** — *Rejected*. Forces every project to maintain a config
+file. Disproportionate friction for the benefit (default works for 95% of cases).
 
 ### 3.3 Cwd sensitivity (Q3)
 
-**a) Hybrid globale + locale (CHOSEN).** Globale per stack `~/.claude/`, locale per
-project context. Degrada gracefully se project context manca.
+**a) Hybrid global + local (CHOSEN).** Global for `~/.claude/` stack, local for project
+context. Degrades gracefully if project context is missing.
 
-**b) Solo globale** — *Rejected*. Perde ADR/manifest/triage del project corrente, riduce
-utility a 50%.
+**b) Global only** — *Rejected*. Loses ADR/manifest/triage of the current project, reduces
+utility to 50%.
 
-**c) Solo locale** — *Rejected*. Perde harness/hook/skill globali, riduce utility a 30%.
+**c) Local only** — *Rejected*. Loses global harnesses/hooks/skills, reduces utility to 30%.
 
 ### 3.4 Performance / parallel (Q4)
 
-**a) Parallel + timeout per-harness, no cache v1.0 (CHOSEN).** 8s timeout × 3-5 harness
-in parallelo = walltime ≤8s. Sotto budget. Cache defer.
+**a) Parallel + per-harness timeout, no cache v1.0 (CHOSEN).** 8s timeout x 3-5 harnesses
+in parallel = walltime <=8s. Under budget. Cache deferred.
 
-**b) Sequential** — *Rejected*. 3-5 harness × 2-5s = 10-25s walltime. Sopra budget.
+**b) Sequential** — *Rejected*. 3-5 harnesses x 2-5s = 10-25s walltime. Over budget.
 
-**c) Cache TTL 60s** — *Rejected v1.0*. Richiede storage in `~/.claude/state/vibe-status/`,
-invalidation logic (file mtime check). Premature: parallel solo è sufficiente.
-Considerable v1.1 se metriche mostrano slowness.
+**c) TTL 60s cache** — *Rejected v1.0*. Requires storage in `~/.claude/state/vibe-status/`,
+invalidation logic (file mtime check). Premature: parallel alone is sufficient.
+Considerable v1.1 if metrics show recurring slowness.
 
 ### 3.5 Output format (Q5)
 
-**a) Markdown default + flag `--json`/`--plain` (CHOSEN).** Markdown è il rendering
-nativo di chat Claude Code, JSON è hatch per future programmatic chaining (es. skill
-`vibe-status-watch` futuro che parsi JSON).
+**a) Markdown default + `--json`/`--plain` flags (CHOSEN).** Markdown is the native rendering
+of Claude Code chat, JSON is a hatch for future programmatic chaining (e.g. future skill
+`vibe-status-watch` that parses JSON).
 
-**b) Plain text default** — *Rejected*. Lose table formatting, harder to scan.
+**b) Plain text default** — *Rejected*. Loses table formatting, harder to scan.
 
-**c) JSON default** — *Rejected*. Non human-readable senza tool. L'utilizzatore primario
-è Stefano in chat, non un altro tool.
+**c) JSON default** — *Rejected*. Not human-readable without tooling. The primary user
+is Stefano in chat, not another tool.
 
 ### 3.6 Failure mode (Q6)
 
-**a) Skip-and-flag, never block entire (CHOSEN).** Resilience: 1 harness rotto non
-oscura le altre info.
+**a) Skip-and-flag, never block entire (CHOSEN).** Resilience: 1 broken harness does not
+obscure other info.
 
-**b) Block entire report on first failure** — *Rejected*. Anti-pattern: lo skill di
-status che fallisce per render lo stato è cattiva UX. Se la skill non riesce a riportare,
-l'utilità è zero.
+**b) Block entire report on first failure** — *Rejected*. Anti-pattern: the status skill
+that fails to render state is bad UX. If the skill cannot report, utility is zero.
 
-**c) Retry su timeout** — *Rejected v1.0*. Aggiunge complessità senza chiaro benefit.
-Un harness che timeoutta 1x probabilmente timeoutta 2x. Defer.
+**c) Retry on timeout** — *Rejected v1.0*. Adds complexity without clear benefit. A harness
+that times out once probably times out twice. Defer.
 
 ---
 
@@ -360,57 +356,57 @@ Un harness che timeoutta 1x probabilmente timeoutta 2x. Defer.
 
 ### 4.1 Positive
 
-- **Single command per audit completo del sistema.** Da 8 lookup manuali a 1 invocazione.
-  Tempo: 3-5 min → <10s.
-- **Self-updating via auto-discovery.** Un nuovo harness/skill è automaticamente incluso
-  senza editare config.
-- **Read-only.** Zero rischio di side effect su file di sistema.
-- **Coerente con convention.** Skill markdown + scripts pattern già consolidato.
-- **Programmatic-friendly via `--json`.** Future skill di automazione (es. weekly health
-  check) possono parsare l'output.
-- **Anchor preservato** (PASS=47 → PASS=48 per skill esistenza).
-- **Bash 3.2-clean** by construction (script segue stile `stop-gate.sh`).
+- **Single command for complete system audit.** From 8 manual lookups to 1 invocation.
+  Time: 3-5 min -> <10s.
+- **Self-updating via auto-discovery.** A new harness/skill is automatically included
+  without editing config.
+- **Read-only.** Zero risk of side effects on system files.
+- **Consistent with convention.** Markdown skill + scripts pattern already established.
+- **Programmatic-friendly via `--json`.** Future automation skills (e.g. weekly health check)
+  can parse the output.
+- **Anchor preserved** (PASS=47 -> PASS=48 for skill existence).
+- **Bash 3.2-clean** by construction (script follows `stop-gate.sh` style).
 
 ### 4.2 Negative
 
-- **Walltime fino a 8s + overhead** sotto carico nominale. Non istantaneo. Mitigato da
-  `--skip-harness` per quick metadata-only view (<1s).
-- **Dipendenza dal harness PASS count** (parse del summary `PASS=N FAIL=N`). Cambio
-  format del harness rompe il parser. Mitigazione: regex tollerante (`grep -E
-  'PASS=[0-9]+'`), fail-graceful con `?` se non match.
-- **Cwd-sensitive non sempre intuitivo.** Stefano in `~` vede meno info che in
-  `~/Developer/vibe-coding-system`. Documentato in SKILL.md header.
-- **Settings.json parsing fragile su edits manuali.** Se JSON malformato (trailing comma,
-  etc.), sezione hook è degradata. Mitigato da fail-graceful (vedi §2.1 Q6).
-- **Coupling settings.json + review-triage-fix harness.** Nuova entry anchor lega
-  l'harness a un 4° file (oltre SKILL.md, coder.md, future settings.json di ADR-0004).
-  Refactor futuro di review-triage-fix richiede update anchor.
+- **Walltime up to 8s + overhead** under nominal load. Not instant. Mitigated by
+  `--skip-harness` for quick metadata-only view (<1s).
+- **Dependency on harness PASS count format** (parsing summary `PASS=N FAIL=N`). Harness
+  format change breaks the parser. Mitigation: tolerant regex (`grep -E
+  'PASS=[0-9]+'`), fail-graceful with `?` if no match.
+- **Cwd-sensitive not always intuitive.** Stefano at `~` sees less info than at
+  `~/Developer/vibe-coding-system`. Documented in SKILL.md header.
+- **Settings.json parsing fragile on manual edits.** If JSON malformed (trailing comma,
+  etc.), hook section is degraded. Mitigated by fail-graceful (see §2.1 Q6).
+- **Coupling settings.json + review-triage-fix harness.** New anchor entry ties the harness
+  to a 4th file (after SKILL.md, coder.md, future settings.json from ADR-0004). Future
+  review-triage-fix refactor requires anchor update.
 
 ### 4.3 Neutral
 
-- Il sistema attuale resta funzionante senza skill. È puramente additive.
-- Memory `feedback_micropiano-refactor-cleanup` resta RESOLVED. No interazione.
-- L'orchestrator non cambia: chiama `/skill vibe-status` quando vuole status, ignora
-  altrimenti.
+- The current system works without the skill. It is purely additive.
+- Memory `feedback_micropiano-refactor-cleanup` remains RESOLVED. No interaction.
+- The orchestrator does not change: calls `/skill vibe-status` when it wants status,
+  ignores otherwise.
 
 ### 4.4 Open questions (validation pending)
 
-- **Adozione real:** Stefano userà `/skill vibe-status` regolarmente o resterà unused?
-  Validabile in 2 settimane di uso organico. Se unused, signal che la friction
-  pre-existing non era effettivamente alta.
-- **Performance under load.** 5+ harness con jsonl session lunghi: rispetta <10s
-  budget? Misurabile via benchmark Task del piano.
-- **Parsing robustness su `~/.claude/settings.json` edits manuali.** Stefano edita
-  occasionalmente settings.json a mano; resilience del parser verificabile solo a uso.
+- **Real adoption:** will Stefano use `/skill vibe-status` regularly or will it remain
+  unused? Validatable in 2 weeks of organic use. If unused, signal that the pre-existing
+  friction was not actually high.
+- **Performance under load.** 5+ harnesses with long session jsonl: respects the <10s
+  budget? Measurable via plan task benchmark.
+- **Parsing robustness on manually edited `~/.claude/settings.json`.** Stefano occasionally
+  edits settings.json by hand; parser resilience verifiable only in use.
 
 ---
 
 ## 5. References
 
-- `~/.claude/skills/concept-to-code/` (pattern skill + scripts)
-- `~/.claude/skills/refactor-snapshot/` (pattern recente con harness)
-- `~/.claude/skills/review-triage-fix/` (skill autoritativa sulla qualità stack)
-- `~/.claude/hooks/stop-gate.sh` (pattern bash 3.2-clean robusto)
-- `docs/vibe-coding-system.md` sez. 8 (skill stack), sez. 3 (sub-agent list)
-- `docs/architecture/ADR-0003-concept-to-code-chain.md` (pattern recente skill markdown)
+- `~/.claude/skills/concept-to-code/` (skill + scripts pattern)
+- `~/.claude/skills/refactor-snapshot/` (recent pattern with harness)
+- `~/.claude/skills/review-triage-fix/` (skill authoritative over stack quality)
+- `~/.claude/hooks/stop-gate.sh` (robust bash 3.2-clean pattern)
+- `docs/vibe-coding-system.md` sec. 8 (skill stack), sec. 3 (sub-agent list)
+- `docs/architecture/ADR-0003-concept-to-code-chain.md` (recent markdown skill pattern)
 - Memory `feedback_bash32-constraint.md`

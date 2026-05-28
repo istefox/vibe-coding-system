@@ -1,422 +1,420 @@
-# ADR-0011 — clean-public-repo + modalità anonima nel chain (anonimizzazione contributo strumento per repo pubblici)
+# ADR-0011 — clean-public-repo + anonymous mode in the chain (tool contribution anonymization for public repos)
 
 **Status:** Accepted — 2026-05-23
 
-**Deciders:** architect (dispatch orchestrator), Stefano Ferri (approvazione finale)
+**Deciders:** architect (dispatch orchestrator), Stefano Ferri (final approval)
 
-**Related:** ADR-0003 (concept-to-code chain — la chain in cui si innesta il gate di
-attivazione), ADR-0008 (workflow v2 brainstorm — precedente di gate opzionale + skill
-non-terminale invocata dal chain; schema 1.0→1.1), ADR-0010 (web-e2e-test — precedente
-immediato del pattern "skill standalone + gate del chain che la invoca", schema 1.1→1.2,
-detection fail-safe, harness honesto su feature non-headless), ADR-0009 (db-backup-guardrail
-— fail-mode asimmetrico, HITL gate su operazione distruttiva, freshness via backup),
-ADR-0005 (vibe-status — skill standalone con report).
+**Related:** ADR-0003 (concept-to-code chain — the chain where the activation gate is inserted),
+ADR-0008 (workflow v2 brainstorm — precedent of optional gate + non-terminal skill invoked by
+the chain; schema 1.0->1.1), ADR-0010 (web-e2e-test — immediate preceding precedent of the
+pattern "standalone skill + chain gate that invokes it", schema 1.1->1.2, fail-safe detection,
+honest harness on non-headless feature), ADR-0009 (db-backup-guardrail — asymmetric fail-mode,
+HITL gate on destructive operation, freshness via backup), ADR-0005 (vibe-status — standalone
+skill with report).
 
 ---
 
 ## Context
 
-Un repo pubblicato su GitHub viene spesso giudicato anche per i marcatori dello strumento
-con cui è stato scritto (trailer di commit, commenti-traccia, file slop, stringhe/emoji
-decorative). Lo scopo della feature, **vincolante e dichiarato nello SPEC**, è duplice:
-(1) **non sbandierare lo strumento** e (2) **qualità olistica** del repo (commit essenziali,
-doc concisi, zero file inutili), così che il lavoro sia giudicato per il codice. Il lavoro
-resta dell'utente: lui lo dirige, rivede, testa ed è responsabile.
+A repo published on GitHub is often judged also by the markers of the tool it was written with
+(commit trailers, trace comments, slop files, decorative strings/emoji). The purpose of the
+feature, **binding and declared in the SPEC**, is dual: (1) **not advertise the tool** and
+(2) **holistic quality** of the repo (essential commits, concise docs, zero useless files), so
+that the work is judged by the code. The work remains the user's: they direct it, review it,
+test it, and are responsible for it.
 
-L'utente ha scelto (BRAINSTORM, Alternativa C★+D★) un'**architettura ibrida**:
-- **Prevenzione** sui repo nuovi → una **modalità anonima** nel chain `concept-to-code`
-  produce output già conforme (commit/doc puliti dall'inizio, zero rewrite).
-- **Rimedio** sui repo esistenti → una **skill standalone `clean-public-repo`** che fa audit
-  + cleanup retroattivo (es. plugin Obsidian già pubblicato).
-- Per i repo **già pubblici**, default = **fresh-history publish** (repo derivato con history
-  pulita; l'originale con tracce resta privato); il **rewrite chirurgico in-place** resta
-  opzione di seconda scelta esplicita, mai default. Priorità #1: **nessun rewrite distruttivo
-  non protetto**.
+The user chose (BRAINSTORM, Alternative C*+D*) a **hybrid architecture**:
+- **Prevention** on new repos -> an **anonymous mode** in the `concept-to-code` chain
+  produces already-compliant output (clean commits/docs from the start, zero rewrite).
+- **Remedy** on existing repos -> a **standalone `clean-public-repo` skill** that does audit
+  + retroactive cleanup (e.g. already published Obsidian plugin).
+- For **already-public** repos, default = **fresh-history publish** (derived repo with clean
+  history; the original with traces remains private); **surgical in-place rewrite** remains
+  an explicit second-choice option, never the default. Priority #1: **no unprotected
+  destructive rewrite**.
 
-Questo ADR progetta: dove innestare il gate di attivazione nel chain, la forma e le dipendenze
-della skill, la detection, il contratto del report, il flusso fresh-history, il rewrite
-chirurgico protetto, la coexistenza della modalità anonima con `coder.md`/`architect.md`, e i
-fail-mode di ogni operazione distruttiva.
+This ADR designs: where to insert the activation gate in the chain, the form and dependencies
+of the skill, detection, report contract, fresh-history flow, protected surgical rewrite,
+coexistence of anonymous mode with `coder.md`/`architect.md`, and fail-modes of each
+destructive operation.
 
-### Inquadramento etico (vincolo, non opzione)
+### Ethical framing (constraint, not option)
 
-Esplicitato perché è un confine di design, non un dettaglio: lo scopo è **non sbandierare lo
-strumento + qualità**. NON è: falsificare autori (mai attribuire commit a persone reali che
-non hanno contribuito) né mentire attivamente se qualcuno chiede esplicitamente. L'attribuzione
-nativa è già disattivata (`settings.json: attribution {commit:"", pr:""}` — fatto verificato
-nello SPEC §"Inquadramento etico"). La feature rimuove **marcatori dello strumento**, non
-falsifica la **paternità umana**: il commit anonimo resta correttamente attribuito all'autore
-git configurato (Stefano), non a un terzo inventato.
+Stated explicitly because it is a design boundary, not a detail: the purpose is **not to
+advertise the tool + quality**. It is NOT: falsifying authors (never attributing commits to
+real people who did not contribute) nor actively lying if someone explicitly asks. Native
+attribution is already disabled (`settings.json: attribution {commit:"", pr:""}` — fact
+verified in SPEC §"Ethical framing"). The feature removes **tool markers**, not falsifies
+**human authorship**: the anonymous commit remains correctly attributed to the configured git
+author (Stefano), not to an invented third party.
 
-### Fatti verificati
+### Verified facts
 
-- **`git-filter-repo` PRESENTE** sull'ambiente (`/opt/homebrew/bin/git-filter-repo`,
-  versione confermata via `git filter-repo --version`). È lo standard de-facto per rewrite
-  chirurgico (report researcher); `git filter-branch` è DEPRECATO e non va usato; BFG non è
-  adatto a sostituzione testo arbitraria. Supporta `--replace-text` (regex),
-  `--message-callback`, `--dry-run`; rifiuta repo non-fresh-clone di default.
-- **`gitleaks` ASSENTE** sull'ambiente (`command -v gitleaks` → vuoto). → La skill **non può
-  dipendere** da gitleaks; deve degradare con grep custom (vedi D3).
-- **`git` PRESENTE** (`/usr/bin/git`).
-- **Manifest schema live = `1.0|1.1`** (`manifest-validate.sh` riga 29:
-  `^manifest_schema_version: "(1\.0|1\.1)"$`; `VALID_STEPS` righe 57-72). Lo schema 1.1 è
-  retrocompat 1.0. Precedente di bump retrocompat: ADR-0008 (1.0→1.1), ADR-0010 (1.1→1.2 —
-  vedi nota di coesistenza in D1).
-- **Chain `concept-to-code`**: 16 stati; Gate 0 è un *check* in `step_0_init` (non uno stato);
-  Gate 1/1b/2/3/4/5 esistenti. `coder.md` NON ha alcuna regola "modalità anonima"; redige un
-  Conventional Commit per l'orchestrator (riga 23/76) ma non lo committa mai.
-- **Baseline harness vivi** (eseguiti 2026-05-23): review-triage-fix **60**, concept-to-code
+- **`git-filter-repo` PRESENT** on the environment (`/opt/homebrew/bin/git-filter-repo`,
+  version confirmed via `git filter-repo --version`). It is the de-facto standard for surgical
+  rewrite (researcher report); `git filter-branch` is DEPRECATED and must not be used; BFG is
+  not suitable for arbitrary text replacement. Supports `--replace-text` (regex),
+  `--message-callback`, `--dry-run`; rejects non-fresh-clone repos by default.
+- **`gitleaks` ABSENT** on the environment (`command -v gitleaks` -> empty). -> The skill
+  **cannot depend** on gitleaks; it must degrade with custom grep (see D3).
+- **`git` PRESENT** (`/usr/bin/git`).
+- **Live manifest schema = `1.0|1.1`** (`manifest-validate.sh` line 29:
+  `^manifest_schema_version: "(1\.0|1\.1)"$`; `VALID_STEPS` lines 57-72). Schema 1.1 is
+  retrocompat 1.0. Precedent for retrocompat bump: ADR-0008 (1.0->1.1), ADR-0010 (1.1->1.2
+  — see coexistence note in D1).
+- **`concept-to-code` chain**: 16 states; Gate 0 is a *check* in `step_0_init` (not a state);
+  Gates 1/1b/2/3/4/5 exist. `coder.md` has NO "anonymous mode" rule; it drafts a Conventional
+  Commit for the orchestrator (line 23/76) but never commits.
+- **Live harness baselines** (run 2026-05-23): review-triage-fix **60**, concept-to-code
   **20**, design-brainstorm 9, refactor-snapshot 18, vibe-status 10,
-  pre-flight-pattern-enforce 13, run-hook-tests 24, db-backup-guardrail 16. Tutti `FAIL=0`.
+  pre-flight-pattern-enforce 13, run-hook-tests 24, db-backup-guardrail 16. All `FAIL=0`.
 
-### Assunzioni esplicite (NON validate — la feature poggia su queste)
+### Explicit assumptions (NOT validated — the feature rests on these)
 
-- **Detection completa del remote pubblico richiede una API call autenticata**
-  (`gh repo view --json visibility`). Senza `gh` o senza auth, la visibilità di un remote
-  GitHub **non è determinabile in modo affidabile** dal solo URL (un URL `https://github.com/…`
-  può puntare a un repo privato). → Decisione fail-safe in D1: se la visibilità non è
-  determinabile, NON proporre il gate (silenzioso), per non disturbare su repo privati.
-- **L'efficacia del cleanup su una UI/history reale (rewrite, fresh-history publish,
-  force-push)** non è testabile headless in modo deterministico: richiede un repo reale con
-  remote. Il harness copre solo le parti pure (detection, classificazione, dry-run su fixture
-  locale); il resto resta open question validabile solo in pilota (onestà come ADR-0008/0009/0010).
-- Il repo `vibe-coding-system` è NON-git: i deliverable di questo ADR sono i 3 markdown
-  (ADR + plan + eventuale ARCH). Il deploy degli artefatti live
-  (`~/.claude/skills/clean-public-repo/`, patch al chain) è un task separato (plan TDD),
-  **senza commit step**.
+- **Complete detection of the public remote requires an authenticated API call**
+  (`gh repo view --json visibility`). Without `gh` or without auth, the visibility of a GitHub
+  remote **is not reliably determinable** from the URL alone (a `https://github.com/...` URL
+  can point to a private repo). -> Fail-safe decision in D1: if visibility is not determinable,
+  do NOT propose the gate (silent), to avoid disturbing on private repos.
+- **The effectiveness of cleanup on a real UI/history (rewrite, fresh-history publish,
+  force-push)** is not deterministically testable headless: it requires a real repo with remote.
+  The harness covers only the pure parts (detection, classification, dry-run on local fixture);
+  the rest remains an open question validatable only in a pilot (honesty as ADR-0008/0009/0010).
+- The repo `vibe-coding-system` is NON-git: the deliverables of this ADR are the 3 markdowns
+  (ADR + plan + eventual ARCH). The deploy of the live artifacts
+  (`~/.claude/skills/clean-public-repo/`, chain patch) is a separate task (TDD plan),
+  **without commit step**.
 
 ---
 
 ## Decision
 
-Adottare l'**architettura ibrida C★ + D★** del BRAINSTORM:
+Adopt the **hybrid architecture C* + D*** from the BRAINSTORM:
 
-1. **Modalità anonima nel chain** (prevenzione): un flag `anonymize: true` nel manifest
-   (schema **1.2**, retrocompat 1.0/1.1) influenza i **template di dispatch** di
-   architect/coder e i recap dei gate. Attivato da un **gate dedicato "Gate 0b — anonymize"**,
-   condizionale, dopo Gate 0 e prima di Step 1.
-2. **Skill standalone `clean-public-repo`** (rimedio): audit + cleanup di un repo nuovo o
-   esistente. **Azione ibrida** (segnala → rimuove solo su conferma). Strategie per la history:
-   **fresh-history publish (default per i già-pubblici)** e **rewrite chirurgico (opzione 2,
-   mai default)**. Detection via **grep custom** (set di marcatori dello strumento) con
-   gitleaks come **integrazione opzionale** se presente.
-3. **Riuso, non duplicazione:** il chain NON contiene logica di cleanup; per i repo esistenti
-   rimanda alla skill (single source of truth, pattern Gate 1b→design-brainstorm,
-   Step 6→review-triage-fix, Gate 6→web-e2e-test — 4a istanza).
+1. **Anonymous mode in the chain** (prevention): a flag `anonymize: true` in the manifest
+   (schema **1.2**, retrocompat 1.0/1.1) influences the **dispatch templates** of
+   architect/coder and the gate summaries. Activated by a **dedicated "Gate 0b — anonymize"
+   gate**, conditional, after Gate 0 and before Step 1.
+2. **Standalone `clean-public-repo` skill** (remedy): audit + cleanup of a new or existing repo.
+   **Hybrid action** (signals -> removes only on confirmation). Strategies for history:
+   **fresh-history publish (default for already-public)** and **surgical rewrite (option 2,
+   never default)**. Detection via **custom grep** (set of tool markers) with gitleaks as
+   **optional integration** if present.
+3. **Reuse, not duplication:** the chain contains NO cleanup logic; for existing repos it
+   redirects to the skill (single source of truth, pattern Gate 1b->design-brainstorm,
+   Step 6->review-triage-fix, Gate 6->web-e2e-test — 4th instance).
 
-Di seguito la decisione per ciascuna delle 8 domande architetturali.
+Below is the decision for each of the 8 architectural questions.
 
-### D1 — Dove innestare il gate: **Gate 0b dedicato**, auto-detect via `gh` con fail-safe, flag `anonymize` nel manifest
+### D1 — Where to insert the gate: **dedicated Gate 0b**, auto-detect via `gh` with fail-safe, `anonymize` flag in manifest
 
-**Gate dedicato "Gate 0b — anonymize"**, NON estensione di Gate 0. Razionale: Gate 0 ha una
-semantica precisa e ortogonale (triage chain-vs-leggero); sovraccaricarlo con l'anonimato
-mescolerebbe due decisioni indipendenti e renderebbe i due check non disattivabili
-separatamente. Gate 0b è un check condizionale in `step_0_init` (come Gate 0 — non è uno
-stato della state machine), eseguito **dopo** Gate 0 (`[c] chain`) e **prima** della
-transizione a `step_1_interview`.
+**Dedicated gate "Gate 0b — anonymize"**, NOT an extension of Gate 0. Rationale: Gate 0 has
+precise and orthogonal semantics (chain-vs-lightweight triage); overloading it with anonymity
+mixes two independent decisions and makes the two checks separately undeactivatable. Gate 0b is
+a conditional check in `step_0_init` (like Gate 0 — it is not a state machine state), executed
+**after** Gate 0 (`[c] chain`) and **before** the transition to `step_1_interview`.
 
-**Auto-detect del remote pubblico** (cascata, helper `scripts/detect-public-remote.sh`):
-1. `git rev-parse --is-inside-work-tree` → se non-git → **silenzioso** (no gate). Default sicuro.
-2. `git remote get-url origin` (e altri remote) → se nessun remote → **silenzioso**.
-3. Host = `github.com` (o `git@github.com:`)? Se no (GitLab/Bitbucket/host privato) → **silenzioso**
-   (lo scope SPEC R1 è GitHub; estendibile in futuro).
-4. Visibilità: se `gh` è presente e autenticato →
-   `gh repo view <owner/repo> --json visibility -q .visibility`. `PUBLIC` → proponi gate.
-   `PRIVATE`/`INTERNAL` → **silenzioso**.
-5. Se `gh` assente o non autenticato → **visibilità non determinabile** → **silenzioso**
-   (fail-safe verso "non proporre": meglio non disturbare su un repo privato che esporre la
-   modalità su un repo che non è pubblico). Lo SPEC R1 dice "silenzioso su privati/locali":
-   l'indeterminato è trattato come "non-pubblico" per non violare quella garanzia.
+**Auto-detect of public remote** (cascade, helper `scripts/detect-public-remote.sh`):
+1. `git rev-parse --is-inside-work-tree` -> if non-git -> **silent** (no gate). Safe default.
+2. `git remote get-url origin` (and other remotes) -> if no remote -> **silent**.
+3. Host = `github.com` (or `git@github.com:`)? If no (GitLab/Bitbucket/private host) -> **silent**
+   (SPEC R1 scope is GitHub; extensible in the future).
+4. Visibility: if `gh` is present and authenticated ->
+   `gh repo view <owner/repo> --json visibility -q .visibility`. `PUBLIC` -> propose gate.
+   `PRIVATE`/`INTERNAL` -> **silent**.
+5. If `gh` absent or not authenticated -> **visibility not determinable** -> **silent**
+   (fail-safe towards "do not propose": better not to disturb on a private repo than to expose
+   the mode on a repo that is not public). SPEC R1 says "silent on private/local": indeterminate
+   is treated as "non-public" to not violate that guarantee.
 
-La modalità resta una **decisione utente** (`[y/n]`), mai auto-applicata (SPEC R1).
+The mode remains a **user decision** (`[y/n]`), never auto-applied (SPEC R1).
 
-**Forma del flag:** `anonymize: true|false` nel manifest (schema **1.2**), default `false`.
-Influenza i **template di dispatch** (D7), non il SKILL.md degli agent. È un dato di stato del
-chain, coerente con `mode`/`gate0`/`brainstorm` già nel manifest.
+**Flag form:** `anonymize: true|false` in the manifest (schema **1.2**), default `false`.
+Influences **dispatch templates** (D7), not the agent SKILL.md. It is a chain state data item,
+consistent with `mode`/`gate0`/`brainstorm` already in the manifest.
 
-### D2 — Forma di `clean-public-repo`: **skill standalone + script bash 3.2**, dipendenze esterne opzionali con degrade graceful
+### D2 — Form of `clean-public-repo`: **standalone skill + bash 3.2 scripts**, optional external dependencies with graceful degrade
 
-**Skill standalone** `~/.claude/skills/clean-public-repo/` (SKILL.md procedurale orchestrator
-+ `scripts/` bash 3.2-clean + `tests/run-tests.sh`). Invocabile a richiesta (SPEC R6) e
-**riusata** dal chain solo come *raccomandazione* (il chain non fa cleanup retroattivo — vedi
-D7). Soggetto = **orchestrator**: le operazioni git distruttive richiedono HITL interattivo;
-un sub-agent in auto mode non deve poterle eseguire (coerente ADR-0010 D1, ADR-0009).
+**Standalone skill** `~/.claude/skills/clean-public-repo/` (procedural orchestrator SKILL.md
++ `scripts/` bash 3.2-clean + `tests/run-tests.sh`). Callable on demand (SPEC R6) and
+**reused** by the chain only as a *recommendation* (the chain does not do retroactive cleanup
+— see D7). Subject = **orchestrator**: destructive git operations require interactive HITL;
+a sub-agent in auto mode must not be able to execute them (consistent ADR-0010 D1, ADR-0009).
 
-**Dipendenze esterne e gestione dell'assenza (vincolo HARD — verificato: gitleaks assente):**
+**External dependencies and absence handling (HARD constraint — verified: gitleaks absent):**
 
-| Dipendenza | Uso | Se ASSENTE |
+| Dependency | Use | If ABSENT |
 |---|---|---|
-| `git` | core (sempre) | la skill non può operare su una history → degrada ad audit dei soli file working-tree + commit-message via `git log` se presente; se proprio assente, dichiara "non-git" e termina senza errore (SPEC edge "branch detached / non-git → degrada senza errori"). |
-| `git-filter-repo` | rewrite chirurgico (opzione 2) | **presente** sull'ambiente, ma la skill **verifica sempre** `command -v git-filter-repo`. Se assente → la strategia rewrite è **disabilitata** con messaggio install (`brew install git-filter-repo` o `pip3 install git-filter-repo`); fresh-history publish (che usa solo `git` core) resta disponibile. |
-| `gitleaks` | detection secret bonus + cross-check stringhe | **assente** sull'ambiente. La skill funziona **senza** gitleaks (grep custom è la detection primaria — D3). Se presente, lo usa come **integrazione opzionale** (genera `.gitleaks.toml` custom + parsa JSON) e lo annota nel report; se assente → nessun errore, nota "gitleaks non installato: detection lessicale via grep (secret-scanning bonus non disponibile; install: `brew install gitleaks`)". |
-| `gh` | detection visibilità remote (D1) + eventuale creazione repo derivato (D5) | se assente/non auth → D1 silenzioso; D5 degrada a istruzioni manuali (l'utente crea il repo su GitHub e fornisce l'URL). |
+| `git` | core (always) | the skill cannot operate on a history -> degrades to audit of working-tree files only + commit messages via `git log` if present; if completely absent, declares "non-git" and terminates without error (SPEC edge "detached branch / non-git -> degrades without errors"). |
+| `git-filter-repo` | surgical rewrite (option 2) | **present** on the environment, but the skill **always verifies** `command -v git-filter-repo`. If absent -> surgical rewrite strategy **disabled** with install message (`brew install git-filter-repo` or `pip3 install git-filter-repo`); fresh-history publish (which uses only core `git`) remains available. |
+| `gitleaks` | bonus secret detection + string cross-check | **absent** on the environment. The skill works **without** gitleaks (custom grep is the primary detection — D3). If present, uses it as **optional integration** (generates custom `.gitleaks.toml` + parses JSON) and notes it in the report; if absent -> no error, note "gitleaks not installed: lexical detection via grep (secret-scanning bonus unavailable; install: `brew install gitleaks`)". |
+| `gh` | remote visibility detection (D1) + possible derived repo creation (D5) | if absent/not auth -> D1 silent; D5 degrades to manual instructions (user creates repo on GitHub and provides the URL). |
 
-Principio: **una dipendenza assente non blocca mai il percorso minimo** (grep custom +
-fresh-history via git core). Le dipendenze migliorano la copertura, non la abilitano.
+Principle: **an absent dependency never blocks the minimal path** (custom grep + fresh-history
+via core git). Dependencies improve coverage, they do not enable it.
 
-### D3 — Detection: **grep custom (primario) sul set di marcatori SPEC R3** + gitleaks opzionale; report con copertura e LIMITI
+### D3 — Detection: **custom grep (primary) on SPEC R3 marker set** + optional gitleaks; report with coverage and LIMITATIONS
 
-Detection **lessicale via grep custom** come motore primario (zero-dep, bash 3.2-clean,
-stack-agnostico). Set di pattern derivato da SPEC R3, su due superfici:
+**Lexical detection via custom grep** as primary engine (zero-dep, bash 3.2-clean,
+stack-agnostic). Pattern set derived from SPEC R3, on two surfaces:
 
-- **Working tree (file tracciati):** `git ls-files` → per ogni file di testo, grep dei pattern:
-  - Trailer/marcatori commit residui nei file: `Co-Authored-By: Claude`, `Generated with Claude Code`.
-  - Commenti-traccia: `// added by Claude`, `# generated by`, riferimenti a task/AI, TODO
-    chiaramente generati (pattern conservativi, vedi falsi positivi sotto).
-  - Stringhe `claude` / `AI` + emoji decorative non richieste (range emoji + parola chiave).
-  - File slop / inutili: euristica su nomi (`scratch`, `notes`, `*-COPY`, README ridondanti) →
-    **segnalati, mai rimossi d'ufficio** (R2).
-- **Commit history (messaggi):** `git log --format=%B` → stessi pattern trailer/marcatori.
+- **Working tree (tracked files):** `git ls-files` -> for each text file, grep of patterns:
+  - Commit trailers/markers remaining in files: `Co-Authored-By: Claude`, `Generated with Claude Code`.
+  - Trace comments: `// added by Claude`, `# generated by`, task/AI references, clearly generated
+    TODOs (conservative patterns, see false positives below).
+  - `claude` / `AI` strings + unrequested decorative emoji (emoji range + keyword).
+  - Slop / useless files: heuristic on names (`scratch`, `notes`, `*-COPY`, redundant READMEs) ->
+    **signaled, never removed by default** (R2).
+- **Commit history (messages):** `git log --format=%B` -> same trailer/marker patterns.
 
-**gitleaks opzionale:** se presente, generato un `.gitleaks.toml` con regole custom per i
-marcatori dello strumento (oltre alle regole secret native), output JSON parsato e **unito** al
-report grep. È un cross-check + il secret-scanning bonus (annotato come future nello SPEC, qui
-solo se gitleaks c'è). **Mai requisito.**
+**Optional gitleaks:** if present, a custom `.gitleaks.toml` is generated with rules for tool
+markers (beyond native secret rules), JSON output parsed and **merged** into the grep report.
+It is a cross-check + the bonus secret-scanning (noted as future in SPEC, here only if gitleaks
+is present). **Never a requirement.**
 
-**Falsi positivi (SPEC edge):** dipendenze legittime (`claude-*` come nome pacchetto), `AI` in
-un dominio/nome proprio. → La detection **segnala con contesto** (path:linea + match), non
-rimuove (R2). La rimozione è sempre su-conferma per categoria/elemento.
+**False positives (SPEC edge):** legitimate dependencies (`claude-*` as package name), `AI` in
+a domain/proper name. -> Detection **signals with context** (path:line + match), does not remove
+(R2). Removal is always per-category/element confirmation.
 
-**Copertura e LIMITI nel report (requisito emerso nel BRAINSTORM, vincolante):** il report
-DEVE dichiarare esplicitamente cosa **NON** copre, per evitare falso senso di sicurezza:
-binari, immagini, file generati/minificati, metadati git (autore/committer date già OK perché
-non falsifichiamo autori), tracce semantiche non lessicali (stile di scrittura), contenuto in
-file non tracciati / `.gitignore`d. Vedi D4.
+**Coverage and LIMITATIONS in report (requirement emerged in BRAINSTORM, binding):** the report
+MUST explicitly declare what it does **NOT** cover, to avoid a false sense of security: binaries,
+images, generated/minified files, git metadata (author/committer date already OK because we do
+not falsify authors), non-lexical semantic traces (writing style), content in non-tracked /
+`.gitignore`d files. See D4.
 
-### D4 — Contratto del report (azione ibrida): markdown `docs/clean-report/<date>-<topic>.md`, categorie R3, sezione COPERTURA/LIMITI obbligatoria
+### D4 — Report contract (hybrid action): markdown `docs/clean-report/<date>-<topic>.md`, R3 categories, mandatory COVERAGE/LIMITATIONS section
 
-La skill scrive **un report** in `<project-root>/docs/clean-report/YYYY-MM-DD-<slug>.md`
-(crea la dir se assente). Struttura (intestazioni inglese, prosa italiano — coerente con il
-sistema):
+The skill writes **a report** in `<project-root>/docs/clean-report/YYYY-MM-DD-<slug>.md`
+(creates the dir if absent). Structure (English headings, Italian prose — consistent with the
+system):
 
-- **Header:** data, repo path, remote+visibilità (o "non determinabile"), strategia history
-  proposta (fresh-history publish | rewrite chirurgico | nessuna), esito audit
-  (`ready` | `da-pulire`).
-- **Findings per categoria R3:** per ciascuna (trailer commit, commenti-traccia, file slop/doc
-  gonfi, stringhe claude/AI+emoji, altro residuo) → lista `path:linea — match — categoria`,
-  e per i commit `<sha-corto> — riga del messaggio`. Ogni finding marcato
-  `auto-removable` (rimozione testuale sicura) | `review-needed` (possibile falso positivo:
-  dipendenza/nome) | `manual` (file slop: decisione umana).
-- **Strategia history (se ci sono tracce nei commit):** raccomandazione fresh-history (default
-  se già-pubblico) vs rewrite chirurgico (opzione 2), con i requisiti di safety (D6).
-- **COPERTURA & LIMITI (sezione obbligatoria):** cosa è stato scansionato (file di testo
-  tracciati + messaggi di commit) e **cosa NON** (binari, generati, metadati, tracce
-  semantiche, file non tracciati). Dichiarazione esplicita: "questo audit riduce i marcatori
-  lessicali noti; NON garantisce l'indistinguibilità totale e NON sostituisce una revisione
-  umana".
-- **Azioni proposte:** elenco confermabile per categoria (`[y]` rimuovi auto-removable / `[s]`
-  salta / dettaglio per-elemento). **Nessuna rimozione cieca** (R2).
+- **Header:** date, repo path, remote+visibility (or "not determinable"), proposed history
+  strategy (fresh-history publish | surgical rewrite | none), audit outcome
+  (`ready` | `to-clean`).
+- **Findings per R3 category:** for each (commit trailers, trace comments, slop/inflated docs,
+  claude/AI+emoji strings, other residue) -> list `path:line — match — category`, and for
+  commits `<short-sha> — message line`. Each finding marked `auto-removable` (safe textual
+  removal) | `review-needed` (possible false positive: dependency/name) | `manual` (slop file:
+  human decision).
+- **History strategy (if traces exist in commits):** recommendation fresh-history (default if
+  already-public) vs surgical rewrite (option 2), with safety requirements (D6).
+- **COVERAGE & LIMITATIONS (mandatory section):** what was scanned (tracked text files + commit
+  messages) and **what was NOT** (binaries, generated, metadata, semantic traces, non-tracked
+  files). Explicit declaration: "this audit reduces known lexical markers; does NOT guarantee
+  total indistinguishability and does NOT replace human review".
+- **Proposed actions:** confirmable list per category (`[y]` remove auto-removable / `[s]` skip
+  / per-element detail). **No blind removal** (R2).
 
-Esito `ready` quando zero finding `auto-removable` residui dopo un cleanup confermato (SPEC DoD).
+Outcome `ready` when zero `auto-removable` residual findings after confirmed cleanup (SPEC DoD).
 
-### D5 — Fresh-history publish (default per già-pubblici): repo pubblico derivato, history originale privata
+### D5 — Fresh-history publish (default for already-public): derived public repo, original history private
 
-Flusso (helper `scripts/fresh-history-publish.sh` — guida + dry-run; le azioni mutanti dietro
-HITL):
-1. **Backup obbligatorio** della `.git/` originale: `tar -czf .git-backup-<ts>.tar.gz .git`
-   (best practice researcher; SPEC R5). Mai procedere senza.
-2. **Cleanup del working tree** sui finding `auto-removable` confermati (D4) → commit pulito
-   nel branch corrente (NON ancora pubblicato).
-3. **Orphan branch:** `git checkout --orphan public-clean` → `git add -A` →
-   un singolo commit curato (`git commit`), messaggio essenziale (modalità anonima D7). La
-   history di sviluppo (con tracce) **resta intatta** sul branch originale, **privata**.
-4. **Pubblicazione del derivato:** preferibilmente come **nuovo repo pubblico** (l'utente lo
-   crea su GitHub; se `gh` presente e autorizzato, `gh repo create` su conferma) con remote
-   dedicato; push del solo `public-clean`. **Nessun force-push sul repo originale** → nessun
-   buco sospetto, nessun rischio di corruzione (BRAINSTORM Alternativa D, rischio TOP mitigato).
-5. La history originale privata non viene mai toccata distruttivamente.
+Flow (helper `scripts/fresh-history-publish.sh` — guide + dry-run; mutating actions behind HITL):
+1. **Mandatory backup** of `.git/` original: `tar -czf .git-backup-<ts>.tar.gz .git`
+   (researcher best practice; SPEC R5). Never proceed without it.
+2. **Working tree cleanup** on confirmed `auto-removable` findings (D4) -> clean commit
+   on the current branch (NOT yet published).
+3. **Orphan branch:** `git checkout --orphan public-clean` -> `git add -A` ->
+   a single curated commit (`git commit`), essential message (anonymous mode D7). The
+   development history (with traces) **remains intact** on the original branch, **private**.
+4. **Derived publication:** preferably as a **new public repo** (the user creates it on GitHub;
+   if `gh` is present and authorized, `gh repo create` on confirmation) with a dedicated remote;
+   push of only `public-clean`. **No force-push on the original repo** -> no suspicious gap,
+   no corruption risk (BRAINSTORM Alternative D, TOP risk mitigated).
+5. The original private history is never destructively touched.
 
-Default per i repo **già pubblici** perché evita del tutto il force-push (l'azione più rischiosa).
+Default for **already-public** repos because it avoids force-push entirely (the riskiest action).
 
-### D6 — Rewrite chirurgico (opzione 2, mai default): `git-filter-repo` con clone fresco + backup tar + dry-run + HITL prima del force-push
+### D6 — Surgical rewrite (option 2, never default): `git-filter-repo` with fresh clone + tar backup + dry-run + HITL before force-push
 
-Solo come **seconda scelta esplicita** (l'utente lo richiede deliberatamente), per il caso
-"esistente non-ancora-pubblico" o quando si vuole preservare la granularità storica. Flusso
-(helper `scripts/surgical-rewrite.sh` — orchestratore di safety, mai automatico):
-1. **Pre-condizione fresh-clone:** `git-filter-repo` di default rifiuta un repo non-fresh-clone;
-   la skill lo rispetta e **istruisce** l'utente a operare su un clone fresco (mai sul working
-   repo). Non passa `--force` per aggirare la protezione.
-2. **Backup tar obbligatorio** della `.git/` prima di qualunque operazione (SPEC R5; researcher).
-3. **Dry-run sempre prima:** `git filter-repo --replace-text <patterns> --dry-run` (+
-   `--message-callback` per i trailer) → mostra cosa cambierebbe (SPEC R5: "dry-run mostra cosa
-   cambierebbe").
-4. **Backup branch/tag automatico** prima dell'applicazione (SPEC R5).
-5. **Applicazione** del rewrite sul clone.
-6. **Force-push SOLO dopo HITL esplicito** (`AskUserQuestion` / box di conferma): è un'azione
-   distruttiva remota (rompe cloni/fork). **Mai automatico, mai da sub-agent.** Coerente con
-   `db-backup-guardrail` (ADR-0009): un'operazione irreversibile sta dietro un gate umano.
+Only as an **explicit second choice** (the user requests it deliberately), for the case
+"existing not-yet-public" or when one wants to preserve historical granularity. Flow (helper
+`scripts/surgical-rewrite.sh` — safety orchestrator, never automatic):
+1. **Fresh-clone precondition:** `git-filter-repo` by default rejects a non-fresh-clone repo;
+   the skill respects this and **instructs** the user to operate on a fresh clone (never on the
+   working repo). Does not pass `--force` to bypass the protection.
+2. **Mandatory tar backup** of `.git/` before any operation (SPEC R5; researcher).
+3. **Always dry-run first:** `git filter-repo --replace-text <patterns> --dry-run` (+
+   `--message-callback` for trailers) -> shows what would change (SPEC R5: "dry-run shows what
+   would change").
+4. **Automatic backup of branches/tags** before application (SPEC R5).
+5. **Apply** the rewrite on the clone.
+6. **Force-push ONLY after explicit HITL** (`AskUserQuestion` / confirmation box): it is a
+   destructive remote operation (breaks clones/forks). **Never automatic, never from sub-agent.**
+   Consistent with `db-backup-guardrail` (ADR-0009): an irreversible operation is behind a human
+   gate.
 
-Il SKILL.md dichiara che il rewrite chirurgico è opt-in e che fresh-history è il default per i
-già-pubblici.
+The SKILL.md declares that surgical rewrite is opt-in and that fresh-history is the default for
+already-public.
 
-### D7 — Modalità anonima nel chain: via **template di dispatch** (no patch a coder.md/architect.md), coexistenza con la regola coder esistente
+### D7 — Anonymous mode in the chain: via **dispatch templates** (no patch to coder.md/architect.md), coexistence with existing coder rule
 
-Quando `manifest.anonymize=true`, il chain **estende i prompt-template di dispatch** (NON
-modifica i SKILL.md degli agent — stesso pattern della direttiva additiva di
-`claude-md-generator`, concept-to-code §3 Step 3). Concretamente:
+When `manifest.anonymize=true`, the chain **extends dispatch prompt-templates** (does NOT modify
+agent SKILL.md — same pattern as the additive directive of `claude-md-generator`, concept-to-code
+§3 Step 3). Concretely:
 
-- **Dispatch coder (Step 5):** il template aggiunge un blocco "Anonymize mode active":
-  - Commit message Conventional **corti ed essenziali** (subject + body minimale, niente
-    narrazione, niente trailer di strumento — già nativamente off via `settings.json`, ribadito).
-  - **Nessun commento-traccia** nel codice (`// added by Claude`, riferimenti a task/AI, TODO
-    generati): scrivere solo commenti che un autore umano scriverebbe.
-  - **Nessun file slop** (README ridondanti, scratch): solo i file richiesti dal plan.
-  - **Nessuna emoji decorativa** non richiesta; doc concisi.
-- **Dispatch architect (Step 2):** il template chiede ADR/plan **concisi**, senza meta-commenti
-  sullo strumento. (L'architect scrive solo doc, non codice; il vincolo è di stile/concisione.)
-- **Recap dei gate:** invariati nella forma, ma il box mostra `Anonymize: ON` per trasparenza.
+- **Coder dispatch (Step 5):** the template adds an "Anonymize mode active" block:
+  - Conventional commit message **short and essential** (subject + minimal body, no narration,
+    no tool trailers — already natively off via `settings.json`, reiterated).
+  - **No trace comments** in the code (`// added by Claude`, task/AI references, generated
+    TODOs): write only comments a human author would write.
+  - **No slop files** (redundant READMEs, scratch): only the files required by the plan.
+  - **No unrequested decorative emoji**; concise docs.
+- **Architect dispatch (Step 2):** the template asks for **concise** ADR/plan, without meta-comments
+  on the tool. (The architect writes only docs, not code; the constraint is of style/conciseness.)
+- **Gate summaries:** unchanged in form, but the box shows `Anonymize: ON` for transparency.
 
-**Coexistenza con `coder.md` (verificato: nessuna regola anonima oggi):** il coder già redige
-un Conventional Commit per l'orchestrator e non committa mai (riga 23/76). La modalità anonima
-**non contraddice** il Pre-flight Pattern Classifier (ADR-0001) né nessuna regola esistente:
-aggiunge solo vincoli di output (concisione, no-traccia) veicolati nel prompt, non nel SKILL.md.
-Quando `anonymize=false` (default), i template restano **identici a oggi** → zero regressioni
-sul comportamento corrente del chain. La modalità anonima è puramente **additiva e opt-in**.
+**Coexistence with `coder.md` (verified: no anonymous rule today):** the coder already drafts a
+Conventional Commit for the orchestrator and never commits (line 23/76). The anonymous mode
+**does not contradict** the Pre-flight Pattern Classifier (ADR-0001) or any existing rule: it
+adds only output constraints (conciseness, no-trace) conveyed in the prompt, not in SKILL.md.
+When `anonymize=false` (default), the templates remain **identical to today** -> zero regressions
+on current chain behavior. The anonymous mode is purely **additive and opt-in**.
 
-### D8 — Safety / fail-mode: ogni operazione distruttiva dietro HITL esplicito + backup; harness honesto
+### D8 — Safety / fail-mode: every destructive operation behind explicit HITL + backup; honest harness
 
-- **HITL su ogni operazione distruttiva** (rewrite, force-push, eliminazione file): mai
-  automatica, mai da sub-agent (coerente regola globale "HITL gate prima di eliminazioni
-  permanenti / push" e ADR-0009). La skill **propone**, l'utente **conferma**.
-- **Backup before destructive** (regola globale "backup prima di file critici"): tar della
-  `.git/` prima di rewrite/fresh-history; backup branch/tag prima del rewrite (SPEC R5).
-- **Dry-run before apply** (SPEC R5): rewrite mostra il diff atteso prima di applicare.
-- **Auto mode classifier:** se il chain gira in auto mode e tenta un force-push, il classifier
-  di Claude Code chiederà comunque conferma su un'operazione distruttiva — coerente con la
-  scelta (vincolo §8 del dispatch). La skill non aggira questo comportamento.
-- **Harness (testabilità honesta):** il harness `clean-public-repo/tests/run-tests.sh` (bash
-  3.2-clean, target dichiarato nel plan) verifica SOLO ciò che è puro e deterministico:
-  structural anchor sullo SKILL.md (sezioni contratto + "orchestrator-only" + "no falsificazione
-  autori" + sezione LIMITI documentata), smoke di `detect-public-remote.sh` (non-git → silenzioso;
-  remote non-github → silenzioso; nessun remote → silenzioso) su fixture `mktemp -d`, e smoke
-  della detection grep su una fixture con marcatori noti (trova i pattern attesi, NON trova un
-  `claude-foo` dipendenza marcato come review-needed). **NON è verificabile headless:** il
-  rewrite reale, il fresh-history publish reale, il force-push, l'integrazione gitleaks/gh su un
-  remote vero → restano **open question, validabili solo in pilota** con un repo reale (onestà
-  come ADR-0008/0009/0010). Mai mockare l'intera sessione git (testerebbe il mock).
+- **HITL on every destructive operation** (rewrite, force-push, file deletion): never automatic,
+  never from sub-agent (consistent global rule "HITL gate before permanent deletions / push" and
+  ADR-0009). The skill **proposes**, the user **confirms**.
+- **Backup before destructive** (global rule "back up before critical files"): tar of `.git/`
+  before rewrite/fresh-history; branch/tag backup before rewrite (SPEC R5).
+- **Dry-run before apply** (SPEC R5): rewrite shows expected diff before applying.
+- **Auto mode classifier:** if the chain runs in auto mode and attempts a force-push, Claude
+  Code's classifier will still ask for confirmation on a destructive operation — consistent with
+  the choice (constraint §8 of dispatch). The skill does not bypass this behavior.
+- **Harness (honest testability):** the `clean-public-repo/tests/run-tests.sh` harness (bash
+  3.2-clean, target declared in the plan) verifies ONLY what is pure and deterministic:
+  structural anchor on SKILL.md (contract sections + "orchestrator-only" + "no author
+  falsification" + documented LIMITATIONS section), smoke of `detect-public-remote.sh`
+  (non-git -> silent; non-github remote -> silent; no remote -> silent) on `mktemp -d` fixtures,
+  and smoke of grep detection on a fixture with known markers (finds expected patterns, does NOT
+  find a `claude-foo` dependency marked as review-needed). **NOT verifiable headless:** real
+  rewrite, real fresh-history publish, force-push, gitleaks/gh integration on a real remote ->
+  remain **open questions, validatable only in a pilot** with a real repo (honesty as
+  ADR-0008/0009/0010). Never mock the entire git session (would test the mock).
 
 ---
 
-## Alternatives considered (per ognuna delle 8 domande)
+## Alternatives considered (for each of the 8 questions)
 
-Le alternative di approccio architetturale provengono dal BRAINSTORM (A/B/C/D); per le
-sotto-decisioni si elencano le opzioni scartate con la ragione.
+The architectural approach alternatives come from the BRAINSTORM (A/B/C/D); for sub-decisions
+the rejected options are listed with the reason.
 
-### Approccio globale (dal BRAINSTORM)
+### Global approach (from the BRAINSTORM)
 
-- **Alternativa A — solo prevenzione (clean-by-construction):** rifiutata come architettura
-  completa. Copre i repo nuovi a costo zero, ma **non copre gli esistenti** (es. plugin
-  Obsidian già pubblicato) che sono esplicitamente in scope (SPEC R6). Adottata come *parte*
-  dell'ibrido (modalità anonima nel chain).
-- **Alternativa B — solo rimedio (scan + scrub on-demand):** rifiutata come architettura
-  completa. Copre gli esistenti, ma i repo nuovi accumulerebbero tracce da ripulire a ogni
-  giro (lavoro ripetuto evitabile). Adottata come *parte* dell'ibrido (skill standalone).
-- **Alternativa C — ibrido prevenzione+rimedio ★:** **adottata**. Ogni caso usa l'approccio
-  giusto (nuovi→A, esistenti→B); copre l'intero scope SPEC. Contro accettato: due superfici da
-  mantenere (mitigato dal riuso — il chain non duplica la skill).
-- **Alternativa D — fresh-history publish ★:** **adottata** come strategia di **default per i
-  già-pubblici** (D5). Evita del tutto il force-push sul repo originale (rischio TOP del
-  pre-mortem). Contro accettato: si perde la granularità storica nel pubblico (compensato dal
-  rewrite chirurgico come opzione 2 per chi la vuole).
+- **Alternative A — prevention only (clean-by-construction):** rejected as complete architecture.
+  Covers new repos at zero cost, but **does not cover existing ones** (e.g. already published
+  Obsidian plugin) which are explicitly in scope (SPEC R6). Adopted as *part* of the hybrid
+  (anonymous mode in the chain).
+- **Alternative B — remedy only (scan + scrub on-demand):** rejected as complete architecture.
+  Covers existing, but new repos would accumulate traces to clean every iteration (avoidable
+  repeated work). Adopted as *part* of the hybrid (standalone skill).
+- **Alternative C — prevention+remedy hybrid **: **adopted**. Each case uses the right approach
+  (new->A, existing->B); covers the entire SPEC scope. Accepted against: two surfaces to maintain
+  (mitigated by reuse — the chain does not duplicate the skill).
+- **Alternative D — fresh-history publish **: **adopted** as the **default strategy for
+  already-public** (D5). Avoids force-push on the original repo entirely (TOP risk of the
+  pre-mortem). Accepted against: historical granularity is lost in public (compensated by
+  surgical rewrite as option 2 for those who want it).
 
-### D1 — Dove innestare il gate
+### D1 — Where to insert the gate
 
-- **Estendere Gate 0 (triage chain-vs-leggero):** rifiutata. Mescola due decisioni ortogonali
-  (chain-vs-leggero vs anonimo-sì/no) in un unico prompt; rende impossibile presentare l'una
-  senza l'altra e confonde l'UX. Gate 0b dedicato è più chiaro e disattivabile separatamente.
-- **Auto-applicare la modalità anonima su ogni remote GitHub pubblico (no `[y/n]`):** rifiutata.
-  Viola SPEC R1 ("decisione utente, non auto-applicata") e l'inquadramento etico (la modalità
-  è una scelta consapevole dell'utente, non un default imposto).
-- **Detection visibilità dal solo URL del remote (no `gh`):** rifiutata. Un URL
-  `github.com/...` non rivela la visibilità (può essere privato); dedurre "pubblico" dall'URL
-  causerebbe falsi positivi che disturbano su repo privati (viola R1 "silenzioso su privati").
-  La cascata usa `gh` e tratta l'indeterminato come non-pubblico (fail-safe).
+- **Extend Gate 0 (chain-vs-lightweight triage):** rejected. Mixes two orthogonal decisions
+  (chain-vs-lightweight vs anonymous-yes/no) in a single prompt; makes it impossible to present
+  one without the other and confuses the UX. Dedicated Gate 0b is clearer and separately
+  deactivatable.
+- **Auto-apply anonymous mode on every public GitHub remote (no `[y/n]`):** rejected. Violates
+  SPEC R1 ("user decision, not auto-applied") and the ethical framing (the mode is a conscious
+  user choice, not an imposed default).
+- **Visibility detection from the remote URL alone (no `gh`):** rejected. A
+  `github.com/...` URL does not reveal visibility (can be private); inferring "public" from the
+  URL would cause false positives that disturb on private repos (violates R1 "silent on private").
+  The cascade uses `gh` and treats indeterminate as non-public (fail-safe).
 
-### D2 — Forma della skill / dipendenze
+### D2 — Skill form / dependencies
 
-- **Rewriter custom in bash (no git-filter-repo):** rifiutata. Riscrivere una history a mano è
-  error-prone e rischioso (rischio TOP); `git-filter-repo` è lo standard maturo con dry-run e
-  protezioni (report researcher). Non reinventare un tool critico per la sicurezza dei dati.
-- **Dipendenza HARD da gitleaks per la detection:** rifiutata — **gitleaks è assente
-  sull'ambiente** (verificato). Renderebbe la skill inutilizzabile out-of-the-box. La detection
-  primaria deve essere grep custom (zero-dep); gitleaks è un bonus opzionale.
-- **Sub-agent dedicato per il cleanup:** rifiutata. Le operazioni git distruttive richiedono
-  HITL interattivo; un sub-agent in auto mode non deve eseguirle (coerente ADR-0010 D1 /
-  ADR-0009). La skill gira sull'orchestrator.
+- **Custom rewriter in bash (no git-filter-repo):** rejected. Rewriting a history by hand is
+  error-prone and risky (TOP risk); `git-filter-repo` is the mature standard with dry-run and
+  protections (researcher report). Do not reinvent a critical data-safety tool.
+- **HARD dependency on gitleaks for detection:** rejected — **gitleaks is absent on the
+  environment** (verified). Would make the skill unusable out-of-the-box. Primary detection
+  must be custom grep (zero-dep); gitleaks is an optional bonus.
+- **Dedicated sub-agent for cleanup:** rejected. Destructive git operations require interactive
+  HITL; a sub-agent in auto mode must not execute them (consistent ADR-0010 D1 / ADR-0009).
+  The skill runs on the orchestrator.
 
 ### D3 — Detection
 
-- **Detection semantica/ML (riconoscere "stile AI"):** rifiutata. Fuori scope, non
-  deterministica, non bash 3.2-clean; il bisogno irriducibile (BRAINSTORM first-principles) è
-  rimuovere **marcatori lessicali noti**, non indovinare lo stile.
-- **Solo gitleaks (no grep custom):** rifiutata. gitleaks è secret-oriented e assente
-  sull'ambiente; i marcatori dello strumento (trailer, commenti, emoji) non sono il suo target
-  primario e richiederebbero comunque regole custom. grep custom è il motore giusto e
-  zero-dep.
-- **Rimozione automatica di tutti i match (no conferma):** rifiutata. Viola SPEC R2 ("mai
-  rimozione cieca") e il caso falso-positivo (dipendenza `claude-*`). L'azione è ibrida:
-  segnala → rimuove su conferma.
+- **Semantic/ML detection (recognize "AI style"):** rejected. Out of scope, non-deterministic,
+  not bash 3.2-clean; the irreducible need (BRAINSTORM first-principles) is to remove **known
+  lexical markers**, not guess style.
+- **Only gitleaks (no custom grep):** rejected. gitleaks is secret-oriented and absent on the
+  environment; tool markers (trailers, comments, emoji) are not its primary target and would
+  require custom rules anyway. Custom grep is the right engine and zero-dep.
+- **Automatic removal of all matches (no confirmation):** rejected. Violates SPEC R2 ("no blind
+  removal") and the false-positive case (dependency `claude-*`). The action is hybrid: signal ->
+  remove on confirmation.
 
-### D4 — Contratto del report
+### D4 — Report contract
 
-- **Report senza sezione LIMITI:** rifiutata. È il requisito esplicito emerso nel BRAINSTORM
-  (falso senso di sicurezza): un report che non dichiara cosa NON copre (binari, metadati,
-  generati) induce l'utente a credere il repo "pulito al 100%". La sezione COPERTURA & LIMITI
-  è obbligatoria.
-- **Output solo in chat (nessun file):** rifiutata. Un audit di pulizia va persistito per
-  revisione umana e per ri-esecuzione; il file è il record dell'azione confermata.
-- **Cancellare i file slop d'ufficio:** rifiutata. SPEC R2 + edge falso-positivo: i file slop
-  sono segnalati come `manual`, la decisione resta umana.
+- **Report without LIMITATIONS section:** rejected. It is the explicit requirement from the
+  BRAINSTORM (false sense of security): a report that does not declare what it does NOT cover
+  (binaries, metadata, generated) induces the user to believe the repo is "100% clean". The
+  COVERAGE & LIMITATIONS section is mandatory.
+- **Output only in chat (no file):** rejected. A cleanup audit must be persisted for human review
+  and for re-execution; the file is the record of the confirmed action.
+- **Delete slop files by default:** rejected. SPEC R2 + false-positive edge: slop files are
+  signaled as `manual`, the decision remains human.
 
 ### D5 — Fresh-history publish
 
-- **Force-push sul repo originale (rewrite in-place come default per i già-pubblici):**
-  rifiutata come default. È il rischio TOP del pre-mortem (corrompe/perde il repo, rompe
-  cloni/fork, è visibile e sospetto). Default = repo derivato; rewrite in-place solo opzione 2
-  esplicita (D6).
-- **Riscrivere la history del repo originale e renderla privata:** rifiutata. Più complessa e
-  rischiosa del semplice orphan branch + repo derivato; non c'è motivo di toccare l'originale.
-- **Squash interattivo manuale (no orphan):** rifiutata come meccanismo. L'orphan branch è
-  idiomatico e deterministico (report researcher); il rebase interattivo è manuale, error-prone
-  e non automatizzabile in modo sicuro.
+- **Force-push on the original repo (in-place rewrite as default for already-public):** rejected
+  as default. It is the TOP risk of the pre-mortem (corrupts/loses the repo, breaks clones/forks,
+  is visible and suspicious). Default = derived repo; in-place rewrite only as explicit option 2
+  (D6).
+- **Rewrite the original repo history and make it private:** rejected. More complex and risky
+  than simple orphan branch + derived repo; no reason to touch the original.
+- **Manual interactive squash (no orphan):** rejected as mechanism. Orphan branch is idiomatic
+  and deterministic (researcher report); interactive rebase is manual, error-prone, and not
+  safely automatable.
 
-### D6 — Rewrite chirurgico
+### D6 — Surgical rewrite
 
-- **`git filter-branch`:** rifiutata. **DEPRECATO** (report researcher), lento, error-prone;
-  la doc git stessa raccomanda `git-filter-repo`.
-- **BFG Repo-Cleaner:** rifiutata. Ottimo per blob grandi/secret noti, ma **non adatto a
-  sostituzione testo arbitraria** dei marcatori (report researcher); `git-filter-repo
-  --replace-text` copre il caso.
-- **Rewrite automatico senza dry-run / senza fresh-clone:** rifiutata. Viola SPEC R5 e il
-  rischio TOP; la protezione fresh-clone di git-filter-repo va rispettata, non aggirata con
+- **`git filter-branch`:** rejected. **DEPRECATED** (researcher report), slow, error-prone;
+  git's own documentation recommends `git-filter-repo`.
+- **BFG Repo-Cleaner:** rejected. Excellent for large blobs/known secrets, but **not suitable
+  for arbitrary text replacement** of markers (researcher report); `git filter-repo
+  --replace-text` covers the case.
+- **Automatic rewrite without dry-run / without fresh-clone:** rejected. Violates SPEC R5 and
+  the TOP risk; git-filter-repo's fresh-clone protection must be respected, not bypassed with
   `--force`.
 
-### D7 — Modalità anonima nel chain
+### D7 — Anonymous mode in the chain
 
-- **Patchare `coder.md`/`architect.md` con la regola anonima:** rifiutata. Renderebbe la regola
-  globale e sempre-attiva (anche fuori dal chain, anche su repo privati), e creerebbe un
-  "vecchio contract da deprecare". Il pattern del sistema è veicolare le direttive condizionali
-  nel **prompt-template di dispatch** (come la direttiva additiva di claude-md-generator):
-  additivo, opt-in, zero regressioni quando off.
-- **Layer separato (post-processing dei commit dopo il coder):** rifiutata. Un post-processor
-  che riscrive i commit appena fatti è di fatto un mini-rewrite (rischio) per qualcosa che si
-  ottiene gratis facendo scrivere bene il coder dall'inizio (prevenzione = Alternativa A). Meglio
+- **Patch `coder.md`/`architect.md` with the anonymous rule:** rejected. Would make the rule
+  global and always-active (even outside the chain, even on private repos), and would create an
+  "old contract to deprecate". The system pattern is to convey conditional directives in the
+  **dispatch prompt-template** (like the additive directive of claude-md-generator): additive,
+  opt-in, zero regressions when off.
+- **Separate layer (post-processing commits after the coder):** rejected. A post-processor that
+  rewrites just-made commits is effectively a mini-rewrite (risk) for something obtainable for
+  free by having the coder write correctly from the start (prevention = Alternative A). Better
   clean-by-construction.
-- **Normalizzazione stilistica per ingannare review umane:** rifiutata — **fuori scope per
-  vincolo etico** (SPEC §"Inquadramento etico", out-of-scope). La modalità rimuove marcatori e
-  cura la qualità; non maschera la natura del lavoro a chi chiede.
+- **Stylistic normalization to deceive human review:** rejected — **out of scope for ethical
+  constraint** (SPEC §"Ethical framing", out-of-scope). The mode removes markers and cares for
+  quality; it does not mask the nature of the work from those who ask.
 
 ### D8 — Safety / fail-mode
 
-- **Force-push automatico in auto mode:** rifiutata. Operazione distruttiva remota irreversibile;
-  va sempre dietro HITL (coerente ADR-0009, regola globale). L'auto mode non esenta dal gate
-  umano sulle operazioni distruttive.
-- **Nessun backup prima del rewrite:** rifiutata. Viola SPEC R5 e la regola globale "backup
-  prima di file critici"; senza backup il rischio TOP non è mitigabile.
-- **Harness end-to-end con un repo git reale + remote:** rifiutata. Richiederebbe un remote
-  GitHub reale, force-push reali, e comunque non sarebbe deterministico/headless. Il harness
-  copre le parti pure (detection, fail-safe della detection-remote); il resto è open question da
-  pilota (onestà ADR-0008/0009/0010). Mai mockare l'intera sessione git.
+- **Automatic force-push in auto mode:** rejected. Irreversible remote destructive operation;
+  always behind HITL (consistent ADR-0009, global rule). Auto mode does not exempt from the
+  human gate on destructive operations.
+- **No backup before rewrite:** rejected. Violates SPEC R5 and the global rule "back up before
+  critical files"; without backup the TOP risk is not mitigable.
+- **End-to-end harness with a real git repo + remote:** rejected. Would require a real GitHub
+  remote, real force-pushes, and would still not be deterministic/headless. The harness covers
+  the pure parts (detection, remote-detection fail-safe); the rest is an open question from the
+  pilot (honesty ADR-0008/0009/0010). Never mock the entire git session.
 
 ---
 
@@ -424,84 +422,83 @@ sotto-decisioni si elencano le opzioni scartate con la ragione.
 
 ### Positive
 
-- **Copre l'intero scope SPEC:** nuovi (prevenzione via modalità anonima) + esistenti (rimedio
-  via skill), con la strategia history giusta per ogni caso.
-- **Rischio TOP mitigato by design:** il default per i già-pubblici (fresh-history publish) evita
-  del tutto il force-push sul repo originale; il rewrite chirurgico in-place è opt-in con
-  backup+dry-run+HITL. Nessun rewrite distruttivo non protetto (priorità #1).
-- **Zero-dep out-of-the-box:** la skill funziona con solo `git` (presente); gitleaks/gh
-  migliorano la copertura ma non sono richiesti (verificato: gitleaks assente).
-- **Riuso pulito:** il chain non duplica la logica di cleanup; la modalità anonima è additiva
-  via prompt-template (zero regressioni quando off). 4a istanza del pattern skill-standalone +
-  gate del chain.
-- **Trasparenza etica:** il report dichiara COPERTURA & LIMITI (no falso senso di sicurezza); la
-  feature non falsifica autori (commit resta attribuito a Stefano).
-- **Detection con contesto:** falsi positivi (`claude-*` dipendenze, "AI" in nomi) marcati
-  `review-needed`, mai rimossi ciecamente (SPEC R2).
+- **Covers the entire SPEC scope:** new repos (prevention via anonymous mode) + existing
+  (remedy via skill), with the right history strategy for each case.
+- **TOP risk mitigated by design:** the default for already-public (fresh-history publish) avoids
+  force-push on the original repo entirely; surgical in-place rewrite is opt-in with
+  backup+dry-run+HITL. No unprotected destructive rewrite (priority #1).
+- **Zero-dep out-of-the-box:** the skill works with only `git` (present); gitleaks/gh improve
+  coverage but are not required (verified: gitleaks absent).
+- **Clean reuse:** the chain does not duplicate the cleanup logic; the anonymous mode is additive
+  via prompt-template (zero regressions when off). 4th instance of the standalone skill + chain
+  gate pattern.
+- **Ethical transparency:** the report declares COVERAGE & LIMITATIONS (no false sense of
+  security); the feature does not falsify authors (commit remains attributed to Stefano).
+- **Detection with context:** false positives (`claude-*` dependencies, "AI" in names) marked
+  `review-needed`, never blindly removed (SPEC R2).
 
 ### Negative
 
-- **Due superfici da mantenere** (modalità anonima nel chain + skill standalone) — costo
-  accettato dell'ibrido, mitigato dal non-duplicare (il chain rimanda alla skill).
-- **Detection lessicale limitata:** grep custom non cattura tracce semantiche/stilistiche né
-  marcatori in binari/generati. Limite dichiarato nel report (LIMITI); NON garantisce
-  indistinguibilità totale.
-- **Visibilità remote indeterminabile senza `gh`:** su un ambiente senza `gh` autenticato il
-  Gate 0b non si attiva mai (fail-safe verso silenzioso) → la prevenzione automatica non parte;
-  l'utente può comunque attivarla a mano o usare la skill. Trade-off conservativo accettato.
-- **Operazioni history reali non testabili headless:** rewrite/fresh-history/force-push
-  validabili solo in pilota; il harness copre solo le parti pure. Limite noto (ADR-0008/0009/0010).
-- **Dipendenza da `git-filter-repo` per l'opzione 2:** se rimosso dall'ambiente, il rewrite
-  chirurgico si disabilita (degrade graceful con messaggio install); fresh-history resta
-  disponibile.
+- **Two surfaces to maintain** (anonymous mode in the chain + standalone skill) — accepted cost
+  of the hybrid, mitigated by not-duplicating (the chain redirects to the skill).
+- **Limited lexical detection:** custom grep does not catch semantic/stylistic traces or markers
+  in binaries/generated files. Limitation declared in the report (LIMITATIONS); does NOT guarantee
+  total indistinguishability.
+- **Undeterminable remote visibility without `gh`:** on an environment without authenticated `gh`
+  Gate 0b never activates (fail-safe towards silent) -> automatic prevention does not start; the
+  user can still activate it manually or use the skill. Accepted conservative trade-off.
+- **Real history operations not testable headless:** rewrite/fresh-history/force-push validatable
+  only in pilot; harness covers only pure parts. Known limitation (ADR-0008/0009/0010).
+- **Dependency on `git-filter-repo` for option 2:** if removed from the environment, the surgical
+  rewrite is disabled (graceful degrade with install message); fresh-history remains available.
 
 ### Neutral
 
-- **Manifest schema 1.2:** nuovo campo opzionale `anonymize: false` (default); 1.0/1.1 restano
-  validi (retrocompat additiva). `manifest-validate.sh` va esteso ad accettare 1.2.
-  **Nota di coesistenza:** ADR-0010 (web-e2e-test) ha già pianificato un bump 1.1→1.2
-  (`artifacts.e2e` + stato `gate_6_e2e_web`). Se ADR-0010 è deployato prima, questo ADR riusa lo
-  schema 1.2 esistente e aggiunge SOLO il campo `anonymize` (additivo, nessun nuovo stato — Gate
-  0b è un check, non uno stato); se ADR-0010 non è ancora deployato, questo ADR introduce 1.2 con
-  `anonymize`. In entrambi i casi 1.2 resta retrocompat 1.0/1.1; il plan verifica lo stato live
-  dello schema prima di editare la regex (vedi plan, Note di coesistenza).
-- **Nuova convenzione `docs/clean-report/`** per i report; opzionale, creata on-demand.
-- **Gate 0b non è uno stato** della state machine (come Gate 0): è un check condizionale in
-  `step_0_init`. Nessun nuovo stato → nessuna estensione di `VALID_STEPS`/transition pairs per
-  il gate (solo il campo `anonymize`).
-- Repo `vibe-coding-system` NON-git: i deliverable sono i markdown; il deploy degli artefatti
-  live (`~/.claude/skills/clean-public-repo/`, patch al chain) è un task separato (plan TDD),
-  senza commit step.
+- **Manifest schema 1.2:** new optional field `anonymize: false` (default); 1.0/1.1 remain valid
+  (additive retrocompat). `manifest-validate.sh` must be extended to accept 1.2.
+  **Coexistence note:** ADR-0010 (web-e2e-test) already planned a 1.1->1.2 bump (`artifacts.e2e`
+  + state `gate_6_e2e_web`). If ADR-0010 is deployed first, this ADR reuses the existing schema
+  1.2 and adds ONLY the `anonymize` field (additive, no new state — Gate 0b is a check, not a
+  state); if ADR-0010 is not yet deployed, this ADR introduces 1.2 with `anonymize`. In both
+  cases 1.2 remains retrocompat 1.0/1.1; the plan verifies the live schema state before editing
+  the regex (see plan, Coexistence notes).
+- **New convention `docs/clean-report/`** for reports; optional, created on-demand.
+- **Gate 0b is not a state** of the state machine (like Gate 0): it is a conditional check in
+  `step_0_init`. No new state -> no extension of `VALID_STEPS`/transition pairs for the gate
+  (only the `anonymize` field).
+- Repo `vibe-coding-system` NON-git: the deliverables are the markdowns; the deploy of the live
+  artifacts (`~/.claude/skills/clean-public-repo/`, chain patch) is a separate task (TDD plan),
+  without commit step.
 
 ---
 
 ## References
 
-- SPEC: `/Users/stefanoferri/Developer/vibe-coding-system/SPEC.md` (R1-R6, edge case, DoD,
-  inquadramento etico)
-- BRAINSTORM: `/Users/stefanoferri/Developer/vibe-coding-system/BRAINSTORM.md` (Alternative
-  A/B/C★/D★, pre-mortem rischio TOP, requisito COPERTURA & LIMITI)
-- ADR-0003 — `docs/architecture/ADR-0003-concept-to-code-chain.md` (chain + manifest YAML + gate HITL)
-- ADR-0008 — `docs/architecture/ADR-0008-concept-to-code-workflow-v2-brainstorm.md` (gate
-  opzionale + skill non-terminale invocata dal chain; schema 1.0→1.1; harness honesto)
-- ADR-0010 — `docs/architecture/ADR-0010-web-e2e-test.md` (pattern skill-standalone + gate;
-  schema 1.1→1.2; detection fail-safe verso default sicuro; testabilità honesta non-headless)
-- ADR-0009 — `docs/architecture/ADR-0009-db-backup-guardrail.md` (HITL su operazione
-  distruttiva; backup come precondizione; fail-mode asimmetrico)
-- ADR-0001 — `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` (la modalità
-  anonima coesiste col Pre-flight Pattern Classifier, non lo contraddice)
-- `~/.claude/skills/concept-to-code/SKILL.md` (state machine; pattern gate→skill riuso;
-  direttiva additiva via prompt-template — §3 Step 3)
-- `~/.claude/skills/concept-to-code/scripts/manifest-validate.sh` (schema regex riga 29,
-  VALID_STEPS righe 57-72)
-- `~/.claude/agents/coder.md` (nessuna regola anonima oggi; redige commit per l'orchestrator,
-  non committa — coexistenza D7)
-- Prior-art tooling (report researcher): `git-filter-repo` (standard rewrite chirurgico,
-  `--replace-text`/`--message-callback`/`--dry-run`, rifiuta non-fresh-clone; install
+- SPEC: `/Users/stefanoferri/Developer/vibe-coding-system/SPEC.md` (R1-R6, edge cases, DoD,
+  ethical framing)
+- BRAINSTORM: `/Users/stefanoferri/Developer/vibe-coding-system/BRAINSTORM.md` (Alternatives
+  A/B/C*/D*, pre-mortem TOP risk, COVERAGE & LIMITATIONS requirement)
+- ADR-0003 — `docs/architecture/ADR-0003-concept-to-code-chain.md` (chain + manifest YAML + HITL gates)
+- ADR-0008 — `docs/architecture/ADR-0008-concept-to-code-workflow-v2-brainstorm.md` (optional
+  gate + non-terminal skill invoked by chain; schema 1.0->1.1; honest harness)
+- ADR-0010 — `docs/architecture/ADR-0010-web-e2e-test.md` (pattern standalone skill + gate;
+  schema 1.1->1.2; fail-safe detection towards safe default; honest non-headless testability)
+- ADR-0009 — `docs/architecture/ADR-0009-db-backup-guardrail.md` (HITL on destructive operation;
+  backup as precondition; asymmetric fail-mode)
+- ADR-0001 — `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` (the anonymous
+  mode coexists with the Pre-flight Pattern Classifier, does not contradict it)
+- `~/.claude/skills/concept-to-code/SKILL.md` (state machine; gate->skill reuse pattern;
+  additive directive via prompt-template — §3 Step 3)
+- `~/.claude/skills/concept-to-code/scripts/manifest-validate.sh` (schema regex line 29,
+  VALID_STEPS lines 57-72)
+- `~/.claude/agents/coder.md` (no anonymous rule today; drafts commit for orchestrator, does not
+  commit — coexistence D7)
+- Prior-art tooling (researcher report): `git-filter-repo` (surgical rewrite standard,
+  `--replace-text`/`--message-callback`/`--dry-run`, rejects non-fresh-clone; install
   `brew install git-filter-repo` / `pip3 install git-filter-repo`); `git filter-branch`
-  DEPRECATO; BFG non adatto a testo arbitrario; `git checkout --orphan` per fresh-history;
-  `gitleaks` per detection (regole custom `.gitleaks.toml`, output JSON) — opzionale qui;
-  backup `tar -czf` di `.git/` + `--dry-run` come safety best practice.
-- `feedback_bash32-constraint` (harness + script bash 3.2-clean)
-- Fatti ambiente verificati 2026-05-23: `git-filter-repo` presente (`/opt/homebrew/bin`),
-  `gitleaks` assente, baseline harness (review-triage-fix 60, concept-to-code 20, ecc.)
+  DEPRECATED; BFG not suitable for arbitrary text; `git checkout --orphan` for fresh-history;
+  `gitleaks` for detection (custom rules `.gitleaks.toml`, JSON output) — optional here;
+  backup `tar -czf` of `.git/` + `--dry-run` as safety best practice.
+- `feedback_bash32-constraint` (harness + bash 3.2-clean scripts)
+- Verified environment facts 2026-05-23: `git-filter-repo` present (`/opt/homebrew/bin`),
+  `gitleaks` absent, harness baselines (review-triage-fix 60, concept-to-code 20, etc.)

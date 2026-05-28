@@ -5,202 +5,200 @@
 **Supersedes:** none
 **Superseded by:** none
 **Related:**
-- `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` (chiude il gap di enforcement della disciplina classifier)
+- `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` (closes the enforcement gap of the classifier discipline)
 - `docs/superpowers/specs/2026-05-20-pre-flight-pattern-enforce-hook-design.md`
 - `docs/superpowers/plans/2026-05-20-pre-flight-pattern-enforce-hook.md`
-- `~/.claude/hooks/stop-gate.sh`, `~/.claude/hooks/approve-test-cmd.sh` (coesistenza hook esistenti)
-- Memory `feedback_bash32-constraint.md` (vincolo per script live)
+- `~/.claude/hooks/stop-gate.sh`, `~/.claude/hooks/approve-test-cmd.sh` (coexistence with existing hooks)
+- Memory `feedback_bash32-constraint.md` (constraint for live scripts)
 
 ---
 
 ## 1. Context
 
-ADR-0001 ha introdotto il **pre-flight pattern classifier**: prima di ogni tool call
-`Edit`/`Write`, il `coder` agent deve emettere una riga `PATTERN: <CATEGORY> | ...` (4
-categorie ADD/REMOVE/REPLACE/MODIFY). La disciplina è hard-coded nel system prompt di
-`~/.claude/agents/coder.md` (righe 25-52) ed è oggi enforced via **three-layer**:
+ADR-0001 introduced the **pre-flight pattern classifier**: before every `Edit`/`Write` tool
+call, the `coder` agent must emit a line `PATTERN: <CATEGORY> | ...` (4 categories ADD/REMOVE/REPLACE/MODIFY).
+The discipline is hard-coded in the system prompt of `~/.claude/agents/coder.md` (lines 25-52) and
+is today enforced via **three-layer**:
 
-1. system prompt (`coder.md` linee 26-52, "you MUST emit")
-2. reviewer post-hoc check (pattern-drift, item 5 di `reviewer.md`)
-3. `review-triage-fix` v1.2 Add+Remove rule (safety net per `REPLACE`)
+1. system prompt (`coder.md` lines 26-52, "you MUST emit")
+2. reviewer post-hoc check (pattern-drift, item 5 of `reviewer.md`)
+3. `review-triage-fix` v1.2 Add+Remove rule (safety net for `REPLACE`)
 
-**Gap residuo identificato in audit 2026-05-20:**
+**Residual gap identified in audit 2026-05-20:**
 
-- Il livello 1 è **self-discipline**: niente blocca il `coder` se omette il header. Sotto
-  context pressure, prompt lunghi, dispatch in worktree paralleli, l'LLM può sorvolare.
-- Il livello 2 (reviewer) opera **post-hoc**: il filesystem è già scritto, il tool call è
-  già passato. La cattura è in cycle successivo, non immediate.
-- Per **parallel coders in worktree** (sez. 2 di `vibe-coding-system.md`), il reviewer
-  spesso non ha il transcript completo di tutti i coder — il check di coerenza
-  `PATTERN:`-vs-diff può saltare silenziosamente.
+- Level 1 is **self-discipline**: nothing blocks the `coder` if it omits the header. Under
+  context pressure, long prompts, dispatch in parallel worktrees, the LLM may skip it.
+- Level 2 (reviewer) operates **post-hoc**: the filesystem is already written, the tool call
+  has already passed. The catch is in the next cycle, not immediate.
+- For **parallel coders in worktree** (sec. 2 of `vibe-coding-system.md`), the reviewer
+  often does not have the full transcript of all coders — the coherence check
+  `PATTERN:`-vs-diff can silently slip.
 
-Conseguenza: la garanzia ADR-0001 è "best effort" del coder, non gate strutturale.
-Ricomparire il drift osservato nel cycle 2 di pricing-markup-cli (memory
-`feedback_micropiano-refactor-cleanup`, RESOLVED) resta possibile in finestre di
-attenzione carica.
+Consequence: the ADR-0001 guarantee is the coder's "best effort", not a structural gate.
+The drift observed in cycle 2 of pricing-markup-cli (memory
+`feedback_micropiano-refactor-cleanup`, RESOLVED) remains possible in high-attention windows.
 
-**Direzione:** introdurre un **hook `PreToolUse` bash** in `~/.claude/hooks/` che, prima
-di ogni tool call `Edit`/`Write`, ispeziona il transcript recente (sliding window) e
-**blocca** l'invocazione se non trova un `PATTERN:` header valido che precede l'edit.
-Promuove la disciplina classifier da contract testuale a **gate runtime** a livello di
-tool call, complementare ai 3 layer esistenti.
+**Direction:** introduce a **`PreToolUse` bash hook** in `~/.claude/hooks/` that, before
+every `Edit`/`Write` tool call, inspects the recent transcript (sliding window) and
+**blocks** the invocation if it does not find a valid `PATTERN:` header preceding the edit.
+Promotes the classifier discipline from a textual contract to a **runtime gate** at tool call
+level, complementary to the 3 existing layers.
 
-### Vincoli ereditati
+### Inherited constraints
 
-- **Anchor preservation harness `review-triage-fix`:** PASS=47 deve restare ≥ 47.
-- **Bash 3.2.57 compat** per ogni hook in `~/.claude/hooks/`. Niente assoc array,
-  `mapfile`, `${v^^}`, `<()`. Solo `grep`/`awk`/`sed`/`jq`.
-- **Coesistenza con hook esistenti.** `stop-gate.sh` (PostToolUse Stop), `approve-test-cmd.sh`
-  (utility user-invoked), `migrate-trust-paths.sh` (utility). Il nuovo hook è `PreToolUse`
-  → diverso event, no race.
-- **Fail-open per default su errore interno.** Identico pattern di `stop-gate.sh` (spec
-  §7): se l'hook crasha, non bloccare l'utente.
-- **HITL ban nel design phase:** auto mode, no gate intermedio nel piano.
-- **Repo NON-git:** no commit step.
+- **Anchor preservation harness `review-triage-fix`:** PASS=47 must remain >= 47.
+- **Bash 3.2.57 compat** for every hook in `~/.claude/hooks/`. No assoc array,
+  `mapfile`, `${v^^}`, `<()`. Only `grep`/`awk`/`sed`/`jq`.
+- **Coexistence with existing hooks.** `stop-gate.sh` (PostToolUse Stop), `approve-test-cmd.sh`
+  (utility user-invoked), `migrate-trust-paths.sh` (utility). The new hook is `PreToolUse`
+  -> different event, no race.
+- **Fail-open by default on internal error.** Identical pattern of `stop-gate.sh` (spec
+  §7): if the hook crashes, do not block the user.
+- **HITL ban in design phase:** auto mode, no intermediate gate in the plan.
+- **NON-git repo:** no commit step.
 
-### Assunzioni esplicite (non verificate empiricamente)
+### Explicit assumptions (not empirically verified)
 
-- **L'hook PreToolUse di Claude Code riceve via stdin JSON contenente `tool_name`,
-  `tool_input` e (cruciale) un campo accessibile al transcript recente.** Da hook
-  contract documentato (`code.claude.com/docs`): `PreToolUse` riceve un JSON con almeno
-  `session_id`, `tool_name`, `tool_input`, `cwd`. Il **transcript completo NON è**
-  passato per stdin in modo robusto cross-version. Assunzione: il `session_id` è
-  sufficiente per derivare un transcript file path (es. `~/.claude/projects/<encoded>/...`
-  contiene il `*.jsonl` della sessione) e l'hook può leggerlo. Se questa assunzione
-  cade, il fallback è il **marker file** scritto dal coder (vedi §2.2 alternative).
-- **L'hook esegue in <100ms typical.** Bash + `grep -E` + `tail` su un file jsonl di
-  pochi MB è sotto 100ms in misurazioni preliminari (non verificato in questo audit).
-- **Il `coder` agent emette `PATTERN:` come testo nel messaggio assistant immediatamente
-  precedente al tool call.** Disciplina ADR-0001 esplicitamente questo pattern; il hook
-  cerca nel transcript il header nelle ultime N entry.
-- **Identificare "il dispatch è il coder agent" è fattibile tramite `subagent_type` nel
-  transcript jsonl.** Verificato: il jsonl session log include `subagent_type` per messaggi
-  di sub-agent. Se questo campo manca per orchestrator edit, l'hook **bypassa di default**
-  (no false positive su orchestrator).
+- **The Claude Code PreToolUse hook receives via stdin JSON containing `tool_name`,
+  `tool_input` and (crucially) a field accessible to the recent transcript.** From hook
+  contract documentation (`code.claude.com/docs`): `PreToolUse` receives a JSON with at least
+  `session_id`, `tool_name`, `tool_input`, `cwd`. The **full transcript is NOT** passed via
+  stdin in a robust cross-version way. Assumption: the `session_id` is sufficient to derive
+  a transcript file path (e.g. `~/.claude/projects/<encoded>/...` contains the `*.jsonl`
+  of the session) and the hook can read it. If this assumption fails, the fallback is the
+  **marker file** written by the coder (see §2.2 alternatives).
+- **The hook executes in <100ms typical.** Bash + `grep -E` + `tail` on a jsonl file of
+  a few MB is under 100ms in preliminary measurements (not verified in this audit).
+- **The `coder` agent emits `PATTERN:` as text in the assistant message immediately
+  preceding the tool call.** ADR-0001 discipline explicitly states this pattern; the hook
+  looks in the transcript for the header in the last N entries.
+- **Identifying "the dispatch is the coder agent" is feasible via `subagent_type` in the
+  transcript jsonl.** Verified: the session jsonl log includes `subagent_type` for sub-agent
+  messages. If this field is missing for orchestrator edits, the hook **bypasses by default**
+  (no false positive on orchestrator).
 
 ---
 
 ## 2. Decision
 
-Introdurre il **hook `pre-flight-pattern-enforce.sh`** in `~/.claude/hooks/`, registrato
-in `~/.claude/settings.json` come `PreToolUse` su tool matcher `Edit|Write|MultiEdit`,
-con logica **block-on-missing** strict per dispatch coder + **fail-open** su orchestrator.
+Introduce the **hook `pre-flight-pattern-enforce.sh`** in `~/.claude/hooks/`, registered
+in `~/.claude/settings.json` as `PreToolUse` on tool matcher `Edit|Write|MultiEdit`,
+with **block-on-missing** strict logic for coder dispatches + **fail-open** on orchestrator.
 
-### 2.1 Risposta alle 7 domande architetturali
+### 2.1 Answers to the 7 architectural questions
 
-#### Q1 — Source of truth per il PATTERN: header
+#### Q1 — Source of truth for the PATTERN: header
 
-**Transcript file della sessione corrente, derivato da `session_id`.**
+**Session transcript file, derived from `session_id`.**
 
-L'hook PreToolUse riceve JSON stdin con `session_id`, `cwd`, `tool_name`, `tool_input`,
-e (in versioni recenti del CLI) un campo `transcript_path` che punta direttamente al
-jsonl della sessione. Path fallback derivable: encoding cwd → directory in
-`~/.claude/projects/<encoded-cwd>/` contenente i jsonl.
+The hook PreToolUse receives JSON stdin with `session_id`, `cwd`, `tool_name`, `tool_input`,
+and (in recent CLI versions) a `transcript_path` field pointing directly to the session jsonl.
+Fallback path derivable from: encoding cwd -> directory in
+`~/.claude/projects/<encoded-cwd>/` containing the jsonl.
 
-Letturra: `tail -n <WINDOW> "$TRANSCRIPT" | jq -r 'select(.type=="assistant") | .message.content[]? | .text? // empty' | grep -E '^PATTERN: (ADD|REMOVE|REPLACE|MODIFY) \|'`.
+Reading: `tail -n <WINDOW> "$TRANSCRIPT" | jq -r 'select(.type=="assistant") | .message.content[]? | .text? // empty' | grep -E '^PATTERN: (ADD|REMOVE|REPLACE|MODIFY) \|'`.
 
-Alternative scartate vedi §3.1.
+Rejected alternatives see §3.1.
 
 #### Q2 — Sliding window dimension
 
-**Window = ultimi 6 messaggi assistant non-tool-result** (configurabile via env
+**Window = last 6 non-tool-result assistant messages** (configurable via env
 `PATTERN_ENFORCE_WINDOW`, default 6).
 
-Razionale:
-- Troppo piccolo (1): false positive se coder dichiara PATTERN, fa Read/Grep, poi Edit
-  — l'header è "vecchio".
-- Troppo grande (50): false negative — `PATTERN: ADD` di un Edit precedente match per
-  un nuovo Edit di tipo diverso.
-- **6** = un Edit + 5 Read/Grep/Bash di context-gathering tipici. Allineato al pattern
-  osservato del coder in 2026-05-20 dispatches (Read 2-3 file → emit PATTERN → Edit).
+Rationale:
+- Too small (1): false positives if coder declares PATTERN, does Read/Grep, then Edit
+  — the header is "old".
+- Too large (50): false negatives — `PATTERN: ADD` from a previous Edit matches for
+  a new Edit of a different type. Distorts the "1 PATTERN per tool call" contract.
+- **6** = one Edit + 5 typical context-gathering Read/Grep/Bash. Aligned with the pattern
+  observed in the coder during 2026-05-20 dispatches (Read 2-3 files -> emit PATTERN -> Edit).
 
-Implementazione: l'hook legge gli ultimi N assistant messages, NON i tool_result/user
+Implementation: the hook reads the last N assistant messages, NOT the tool_result/user
 messages (jq filter `.type=="assistant"`).
 
 #### Q3 — Block vs warn
 
-**Block strict per dispatch coder; warn-only altrimenti.**
+**Block strict for coder dispatch; warn-only otherwise.**
 
-- Se `subagent_type == "coder"` nel transcript recente E manca un `PATTERN:` valido nella
-  window → exit con `{"decision":"block","reason":"..."}` (PreToolUse hook contract:
+- If `subagent_type == "coder"` in the recent transcript AND a valid `PATTERN:` is missing in
+  the window -> exit with `{"decision":"block","reason":"..."}` (PreToolUse hook contract:
   exit 0 + JSON decision block).
-- Se non identificato come coder (orchestrator, altro agent, missing field) → fail-open,
-  exit 0 silent (no block, opzionale stderr warn loggato in `~/.claude/state/pattern-enforce/`).
+- If not identified as coder (orchestrator, other agent, missing field) -> fail-open,
+  exit 0 silent (no block, optional stderr warn logged to `~/.claude/state/pattern-enforce/`).
 
-Razionale: il coder è l'unico agent con disciplina classifier hard-coded (ADR-0001).
-Bloccare orchestrator/architect/reviewer su Edit (legittimi) sarebbe friction-puro.
+Rationale: the coder is the only agent with hard-coded classifier discipline (ADR-0001).
+Blocking orchestrator/architect/reviewer on Edit (legitimate) would be pure friction.
 
-Combination: **block strict ma con bypass mechanism** (Q5) per casi legitimi.
+Combination: **strict block but with bypass mechanism** (Q5) for legitimate cases.
 
-#### Q4 — Scope: coder vs altri agent
+#### Q4 — Scope: coder vs other agents
 
-**Distinzione via `subagent_type` nel transcript jsonl.**
+**Distinction via `subagent_type` in the transcript jsonl.**
 
-L'hook scansiona la window e cerca il primo messaggio assistant che dichiari il subagent
-context. Tre casi:
+The hook scans the window and looks for the first assistant message that declares the subagent
+context. Three cases:
 
-1. `subagent_type == "coder"` presente → **enforce strict** (block on missing).
-2. `subagent_type` presente ma diverso (`architect`, `reviewer`, `debugger`, etc.) →
-   **bypass silent** (no enforcement; quegli agent non hanno la disciplina classifier).
-3. `subagent_type` assente (orchestrator session diretta) → **bypass silent** (no block;
-   l'orchestrator può Edit liberamente).
+1. `subagent_type == "coder"` present -> **strict enforce** (block on missing).
+2. `subagent_type` present but different (`architect`, `reviewer`, `debugger`, etc.) ->
+   **silent bypass** (no enforcement; those agents do not have the classifier discipline).
+3. `subagent_type` absent (direct orchestrator session) -> **silent bypass** (no block;
+   the orchestrator can Edit freely).
 
-Edge: messaggi vecchi della stessa sessione hanno `subagent_type` di un dispatch
-precedente. Mitigazione: l'hook guarda solo nella window (ultimi N), che cattura il
-"current speaker".
+Edge: old messages from the same session have the `subagent_type` of a previous dispatch.
+Mitigation: the hook only looks within the window (last N), which captures the "current speaker".
 
 #### Q5 — Bypass mechanism
 
-**Tre layer di bypass, dal più granulare al più drastico:**
+**Three bypass layers, from most granular to most drastic:**
 
-1. **Env var per single tool call:** `PATTERN_ENFORCE=off` impostato dal coder/orchestrator
-   prima del tool call. L'hook legge `os.environ` ed esce 0 immediatamente. Usabile in
-   transcript via shell escape se serve, ma richiede l'env propagato (rare). Soft escape.
-2. **File flag globale:** `~/.claude/state/pattern-enforce/disabled` (touch il file →
-   disable; rm → re-enable). Bypass per troubleshooting/maintenance senza editare
-   `settings.json`. Persiste tra sessioni — l'utente è responsabile di pulirlo.
-3. **Disabilitazione completa via settings.json:** rimuovere l'entry hook PreToolUse.
-   Ultima risorsa, equivalente a uninstall del hook.
+1. **Env var for single tool call:** `PATTERN_ENFORCE=off` set by the coder/orchestrator
+   before the tool call. The hook reads `os.environ` and exits 0 immediately. Usable in
+   transcript via shell escape if needed, but requires propagated env (rare). Soft escape.
+2. **Global flag file:** `~/.claude/state/pattern-enforce/disabled` (touch the file ->
+   disable; rm -> re-enable). Bypass for troubleshooting/maintenance without editing
+   `settings.json`. Persists between sessions — the user is responsible for cleaning it up.
+3. **Complete disable via settings.json:** remove the PreToolUse hook entry. Last resort,
+   equivalent to uninstalling the hook.
 
-In tutti i casi di bypass l'hook logga in `~/.claude/state/pattern-enforce/audit.log`
-(append-only, 1 riga per skip) per audit-trail.
+In all bypass cases the hook logs to `~/.claude/state/pattern-enforce/audit.log`
+(append-only, 1 line per skip) for audit trail.
 
-#### Q6 — Validation regex e edge case REPLACE-incomplete
+#### Q6 — Validation regex and REPLACE-incomplete edge case
 
-**Regex strict:** `^PATTERN: (ADD|REMOVE|REPLACE|MODIFY) \|`
+**Strict regex:** `^PATTERN: (ADD|REMOVE|REPLACE|MODIFY) \|`
 
-- Match strict del prefix + categoria + separator `|`.
-- Validazione **forma**, non semantica: l'hook non parsa il payload, non verifica
-  `path:line` consistente con `tool_input.file_path`. Quel deep-check resta al reviewer
-  (item 5 di reviewer.md, layer 2 di ADR-0001).
-- **REPLACE-incomplete (manca `Remove:`):** l'hook **non blocca** questo caso specifico.
-  Razionale: validation semantica del payload è scope creep — basta che il header sia
-  presente e ben formato. La regola v1.2 `Add+Remove rule` resta tertiary safety net post-hoc.
-  Trade-off accepted: l'hook è gate pre-edit per la *presenza* del classifier, non per la
-  *completezza* del payload (defer al reviewer).
+- Strict match of prefix + category + `|` separator.
+- Validates **form**, not semantics: the hook does not parse the payload, does not verify
+  that `path:line` is consistent with `tool_input.file_path`. That deep-check remains with
+  the reviewer (item 5 of reviewer.md, layer 2 of ADR-0001).
+- **REPLACE-incomplete (missing `Remove:`):** the hook **does not block** this specific case.
+  Rationale: semantic validation of the payload is scope creep — it is sufficient for the
+  header to be present and well-formed. The v1.2 `Add+Remove rule` remains the post-hoc
+  tertiary safety net. Trade-off accepted: the hook is a pre-edit gate for the *presence* of
+  the classifier, not for the *completeness* of the payload (deferred to reviewer).
 
-Estensione futura v1.1: possibile arricchire la regex a `^PATTERN: REPLACE \| Add: .+ \| Remove: .+`
-per catturare REPLACE-incomplete pre-edit. Defer per non gold-plate v1.0.
+Future extension v1.1: possible to enrich the regex to `^PATTERN: REPLACE \| Add: .+ \| Remove: .+`
+to catch REPLACE-incomplete pre-edit. Deferred to avoid gold-plating v1.0.
 
 #### Q7 — Performance
 
-**Target <100ms typical, fail-open su slow path.**
+**Target <100ms typical, fail-open on slow path.**
 
-Implementazione:
+Implementation:
 - `cat /dev/stdin | jq -r '.session_id, .cwd, .tool_name'` (1 jq invocation).
-- Derive `transcript_path` da `session_id` (~5ms file lookup).
-- `tail -n 200 "$TRANSCRIPT" | jq -r '...' | grep -E '...'` su file tipicamente <5MB,
-  tail+jq+grep <50ms su macOS M-series.
-- Total expected: 30-80ms typical, hard timeout interno via `timeout 2s` per fail-open
-  su slow path (analogo a `stop-gate.sh` line 78-87 pattern).
+- Derive `transcript_path` from `session_id` (~5ms file lookup).
+- `tail -n 200 "$TRANSCRIPT" | jq -r '...' | grep -E '...'` on typically <5MB file,
+  tail+jq+grep <50ms on macOS M-series.
+- Total expected: 30-80ms typical, internal hard timeout via `timeout 2s` for fail-open
+  on slow path (analogous to `stop-gate.sh` lines 78-87 pattern).
 
-Misurazione concreta nel piano (Task 6: benchmark verify).
+Concrete measurement in the plan (Task 6: benchmark verify).
 
-### 2.2 Architettura del hook
+### 2.2 Hook architecture
 
 ```
 ~/.claude/hooks/pre-flight-pattern-enforce.sh    (executable bash 3.2-clean)
-~/.claude/hooks/tests/pre-flight-pattern-enforce.sh    (test harness deterministico)
+~/.claude/hooks/tests/pre-flight-pattern-enforce.sh    (deterministic test harness)
 ~/.claude/state/pattern-enforce/                  (audit.log, disabled flag)
 ~/.claude/settings.json                           (entry PreToolUse matcher Edit|Write|MultiEdit)
 ```
@@ -223,154 +221,152 @@ Misurazione concreta nel piano (Task 6: benchmark verify).
 - Block: `exit 0` + stdout `{"decision":"block","reason":"<msg>"}`.
 - Internal error: stderr message + `exit 0` (fail-open).
 
-### 2.3 Coesistenza con hook esistenti
+### 2.3 Coexistence with existing hooks
 
 | Hook | Event | Tool matcher | Conflict risk |
 |---|---|---|---|
 | `pre-flight-pattern-enforce.sh` (new) | PreToolUse | `Edit\|Write\|MultiEdit` | — |
-| `stop-gate.sh` | Stop | `*` | None — diverso event |
+| `stop-gate.sh` | Stop | `*` | None — different event |
 | `approve-test-cmd.sh` | (user-invoked, not hook entry) | — | None |
 | `migrate-trust-paths.sh` | (user-invoked, not hook entry) | — | None |
 | `auto-format.sh` | PostToolUse | `Edit\|Write` | None — Post vs Pre |
-| `backup-before-deploy.sh` | PreToolUse | (different matcher) | Low — entrambi PreToolUse ma matcher possibly distinct; chained execution safe |
-| `protect-files.sh` | PreToolUse | (different) | Low — chained, fail-fast: se protect blocca, pattern-enforce non gira (acceptable) |
+| `backup-before-deploy.sh` | PreToolUse | (different matcher) | Low — both PreToolUse but possibly distinct matchers; chained execution safe |
+| `protect-files.sh` | PreToolUse | (different) | Low — chained, fail-fast: if protect blocks, pattern-enforce does not run (acceptable) |
 
-Ordering: Claude Code esegue hook PreToolUse in ordine di registrazione `settings.json`.
-**Decisione:** registrare `pre-flight-pattern-enforce.sh` **dopo** `protect-files.sh` e
-`backup-before-deploy.sh`. Razionale: protect-files (security boundary) è top priority;
-pattern-enforce (governance) viene dopo. Se un Edit è già bloccato da protect-files,
-pattern-enforce non viene eseguito — safe.
+Ordering: Claude Code executes PreToolUse hooks in order of registration in `settings.json`.
+**Decision:** register `pre-flight-pattern-enforce.sh` **after** `protect-files.sh` and
+`backup-before-deploy.sh`. Rationale: protect-files (security boundary) is top priority;
+pattern-enforce (governance) comes after. If an Edit is already blocked by protect-files,
+pattern-enforce does not run — safe.
 
 ### 2.4 Anchor preservation strategy
 
-Il harness `review-triage-fix` (PASS=47) NON osserva i file hook. Per proteggere il nuovo
-hook da regressioni accidentali, decisioni:
+The `review-triage-fix` harness (PASS=47) does NOT observe hook files. To protect the new
+hook from accidental regressions, decisions:
 
-- **Test harness dedicato:** `~/.claude/hooks/tests/pre-flight-pattern-enforce.sh` con
-  fixture JSON di esempio + 6-8 case (block valid, allow valid, bypass via flag, bypass
-  via env, fail-open su transcript inesistente, non-coder skip, malformed JSON,
-  performance smoke). Non integrato in `review-triage-fix` harness — è un harness
-  parallelo invocato manualmente o da future skill di system-validation.
-- **Anchor structural in `review-triage-fix` harness:** +1 anchor `grep -q -- 'pre-flight-pattern-enforce'`
-  in `~/.claude/settings.json` per verificare che l'entry hook resti registrato.
-  Trade-off: lega `review-triage-fix` a un terzo file (oltre `SKILL.md` e `coder.md` di
-  ADR-0001), ma il principio "review-triage-fix ha autorità sulla qualità dello stack
-  coder" si estende (ADR-0001 §3.3 sub-question).
+- **Dedicated test harness:** `~/.claude/hooks/tests/pre-flight-pattern-enforce.sh` with
+  example JSON fixtures + 6-8 cases (block valid, allow valid, bypass via flag, bypass
+  via env, fail-open on non-existent transcript, non-coder skip, malformed JSON,
+  performance smoke). Not integrated into the `review-triage-fix` harness — it is a
+  parallel harness invoked manually or by future system-validation skills.
+- **Structural anchor in `review-triage-fix` harness:** +1 anchor `grep -q -- 'pre-flight-pattern-enforce'`
+  in `~/.claude/settings.json` to verify that the hook entry remains registered.
+  Trade-off: ties `review-triage-fix` to a third file (after `SKILL.md` and `coder.md` from
+  ADR-0001), but the principle "review-triage-fix has authority over the quality of the coder
+  stack" extends (ADR-0001 §3.3 sub-question).
 
-**Harness PASS=47 → PASS=48** (+1 anchor su `settings.json`).
+**Harness PASS=47 -> PASS=48** (+1 anchor on `settings.json`).
 
-### 2.5 Lingua
+### 2.5 Language
 
-Hook script in bash con comment in inglese (codice = inglese, regola globale).
-Reason field del block message in italiano (utente-facing). Spec, plan, memory in italiano.
-ADR in italiano. Allineato a Stefano global rule.
+Hook script in bash with comments in English (code = English, global rule).
+Reason field of the block message in Italian (user-facing). Spec, plan, memory in Italian.
+ADR in Italian. Aligned with Stefano global rule.
 
 ---
 
 ## 3. Alternatives considered
 
-### 3.1 Source of truth per il PATTERN: header (Q1)
+### 3.1 Source of truth for the PATTERN: header (Q1)
 
 **a) Transcript file via `session_id` / `transcript_path` (CHOSEN).** Single source of
-truth nativa di Claude Code, no infrastructure aggiuntiva, leggibile cross-version.
+native Claude Code truth, no additional infrastructure, readable cross-version.
 
-**b) Marker file scritto esplicitamente dal coder prima del tool call** — *Rejected*.
-Richiede modifica al system prompt del coder per emettere `Bash: echo "PATTERN: ..." > /tmp/<sid>.pattern`.
-Aggiunge tool call extra ad ogni edit, complica il pattern (Bash → Edit, non solo Edit),
-e introduce race condition tra parallel coders in worktree (chi scrive `/tmp/<sid>.pattern`?
-serve namespacing). Stato file = state externo da pulire, drift inevitabile.
+**b) Marker file explicitly written by the coder before the tool call** — *Rejected*.
+Requires modifying the coder system prompt to emit `Bash: echo "PATTERN: ..." > /tmp/<sid>.pattern`.
+Adds an extra tool call to every edit, complicates the pattern (Bash -> Edit, not just Edit),
+and introduces race conditions between parallel coders in worktrees (who writes `/tmp/<sid>.pattern`?
+namespacing needed). State file = external state to clean, drift inevitable.
 
-**c) Variabile env propagata dal coder all'hook** — *Rejected*. Le env var non
-attraversano da assistant message a hook bash process in modo robusto. Claude Code non
-espone meccanismo documentato per "agent set env var visible to hook". Anti-pattern.
+**c) Env var propagated from coder to hook** — *Rejected*. Env vars do not
+cross from assistant message to hook bash process in a robust way. Claude Code does not
+expose a documented mechanism for "agent set env var visible to hook". Anti-pattern.
 
-**d) Sezione system_prompt esposta all'hook** — *Rejected*. Il sub-agent system prompt
-non è esposto a PreToolUse hook nativamente. L'hook non può "vedere" il contract del
-coder; può solo leggere il transcript (vedi a).
+**d) System prompt section exposed to the hook** — *Rejected*. The sub-agent system prompt
+is not exposed to PreToolUse hooks natively. The hook cannot "see" the coder's contract;
+it can only read the transcript (see a).
 
 ### 3.2 Sliding window dimension (Q2)
 
-**a) Window = 6 ultimi assistant messages (CHOSEN).** Empiricamente bilanciato per
-pattern osservato del coder (Read context-gathering → emit PATTERN → Edit).
+**a) Window = 6 last assistant messages (CHOSEN).** Empirically balanced for the
+observed coder pattern (Read context-gathering -> emit PATTERN -> Edit).
 
-**b) Window = 1 (solo ultimo)** — *Rejected*. Troppo strict: coder che fa Read tra
-PATTERN e Edit è realtà comune. Falserebbero positive ad alto rate.
+**b) Window = 1 (only last)** — *Rejected*. Too strict: coder that does a Read between
+PATTERN and Edit is common reality. Would produce false positives at a high rate.
 
-**c) Window = intera sessione** — *Rejected*. Falsi negative: PATTERN dichiarato 30
-edit fa match per un Edit nuovo di categoria diversa. Distorce il contract "1 PATTERN
-per tool call".
+**c) Window = entire session** — *Rejected*. False negatives — `PATTERN: ADD` declared 30
+edits ago matches for a new Edit of a different type. Distorts the "1 PATTERN per tool call"
+contract.
 
-**d) Window time-based (ultimi 30s)** — *Rejected*. Time non è una metrica intrinseca
-del jsonl (timestamp variabili per LLM latency). Count-based è deterministico.
+**d) Time-based window (last 30s)** — *Rejected*. Time is not an intrinsic metric of
+the jsonl (variable timestamps for LLM latency). Count-based is deterministic.
 
 ### 3.3 Block vs warn (Q3)
 
-**a) Block strict per coder, warn-silent altri (CHOSEN).** Friction mirata. Coder è
-l'unico agent con disciplina hard-coded; altri non meritano block.
+**a) Block strict for coder, warn-silent others (CHOSEN).** Targeted friction. Coder is
+the only agent with hard-coded discipline; others do not deserve blocking.
 
-**b) Warn-only sempre** — *Rejected*. Non chiude il gap di enforcement: stesso "best
-effort" attuale, solo aggiunge rumore stderr. Zero benefit incrementale rispetto al
-status quo ADR-0001.
+**b) Warn-only always** — *Rejected*. Does not close the enforcement gap: same "best effort"
+as today, only adds stderr noise. Zero incremental benefit over the ADR-0001 status quo.
 
-**c) Block sempre (anche orchestrator)** — *Rejected*. L'orchestrator legittimamente fa
-Edit senza disciplina classifier (es. update doc, MEMORY.md). Bloccarlo = friction puro,
-genera bypass forzati che disabilitano la feature.
+**c) Block always (even orchestrator)** — *Rejected*. The orchestrator legitimately does
+Edit without classifier discipline (e.g. update doc, MEMORY.md). Blocking it = pure friction,
+generates forced bypasses that disable the feature.
 
 **d) Block + auto-emit fallback `PATTERN: MODIFY | <auto>`** — *Rejected*. Anti-pattern:
-auto-completion vanifica il valore cognitivo del classifier (ADR-0001 §4.1 — il valore è
-*forzare il coder a pensare*). Auto-emit lo restituisce a no-op.
+auto-completion defeats the cognitive value of the classifier (ADR-0001 §4.1 — the value is
+*forcing the coder to think*). Auto-emit renders it a no-op.
 
-### 3.4 Scope coder vs altri (Q4)
+### 3.4 Scope coder vs others (Q4)
 
-**a) `subagent_type == "coder"` discrimination (CHOSEN).** Field nativo del jsonl,
-deterministico, no marker aggiuntivo.
+**a) `subagent_type == "coder"` discrimination (CHOSEN).** Native field of the jsonl,
+deterministic, no additional marker.
 
-**b) Marker injection nel system prompt del coder** — *Rejected*. Richiede mod al prompt,
-escapable dal LLM (può omettere il marker), e duplicato del meccanismo `subagent_type`
-già presente.
+**b) Marker injection in the coder system prompt** — *Rejected*. Requires prompt mod,
+escapable by the LLM (can omit the marker), and duplicates the `subagent_type` mechanism
+already present.
 
-**c) Enforce su tutti gli agent** — *Rejected*. Solo coder ha la disciplina ADR-0001;
-altri sub-agent non hanno contract `PATTERN:`. Estendere a tutti = imporre disciplina che
-non c'è.
+**c) Enforce on all agents** — *Rejected*. Only coder has ADR-0001 discipline;
+other sub-agents do not have the `PATTERN:` contract. Extending to all = imposing a
+discipline that does not exist.
 
 ### 3.5 Bypass mechanism (Q5)
 
-**a) Tre layer (env + file flag + settings.json) (CHOSEN).** Granularità su use case:
-single-call (env), session/maintenance (file), permanent disable (settings.json). Ognuno
-ha log/audit-trail.
+**a) Three layers (env + file flag + settings.json) (CHOSEN).** Granularity for use cases:
+single-call (env), session/maintenance (file flag), permanent disable (settings.json). Each
+has a log/audit-trail.
 
-**b) Solo file flag** — *Rejected*. Manca granularità single-call. Force a touch+rm per
-ogni eccezione legittima, friction operativa.
+**b) Only file flag** — *Rejected*. Missing single-call granularity. Forces touch+rm for
+each legitimate exception, operational friction.
 
-**c) Nessun bypass** — *Rejected*. Hook che blocca senza escape è anti-pattern. Edge case
-legittimo (coder fa Edit non-classifiable, debug session, recovery): impossibile da
-gestire senza disable bypass.
+**c) No bypass** — *Rejected*. A hook that blocks without escape is an anti-pattern.
+Legitimate edge case (coder does non-classifiable Edit, debug session, recovery):
+impossible to handle without bypass disable.
 
-### 3.6 Validation regex e REPLACE-incomplete (Q6)
+### 3.6 Validation regex and REPLACE-incomplete (Q6)
 
-**a) Regex strict di forma, no semantic check (CHOSEN).** Gate "presenza PATTERN well-formed".
-Semantic (es. REPLACE pair completo) defer al reviewer (layer 2 ADR-0001).
+**a) Strict form regex, no semantic check (CHOSEN).** Gate "presence of well-formed PATTERN".
+Semantic (e.g. REPLACE pair complete) deferred to reviewer (layer 2 ADR-0001).
 
-**b) Validation semantica completa (REPLACE pair, path:line consistency)** — *Rejected
-in v1.0*. Scope creep, complica hook bash, rallenta performance. Defer v1.1 se metriche
-pilota mostrano REPLACE-incomplete frequente.
+**b) Complete semantic validation (REPLACE pair, path:line consistency)** — *Rejected
+in v1.0*. Scope creep, complicates bash hook, slows performance. Defer v1.1 if pilot
+metrics show REPLACE-incomplete is frequent.
 
-**c) Regex lenient (case-insensitive, partial match)** — *Rejected*. Lascia escape al
-coder per scrivere malformato (es. `pattern: add ...`). Strict regex = disciplina
-allineata al contract ADR-0001 (esempi esatti).
+**c) Lenient regex (case-insensitive, partial match)** — *Rejected*. Leaves escape room
+for the coder to write malformed (e.g. `pattern: add ...`). Strict regex = discipline
+aligned with the ADR-0001 contract (exact examples).
 
 ### 3.7 Performance approach (Q7)
 
-**a) Bash + jq + tail + grep con hard timeout 2s (CHOSEN).** 3.2-clean, fail-open su slow,
-typical <100ms. Pattern già consolidato in `stop-gate.sh` (timeout robusto, righe 77-88).
+**a) Bash + jq + tail + grep with 2s hard timeout (CHOSEN).** 3.2-clean, fail-open on slow,
+typical <100ms. Pattern already consolidated in `stop-gate.sh` (robust timeout, lines 77-88).
 
-**b) Python helper script** — *Rejected*. Aggiunge dipendenza Python (mai necessaria
-finora in `~/.claude/hooks/`), startup overhead Python interpreter ~150-200ms (oltre
-target <100ms anche prima di qualsiasi logica).
+**b) Python helper script** — *Rejected*. Adds Python dependency (never needed so far in
+`~/.claude/hooks/`), Python interpreter startup overhead ~150-200ms (beyond <100ms target
+even before any logic).
 
-**c) Caching della window in `~/.claude/state/`** — *Rejected v1.0*. Premature
-optimization. Tail+jq su file <5MB è sufficiente. Cache richiede invalidation logic
-(stale state).
+**c) Caching the window in `~/.claude/state/`** — *Rejected v1.0*. Premature optimization.
+Tail+jq on files <5MB is sufficient. Cache requires invalidation logic (stale state).
 
 ---
 
@@ -378,66 +374,66 @@ optimization. Tail+jq su file <5MB è sufficiente. Cache richiede invalidation l
 
 ### 4.1 Positive
 
-- **Gate runtime alla disciplina classifier.** Prima volta che il sistema enforca
-  `PATTERN:` a livello di tool call, non solo via review post-hoc.
-- **Friction mirata.** Solo coder agent vede il block. Altri agent (orchestrator,
-  architect, reviewer) restano fluid.
-- **Defense in depth.** Quarto layer al stack ADR-0001 (system prompt → hook gate →
-  reviewer post-hoc → v1.2 safety net). Hook chiude il gap "parallel coder in worktree
-  senza reviewer transcript".
-- **Audit trail.** Tutti i block e bypass loggati in `~/.claude/state/pattern-enforce/audit.log`.
-  Metriche di pilota osservabili (hit-rate, bypass rate).
-- **Anchor preservato.** Harness PASS=47 → PASS=48 (additivo).
-- **Performance accettabile.** <100ms typical, hard timeout 2s, fail-open su error.
-- **Zero nuove dipendenze.** Bash 3.2 + jq (già usato da `stop-gate.sh`).
+- **Runtime gate to the classifier discipline.** First time the system enforces `PATTERN:`
+  at tool call level, not just via post-hoc review.
+- **Targeted friction.** Only the coder agent sees the block. Other agents (orchestrator,
+  architect, reviewer) remain fluid.
+- **Defense in depth.** Fourth layer to the ADR-0001 stack (system prompt -> hook gate ->
+  reviewer post-hoc -> v1.2 safety net). Hook closes the gap "parallel coder in worktree
+  without reviewer transcript".
+- **Audit trail.** All blocks and bypasses logged to `~/.claude/state/pattern-enforce/audit.log`.
+  Observable pilot metrics (hit-rate, bypass rate).
+- **Anchor preserved.** Harness PASS=47 -> PASS=48 (additive).
+- **Acceptable performance.** <100ms typical, 2s hard timeout, fail-open on error.
+- **Zero new dependencies.** Bash 3.2 + jq (already used by `stop-gate.sh`).
 
 ### 4.2 Negative
 
-- **Friction sul coder se transcript_path non risolvibile.** Edge case: sessione fresh
-  dove il jsonl non è ancora flushed; l'hook fail-open silent (acceptable), ma il primo
-  Edit potrebbe bypassare il check. Mitigato da reviewer post-hoc (layer 3 ADR-0001).
-- **Dipendenza dal formato jsonl di Claude Code.** Cambio breaking del formato future
-  → hook degrada. Mitigazione: fail-open su jq parse error.
-- **False positive rate iniziale stimato 5-15%.** Coder potrebbe legittimamente fare
-  Edit senza PATTERN se l'LLM ha drift. Bypass mechanism (Q5) copre, ma genera friction
-  finché il pattern si stabilizza. Validabile in pilota.
-- **Coupling settings.json + harness.** Aggiunta entry hook in settings.json verifica
-  anchor di review-triage-fix. Refactor futuro di settings.json richiede update anchor.
-- **Performance non garantita su transcript >50MB.** Sessioni long-running con jsonl
-  enormi possono lenire il tail+jq. Mitigato dal `tail -n 200` (lettura O(n) della coda),
-  non parse full file.
+- **Friction on coder if transcript_path is not resolvable.** Edge case: fresh session
+  where the jsonl has not yet flushed; the hook fail-open silently (acceptable), but the first
+  Edit might bypass the check. Mitigated by reviewer post-hoc (layer 3 ADR-0001).
+- **Dependency on Claude Code jsonl format.** Future breaking format change -> hook degrades.
+  Mitigation: fail-open on jq parse error.
+- **Initial estimated false positive rate 5-15%.** Coder might legitimately do an Edit without
+  PATTERN if the LLM drifts. Bypass mechanism (Q5) covers it, but generates friction until
+  the pattern stabilizes. Validatable in pilot.
+- **Coupling settings.json + harness.** Adding hook entry in settings.json verifies anchor of
+  review-triage-fix. Future settings.json refactor requires anchor update.
+- **Performance not guaranteed on transcript >50MB.** Long-running sessions with huge jsonl
+  files may slow down the tail+jq. Mitigated by `tail -n 200` (O(n) tail reading of the queue),
+  not full file parse.
 
 ### 4.3 Neutral
 
-- ADR-0001 resta autoritativo per la **definizione del pattern** (categorie, format).
-  Questo ADR aggiunge solo enforcement layer.
-- Il reviewer.md pattern-drift check (item 5) resta invariato — layer 3 conserva il
-  semantic check che l'hook esplicitamente non fa (REPLACE pair completo, etc.).
-- Memory `feedback_micropiano-refactor-cleanup` resta RESOLVED. Questo ADR è additive.
+- ADR-0001 remains authoritative for the **pattern definition** (categories, format).
+  This ADR adds only an enforcement layer.
+- The reviewer.md pattern-drift check (item 5) remains unchanged — layer 3 preserves the
+  semantic check that the hook explicitly does not do (REPLACE pair complete, etc.).
+- Memory `feedback_micropiano-refactor-cleanup` remains RESOLVED. This ADR is additive.
 
 ### 4.4 Open questions (validation pending)
 
-- **`transcript_path` field è disponibile in tutte le versioni del CLI attive sul Mac di
-  Stefano (Claude Code 2.x)?** Verificabile testando l'hook con un dispatch reale in pilota.
-  Fallback: derivare da `session_id` via encoding cwd (più fragile ma feasible).
-- **False positive rate effettivo del coder nei primi 20-30 dispatch.** Misurabile via
-  audit.log dei block. Se >20%, considerare amendment v1.1 (window dimension, regex
-  lenience, semantic skip per certi tool_input pattern).
-- **Performance under load.** Misurabile con benchmark `time` sul harness Task 6.
-  Se >150ms p95, considerare cache layer (defer to v1.1).
+- **Is the `transcript_path` field available in all CLI versions active on Stefano's Mac
+  (Claude Code 2.x)?** Verifiable by testing the hook with a real dispatch in pilot.
+  Fallback: derive from `session_id` via cwd encoding (more fragile but feasible).
+- **Actual false positive rate of the coder in the first 20-30 dispatches.** Measurable via
+  audit.log of blocks. If >20%, consider amendment v1.1 (window dimension, regex lenience,
+  semantic skip for certain tool_input patterns).
+- **Performance under load.** Measurable with `time` benchmark on harness Task 6.
+  If >150ms p95, consider cache layer (defer to v1.1).
 
 ---
 
 ## 5. References
 
-- `~/.claude/agents/coder.md` (disciplina ADR-0001 enforced da questo hook)
-- `~/.claude/agents/reviewer.md` (layer 3 complementare)
-- `~/.claude/hooks/stop-gate.sh` (pattern di hook bash 3.2-clean: timeout, fail-open, JSON
+- `~/.claude/agents/coder.md` (ADR-0001 discipline enforced by this hook)
+- `~/.claude/agents/reviewer.md` (complementary layer 3)
+- `~/.claude/hooks/stop-gate.sh` (pattern of bash 3.2-clean hook: timeout, fail-open, JSON
   emit via jq)
-- `~/.claude/hooks/approve-test-cmd.sh` (utility hook esistente, coesistenza no conflict)
-- `~/.claude/settings.json` (target registration entry PreToolUse)
-- `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` (definizione pattern)
-- `docs/vibe-coding-system.md` sez. 7 (hooks deterministic automation) + sez. 10
+- `~/.claude/hooks/approve-test-cmd.sh` (existing utility hook, coexistence no conflict)
+- `~/.claude/settings.json` (target PreToolUse entry registration)
+- `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` (pattern definition)
+- `docs/vibe-coding-system.md` sec. 7 (hooks deterministic automation) + sec. 10
   (permission strategy)
-- Memory `feedback_bash32-constraint.md` (compat shell)
+- Memory `feedback_bash32-constraint.md` (shell compat)
 - Claude Code docs `code.claude.com/docs/en/docs/claude-code/hooks` (PreToolUse contract)

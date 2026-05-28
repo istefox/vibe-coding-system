@@ -1,4 +1,4 @@
-# ADR-0003 — `concept-to-code` skill orchestratore del chain concept→code
+# ADR-0003 — `concept-to-code` orchestrator skill for the concept->code chain
 
 **Status:** Accepted — 2026-05-20 (implemented via plan 2026-05-20-concept-to-code-chain.md; review-triage-fix harness PASS=47; concept-to-code self-test PASS=10; refactor-snapshot self-test PASS=11 unchanged)
 **Authors:** Adriano (architect agent) per Stefano Ferri
@@ -7,15 +7,15 @@
 **Related:**
 - `docs/superpowers/specs/2026-05-20-concept-to-code-chain-design.md`
 - `docs/superpowers/plans/2026-05-20-concept-to-code-chain.md`
-- `docs/vibe-coding-system.md` (blueprint sez. 11 — workflow concept→code)
-- `~/.claude/skills/interview-driver/SKILL.md` (skill custom utente, riusato)
-- `~/.claude/skills/adr-writer/SKILL.md` (skill custom utente, riusato)
-- `~/.claude/skills/claude-md-generator/SKILL.md` (skill custom utente, riusato)
+- `docs/vibe-coding-system.md` (blueprint sec. 11 — concept->code workflow)
+- `~/.claude/skills/interview-driver/SKILL.md` (custom user skill, reused)
+- `~/.claude/skills/adr-writer/SKILL.md` (custom user skill, reused)
+- `~/.claude/skills/claude-md-generator/SKILL.md` (custom user skill, reused)
 - `~/.claude/agents/architect.md` (sub-agent dispatched in Step 2)
-- `~/.claude/agents/coder.md` (sub-agent dispatched in Step 5, ha già Pre-flight Pattern Classifier ADR-0001)
+- `~/.claude/agents/coder.md` (sub-agent dispatched in Step 5, already has Pre-flight Pattern Classifier ADR-0001)
 - `~/.claude/agents/reviewer.md` (item 5 Pattern-drift check, ADR-0001)
 - `~/.claude/agents/refactorer.md` (Snapshot Harness Integration, ADR-0002)
-- `~/.claude/skills/review-triage-fix/SKILL.md` (v1.2 Add+Remove rule, opzionalmente invocata in Step 6)
+- `~/.claude/skills/review-triage-fix/SKILL.md` (v1.2 Add+Remove rule, optionally invoked in Step 6)
 - `~/.claude/skills/review-triage-fix/tests/run-tests.sh` (anchor harness target, PASS=45 baseline 2026-05-20)
 - ADR-0001 (Pre-flight Pattern Classifier, Accepted 2026-05-20)
 - ADR-0002 (Refactor Snapshot Harness, Accepted 2026-05-20)
@@ -26,473 +26,449 @@
 
 ## 1. Context
 
-Il blueprint del sistema multi-agente (`docs/vibe-coding-system.md` sez. 11) descrive il
-workflow concept→code come una catena lineare con HITL gates impliciti:
+The multi-agent system blueprint (`docs/vibe-coding-system.md` sec. 11) describes the
+concept->code workflow as a linear chain with implicit HITL gates:
 
 ```
-interview → SPEC.md → ARCH.md (+ ADR) → CLAUDE.md di progetto →
-  fresh session → scaffold in plan mode → impl multi-agent → review → commit
+interview -> SPEC.md -> ARCH.md (+ ADR) -> project CLAUDE.md ->
+  fresh session -> scaffold in plan mode -> multi-agent impl -> review -> commit
 ```
 
-Oggi questo workflow è **prosa**, non eseguibile. Ogni feature deployata segue il chain
-ad memoriam dell'orchestrator. Tre evidenze convergenti motivano l'intervento.
+Today this workflow is **prose**, not executable. Every deployed feature follows the chain
+from the orchestrator's memory. Three converging pieces of evidence motivate the intervention.
 
-### Evidenze
+### Evidence
 
-1. **Pattern ripetuto nella sessione 2026-05-20.** Sono stati dispatched manualmente
-   `architect` → `coder` due volte nella stessa giornata (ADR-0001 + ADR-0002) con
-   prompt template quasi identico. La ripetizione manuale è la firma di un'automation
-   mancante. Drift potenziale tra dispatch (es. varianti di brief, vincoli HARD
-   ricopiati mano).
+1. **Repeated pattern in the 2026-05-20 session.** Two manual dispatches of
+   `architect` -> `coder` were done in the same day (ADR-0001 + ADR-0002) with
+   nearly identical prompt templates. Manual repetition is the signature of missing automation.
+   Potential drift between dispatches (e.g. brief variants, manually copied HARD constraints).
 
-2. **Workflow blueprint sez. 11 è raccomandazione, non skill.** La distanza fra
-   blueprint e pratica si traduce in inconsistenza fra feature consecutive: ADR-0001
-   ha generato 8 task TDD, ADR-0002 ne ha generati 8 con struttura simile ma non
-   identica. La drift è invisibile finché non si confrontano due plan side-by-side.
+2. **Workflow blueprint sec. 11 is a recommendation, not a skill.** The gap between
+   blueprint and practice translates into inconsistency between consecutive features: ADR-0001
+   generated 8 TDD tasks, ADR-0002 generated 8 with similar but not identical structure. The
+   drift is invisible until two plans are compared side-by-side.
 
-3. **Le 3 feature deployate 2026-05-20** (ADR-0001 coder pre-flight + ADR-0002
-   refactor-snapshot + review-triage-fix v1.2 Add+Remove) condividono lo *stesso* flow
-   `architect produce 3 deliverable → coder implementa 6-8 task TDD`. Una skill
-   orchestratore unica avrebbe ridotto 3 dispatch manuali a 1, con drift azzerato per
-   costruzione.
+3. **The 3 features deployed 2026-05-20** (ADR-0001 coder pre-flight + ADR-0002
+   refactor-snapshot + review-triage-fix v1.2 Add+Remove) share the *same* flow
+   `architect produces 3 deliverables -> coder implements 6-8 TDD tasks`. A single
+   orchestrator skill would have reduced 3 manual dispatches to 1, with drift zeroed
+   by construction.
 
-### Problema architetturale
+### Architectural problem
 
-Il workflow concept→code è uno *state machine deterministico* (Step 1..6, HITL gates,
-fresh session checkpoint, manifest tra sessioni) ma è oggi codificato come prosa
-descrittiva. Quattro conseguenze:
+The concept->code workflow is a *deterministic state machine* (Steps 1..6, HITL gates,
+fresh session checkpoint, cross-session manifest) but today is codified as descriptive prose.
+Four consequences:
 
-- **Drift cross-feature:** ogni dispatch architect→coder reinventa il prompt template.
-- **Loss of state allo Step 4 (fresh session):** quando l'orchestrator apre nuova
-  sessione perde tutto il context di interview/ADR/CLAUDE.md. Oggi si ri-anchora
-  rileggendo i file, ma senza guarantee che riprenda dal punto giusto.
-- **HITL gates impliciti:** l'utente non sa a priori quanti gate ci sono né cosa
-  approva. Il "concept-to-code" oggi *sembra* atomico ma è 3-4 turni HITL.
-- **Coexistenza fragile con feature deployate 2026-05-20:** Pre-flight Pattern
-  Classifier (coder), Pattern-drift check (reviewer), Snapshot Harness (refactorer)
-  sono attive ma non orchestrate. Un dispatch manuale può saltarle senza errore.
+- **Cross-feature drift:** every architect->coder dispatch reinvents the prompt template.
+- **State loss at Step 4 (fresh session):** when the orchestrator opens a new session it loses
+  all the interview/ADR/CLAUDE.md context. Today it re-anchors by re-reading the files, but
+  without guarantee it resumes from the right point.
+- **Implicit HITL gates:** the user does not know in advance how many gates there are or what
+  they approve. Today "concept-to-code" *seems* atomic but involves 3-4 HITL turns.
+- **Fragile coexistence with 2026-05-20 deployed features:** Pre-flight Pattern Classifier
+  (coder), Pattern-drift check (reviewer), Snapshot Harness (refactorer) are active but not
+  orchestrated. A manual dispatch can skip them without error.
 
-### Direzione
+### Direction
 
-Introdurre una **skill markdown chiamabile** `concept-to-code` in
-`~/.claude/skills/concept-to-code/` che codifica il chain blueprint sez. 11 come
-state machine eseguibile con:
+Introduce a **callable markdown skill** `concept-to-code` in
+`~/.claude/skills/concept-to-code/` that codifies the blueprint sec. 11 chain as an
+executable state machine with:
 
-- **Manifest YAML persistente** in `docs/manifests/YYYY-MM-DD-<topic>.manifest.yml`
-  del progetto target, stato del chain attraverso fresh-session boundary.
-- **HITL gates espliciti** (3 bloccanti + 1 fresh-session checkpoint informativo).
-- **Resume semantics** via `/concept-to-code resume <manifest-path>` dopo fresh
-  session.
-- **Dispatch pinned** ad agent esistenti (`architect`, `coder`) con prompt template
-  versionati dentro la skill (no drift per costruzione).
-- **Riuso** delle 3 skill custom già presenti: `interview-driver` (NON
+- **Persistent YAML manifest** in `docs/manifests/YYYY-MM-DD-<topic>.manifest.yml`
+  of the target project, preserving chain state across fresh-session boundaries.
+- **Explicit HITL gates** (3 blocking + 1 informative fresh-session checkpoint).
+- **Resume semantics** via `/concept-to-code resume <manifest-path>` after fresh session.
+- **Pinned dispatch** to existing agents (`architect`, `coder`) with prompt templates
+  versioned inside the skill (no drift by construction).
+- **Reuse** of the 3 existing custom skills: `interview-driver` (NOT
   `superpowers:brainstorming`), `adr-writer`, `claude-md-generator`.
-- **Coexistenza ortogonale** con ADR-0001 / ADR-0002 / v1.2: la skill *invoca* le
-  feature deployate, non le sostituisce.
+- **Orthogonal coexistence** with ADR-0001 / ADR-0002 / v1.2: the skill *invokes* the
+  deployed features, not replaces them.
 
-L'obiettivo: trasformare il chain concept→code da "prosa raccomandata" a "skill con
-state machine deterministica e guard rail", riducendo drift e HITL fatigue.
+The objective: transform the concept->code chain from "recommended prose" to "skill with
+deterministic state machine and guardrails", reducing drift and HITL fatigue.
 
-### Vincoli ereditati (HARD)
+### Inherited constraints (HARD)
 
 - **Anchor preservation `review-triage-fix` harness:** PASS=45 post ADR-0002
-  (2026-05-20). Mai scendere. Target post-feature: **PASS=47** (+2 anchor structural
-  in `review-triage-fix/tests/run-tests.sh` su esistenza skill `concept-to-code` e
-  reference a manifest schema — vedi Decision §2.10).
-- **Skill self-test target:** la skill `concept-to-code` ha proprio harness in
-  `tests/run-tests.sh`. Target **PASS=10** (10 assertion: manifest schema validation,
-  step-state transitions, resume semantics, override safe-to-restart, contract
-  invariants).
-- **Bash 3.2.57** per ogni script helper della skill (manifest parser/validator). No
+  (2026-05-20). Never decrease. Post-feature target: **PASS=47** (+2 structural anchors
+  in `review-triage-fix/tests/run-tests.sh` on skill `concept-to-code` existence and
+  reference to manifest schema — see Decision §2.10).
+- **Skill self-test target:** the `concept-to-code` skill has its own harness in
+  `tests/run-tests.sh`. Target **PASS=10** (10 assertions: manifest schema validation,
+  step-state transitions, resume semantics, override safe-to-restart, contract invariants).
+- **Bash 3.2.57** for every skill helper script (manifest parser/validator). No
   assoc array, no `mapfile`, no `${v^^}`, no `<()` process substitution, no
-  here-string. Pattern già consolidato dai 45 anchor del harness review-triage-fix
-  e dai 11 self-test refactor-snapshot.
-- **Sub-agent non spawnano sub-agent** (blueprint sez. 2). Lo skill è istruzione
-  per l'**orchestrator** (main agent), non per sub-agent. I dispatch
-  `architect`/`coder` partono dall'orchestrator (sessione CLI principale), MAI da
-  un sub-agent. La skill markdown chiarisce questo invariante esplicitamente nel
-  body.
-- **Fresh session caveat (blueprint sez. 11):** lo skill DEVE rispettare il "fresh
-  session" tra interview/architecture (Step 1-3) e implementazione (Step 5) perché
-  il context window dell'orchestrator si riempie di interview Q&A. Il manifest YAML
-  è il meccanismo di state-passing cross-session.
-- **Coesistenza con feature deployate 2026-05-20:** Pre-flight Pattern Classifier
+  here-string. Pattern already consolidated by the 45 anchors of the review-triage-fix
+  harness and by the 11 refactor-snapshot self-tests.
+- **Sub-agents do not spawn sub-agents** (blueprint sec. 2). The skill is an instruction
+  for the **orchestrator** (main CLI agent), not for sub-agents. Dispatches of
+  `architect`/`coder` originate from the orchestrator (main CLI session), NEVER from
+  a sub-agent. The markdown skill clarifies this invariant explicitly in its body.
+- **Fresh session caveat (blueprint sec. 11):** the skill MUST respect the "fresh
+  session" between interview/architecture (Steps 1-3) and implementation (Step 5) because
+  the orchestrator's context window fills up with interview Q&A. The YAML manifest is
+  the cross-session state-passing mechanism.
+- **Coexistence with 2026-05-20 deployed features:** Pre-flight Pattern Classifier
   (coder, ADR-0001), Pattern-drift check (reviewer, ADR-0001), Snapshot Harness
-  (refactorer, ADR-0002), Add+Remove rule v1.2 — **tutti restano attivi e invariati**.
-  La skill USA queste feature, non le edita.
-- **No backwards-compat shim:** se la skill modifica `coder.md` per supportare
-  `--manifest` input, è una sostituzione pulita (no flag legacy parallelo). MA: la
-  decisione corrente (vedi §2.9) è di **non modificare coder.md**: la skill passa
-  il manifest content nel prompt del dispatch, non come argomento esterno.
-- **Lingua:** SKILL.md in inglese (contract), ADR/spec/plan/memory in italiano,
-  manifest YAML field name in inglese, commit/code in inglese.
-- **Repo blueprint NON-git:** vibe-coding-system non ha git inizializzato. Il plan
-  non propone operazioni git per i deliverable doc. La skill stessa, quando
-  eseguita su un progetto target git-tracked, NON propone commit nel Step 6: il
-  commit resta HITL gate manuale dell'utente (coerente con global CLAUDE.md).
-- **Auto mode per questo dispatch architect:** nessun HITL durante il design. Però
-  il design della skill prevede HITL al runtime (vedi §2.4).
+  (refactorer, ADR-0002), Add+Remove rule v1.2 — **all remain active and unchanged**.
+  The skill USES these features, it does not edit them.
+- **No backwards-compat shim:** if the skill modifies `coder.md` to support
+  `--manifest` input, it is a clean substitution (no legacy parallel flag). BUT: the
+  current decision (see §2.9) is to **not modify coder.md**: the skill passes the manifest
+  content in the dispatch prompt, not as an external argument.
+- **Language:** SKILL.md in English (contract), ADR/spec/plan/memory in Italian,
+  manifest YAML field names in English, commits/code in English.
+- **Blueprint repo NON-git:** vibe-coding-system has no git initialized. The plan does not
+  propose git operations for doc deliverables. The skill itself, when executed on a
+  git-tracked target project, does NOT propose a commit in Step 6: the commit remains
+  a manual HITL gate for the user (consistent with global CLAUDE.md).
+- **Auto mode for this architect dispatch:** no HITL during design. However,
+  the skill design includes HITL at runtime (see §2.4).
 
-### Assunzioni esplicite (non verificate empiricamente)
+### Explicit assumptions (not empirically verified)
 
-- L'orchestrator (main agent CLI) onora le istruzioni di una skill markdown
-  `disable-model-invocation: false`. Verificato dal pattern usage di
-  `interview-driver`, `adr-writer`, `claude-md-generator`. Non verificato per skill
-  con state machine multi-step e resume.
-- La directory `docs/manifests/` può essere creata nel progetto target senza
-  conflitto con convenzioni esistenti. Per i progetti pilota attuali (es.
-  `pricing-markup-cli`, `swarm-testcmd`) verificato come safe (path libero).
-- L'utente accetta 3 HITL gate sincroni nel flow base (Step 1-3) come trade-off
-  contro drift. Razionalizzato dalla memory `feedback_hitl-and-security-discipline.md`
-  ("security-warning vanno trattati seriamente, riscrittura conservativa") —
-  l'utente preferisce gate espliciti a dispatch silenziosi.
-- La fresh session in Step 4 viene effettivamente aperta dall'utente in una nuova
-  shell CLI Claude Code. Non automatizzabile lato skill (la skill non può
-  `exec claude --new-session`). Risolto via instruction esplicita + manifest
-  pickup.
+- The orchestrator (main CLI agent) honors the instructions of a markdown skill with
+  `disable-model-invocation: false`. Verified from the usage pattern of
+  `interview-driver`, `adr-writer`, `claude-md-generator`. Not verified for skills
+  with multi-step state machine and resume.
+- The `docs/manifests/` directory can be created in the target project without
+  conflict with existing conventions. For current pilot projects (e.g.
+  `pricing-markup-cli`, `swarm-testcmd`) verified as safe (free path).
+- The user accepts 3 synchronous HITL gates in the base flow (Steps 1-3) as a trade-off
+  against drift. Rationalized by the memory `feedback_hitl-and-security-discipline.md`
+  ("security warnings must be taken seriously, conservative rewrite") — the user prefers
+  explicit gates to silent dispatches.
+- The fresh session in Step 4 is actually opened by the user in a new shell CLI Claude
+  Code. Not automatable from the skill side (the skill cannot `exec claude --new-session`).
+  Resolved via explicit instruction + manifest pickup.
 
 ---
 
 ## 2. Decision
 
-Deploy della skill `~/.claude/skills/concept-to-code/` come orchestratore del chain
-concept→code, decomposto nelle 10 decisioni che seguono. Ognuna corrisponde a una
-delle 10 domande architetturali del brief.
+Deploy the skill `~/.claude/skills/concept-to-code/` as orchestrator of the concept->code
+chain, decomposed into the 10 decisions that follow. Each corresponds to one of the 10
+architectural questions from the brief.
 
-### 2.1 — Forma del componente (Q1)
+### 2.1 — Component form (Q1)
 
-**Decisione:** skill markdown chiamabile in `~/.claude/skills/concept-to-code/SKILL.md`
-+ 3 helper bash 3.2 in `scripts/` (manifest validator, step-state transition,
-resume detector) + self-test in `tests/run-tests.sh`. NO slash command dedicato,
-NO agent dedicato.
+**Decision:** callable markdown skill in `~/.claude/skills/concept-to-code/SKILL.md`
++ 3 bash 3.2 helpers in `scripts/` (manifest validator, step-state transition,
+resume detector) + self-test in `tests/run-tests.sh`. NO dedicated slash command,
+NO dedicated agent.
 
-**Razionale:** lo skill è la primitiva nativa di Claude Code per istruire il
-main agent (vedi pattern di `interview-driver`, `adr-writer`, `claude-md-generator`
-già in uso). Slash command sarebbero un duplicate layer sopra lo skill. Un
-`orchestrator-chain` agent dedicato violerebbe il vincolo HARD blueprint sez. 2
-("sub-agent non spawnano sub-agent"): l'orchestrator è già la sessione principale,
-non un sub-agent. La skill viene invocata via prompt utente
-(`/skill concept-to-code <topic>` o pattern naturale "fammi il chain concept→code
-per <topic>") e dispatcha gli agent dall'orchestrator.
+**Rationale:** the skill is the native primitive of Claude Code for instructing the
+main agent (see pattern of `interview-driver`, `adr-writer`, `claude-md-generator`
+already in use). Slash commands would be a duplicate layer on top of the skill. A
+dedicated `orchestrator-chain` agent would violate the HARD constraint from blueprint sec. 2
+("sub-agents do not spawn sub-agents"): the orchestrator is already the main session,
+not a sub-agent. The skill is invoked via user prompt
+(`/skill concept-to-code <topic>` or natural pattern "do the concept->code chain
+for <topic>") and dispatches agents from the orchestrator.
 
 ### 2.2 — State persistence (Q2)
 
-**Decisione:** manifest YAML in
+**Decision:** manifest YAML in
 `<project-root>/docs/manifests/YYYY-MM-DD-<topic-slug>.manifest.yml`. State
 machine fields: `version`, `topic`, `created_at`, `current_step`, `status`,
-`artifacts.{spec,arch,adr,plan,project_claude_md}` con path assoluti, `hitl_gates`
-list con timestamp di approval, `session_boundary` flag (true dopo Step 4), `next_action`
-hint stringa.
+`artifacts.{spec,arch,adr,plan,project_claude_md}` with absolute paths, `hitl_gates`
+list with approval timestamps, `session_boundary` flag (true after Step 4), `next_action`
+hint string.
 
-**Razionale:** manifest YAML è leggibile dall'utente (debug), versionabile in
-git con il progetto target, persiste cross-session by design (Step 4 fresh
-session apre il manifest, non ricostruisce stato dal prompt). JSON era
-candidate ma YAML è più human-readable per il use case (l'utente *deve* poter
-leggere il manifest per sbloccare manualmente uno stallo). State inline nel
-prompt fallisce allo Step 4 boundary (context window perso). Niente
-persistence fallisce alla resume (nessun anchor per dove riprendere). Path
-sotto `docs/manifests/` segue convenzione esistente (`docs/architecture/`,
+**Rationale:** manifest YAML is user-readable (debug), versionable in
+git with the target project, persists cross-session by design (Step 4 fresh
+session opens the manifest, does not reconstruct state from prompt). JSON was
+a candidate but YAML is more human-readable for the use case (the user *must* be able to
+read the manifest to manually unblock a stall). State inline in the prompt fails at the
+Step 4 boundary (context window lost). No persistence fails at resume (no anchor for
+where to continue). Path under `docs/manifests/` follows existing convention (`docs/architecture/`,
 `docs/superpowers/specs|plans/`).
 
 ### 2.3 — Resume/restart semantics (Q3)
 
-**Decisione:** comando esplicito invocato dall'utente in fresh session:
-`/skill concept-to-code resume <manifest-path>`. Auto-detection NO (troppo
-implicito, rischio di pickup del manifest sbagliato). La skill, ricevuta
-l'invocazione `resume`, legge il manifest, valida la struttura via
-`scripts/manifest-validate.sh`, controlla il campo `current_step`, e procede
-dal Step 5 se `current_step == "ready_for_implementation"`. Se il manifest
-ha `current_step` antecedente a Step 4, fallisce con errore: "resume non
-necessario, riprendi dalla sessione esistente". Se il manifest ha
-`status: completed`, fallisce con errore: "chain già completo".
+**Decision:** explicit command invoked by the user in a fresh session:
+`/skill concept-to-code resume <manifest-path>`. Auto-detection NO (too
+implicit, risk of picking up the wrong manifest). The skill, receiving the
+`resume` invocation, reads the manifest, validates the structure via
+`scripts/manifest-validate.sh`, checks the `current_step` field, and proceeds
+from Step 5 if `current_step == "ready_for_implementation"`. If the manifest
+has `current_step` prior to Step 4, fails with error: "resume not
+necessary, continue from existing session". If the manifest has
+`status: completed`, fails with error: "chain already complete".
 
-**Razionale:** invocazione esplicita evita ambiguità (l'utente sceglie quale
-manifest riprendere; coexistenza con manifest in flight di altri progetti).
-Auto-detection scartata: con multipli progetti aperti il rischio di picking
-sbagliato è alto. Validation pre-resume tramite helper bash è cheap e blocca
-manifest corrotti (es. editing manuale errato).
+**Rationale:** explicit invocation avoids ambiguity (the user chooses which
+manifest to resume; coexistence with in-flight manifests of other projects).
+Auto-detection rejected: with multiple open projects the risk of picking the
+wrong one is high. Pre-resume validation via bash helper is cheap and blocks
+corrupted manifests (e.g. incorrect manual editing).
 
-### 2.4 — HITL gate count + tipo (Q4)
+### 2.4 — HITL gate count + type (Q4)
 
-**Decisione:** **3 HITL gates bloccanti** + 1 fresh-session checkpoint
-informativo + 1 review gate opzionale.
+**Decision:** **3 blocking HITL gates** + 1 informative fresh-session checkpoint + 1 optional
+review gate.
 
-| Gate    | Tipo          | Dopo Step | Cosa mostra                                         | Cosa attende                          |
+| Gate    | Type          | After Step | What it shows                                       | What it waits for                     |
 | ------- | ------------- | --------- | --------------------------------------------------- | ------------------------------------- |
-| Gate 1  | bloccante     | Step 1    | path SPEC.md + summary 5 righe                      | conferma "spec ok" / richiesta edit  |
-| Gate 2  | bloccante     | Step 2    | path ADR + ARCH + plan + key decisions              | conferma "architecture ok" / edit    |
-| Gate 3  | bloccante     | Step 3    | path CLAUDE.md generato + diff se overwrite         | conferma "project memory ok" / skip  |
-| Gate 4  | checkpoint    | Step 4    | manifest path + comando resume                      | nessuna attesa (informativo)         |
-| Gate 5  | opzionale     | Step 6    | review report + propose cycle review-triage-fix     | "run review" / "skip review"         |
+| Gate 1  | blocking      | Step 1    | path SPEC.md + 5-line summary                       | confirm "spec ok" / edit request     |
+| Gate 2  | blocking      | Step 2    | path ADR + ARCH + plan + key decisions              | confirm "architecture ok" / edit     |
+| Gate 3  | blocking      | Step 3    | path CLAUDE.md generated + diff if overwrite        | confirm "project memory ok" / skip   |
+| Gate 4  | checkpoint    | Step 4    | manifest path + resume command                      | no wait (informative)                |
+| Gate 5  | optional      | Step 6    | review report + propose review-triage-fix cycle     | "run review" / "skip review"         |
 
-**Razionale:** 3 gate sincroni mappano i 3 confini di "promise" del workflow
-blueprint (spec→arch, arch→memory, memory→impl). Step 4 NON è gate: la skill
-non può forzare la fresh session, può solo istruire. Step 5 NON è gate: una
-volta dispatched il coder, il sub-agent gestisce il proprio flow (con
-Pre-flight Pattern Classifier ADR-0001 che è esso stesso una forma di
-self-gate). Step 6 review è opzionale perché la review-triage-fix v1.2 cycle
-ha costo non-banale e non sempre giustificato. Bloccante > informativo
-perché la memory `feedback_hitl-and-security-discipline.md` rinforza la
-preferenza utente per gate espliciti su drift silenziosi. Auto mode futuro
-(non in scope di questo ADR) potrà bypassare Gate 1 e Gate 3, MAI Gate 2
-(architecture decision è irreversibile in pratica).
+**Rationale:** 3 synchronous gates map the 3 "promise" boundaries of the workflow
+blueprint (spec->arch, arch->memory, memory->impl). Step 4 is NOT a gate: the skill
+cannot force the fresh session, it can only instruct. Step 5 is NOT a gate: once the
+coder is dispatched, the sub-agent manages its own flow (with Pre-flight Pattern
+Classifier ADR-0001 which is itself a form of self-gate). Step 6 review is optional
+because the review-triage-fix v1.2 cycle has a non-trivial cost and is not always
+justified. Blocking > informative because the memory `feedback_hitl-and-security-discipline.md`
+reinforces the user preference for explicit gates over silent drift. Future auto mode
+(not in scope of this ADR) can bypass Gate 1 and Gate 3, NEVER Gate 2 (architecture
+decisions are practically irreversible).
 
 ### 2.5 — Interview skill choice (Q5)
 
-**Decisione:** **usare la skill custom esistente `interview-driver`**
-(`~/.claude/skills/interview-driver/SKILL.md`). NON usare
-`superpowers:brainstorming`. NON creare una nuova skill.
+**Decision:** **use the existing custom skill `interview-driver`**
+(`~/.claude/skills/interview-driver/SKILL.md`). NOT `superpowers:brainstorming`.
+NOT create a new skill.
 
-**Razionale:** `interview-driver` è già custom-tuned per il workflow
-dell'utente: usa `AskUserQuestion` tool, una domanda alla volta, output
-SPEC.md nella cartella corrente con sezioni standard. `superpowers:brainstorming`
-è skill ufficiale superpowers ma non garantita per stabilità nel tempo
-(dipende dal package superpowers); inoltre il suo output potrebbe non essere
-strict-SPEC. Creare un nuovo `interview-driver-v2` introdurrebbe drift
-gratuito (3 skill custom interview parallele). Mantenere unica fonte custom
-riduce surface di manutenzione. La skill `concept-to-code` invoca
-`interview-driver` come Step 1 e si aspetta `SPEC.md` nella cwd (path
-catturato nel manifest).
+**Rationale:** `interview-driver` is already custom-tuned for the user's workflow:
+uses `AskUserQuestion` tool, one question at a time, outputs SPEC.md in the current
+folder with standard sections. `superpowers:brainstorming` is an official superpowers
+skill but not guaranteed for stability over time (depends on the superpowers package);
+moreover its output might not be strict-SPEC. Creating a new `interview-driver-v2`
+would introduce gratuitous drift (3 parallel custom interview skills). Maintaining a
+single custom source reduces maintenance surface. The `concept-to-code` skill invokes
+`interview-driver` as Step 1 and expects `SPEC.md` in the cwd (path captured in the
+manifest).
 
 ### 2.6 — CLAUDE.md handling (Q6)
 
-**Decisione:** **diff-aware con HITL gate**. Se `CLAUDE.md` non esiste alla
-root del progetto target, generalo (via `claude-md-generator` skill) e
-mostralo all'utente in Gate 3. Se esiste già, esegui `diff CLAUDE.md
-CLAUDE.md.proposed` e mostra il diff in Gate 3 con opzioni:
-`overwrite` / `merge manual` / `skip`. Default: `skip` (conservativo).
+**Decision:** **diff-aware with HITL gate**. If `CLAUDE.md` does not exist at
+the target project root, generate it (via `claude-md-generator` skill) and
+show it to the user at Gate 3. If it already exists, run `diff CLAUDE.md
+CLAUDE.md.proposed` and show the diff at Gate 3 with options:
+`overwrite` / `merge manual` / `skip`. Default: `skip` (conservative).
 
-**Razionale:** overwrite cieco rischia di distruggere CLAUDE.md curati
-dall'utente (es. progetto `vibe-coding-system` stesso ha CLAUDE.md di
-~80 righe con riferimenti specifici alla specifica autoritativa).
-Diff-aware è opzione safe-by-default. Skip-by-default rispetta la
-preferenza utente "mai sovrascrivere un file esistente senza prima
-mostrare il diff" (global CLAUDE.md, sezione Sicurezza & Guardrail). Append-only
-scartato: CLAUDE.md è di solito riorganizzato semanticamente, append cieco
-rompe la struttura. Merge manual è soluzione esplicita per il caso
-ambiguo (l'utente legge il diff, decide a mano, poi ri-invoca la skill).
+**Rationale:** blind overwrite risks destroying carefully crafted CLAUDE.md files
+from the user (e.g. the `vibe-coding-system` project itself has a CLAUDE.md of
+~80 lines with specific references to the authoritative spec). Diff-aware is the
+safe-by-default option. Skip-by-default respects the user preference "never overwrite
+an existing file without first showing the diff" (global CLAUDE.md, Security & Guardrails
+section). Append-only rejected: CLAUDE.md is usually reorganized semantically, blind
+append breaks the structure. Manual merge is the explicit solution for the ambiguous
+case (the user reads the diff, decides manually, then re-invokes the skill).
 
 ### 2.7 — Sub-agent dispatch enforcement (Q7)
 
-**Decisione:** **anchor structural test nel harness review-triage-fix**
-(+2 anchor su esistenza `~/.claude/skills/concept-to-code/SKILL.md` e
-reference a `manifest_schema_version` nella SKILL.md). Skill template
-strict: il body della SKILL.md contiene il prompt template letterale
-(triple-backtick block) che l'orchestrator DEVE copiare nel dispatch
-all'architect/coder. Niente "describe what you want", solo "execute exactly
-this prompt".
+**Decision:** **structural anchor test in the review-triage-fix harness**
+(+2 anchors on existence of `~/.claude/skills/concept-to-code/SKILL.md` and
+reference to `manifest_schema_version` in the SKILL.md). Strict skill template:
+the body of SKILL.md contains the literal prompt template (triple-backtick block)
+that the orchestrator MUST copy into the dispatch to architect/coder. No "describe
+what you want", only "execute exactly this prompt".
 
-**Razionale:** garantire che l'orchestrator segua effettivamente la skill
-e non improvvisi è un problema impossibile in assoluto (l'orchestrator è
-un LLM, può sempre divergere). Mitigation a strati:
-1. SKILL.md con prompt template letterale (riduce variability nel dispatch).
-2. Self-test harness della skill che valida il manifest schema (rileva
-   manifest corrotti dovuti a improvvisazione).
-3. Anchor structural test nel harness review-triage-fix (rileva
-   rimozione/rottura della skill).
-4. HITL gates al runtime (l'utente può catchare la divergenza al Gate 1/2/3).
+**Rationale:** guaranteeing that the orchestrator actually follows the skill
+and does not improvise is impossible in absolute terms (the orchestrator is an LLM,
+it can always diverge). Mitigation in layers:
+1. SKILL.md with literal prompt template (reduces variability in dispatch).
+2. Skill self-test harness that validates the manifest schema (detects
+   corrupted manifests due to improvisation).
+3. Structural anchor test in the review-triage-fix harness (detects
+   removal/breakage of the skill).
+4. HITL gates at runtime (the user can catch divergence at Gate 1/2/3).
 
-Non c'è bullet-proof guarantee; c'è defense-in-depth.
+There is no bullet-proof guarantee; there is defense-in-depth.
 
 ### 2.8 — Failure mode (Q8)
 
-**Decisione:** **state machine "abort, no auto-retry"**. Se architect
-dispatch fallisce a metà (API overload, tool error, agent timeout), la
-skill marca `manifest.current_step.status = failed` con `failure_reason`
-field, scrive l'ultimo output disponibile (parziale ADR/plan/spec se
-esiste) in path `*.partial`, e si ferma. L'utente decide manualmente:
-re-invocare la skill con stesso topic (riparte dal Step ultimo green) o
-abbandonare (delete manuale del manifest). Niente auto-retry, niente
-skip-to-next.
+**Decision:** **state machine "abort, no auto-retry"**. If the architect
+dispatch fails mid-way (API overload, tool error, agent timeout), the skill
+marks `manifest.current_step.status = failed` with a `failure_reason` field,
+writes the last available output (partial ADR/plan/spec if it exists) to
+paths as `*.partial`, and stops. The user decides manually: re-invoke the skill
+with the same topic (restart from last green Step) or abandon (manual delete of
+the manifest). No auto-retry, no skip-to-next.
 
-**Razionale:** auto-retry rischia di amplificare il problema (rate limit
-loop). Skip-to-next rompe la dependency chain (Step 3 senza Step 2 verde
-genera CLAUDE.md su architettura inconsistente). Manual resume preserva
-controllo utente. Il `failure_reason` field è hint diagnostico (es.
-`"architect_timeout_60s"`, `"api_overload_529"`, `"file_write_permission_denied"`).
-Coerente con global CLAUDE.md "Se non puoi verificare un risultato,
-segnalalo — non assumere che funzioni".
+**Rationale:** auto-retry risks amplifying the problem (rate limit loop). Skip-to-next
+breaks the dependency chain (Step 3 without a green Step 2 generates CLAUDE.md on
+an inconsistent architecture). Manual resume preserves user control. The `failure_reason`
+field is a diagnostic hint (e.g. `"architect_timeout_60s"`, `"api_overload_529"`,
+`"file_write_permission_denied"`). Consistent with global CLAUDE.md "If you cannot verify
+a result, report it — do not assume it works".
 
-### 2.9 — Coexistenza con dispatch manuali (Q9)
+### 2.9 — Coexistence with manual dispatches (Q9)
 
-**Decisione:** **lo skill diventa "default" ma NON "obbligatorio"**.
-Dispatch manuali di `architect` e `coder` restano possibili e validi.
-La skill `concept-to-code` non modifica `architect.md` né `coder.md`.
-Il README del repo blueprint (sez. dedicata in `docs/vibe-coding-system.md`
-o GUIDA-CREARE-PROGETTO.md — futuro, non in scope di questo plan) menziona
-la skill come entry point preferito.
+**Decision:** **the skill becomes "default" but NOT "mandatory"**.
+Manual dispatches of `architect` and `coder` remain possible and valid.
+The `concept-to-code` skill does not modify `architect.md` or `coder.md`.
+The blueprint repo README (dedicated section in `docs/vibe-coding-system.md`
+or GUIDA-CREARE-PROGETTO.md — future, not in scope of this plan) mentions
+the skill as the preferred entry point.
 
-**Razionale:** rigida obbligatorietà violerebbe il principio "power-user
-override always available". Esempi legittimi di bypass: fix critico
-hotline (no time per chain completo), iterazione su ADR esistente (no
-nuova interview), feature micro-scope (skip Step 3 CLAUDE.md). La skill
-ha vinto se l'utente la sceglie per natural fit, non se è forzata.
+**Rationale:** strict mandatoriness would violate the "power-user override always
+available" principle. Legitimate bypass examples: critical hotline fix (no time for
+complete chain), iteration on existing ADR (no new interview), micro-scope feature
+(skip Step 3 CLAUDE.md). The skill wins if the user chooses it for natural fit,
+not because it is forced.
 
-### 2.10 — Output finale (Q10)
+### 2.10 — Final output (Q10)
 
-**Decisione:** triple output. (a) **Report markdown** stampato in chat al
-termine dello Step 6 con: file generati, durata totale, HITL gates
-passati, harness deltas, link al manifest. (b) **Manifest update** a
-`status: completed` + `completed_at` timestamp. (c) **Memory entry**
-auto-suggerita ma NON auto-scritta: la skill compone il testo di una
-voce per `MEMORY.md` (linea `## Project`) e la mostra all'utente in
-Gate 5 con opzioni `append` / `skip`. Niente notification OS-level.
+**Decision:** triple output. (a) **Markdown report** printed in chat at the end
+of Step 6 with: files generated, total duration, HITL gates passed, harness
+deltas, link to manifest. (b) **Manifest update** to `status: completed` +
+`completed_at` timestamp. (c) **Memory entry** auto-suggested but NOT auto-written:
+the skill composes the text of an entry for `MEMORY.md` (line `## Project`) and
+shows it to the user at Gate 5 with options `append` / `skip`. No OS-level notification.
 
-**Razionale:** report markdown è auditabile e copy-pasta-able. Manifest
-update è già implicito nello state machine, ma esplicitarlo nel contract
-evita stale manifest. Memory entry auto-suggerita risolve il pattern
-osservato in MEMORY.md attuale (entry manuali scritte sempre nello stesso
-formato dall'utente: "[topic](project_<slug>.md) — DEPLOYED YYYY-MM-DD
-descr"); auto-write violerebbe il principio "no side-effect non
-richiesti" (dal brief: side-effect su `agent-notes/architect.md` segnalato
-come precedente errore).
+**Rationale:** markdown report is auditable and copy-paste-able. Manifest update is
+already implicit in the state machine, but making it explicit in the contract avoids
+stale manifest. Auto-suggested memory entry resolves the pattern observed in the current
+MEMORY.md (manual entries always written in the same format by the user: "[topic](project_<slug>.md)
+— DEPLOYED YYYY-MM-DD description"); auto-write would violate the "no unrequested side effects"
+principle (the brief itself cites the `agent-notes/architect.md` case as an unwanted
+preceding side effect).
 
-### Sintesi 10 decisioni
+### Summary of 10 decisions
 
-| Q  | Decisione                                                                 |
+| Q  | Decision                                                                 |
 | -- | ------------------------------------------------------------------------- |
-| Q1 | Skill markdown `concept-to-code` + 3 bash helper + self-test              |
+| Q1 | Markdown skill `concept-to-code` + 3 bash helpers + self-test            |
 | Q2 | Manifest YAML in `docs/manifests/YYYY-MM-DD-<topic>.manifest.yml`         |
-| Q3 | Resume esplicito: `/skill concept-to-code resume <manifest-path>`         |
-| Q4 | 3 HITL bloccanti + 1 checkpoint + 1 review opzionale                      |
-| Q5 | Riusa `interview-driver` esistente, NON `brainstorming`, NON nuova skill  |
-| Q6 | CLAUDE.md diff-aware, default `skip` se esiste                            |
-| Q7 | Defense-in-depth: prompt template letterale + self-test + anchor + HITL   |
-| Q8 | Abort no-retry, `failure_reason` field, resume manuale utente             |
-| Q9 | Default ma non obbligatorio; dispatch manuali restano validi              |
-| Q10 | Report MD + manifest `completed` + memory entry auto-suggerita HITL      |
+| Q3 | Explicit resume: `/skill concept-to-code resume <manifest-path>`          |
+| Q4 | 3 blocking HITL + 1 checkpoint + 1 optional review                       |
+| Q5 | Reuse existing `interview-driver`, NOT `brainstorming`, NOT new skill     |
+| Q6 | CLAUDE.md diff-aware, default `skip` if it exists                         |
+| Q7 | Defense-in-depth: literal prompt template + self-test + anchor + HITL     |
+| Q8 | Abort no-retry, `failure_reason` field, manual user resume                |
+| Q9 | Default but not mandatory; manual dispatches remain valid                 |
+| Q10 | MD report + manifest `completed` + HITL auto-suggested memory entry      |
 
 ---
 
 ## 3. Alternatives considered
 
-Per ognuna delle 10 domande, almeno una alternativa scartata con motivo del
-rifiuto. Tabelle sintetiche per leggibilità.
+For each of the 10 questions, at least one rejected alternative with the reason for
+rejection. Summary tables for readability.
 
-### Q1 — Forma del componente
+### Q1 — Component form
 
-- **Slash command dedicato `/concept-to-code`** — *rifiutato*: layer duplicato
-  sopra lo skill. I slash command custom richiedono setup `.claude/commands/` di
-  progetto (per-repo) o framework override. La skill markdown è invocabile sia
-  via natural language ("fammi il chain concept→code per X") sia via prefix
-  ufficiale (`/skill concept-to-code`), copre entrambi i casi senza file extra.
-- **Agent dedicato `orchestrator-chain`** — *rifiutato*: violerebbe blueprint
-  sez. 2 ("sub-agent non spawnano sub-agent"). L'orchestrator è il main agent
-  della sessione CLI, non è un sub-agent. Un nuovo agent `orchestrator-chain`
-  sarebbe un sub-agent che chiama altri sub-agent — non supportato.
-- **Combinazione skill + agent dedicato** — *rifiutato*: complessità
-  superflua. La skill da sola è sufficiente; aggiungere un agent introduce
-  duplicate intent (sia lo skill sia l'agent definirebbero lo stesso state
-  machine).
+- **Dedicated slash command `/concept-to-code`** — *rejected*: duplicate layer
+  on top of the skill. Custom slash commands require `.claude/commands/` setup
+  (per-repo) or framework override. The markdown skill is invocable both
+  via natural language ("do the concept->code chain for X") and via the official
+  prefix (`/skill concept-to-code`), covering both cases without extra files.
+- **Dedicated agent `orchestrator-chain`** — *rejected*: would violate blueprint
+  sec. 2 ("sub-agents do not spawn sub-agents"). The orchestrator is the main agent
+  of the CLI session, not a sub-agent. A new `orchestrator-chain` agent would be a
+  sub-agent calling other sub-agents — not supported.
+- **Combination skill + dedicated agent** — *rejected*: superfluous complexity.
+  The skill alone is sufficient; adding an agent introduces duplicate intent (both
+  the skill and the agent would define the same state machine).
 
 ### Q2 — State persistence
 
-- **File JSON in `.claude/state/concept-to-code-<topic>.json`** — *rifiutato*:
-  JSON è meno human-readable. L'utente *deve* poter leggere/editare il
-  manifest in caso di stallo (es. correggere un path stale). YAML vince per
-  leggibilità.
-- **Inline nel prompt (state machine pure functional)** — *rifiutato*:
-  fallisce allo Step 4 fresh session boundary. Il context window della nuova
-  sessione non contiene lo state precedente.
-- **Niente persistence (re-derivabile dai file)** — *rifiutato*: re-derivare
-  state da SPEC.md/ADR esistenti è euristico (timestamp file? ultima modifica?)
-  e fragile. Manifest esplicito è deterministico.
+- **JSON file in `.claude/state/concept-to-code-<topic>.json`** — *rejected*:
+  JSON is less human-readable. The user *must* be able to read/edit the manifest in
+  case of a stall (e.g. correct a stale path). YAML wins for readability.
+- **Inline in the prompt (pure functional state machine)** — *rejected*:
+  fails at the Step 4 fresh session boundary. The context window of the new session
+  does not contain the previous state.
+- **No persistence (re-derivable from files)** — *rejected*: re-deriving state
+  from SPEC.md/existing ADRs is heuristic (file timestamps? last modification?)
+  and fragile. Explicit manifest is deterministic.
 
 ### Q3 — Resume semantics
 
-- **Auto-detection del manifest in flight** — *rifiutato*: rischio di pickup
-  del manifest sbagliato in presenza di multipli progetti aperti. L'utente
-  potrebbe avere 3 manifest pending in 3 progetti; auto-pickup del "più
-  recente" è euristico, non deterministico.
-- **Override safe-to-restart (force resume even if completed)** — *rifiutato*:
-  silenziosa overwrite di stato già consolidato. Se completed, la skill
-  fallisce e suggerisce all'utente di creare un NUOVO manifest (no `resume
-  --force`).
+- **Auto-detection of in-flight manifest** — *rejected*: risk of picking up the
+  wrong manifest in the presence of multiple open projects. The user might have 3
+  pending manifests in 3 projects; auto-pickup of the "most recent" is heuristic,
+  not deterministic.
+- **Override safe-to-restart (force resume even if completed)** — *rejected*:
+  silent overwrite of already consolidated state. If completed, the skill fails and
+  suggests the user create a NEW manifest (no `resume --force`).
 
-### Q4 — HITL gate count + tipo
+### Q4 — HITL gate count + type
 
-- **Tutti gate informativi (mostra e procedi)** — *rifiutato*: viola la
-  preferenza utente esplicita per HITL gates espliciti (memory
-  `feedback_hitl-and-security-discipline.md` + global CLAUDE.md sez. HITL).
-- **Tutti gate bloccanti incluso Step 4 e Step 5** — *rifiutato*: Step 4 NON
-  può essere gate sincrono (skill non può forzare apertura nuova sessione).
-  Step 5 dispatch coder è esso stesso un sub-process autonomo; aggiungere
-  HITL prima del dispatch è ridondante (Gate 2 già copre).
-- **Solo 1 HITL finale (mega-gate)** — *rifiutato*: 1 gate finale = utente
-  approva o respinge tutto il chain in blocco. Edit granulari diventano
-  impossibili (es. "spec ok ma ADR è da rivedere" richiede 2 gate
-  indipendenti).
+- **All gates informative (show and proceed)** — *rejected*: violates the explicit
+  user preference for HITL gates (memory `feedback_hitl-and-security-discipline.md` +
+  global CLAUDE.md sec. HITL).
+- **All gates blocking including Step 4 and Step 5** — *rejected*: Step 4 CANNOT
+  be a synchronous gate (skill cannot force opening a new session). Step 5 coder
+  dispatch is itself an autonomous sub-process; adding HITL before dispatch is
+  redundant (Gate 2 already covers it).
+- **Only 1 final HITL (mega-gate)** — *rejected*: 1 final gate = user approves or
+  rejects the entire chain as a block. Granular edits become impossible (e.g. "spec
+  ok but ADR needs revision" requires 2 independent gates).
 
 ### Q5 — Interview skill choice
 
-- **`superpowers:brainstorming` ufficiale** — *rifiutato*: dipendenza esterna
-  (package superpowers), evoluzione non controllata, output non strict-SPEC.
-  La skill custom `interview-driver` è già autoritativa per l'utente.
-- **Nuovo `interview-driver-v2`** — *rifiutato*: 2 skill custom interview in
-  parallelo creano drift di manutenzione. Refining `interview-driver`
-  esistente, se serve, è preferibile.
-- **Mix (brainstorming per draft, interview-driver per refinement)** —
-  *rifiutato*: 2 invocazioni per Step 1 raddoppiano la durata e introducono
-  variability tra draft e refinement.
+- **Official `superpowers:brainstorming`** — *rejected*: external dependency
+  (superpowers package), uncontrolled evolution, output not strict-SPEC.
+  The custom `interview-driver` skill is already authoritative for the user.
+- **New `interview-driver-v2`** — *rejected*: 2 parallel custom interview skills
+  create maintenance drift. Refining the existing `interview-driver`, if needed,
+  is preferable.
+- **Mix (brainstorming for draft, interview-driver for refinement)** —
+  *rejected*: 2 invocations for Step 1 double the duration and introduce
+  variability between draft and refinement.
 
 ### Q6 — CLAUDE.md handling
 
-- **Always overwrite** — *rifiutato*: distruggerebbe CLAUDE.md curati
-  manualmente (es. quello del repo `vibe-coding-system` con riferimenti
-  alla spec). Viola global CLAUDE.md guardrail.
-- **Solo se non esiste (skip silenzioso)** — *rifiutato*: utente non
-  apprende che ci sarebbe stato un update potenziale. Diff-aware con HITL
-  è più trasparente.
-- **Append-only** — *rifiutato*: CLAUDE.md ha struttura semantica; append
-  cieco la rompe (sez. duplicate, ordering caotico).
+- **Always overwrite** — *rejected*: would destroy manually crafted CLAUDE.md files
+  (e.g. the one in the `vibe-coding-system` repo with references to the spec). Violates
+  global CLAUDE.md guardrail.
+- **Only if it does not exist (silent skip)** — *rejected*: user does not learn
+  that a potential update would have occurred. Diff-aware with HITL is more transparent.
+- **Append-only** — *rejected*: CLAUDE.md has semantic structure; blind append breaks
+  it (duplicate sections, chaotic ordering).
 
 ### Q7 — Sub-agent dispatch enforcement
 
-- **Strict template + hook validator** — *rifiutato*: hook che ispezionano
-  il prompt dell'orchestrator pre-dispatch non sono il pattern usato oggi
-  (hook in `~/.claude/hooks/` sono per test-cmd e stop-gate, non per
-  prompt inspection). Aggiungere un hook nuovo per questo è scope creep.
-- **Solo skill template strict (senza anchor harness)** — *rifiutato*: la
-  skill può essere accidentalmente modificata o cancellata; senza anchor
-  in `review-triage-fix/tests/run-tests.sh` la regressione passa silente.
-- **Solo HITL gates (no defense-in-depth)** — *rifiutato*: HITL fatigue è
-  rischio reale (vedi memory). Più strati = meno dipendenza dal singolo
-  gate.
+- **Strict template + hook validator** — *rejected*: hooks that inspect the orchestrator
+  prompt pre-dispatch are not the pattern used today (hooks in `~/.claude/hooks/` are for
+  test-cmd and stop-gate, not for prompt inspection). Adding a new hook for this is scope
+  creep.
+- **Only strict skill template (without anchor harness)** — *rejected*: the skill can
+  be accidentally modified or deleted; without anchor in `review-triage-fix/tests/run-tests.sh`
+  the regression passes silently.
+- **Only HITL gates (no defense-in-depth)** — *rejected*: HITL fatigue is a real risk
+  (see memory). More layers = less dependence on a single gate.
 
 ### Q8 — Failure mode
 
-- **Auto-retry con backoff** — *rifiutato*: rate limit / API overload
-  loop diventa pernicioso. L'utente preferisce abort esplicito (decide
-  retry manualmente).
-- **Skip-to-next con flag `--continue`** — *rifiutato*: Step N+1 dipende
-  da Step N (CLAUDE.md generato richiede ARCH.md valido). Skip rompe
-  dependency invariant.
-- **Rollback automatico al checkpoint precedente** — *rifiutato*: file
-  generati intermediamente (SPEC.md parziale) sono recuperabili
-  manualmente; auto-delete è destructive senza beneficio chiaro.
+- **Auto-retry with backoff** — *rejected*: rate limit / API overload loop becomes
+  pernicious. The user prefers explicit abort (decides retry manually).
+- **Skip-to-next with `--continue` flag** — *rejected*: Step N+1 depends on
+  Step N (CLAUDE.md generated requires valid ARCH.md). Skip breaks the dependency
+  invariant.
+- **Automatic rollback to previous checkpoint** — *rejected*: intermediately generated
+  files (partial SPEC.md) are manually recoverable; auto-delete is destructive without
+  clear benefit.
 
-### Q9 — Coexistenza dispatch manuali
+### Q9 — Coexistence with manual dispatches
 
-- **Forced via hook (disable manual dispatch)** — *rifiutato*: power-user
-  override è esplicitamente preservato (global CLAUDE.md "Proattività"
-  implica utente esperto sceglie il flow). Hook che blocca dispatch
-  manuali sarebbe ostile.
-- **Soft warning su dispatch manuale ("considera concept-to-code")** —
-  *rifiutato*: noise nel pattern dispatch ricorrente. Memory utente
-  ricorda della skill, non serve nudge inline.
+- **Forced via hook (disable manual dispatch)** — *rejected*: power-user override is
+  explicitly preserved (global CLAUDE.md "Proactivity" implies expert user chooses
+  the flow). A hook blocking manual dispatches would be hostile.
+- **Soft warning on manual dispatch ("consider concept-to-code")** — *rejected*: noise
+  in the recurring dispatch pattern. User memory remembers the skill, no inline nudge
+  is needed.
 
-### Q10 — Output finale
+### Q10 — Final output
 
-- **Solo report markdown (no manifest update)** — *rifiutato*: manifest
-  stale resta in flight, falsa la auto-detection futura (se mai
-  implementata). State machine consistency richiede status terminale
-  esplicito.
-- **Auto-write a MEMORY.md** — *rifiutato*: side-effect non richiesto. Il
-  brief stesso cita il caso `agent-notes/architect.md` come precedente
-  side-effect indesiderato. Auto-suggest + HITL append è la giusta linea.
-- **Notification OS-level (Hammerspoon/AppleScript)** — *rifiutato*:
-  scope creep, dipendenza piattaforma, fuori dal contract di una skill
-  markdown.
+- **Only markdown report (no manifest update)** — *rejected*: stale manifest remains
+  in flight, falsifies future auto-detection (if ever implemented). State machine
+  consistency requires an explicit terminal status.
+- **Auto-write to MEMORY.md** — *rejected*: unrequested side effect. The brief itself
+  cites the `agent-notes/architect.md` case as an unwanted preceding side effect.
+  Auto-suggest + HITL append is the correct line.
+- **OS-level notification (Hammerspoon/AppleScript)** — *rejected*: scope creep,
+  platform dependency, outside the contract of a markdown skill.
 
 ---
 
@@ -500,86 +476,74 @@ rifiuto. Tabelle sintetiche per leggibilità.
 
 ### Positive
 
-- **Drift azzerato cross-feature:** prompt template versionato dentro la
-  skill, ogni dispatch architect/coder è identico per costruzione. ADR-0004
-  + ADR-0005 + ADR-NNN useranno lo stesso flow byte-faithful.
-- **State machine deterministica:** manifest YAML è ispezionabile, debug-able,
-  versionabile. Stallo a metà chain = manifest legibile dall'utente che
-  decide come procedere.
-- **HITL gates espliciti:** l'utente sa a priori che ci sono 3 gate
-  bloccanti. Niente sorprese tipo "credevo fosse atomico ma mi chiede 4
-  conferme".
-- **Fresh session boundary risolto cleanly:** Step 4 + manifest YAML + Step
-  5 resume = transizione cross-session senza loss of state, senza
-  re-prompting dell'utente.
-- **Coexistenza ortogonale con ADR-0001/ADR-0002/v1.2:** Pre-flight Pattern
-  Classifier (coder), Pattern-drift check (reviewer), Snapshot Harness
-  (refactorer) restano attivi e invocati naturalmente nel Step 5 (impl) e
-  Step 6 (review). Triple-angle coverage del drift "code change vs intent"
-  + new chain orchestration = quadruple-angle.
-- **Skill custom esistenti riusate:** `interview-driver`, `adr-writer`,
-  `claude-md-generator` finalmente orchestrate in chain unitario.
-- **Sub-agent constraint rispettato:** la skill istruisce l'orchestrator
-  (main agent), no sub-agent spawning. Blueprint sez. 2 invariata.
-- **Auditabilità completa:** manifest + report finale + memory entry
-  auto-suggerita = 3 livelli di trace.
+- **Cross-feature drift zeroed:** prompt template versioned inside the skill, every
+  architect/coder dispatch is byte-faithful identical by construction. ADR-0004 + ADR-0005
+  + ADR-NNN will use the same flow.
+- **Deterministic state machine:** YAML manifest is inspectable, debuggable,
+  versionable. Stall mid-chain = user-readable manifest that decides how to proceed.
+- **Explicit HITL gates:** the user knows in advance there are 3 blocking gates.
+  No surprises like "I thought it was atomic but it asks 4 confirmations".
+- **Fresh session boundary cleanly resolved:** Step 4 + manifest YAML + Step
+  5 resume = cross-session transition without state loss, without re-prompting the user.
+- **Orthogonal coexistence with ADR-0001/ADR-0002/v1.2:** Pre-flight Pattern
+  Classifier (coder), Pattern-drift check (reviewer), Snapshot Harness (refactorer)
+  remain active and naturally invoked in Step 5 (impl) and Step 6 (review). Triple-angle
+  drift coverage "code change vs intent" + new chain orchestration = quadruple-angle.
+- **Existing custom skills reused:** `interview-driver`, `adr-writer`,
+  `claude-md-generator` finally orchestrated in a unified chain.
+- **Sub-agent constraint respected:** the skill instructs the orchestrator
+  (main agent), no sub-agent spawning. Blueprint sec. 2 unchanged.
+- **Complete auditability:** manifest + final report + auto-suggested memory entry
+  = 3 levels of trace.
 
 ### Negative
 
-- **Surface di manutenzione aumentata:** 1 skill nuova + 3 helper bash + 1
-  self-test harness. Stima ~250 righe markdown + ~250 righe bash. Future
-  changes a `interview-driver`/`adr-writer`/`claude-md-generator` API
-  richiedono allineamento della skill.
-- **HITL fatigue rischio:** 3 gate sincroni nel base flow. Se l'utente
-  fa 5 cycle concept-to-code in una settimana, sono 15 conferme. Mitigation
-  futura: auto-mode flag per skip Gate 1 e Gate 3 (NON Gate 2). Non in
-  scope di questo ADR.
-- **Manifest stale come failure mode silente:** se l'utente abbandona un
-  chain a metà senza marcare il manifest, il file resta in flight. Niente
-  auto-cleanup. Mitigation: la `MEMORY.md` aggiornata e il fatto che
-  manifest sia ispezionabile riducono il rischio di confusione.
-- **Curva di apprendimento iniziale:** la skill ha 6 step, 3 gate, 1
-  resume command. Più complessa di un dispatch architect manuale (1 step,
-  0 gate). Mitigation: doc dedicata + report finale che spiega cosa è
-  successo.
-- **Dipendenza implicita su `interview-driver`:** se l'utente decommissiona
-  `interview-driver`, la skill `concept-to-code` rompe. Hard-coded path
-  nel SKILL.md body. Mitigation: anchor harness su esistenza
-  `~/.claude/skills/interview-driver/SKILL.md` (out of scope per questo
-  plan, candidate per future plan).
+- **Increased maintenance surface:** 1 new skill + 3 bash helpers + 1 self-test harness.
+  Estimate ~250 lines markdown + ~250 lines bash. Future changes to `interview-driver`/`adr-writer`/`claude-md-generator`
+  API require skill alignment.
+- **HITL fatigue risk:** 3 synchronous gates in the base flow. If the user does 5 concept-to-code
+  cycles in a week, that is 15 confirmations. Future mitigation: auto-mode flag to skip Gate 1
+  and Gate 3 (NOT Gate 2). Not in scope of this ADR.
+- **Stale manifest as silent failure mode:** if the user abandons a chain mid-way without
+  marking the manifest, the file stays in flight. No auto-cleanup. Mitigation: updated
+  `MEMORY.md` and the fact that the manifest is inspectable reduce the risk of confusion.
+- **Initial learning curve:** the skill has 6 steps, 3 gates, 1 resume command. More complex
+  than a manual architect dispatch (1 step, 0 gates). Mitigation: dedicated doc + final report
+  that explains what happened.
+- **Implicit dependency on `interview-driver`:** if the user decommissions
+  `interview-driver`, the `concept-to-code` skill breaks. Hard-coded path in the SKILL.md
+  body. Mitigation: anchor harness on existence of `~/.claude/skills/interview-driver/SKILL.md`
+  (out of scope for this plan, candidate for future plan).
 
 ### Neutral
 
-- **No edit a `architect.md` né `coder.md`:** decisione §2.9. La skill
-  passa il content del manifest nel prompt del dispatch, no flag esterno.
-  Coerente con "no backwards-compat shim" perché non c'è feature
-  preesistente da shimmare.
-- **No hook modifica:** la skill è puro markdown + bash userland. Niente
+- **No edit to `architect.md` or `coder.md`:** decision §2.9. The skill passes the
+  manifest content in the dispatch prompt, no external flag. Consistent with "no
+  backwards-compat shim" because there is no pre-existing feature to shim.
+- **No hook modification:** the skill is pure markdown + bash userland. No
   `settings.json` / `.mcp.json` / hook touch.
-- **No skill superpowers dipendenza:** la skill `concept-to-code` non
-  importa `superpowers:brainstorming` né altre skill superpowers.
-  Autonomia da package esterni.
-- **Manifest schema versioning:** field `manifest_schema_version: "1.0"`
-  obbligatorio. Future schema changes via bump del version. Nessuna
-  migration tool in v1.0 (refactoring manuale dei manifest esistenti se
-  cambia lo schema).
-- **Path absoluto vs relativo nel manifest:** scelta path assoluti
-  (`/Users/stefanoferri/...`) per coerenza con pattern memory MEMORY.md
-  esistente. Vincolo: manifest non portabile fra machine. Accettato:
-  il manifest è state locale, non shared artifact.
+- **No superpowers skill dependency:** the `concept-to-code` skill does not import
+  `superpowers:brainstorming` or other superpowers skills. Autonomy from external packages.
+- **Manifest schema versioning:** field `manifest_schema_version: "1.0"` mandatory.
+  Future schema changes via version bump. No migration tool in v1.0 (manual refactoring of
+  existing manifests if schema changes).
+- **Absolute vs relative path in manifest:** choice of absolute paths
+  (`/Users/stefanoferri/...`) for consistency with existing MEMORY.md pattern. Constraint:
+  manifest not portable between machines. Accepted: the manifest is local state, not a
+  shared artifact.
 
 ---
 
 ## 5. References
 
-- Blueprint: `docs/vibe-coding-system.md` sez. 11 (workflow concept→code)
+- Blueprint: `docs/vibe-coding-system.md` sec. 11 (concept->code workflow)
 - Spec design: `docs/superpowers/specs/2026-05-20-concept-to-code-chain-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-05-20-concept-to-code-chain.md`
-- Skill orchestrata (interview): `~/.claude/skills/interview-driver/SKILL.md`
-- Skill orchestrata (ADR): `~/.claude/skills/adr-writer/SKILL.md`
-- Skill orchestrata (CLAUDE.md): `~/.claude/skills/claude-md-generator/SKILL.md`
-- Sub-agent dispatched in chain: `~/.claude/agents/architect.md`, `~/.claude/agents/coder.md`
-- Feature deployate 2026-05-20 (coexistenza):
+- Orchestrated skill (interview): `~/.claude/skills/interview-driver/SKILL.md`
+- Orchestrated skill (ADR): `~/.claude/skills/adr-writer/SKILL.md`
+- Orchestrated skill (CLAUDE.md): `~/.claude/skills/claude-md-generator/SKILL.md`
+- Sub-agents dispatched in chain: `~/.claude/agents/architect.md`, `~/.claude/agents/coder.md`
+- Features deployed 2026-05-20 (coexistence):
   - ADR-0001 `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md`
   - ADR-0002 `docs/architecture/ADR-0002-refactor-snapshot-harness.md`
   - review-triage-fix v1.2 `~/.claude/skills/review-triage-fix/SKILL.md`

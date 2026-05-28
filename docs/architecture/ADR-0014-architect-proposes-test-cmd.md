@@ -1,171 +1,173 @@
-# ADR-0014 — L'architect propone `.claude/test-cmd` nel chain `concept-to-code` (Step 2), approvazione TOFU umana invariata
+# ADR-0014 — Architect proposes `.claude/test-cmd` in the `concept-to-code` chain (Step 2), unchanged human TOFU approval
 
-**Status:** Accepted — 2026-05-25 (Stefano: greenfield = **opzione A** "approva-l'intenzione-ora + fail-open dei consumatori finché non eseguibile"; formato blocco `TEST-CMD CANDIDATE:` / `TEST-CMD MODE:` confermato. Implementato: edit a `concept-to-code` Step 2 + nota coexistence; TOFU/`approve-test-cmd.sh` invariati.)
+**Status:** Accepted — 2026-05-25 (Stefano: greenfield = **option A** "approve-the-intention-now + consumers fail-open until executable"; `TEST-CMD CANDIDATE:` / `TEST-CMD MODE:` block format confirmed. Implemented: edit to `concept-to-code` Step 2 + coexistence note; TOFU/`approve-test-cmd.sh` unchanged.)
 
-**Deciders:** architect (dispatch orchestrator), Stefano Ferri (approvazione finale)
+**Deciders:** architect (dispatch orchestrator), Stefano Ferri (final approval)
 
-**Related:** ADR-0002 (`docs/architecture/ADR-0002-refactor-snapshot-harness.md` — definisce
-`.claude/test-cmd` come unico punto di contatto stack-specifico per la behavior-preservation,
-strumentata via SHA256 dell'output del comando; questo ADR ne automatizza la *proposta*, non il
-contratto); ADR-0003 (`docs/architecture/ADR-0003-concept-to-code-chain.md` — il chain in cui si
-innesta la proposta, allo Step 2); ADR-0009 + swarm-testcmd (il fail-mode asimmetrico e la TOFU
-SHA-pinned: "un test-cmd sbagliato dà falsa sicurezza → meglio UNVERIFIED che auto-indovinare";
-questo ADR NON tocca quel gate); ADR-0012 (`docs/architecture/ADR-0012-agent-memory-orchestrator-mediated.md`
-— precedente di come i contratti dell'architect sono veicolati dal **template del chain**, non
-gonfiando `architect.md`; pattern riusato qui per il blocco `TEST-CMD CANDIDATE`).
+**Related:** ADR-0002 (`docs/architecture/ADR-0002-refactor-snapshot-harness.md` — defines
+`.claude/test-cmd` as the only stack-specific contact point for behavior-preservation,
+instrumented via SHA256 of the command output; this ADR automates its *proposal*, not the
+contract); ADR-0003 (`docs/architecture/ADR-0003-concept-to-code-chain.md` — the chain where
+the proposal is inserted, at Step 2); ADR-0009 + swarm-testcmd (the asymmetric fail-mode and
+TOFU SHA-pinned: "a wrong test-cmd gives false security -> better UNVERIFIED than auto-guess";
+this ADR does NOT touch that gate); ADR-0012 (`docs/architecture/ADR-0012-agent-memory-orchestrator-mediated.md`
+— precedent for how architect contracts are conveyed by the **chain template**, not by inflating
+`architect.md`; pattern reused here for the `TEST-CMD CANDIDATE` block).
 
 ---
 
 ## Context
 
-### Il file `.claude/test-cmd` e i suoi consumatori (VERIFICATO 2026-05-25)
+### The `.claude/test-cmd` file and its consumers (VERIFIED 2026-05-25)
 
-`.claude/test-cmd` è un file a una riga utile (più commenti `#` e righe vuote) che dichiara il
-comando di test del progetto. È il **solo punto di contatto stack-specifico** della
-behavior-preservation (ADR-0002). Formato e parser sono identici in tutti i consumatori (awk:
-prima riga non-vuota, non-commento; valore speciale `NONE` = opt-out). I consumatori risalgono
-l'albero da cwd cercando `.claude/test-cmd` (max 40 livelli):
+`.claude/test-cmd` is a single-useful-line file (plus `#` comments and empty lines) that declares
+the project's test command. It is the **only stack-specific contact point** of behavior-preservation
+(ADR-0002). Format and parser are identical across all consumers (awk: first non-empty,
+non-comment line; special value `NONE` = opt-out). Consumers ascend the tree from cwd looking for
+`.claude/test-cmd` (max 40 levels):
 
-- `~/.claude/hooks/stop-gate.sh` — a fine task, se il codice è "dirty", **esegue** il comando se
-  e solo se il file è TOFU-trusted; altrimenti blocca chiedendo l'approvazione. Fail-open su
-  file assente/`NONE`/vuoto/non-eseguibile/timeout (mai falsa conferma).
-- `~/.claude/skills/review-triage-fix/scripts/verify.sh` — reporter (non gate): PASS / FAIL /
-  **UNVERIFIED** come primo token; UNVERIFIED se file assente, `NONE`, vuoto o non eseguibile.
-- `~/.claude/skills/refactor-snapshot/` + `~/.claude/agents/refactorer.md` — il refactorer
-  ESIGE che il file pre-esista e sia approvato; se assente → snapshot UNVERIFIED → STOP.
-- `~/.claude/hooks/approve-test-cmd.sh` — CLI TOFU (NON un hook). Calcola lo SHA256 del file e
-  registra `<sha256>\t<root-normalizzato>` nel trust file. **Non esegue mai il comando.** Cambiare
-  il file invalida il trust → riapprovazione necessaria.
+- `~/.claude/hooks/stop-gate.sh` — at end of task, if the code is "dirty", **executes** the
+  command if and only if the file is TOFU-trusted; otherwise blocks asking for approval. Fail-open
+  on absent/`NONE`/empty/non-executable/timeout (never false confirmation).
+- `~/.claude/skills/review-triage-fix/scripts/verify.sh` — reporter (not gate): PASS / FAIL /
+  **UNVERIFIED** as first token; UNVERIFIED if file absent, `NONE`, empty, or non-executable.
+- `~/.claude/skills/refactor-snapshot/` + `~/.claude/agents/refactorer.md` — the refactorer
+  REQUIRES the file to pre-exist and be approved; if absent -> snapshot UNVERIFIED -> STOP.
+- `~/.claude/hooks/approve-test-cmd.sh` — CLI TOFU (NOT a hook). Computes SHA256 of the file and
+  records `<sha256>\t<normalized-root>` in the trust file. **Never executes the command.** Changing
+  the file invalidates trust -> re-approval required.
 
-### Il problema: frizione "crealo a mano"
+### The problem: "create it manually" friction
 
-Oggi `.claude/test-cmd` deve essere **scritto a mano** e poi approvato con la CLI. Il chain
-`concept-to-code` non lo scaffolda: lo cita solo nelle coexistence invariants (SKILL.md riga 559).
-Conseguenza: ogni nuovo progetto passato dal chain arriva all'implementazione senza test-cmd, e i
-tre consumatori restano in stato non-verificato (block/UNVERIFIED/STOP) finché Stefano non crea il
-file manualmente. La frizione è inutile: allo **Step 2** del chain l'architect ha già letto SPEC,
-ARCH e lo stack/framework — è il punto **più informato** del workflow per dedurre il comando di
-test corretto. Spostare la deduzione lì elimina il lavoro manuale senza spostare il gate di
-sicurezza.
+Today `.claude/test-cmd` must be **written by hand** and then approved with the CLI. The
+`concept-to-code` chain does not scaffold it: it only cites it in the coexistence invariants
+(SKILL.md line 559). Consequence: every new project passed through the chain arrives at
+implementation without a test-cmd, and the three consumers remain in unverified state
+(block/UNVERIFIED/STOP) until Stefano manually creates the file. The friction is unnecessary: at
+**Step 2** of the chain the architect has already read the SPEC, ARCH, and the stack/framework —
+it is the **most informed point** of the workflow for deducing the correct test command. Moving
+the deduction there eliminates the manual work without shifting the security gate.
 
-### Greenfield vs brownfield: la tensione da risolvere
+### Greenfield vs brownfield: the tension to resolve
 
-- **Brownfield** (progetto esistente con test): il comando dedotto dall'architect è
-  **eseguibile subito**. La proposta è anche immediatamente verificabile.
-- **Greenfield** (progetto nuovo, test non ancora scritti): il comando è quello *previsto*
-  (es. `pytest -q`, `npm test`) ma **non gira** finché i test non esistono (tipicamente fino
-  allo scaffold/impl). Approvare ora un comando non ancora eseguibile è sicuro per la TOFU (SHA
-  pinned su un'intenzione), ma non è ancora "verificato in esecuzione": al primo run i consumatori
-  fail-open su "non eseguibile" (stop-gate fail-open, verify.sh UNVERIFIED) — quindi **nessuna
-  falsa conferma**, ma serve decidere QUANDO l'approvazione/uso diventa sensato. Questa tensione
-  è risolta esplicitamente in Decision punto 4 (con la decisione finale deferita a Stefano).
+- **Brownfield** (existing project with tests): the command deduced by the architect is
+  **immediately executable**. The proposal is also immediately verifiable.
+- **Greenfield** (new project, tests not yet written): the command is the *intended* one
+  (e.g. `pytest -q`, `npm test`) but **does not run** until the tests exist (typically until
+  scaffold/impl). Approving a not-yet-executable command is safe for TOFU (SHA pinned on an
+  intention), but it is not yet "verified in execution": on first run consumers fail-open on
+  "not executable" (stop-gate fail-open, verify.sh UNVERIFIED) — therefore **no false
+  confirmation**, but a decision is needed on WHEN the approval/use becomes sensible. This
+  tension is explicitly resolved in Decision point 4 (with the final decision deferred to Stefano).
 
 ---
 
 ## Decision
 
-1. **Punto di proposta = architect, Step 2.** Nel report dell'architect viene aggiunto un blocco
-   strutturato terminale `TEST-CMD CANDIDATE:` con il comando di test dedotto dallo stack, e il
-   flag greenfield/brownfield (formato in Decision punto 3). Il contratto è veicolato dal
-   **template del chain** (SKILL.md Step 2), NON da `architect.md` — coerente con ADR-0012, per
-   non gonfiare la definizione dell'agente con logica specifica del chain.
+1. **Proposal point = architect, Step 2.** In the architect's report a terminal structured block
+   `TEST-CMD CANDIDATE:` is added with the test command deduced from the stack, and the
+   greenfield/brownfield flag (format in Decision point 3). The contract is conveyed by the
+   **chain template** (SKILL.md Step 2), NOT by `architect.md` — consistent with ADR-0012, to
+   avoid inflating the agent definition with chain-specific logic.
 
-2. **L'orchestratore scrive il candidato; l'umano approva.** Dopo il ritorno dell'architect,
-   l'orchestratore estrae il comando dal blocco e scrive `<project-root>/.claude/test-cmd` come
-   **candidato** (con un commento `#` che lo marca proposto + flag greenfield se applicabile).
-   Poi presenta un **gate HITL** che mostra il comando e chiede a Stefano di approvarlo eseguendo
-   `bash ~/.claude/hooks/approve-test-cmd.sh "<project-root>"`. Si **riusa il meccanismo TOFU
-   esistente**: nessun nuovo gate, nessun nuovo trust store, nessuna nuova CLI.
+2. **The orchestrator writes the candidate; the human approves.** After the architect returns,
+   the orchestrator extracts the command from the block and writes `<project-root>/.claude/test-cmd`
+   as a **candidate** (with a `#` comment marking it as proposed + greenfield flag if applicable).
+   Then it presents a **HITL gate** that shows the command and asks Stefano to approve it by
+   running `bash ~/.claude/hooks/approve-test-cmd.sh "<project-root>"`. The **existing TOFU
+   mechanism is reused**: no new gate, no new trust store, no new CLI.
 
-3. **Formato del blocco architect** (terminale, dopo `DURABLE NOTES:`):
+3. **Architect block format** (terminal, after `DURABLE NOTES:`):
    ```
-   TEST-CMD CANDIDATE: <comando di test su una riga>
+   TEST-CMD CANDIDATE: <test command on a single line>
    TEST-CMD MODE: greenfield | brownfield
    ```
-   Se l'architect non può dedurre un comando affidabile → la riga letterale
-   `TEST-CMD CANDIDATE: none` (l'orchestratore NON scrive il file e lo segnala al gate).
+   If the architect cannot deduce a reliable command -> the literal line
+   `TEST-CMD CANDIDATE: none` (the orchestrator does NOT write the file and signals it at the gate).
 
-4. **Risoluzione greenfield (deferita a Stefano — punto aperto).** Approccio raccomandato:
-   **approvazione-dell'intenzione ora + verifica-eseguibilità al primo uso reale**. Lo
-   `.claude/test-cmd` greenfield si scrive e si approva subito (SHA pinned sull'intenzione);
-   marcato col commento `# greenfield: provisional — non eseguibile finché i test non esistono`.
-   Fino ad allora i consumatori fail-open correttamente (stop-gate fail-open su rc 124/125/126/127,
-   verify.sh → UNVERIFIED): mai falsa conferma. Quando appaiono i primi test (scaffold/impl), il
-   comando diventa eseguibile **senza alcuna ri-approvazione** purché il file non sia cambiato; se
-   l'architect aveva sbagliato il comando e va corretto, il cambio del file invalida la TOFU e
-   forza una riapprovazione — comportamento desiderato. **Alternativa che Stefano deve valutare:**
-   spostare il gate di approvazione greenfield *dopo* i primi test (approvare solo un comando già
-   eseguibile), al costo di lasciare il progetto non-verificato durante lo scaffold iniziale.
+4. **Greenfield resolution (deferred to Stefano — open point).** Recommended approach:
+   **approve-the-intention-now + verify-executability-at-first-real-use**. The greenfield
+   `.claude/test-cmd` is written and approved immediately (SHA pinned on the intention); marked
+   with the comment `# greenfield: provisional — not executable until tests exist`. Until then
+   consumers fail-open correctly (stop-gate fail-open on rc 124/125/126/127, verify.sh ->
+   UNVERIFIED): never false confirmation. When the first tests appear (scaffold/impl), the command
+   becomes executable **without any re-approval** provided the file has not changed; if the
+   architect guessed the wrong command and it needs correction, the file change invalidates TOFU
+   and forces re-approval — desired behavior. **Alternative Stefano must evaluate:** move the
+   greenfield approval gate *after* the first tests (approve only an already-executable command),
+   at the cost of leaving the project unverified during the initial scaffold.
 
-5. **Sicurezza invariata.** L'approvazione SHA-pinned resta **umana e singola**. Il sistema
-   PROPONE (scrive un candidato), non auto-esegue **mai** un comando non approvato: lo scrivere il
-   file NON lo rende trusted — il trust nasce solo dall'esecuzione esplicita di `approve-test-cmd.sh`
-   da parte di Stefano. Questo **non indebolisce la TOFU**: l'oggetto pinnato (SHA del file) e il
-   gate (CLI umana) sono invariati; cambia solo *chi redige il candidato* (architect anziché
-   Stefano a mano), che è a monte del pin.
+5. **Security unchanged.** The SHA-pinned approval remains **human and singular**. The system
+   PROPOSES (writes a candidate), never auto-executes **a command that has not been approved**:
+   writing the file does NOT make it trusted — trust arises only from the explicit execution of
+   `approve-test-cmd.sh` by Stefano. This **does not weaken TOFU**: the pinned object (SHA of
+   the file) and the gate (human CLI) are unchanged; only *who drafts the candidate* changes
+   (architect instead of Stefano by hand), which is upstream of the pin.
 
-6. **Coexistence invariata.** Il candidato è scritto nello stesso formato a una riga consumato
-   da stop-gate / verify.sh / refactor-snapshot; nessuno script consumatore cambia. Le coexistence
-   invariants del chain (SKILL.md) restano valide; si aggiorna solo la nota da "non scaffolda
-   test-cmd" a "scaffolda un candidato test-cmd allo Step 2, approvazione TOFU invariata".
+6. **Coexistence unchanged.** The candidate is written in the same single-line format consumed by
+   stop-gate / verify.sh / refactor-snapshot; no consumer script changes. The coexistence
+   invariants of the chain (SKILL.md) remain valid; only the note is updated from "does not
+   scaffold test-cmd" to "scaffolds a candidate test-cmd at Step 2, TOFU approval unchanged".
 
 ---
 
 ## Consequences
 
 **Positive**
-- Elimina la frizione "crealo a mano": il comando lo redige il punto più informato del chain.
-- Zero nuova superficie di sicurezza: riusa TOFU + trust store + CLI esistenti.
-- Coerente con ADR-0012: contratto nel template del chain, `architect.md` non si gonfia.
-- I consumatori (stop-gate/verify.sh/refactorer) non cambiano: rischio di regressione minimo.
+- Eliminates "create it manually" friction: the command is drafted by the most informed point of
+  the chain.
+- Zero new security surface: reuses TOFU + trust store + existing CLI.
+- Consistent with ADR-0012: contract in chain template, `architect.md` does not inflate.
+- Consumers (stop-gate/verify.sh/refactorer) do not change: minimal regression risk.
 
 **Negative**
-- L'architect può dedurre un comando sbagliato; mitigato dal fatto che il gate HITL mostra il
-  comando a Stefano *prima* dell'approvazione, e che un comando errato dà UNVERIFIED (non falsa
-  conferma) finché non corretto + riapprovato.
-- Greenfield introduce uno stato "provvisorio" che richiede disciplina (la decisione su quando
-  approvare resta aperta, punto 4).
+- The architect may deduce a wrong command; mitigated by the fact that the HITL gate shows the
+  command to Stefano *before* approval, and that a wrong command gives UNVERIFIED (not false
+  confirmation) until corrected + re-approved.
+- Greenfield introduces a "provisional" state that requires discipline (the decision on when to
+  approve remains open, point 4).
 
 **Neutral**
-- Il chain acquisisce un micro-step in più (scrittura candidato + gate). Su brownfield è anche
-  immediatamente verificabile; su greenfield è dichiarativo.
-- Se l'architect emette `TEST-CMD CANDIDATE: none`, il comportamento è identico ad oggi (nessun
-  file, consumatori in stato non-verificato): nessuna regressione rispetto allo status quo.
+- The chain acquires a micro-step (candidate writing + gate). On brownfield it is also immediately
+  verifiable; on greenfield it is declarative.
+- If the architect emits `TEST-CMD CANDIDATE: none`, behavior is identical to today (no file,
+  consumers in unverified state): no regression from status quo.
 
 ---
 
 ## Alternatives considered
 
-**(A) Status quo — creazione manuale del test-cmd.** Rifiutata: è esattamente la frizione che
-Stefano vuole rimuovere. Lascia ogni nuovo progetto del chain senza test-cmd fino a intervento
-manuale, con i tre consumatori bloccati/UNVERIFIED. Nessun guadagno se non l'assenza di lavoro di
-design.
+**(A) Status quo — manual test-cmd creation.** Rejected: it is exactly the friction Stefano wants
+to remove. Leaves every new chain project without test-cmd until manual intervention, with the
+three consumers blocked/UNVERIFIED. No gain beyond the absence of design work.
 
-**(B) Auto-detect euristico a runtime, senza coinvolgere l'architettura.** Uno script che, al
-primo uso, indovina il comando dai file presenti (presenza di `pytest.ini`, `package.json`,
-`Cargo.toml`…) e lo scrive/esegue. Rifiutata: l'euristica è **meno informata dell'architect** (non
-conosce SPEC/ARCH né le scelte di test del progetto), e — per il principio di ADR-0009/swarm-testcmd
-— un test-cmd indovinato male dà **falsa sicurezza**. Eseguire senza approvazione viola la TOFU;
-nessun euristico è abbastanza affidabile da bypassare il gate umano.
+**(B) Heuristic auto-detect at runtime, without involving architecture.** A script that, on first
+use, guesses the command from present files (presence of `pytest.ini`, `package.json`,
+`Cargo.toml`...) and writes/executes it. Rejected: the heuristic is **less informed than the
+architect** (does not know SPEC/ARCH or the project's testing choices), and — per the
+ADR-0009/swarm-testcmd principle — a wrongly guessed test-cmd gives **false security**. Executing
+without approval violates TOFU; no heuristic is reliable enough to bypass the human gate.
 
-**(C) Proposta allo Step 2 (architect) + approvazione TOFU singola — SCELTA.** L'architect, già il
-punto più informato del chain, dichiara il comando nel report; l'orchestratore scrive un candidato;
-Stefano approva una volta con la CLI esistente. Combina il vantaggio informativo di un'analisi a
-livello di architettura con il gate di sicurezza umano invariato. Motivo della scelta: massimizza
-la qualità della proposta e azzera la nuova superficie di sicurezza, mantenendo il PROPONE-non-esegue.
+**(C) Proposal at Step 2 (architect) + single TOFU approval — CHOSEN.** The architect, already
+the most informed point of the chain, declares the command in the report; the orchestrator writes
+a candidate; Stefano approves once with the existing CLI. Combines the informational advantage of
+an architecture-level analysis with the unchanged human security gate. Reason for choice: maximizes
+proposal quality and zeroes the new security surface, maintaining PROPOSES-not-executes.
 
-**(D) Gate di approvazione spostato a fine chain (dopo i primi test, solo comandi eseguibili).**
-Scartata come default, ma trattenuta come opzione greenfield in Decision punto 4: garantisce che si
-approvi solo un comando già eseguibile, al costo di lasciare lo scaffold iniziale non-verificato e
-di spostare il gate lontano dal punto in cui il comando è dedotto.
+**(D) Approval gate moved to end of chain (after first tests, only executable commands).**
+Rejected as default, retained as greenfield option in Decision point 4: guarantees approving only
+an already-executable command, at the cost of leaving the initial scaffold unverified and moving
+the gate far from the point where the command is deduced.
 
 ---
 
 ## References
 
-- `~/.claude/hooks/approve-test-cmd.sh` — CLI TOFU (SHA256-pinning, mai esegue il comando).
-- `~/.claude/hooks/stop-gate.sh` — enforce TOFU + esecuzione a fine task, fail-open asimmetrico.
-- `~/.claude/skills/review-triage-fix/scripts/verify.sh` — reporter PASS/FAIL/UNVERIFIED.
-- `~/.claude/agents/refactorer.md` — consumatore che ESIGE test-cmd approvato (snapshot UNVERIFIED se assente).
-- `~/.claude/skills/concept-to-code/SKILL.md` — Step 2 (dispatch architect, ~righe 167-221) punto di innesto; coexistence invariants riga ~559.
-- ADR-0002, ADR-0003, ADR-0009, ADR-0012 (vedi Related).
+- `~/.claude/hooks/approve-test-cmd.sh` — CLI TOFU (SHA256-pinning, never executes the command).
+- `~/.claude/hooks/stop-gate.sh` — enforce TOFU + end-of-task execution, asymmetric fail-open.
+- `~/.claude/skills/review-triage-fix/scripts/verify.sh` — PASS/FAIL/UNVERIFIED reporter.
+- `~/.claude/agents/refactorer.md` — consumer that REQUIRES an approved test-cmd (snapshot
+  UNVERIFIED if absent).
+- `~/.claude/skills/concept-to-code/SKILL.md` — Step 2 (architect dispatch, ~lines 167-221)
+  insertion point; coexistence invariants line ~559.
+- ADR-0002, ADR-0003, ADR-0009, ADR-0012 (see Related).

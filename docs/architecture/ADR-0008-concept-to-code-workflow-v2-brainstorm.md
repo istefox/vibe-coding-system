@@ -1,8 +1,8 @@
-# ADR-0008 — `concept-to-code` workflow v2: Gate 0, brownfield mode, brainstorm-gate + nuova skill `design-brainstorm`
+# ADR-0008 — `concept-to-code` workflow v2: Gate 0, brownfield mode, brainstorm-gate + new `design-brainstorm` skill
 
 **Status:** Accepted — 2026-05-21 (implemented via plan `2026-05-21-concept-to-code-workflow-v2.md`; design-brainstorm PASS=9; concept-to-code self-test PASS=20; review-triage-fix PASS=51; smoke-e2e PASS)
 **Authors:** Adriano (architect agent) per Stefano Ferri
-**Supersedes:** none (estende ADR-0003, non lo rimpiazza)
+**Supersedes:** none (extends ADR-0003, does not replace it)
 **Superseded by:** none
 **Related:**
 - `docs/architecture/ADR-0003-concept-to-code-chain.md` (Accepted 2026-05-20 — chain v1)
@@ -10,13 +10,13 @@
 - `docs/superpowers/specs/2026-05-21-concept-to-code-workflow-v2-design.md`
 - `docs/superpowers/specs/2026-05-21-design-brainstorm-skill-design.md`
 - `docs/superpowers/plans/2026-05-21-concept-to-code-workflow-v2.md`
-- `~/.claude/skills/concept-to-code/SKILL.md` (skill da patchare)
+- `~/.claude/skills/concept-to-code/SKILL.md` (skill to patch)
 - `~/.claude/skills/concept-to-code/scripts/manifest-{init,validate,transition}.sh`
 - `~/.claude/skills/concept-to-code/tests/run-tests.sh` (self-test, baseline PASS=13)
 - `~/.claude/skills/concept-to-code/tests/smoke-e2e.sh` (smoke, ADR-0007)
 - `~/.claude/skills/review-triage-fix/tests/run-tests.sh` (anchor harness, baseline PASS=49)
-- `~/.claude/skills/interview-driver/SKILL.md` (Step 1, produce SPEC)
-- `~/.claude/skills/claude-md-generator/SKILL.md` (Step 3, produce CLAUDE.md)
+- `~/.claude/skills/interview-driver/SKILL.md` (Step 1, produces SPEC)
+- `~/.claude/skills/claude-md-generator/SKILL.md` (Step 3, produces CLAUDE.md)
 - `~/.claude/agents/architect.md` (dispatched in Step 2)
 - Memory `feedback_bash32-constraint.md`
 - Memory `feedback_disable-model-invocation-strong.md`
@@ -26,329 +26,317 @@
 
 ## 1. Context
 
-ADR-0003 ha trasformato il workflow concept→code (blueprint §11) da prosa a state
-machine deterministica con manifest YAML, 5 gate HITL, e dispatch pinned. ADR-0007 ne
-ha aggiunto lo smoke-e2e. Il **primo uso reale** del chain (progetto `rempay`,
-2026-05-21) lo ha validato end-to-end ma ha esposto **tre gap di workflow** che
-condividono lo stesso punto di intervento (`concept-to-code/SKILL.md` + i 3 helper
-bash): frammentarli in tre ADR separati produrrebbe debito di coordinamento sullo
-stesso file. Sono trattati insieme.
+ADR-0003 transformed the concept->code workflow (blueprint §11) from prose to a deterministic
+state machine with YAML manifest, 5 HITL gates, and pinned dispatch. ADR-0007 added the
+smoke-e2e. The **first real use** of the chain (project `rempay`, 2026-05-21) validated it
+end-to-end but exposed **three workflow gaps** that share the same intervention point
+(`concept-to-code/SKILL.md` + the 3 helper bash scripts): fragmenting them into three separate
+ADRs would produce coordination debt on the same file. They are addressed together.
 
-### Gap #1 — Manca Gate 0 (decisione chain-vs-leggero)
+### Gap #1 — Missing Gate 0 (chain-vs-lightweight decision)
 
-La sez. `## 1. When to invoke` dello SKILL.md elenca criteri "Do NOT invoke for"
-(SPEC+ADR già esistenti, micro-scope <3 file, iterazione su ADR). Oggi l'orchestrator,
-quando rileva questi criteri, decide **in silenzio** se fare il chain completo o fare
-fallback a workflow leggero. Nel test reale ha fatto fallback senza chiedere; è servito
-l'intervento manuale di Stefano per forzare il chain. La decisione di processo
-appartiene all'utente, non all'orchestrator: è una scelta di costo/profondità, non
-tecnica.
+The `## 1. When to invoke` section of SKILL.md lists criteria "Do NOT invoke for" (SPEC+ADR
+already existing, micro-scope <3 files, iteration on ADR). Today the orchestrator, when it
+detects these criteria, decides **silently** whether to run the full chain or fall back to
+lightweight workflow. In the real test it fell back without asking; Stefano's manual
+intervention was needed to force the chain. The process decision belongs to the user, not
+the orchestrator: it is a cost/depth choice, not a technical one.
 
-### Gap #2 — Manca "brownfield mode"
+### Gap #2 — Missing "brownfield mode"
 
-Il chain v1 assume implicitamente greenfield: Step 1 interview scrive `SPEC.md`, Step 3
-`claude-md-generator` rigenera `CLAUDE.md` da zero. Sul progetto rempay (brownfield)
-l'orchestrator ha gestito **bene ma ad-hoc** due casi:
-- **SPEC esistente e congelata:** ha saltato Step 1 (l'interview l'avrebbe sovrascritta)
-  e puntato `artifacts.spec` alla SPEC esistente.
-- **CLAUDE.md curato a mano (97 righe di gotcha):** ha capito che `claude-md-generator`
-  rigenererebbe da zero degradando il file; ha prodotto invece una proposta **additiva**.
+The v1 chain implicitly assumes greenfield: Step 1 interview writes `SPEC.md`, Step 3
+`claude-md-generator` regenerates `CLAUDE.md` from scratch. On the rempay project (brownfield)
+the orchestrator handled **well but ad-hoc** two cases:
+- **Frozen existing SPEC:** it skipped Step 1 (the interview would have overwritten it)
+  and pointed `artifacts.spec` to the existing SPEC.
+- **Manually crafted CLAUDE.md (97 lines of gotchas):** it understood that `claude-md-generator`
+  would regenerate from scratch, degrading the file; it instead produced an **additive** proposal.
 
-Questi comportamenti sono corretti ma non codificati → dipendono dalla sveglieria
-dell'orchestrator caso per caso (fragile, non riproducibile, drift garantito al prossimo
-uso).
+These behaviors are correct but not codified -> they depend on the orchestrator's alertness
+case by case (fragile, not reproducible, drift guaranteed on the next use).
 
-### Gap #3 — Manca un brainstorm-gate opzionale tra SPEC e architettura
+### Gap #3 — Missing optional brainstorm-gate between SPEC and architecture
 
-Oggi, una volta pronto lo SPEC, lo Step 2 dispatcha direttamente l'architect che decide
-l'architettura **da solo** (monologico). Manca uno spazio dialogico per esplorare
-alternative di *metodologia applicativa* e *idee nuove* CON l'utente, prima di fissare
-l'ADR. Questo è il punto in cui un'esplorazione strutturata fa la differenza
-sull'architettura finale.
+Today, once the SPEC is ready, Step 2 dispatches the architect directly who decides the
+architecture **alone** (monological). Missing is a dialogical space to explore
+alternatives of *application methodology* and *new ideas* WITH the user, before fixing
+the ADR. This is the point where a structured exploration makes the most difference on the
+final architecture.
 
-### Direzione
+### Direction
 
-1. **Gate 0** all'avvio del chain: quando rileva criteri di esclusione, si ferma e
-   chiede esplicitamente `[c] chain / [l] leggero / [a] abort`. La decisione torna
-   all'utente.
-2. **Distinzione greenfield/brownfield** codificata: Step 1 e Step 3 si comportano in
-   modo diverso a seconda della presenza di SPEC.md / CLAUDE.md.
-3. **Brainstorm-gate** opzionale tra Step 1 e Step 2, che invoca una **nuova skill
-   `design-brainstorm`** la quale esplora alternative di approccio e produce un
-   `BRAINSTORM.md` che alimenta il dispatch dell'architect.
-4. **Nuova skill `design-brainstorm`** di alta qualità metodologica (vedi spec
-   dedicata), invocabile sia standalone sia dal chain.
+1. **Gate 0** at chain start: when it detects exclusion criteria, it stops and explicitly
+   asks `[c] chain / [l] lightweight / [a] abort`. The decision returns to the user.
+2. **Greenfield/brownfield distinction** codified: Steps 1 and 3 behave differently
+   depending on the presence of SPEC.md / CLAUDE.md.
+3. **Optional brainstorm-gate** between Steps 1 and 2, which invokes a **new
+   `design-brainstorm` skill** that explores approach alternatives and produces a
+   `BRAINSTORM.md` that feeds the architect dispatch.
+4. **New `design-brainstorm` skill** of high methodological quality (see dedicated spec),
+   invocable both standalone and from the chain.
 
-### Vincoli ereditati (HARD)
+### Inherited constraints (HARD)
 
 - **Anchor preservation:** review-triage-fix harness PASS=49, concept-to-code self-test
-  PASS=13 — mai scendere. Solo append di anchor.
-- **Bash 3.2.57** per ogni script: no assoc array, no `mapfile`, no `${v^^}`, no `<()`,
+  PASS=13 — never decrease. Anchor-only append.
+- **Bash 3.2.57** for every script: no assoc array, no `mapfile`, no `${v^^}`, no `<()`,
   no here-string. temp-file + grep maps (memory `feedback_bash32-constraint.md`).
-- **Coexistence:** il redesign NON deve rompere i chain già completati (manifest rempay
-  `status: completed` su schema 1.0). Le nuove transizioni devono essere
-  retrocompatibili con schema 1.0 oppure introdurre schema 1.1 con migrazione
-  documentata.
-- **`disable-model-invocation`:** la skill `design-brainstorm` DEVE essere invocabile
-  dal chain (brainstorm-gate) → NON deve avere `disable-model-invocation: true`
+- **Coexistence:** the redesign MUST NOT break already completed chains (rempay manifest
+  `status: completed` on schema 1.0). The new transitions must be retrocompatible with
+  schema 1.0 or introduce schema 1.1 with documented migration.
+- **`disable-model-invocation`:** the `design-brainstorm` skill MUST be invocable from
+  the chain (brainstorm-gate) -> MUST NOT have `disable-model-invocation: true`
   (memory `feedback_disable-model-invocation-strong.md`).
-- **Sub-agent non spawnano sub-agent:** lo skill istruisce l'orchestrator (main CLI).
-- **Repo blueprint NON-git:** nessuno step git nei plan.
+- **Sub-agents do not spawn sub-agents:** the skill instructs the orchestrator (main CLI).
+- **Blueprint repo NON-git:** no git steps in plans.
 
 ---
 
 ## 2. Decision
 
-Le sette domande architetturali del brief sono risolte come segue. Ogni decisione ha le
-sue alternative scartate nella sez. 3.
+The seven architectural questions from the brief are resolved as follows. Each decision has
+its rejected alternatives in sec. 3.
 
-### 2.1 (Q1) Nome della skill: **`design-brainstorm`**
+### 2.1 (Q1) Skill name: **`design-brainstorm`**
 
-Scelto `design-brainstorm`. Comunica sia il *quando* (fase di design, pre-architettura)
-sia il *cosa* (brainstorm di approcci). Frontmatter `name: design-brainstorm`, directory
+Chosen `design-brainstorm`. Communicates both the *when* (design phase, pre-architecture)
+and the *what* (brainstorm of approaches). Frontmatter `name: design-brainstorm`, directory
 `~/.claude/skills/design-brainstorm/`.
 
-### 2.2 (Q2) Gate 0 — rilevamento criteri di esclusione: **check deterministici via file + stima da SPEC, decisione all'utente**
+### 2.2 (Q2) Gate 0 — exclusion criteria detection: **deterministic checks via files + estimate from SPEC, decision to the user**
 
-Gate 0 fa parte di Form A (start chain), eseguito subito dopo `manifest-init.sh` (stato
-`step_0_init`), PRIMA della transizione a `step_1_interview`. Rileva due criteri con
-controlli deterministici:
+Gate 0 is part of Form A (start chain), executed right after `manifest-init.sh` (state
+`step_0_init`), BEFORE the transition to `step_1_interview`. It detects two criteria with
+deterministic checks:
 
-- **Criterio A — "SPEC+ADR già esistenti":** check file. Esiste `<project-root>/SPEC.md`
-  AND esiste almeno un file `<project-root>/docs/architecture/ADR-*.md`. Entrambi
-  presenti → criterio A attivo.
-- **Criterio B — "micro-scope <3 file":** NON è stimabile in modo affidabile prima
-  dell'interview/architettura. Quindi Gate 0 NON conta i file: presenta il criterio B
-  come **flag dichiarativo** che l'utente può confermare ("è un micro-scope?"). Lo
-  conta l'utente, non l'orchestrator. Questo evita falsi negativi/positivi da euristiche
-  fragili (lezione `swarm-testcmd`: meglio tier autoritativo che euristica).
+- **Criterion A — "SPEC+ADR already existing":** file check. Does `<project-root>/SPEC.md`
+  exist AND does at least one `<project-root>/docs/architecture/ADR-*.md` file exist? Both
+  present -> criterion A active.
+- **Criterion B — "micro-scope <3 files":** NOT reliably estimable before interview/architecture.
+  Therefore Gate 0 does NOT count files: it presents criterion B as a **declarative flag**
+  that the user can confirm ("is it a micro-scope?"). The user counts, not the orchestrator.
+  This avoids false negatives/positives from fragile heuristics (lesson `swarm-testcmd`:
+  better authoritative tier than heuristic).
 
-Se nessun criterio è attivo → Gate 0 passa silenziosamente (UX invariata per il caso
-greenfield comune). Se almeno un criterio è attivo → blocca e chiede:
+If no criterion is active -> Gate 0 passes silently (UX unchanged for the common greenfield
+case). If at least one criterion is active -> blocks and asks:
 
 ```
 ============================================================
 concept-to-code · Gate 0 · TRIAGE CHAIN
 ============================================================
-Criteri di esclusione rilevati:
-  [x] SPEC.md + ADR già esistenti in <project-root>
-  [ ] Micro-scope (<3 file) — confermalo tu
+Exclusion criteria detected:
+  [x] SPEC.md + ADR already existing in <project-root>
+  [ ] Micro-scope (<3 files) — confirm yourself
 Manifest: <manifest-path>
 ============================================================
 HITL Gate 0: chain_triage
-  [c] chain completo (procedi con interview/architettura)
-  [l] workflow leggero (plan diretto, niente chain)
+  [c] full chain (proceed with interview/architecture)
+  [l] lightweight workflow (direct plan, no chain)
   [a] abort chain
 > _
 ```
 
-`[l]` → `manifest-transition.sh <m> aborted aborted` con `next_action` che documenta il
-fallback a workflow leggero (l'utente prosegue fuori dal chain). Non è un fallimento:
-è una scelta legittima. `[a]` → abort. `[c]` → procede a Step 1.
+`[l]` -> `manifest-transition.sh <m> aborted aborted` with `next_action` documenting the
+fallback to lightweight workflow (the user continues outside the chain). Not a failure:
+it is a legitimate choice. `[a]` -> abort. `[c]` -> proceeds to Step 1.
 
-Il rilevamento dei criteri è incapsulato in un nuovo helper `scripts/gate0-detect.sh`
-(bash 3.2-clean) per testabilità isolata e riuso.
+The criteria detection is encapsulated in a new helper `scripts/gate0-detect.sh`
+(bash 3.2-clean) for isolated testability and reuse.
 
-### 2.3 (Q3) Brownfield detection: **automatica (presenza file) + conferma utente al Gate 0**
+### 2.3 (Q3) Brownfield detection: **automatic (file presence) + user confirmation at Gate 0**
 
-Brownfield è derivato deterministicamente dalla presenza di `<project-root>/SPEC.md`:
+Brownfield is derived deterministically from the presence of `<project-root>/SPEC.md`:
 
-- **Greenfield** (no `SPEC.md`): Step 1 interview produce SPEC nuovo; Step 3 genera
-  `CLAUDE.md` (da zero se assente, additivo se presente — vedi sotto).
-- **Brownfield** (`SPEC.md` esiste): Step 1 SALTATO; `artifacts.spec` punta alla SPEC
-  esistente; Gate 1 marcato "spec pre-esistente approvata".
+- **Greenfield** (no `SPEC.md`): Step 1 interview produces new SPEC; Step 3 generates
+  `CLAUDE.md` (from scratch if absent, additive if present — see below).
+- **Brownfield** (`SPEC.md` exists): Step 1 SKIPPED; `artifacts.spec` points to the
+  existing SPEC; Gate 1 marked "pre-existing approved spec".
 
-La detection è **automatica** (check file), ma la **conferma è implicita nel Gate 0**:
-quando `SPEC.md` esiste, il criterio A è già attivo e l'utente, scegliendo `[c]`, sta di
-fatto confermando di voler procedere in brownfield mode. Non si introduce un gate
-separato per la conferma brownfield (eviterebbe gate fatigue, antipattern noto da
-ADR-0003 §1).
+The detection is **automatic** (file check), but **confirmation is implicit at Gate 0**:
+when `SPEC.md` exists, criterion A is already active and the user, by choosing `[c]`, is
+implicitly confirming they want to proceed in brownfield mode. No separate gate is introduced
+for the brownfield confirmation (avoids gate fatigue, known anti-pattern from ADR-0003 §1).
 
-Il flag `mode: greenfield|brownfield` viene scritto nel manifest (nuovo campo
-top-level, vedi 2.6) per renderlo ispezionabile e per pilotare il comportamento di Step
-1 e Step 3 in modo deterministico, non a discrezione dell'orchestrator.
+The flag `mode: greenfield|brownfield` is written to the manifest (new top-level field, see
+2.6) to make it inspectable and to drive Step 1 and Step 3 behavior deterministically, not at
+the orchestrator's discretion.
 
-Ortogonalmente, il comportamento di Step 3 su `CLAUDE.md` esistente diventa **sempre
-additivo** (mai degradante), indipendentemente da greenfield/brownfield: se `CLAUDE.md`
-esiste, `claude-md-generator` produce `CLAUDE.md.proposed` in **modalità additiva**
-(CLAUDE.md attuale preservato + sezione "## Decisioni dal chain <topic>" che referenzia
-il nuovo ADR), e Gate 3 mostra il diff. Questo codifica la mossa ad-hoc di rempay.
+Orthogonally, Step 3 behavior on existing `CLAUDE.md` becomes **always additive** (never
+degrading), regardless of greenfield/brownfield: if `CLAUDE.md` exists, `claude-md-generator`
+produces `CLAUDE.md.proposed` in **additive mode** (current CLAUDE.md preserved + section
+"## Decisions from chain <topic>" referencing the new ADR), and Gate 3 shows the diff. This
+codifies the rempay ad-hoc move.
 
-### 2.4 (Q4) Dove vive `BRAINSTORM.md`: **project root + campo `artifacts.brainstorm` nel manifest**
+### 2.4 (Q4) Where `BRAINSTORM.md` lives: **project root + `artifacts.brainstorm` field in manifest**
 
-`BRAINSTORM.md` vive in `<project-root>/BRAINSTORM.md` (stesso livello di SPEC.md/ARCH.md
-— coerenza posizionale con gli altri artefatti di design del chain). Il manifest lo
-traccia con il nuovo campo `artifacts.brainstorm` (assente=null, popolato quando il
-brainstorm-gate produce il file). Vive accanto a SPEC.md e ARCH.md, non in `docs/`,
-perché è un artefatto di alto livello (come SPEC/ARCH) e non un documento di archivio.
+`BRAINSTORM.md` lives in `<project-root>/BRAINSTORM.md` (same level as SPEC.md/ARCH.md
+— positional consistency with the other design artifacts of the chain). The manifest tracks
+it with the new field `artifacts.brainstorm` (absent=null, populated when the brainstorm-gate
+produces the file). It lives next to SPEC.md and ARCH.md, not in `docs/`, because it is a
+high-level artifact (like SPEC/ARCH) and not an archive document.
 
-### 2.5 (Q5 + Q7) State machine: **schema 1.1 con nuovi campi opzionali; nessun nuovo stato `current_step` obbligatorio per Gate 0/brownfield; un solo nuovo stato per il brainstorm-gate**
+### 2.5 (Q5 + Q7) State machine: **schema 1.1 with new optional fields; no new mandatory `current_step` state for Gate 0/brownfield; a single new state for the brainstorm-gate**
 
-Principio guida: minimizzare i nuovi stati nella enum `current_step` (ogni stato nuovo
-= nuove transizioni legali + rischio rottura smoke-e2e). Si usano **flag nel manifest**
-dove possibile, **stati nuovi** solo dove serve un punto di ripresa cross-sessione.
+Guiding principle: minimize new states in the `current_step` enum (every new state =
+new legal transitions + risk of breaking smoke-e2e). **Manifest flags** are used where
+possible, **new states** only where a cross-session resume point is needed.
 
-- **Gate 0:** NON è uno stato. È un check eseguito in `step_0_init` prima della
-  transizione a `step_1_interview`. Esito registrato nel campo `gate0` del manifest. La
-  transizione `step_0_init → step_1_interview` resta legale e invariata. `[l]`/`[a]`
-  usano la transizione wildcard `* → aborted` già supportata.
-- **Brownfield:** NON è uno stato. È il flag `mode: brownfield`. In brownfield, Step 1
-  è saltato → si usa la transizione **nuova** `step_1_interview → gate_1_spec_review`
-  che già esiste, ma serve poterci arrivare senza interview reale. Soluzione: in
-  brownfield l'orchestrator transiziona comunque `step_0_init → step_1_interview` (lo
-  stato "interview" esiste ma è no-op: punta `artifacts.spec` all'esistente) →
-  `step_1_interview → gate_1_spec_review`. Nessuna transizione nuova richiesta. Gate 1
-  marcato "spec pre-esistente".
-- **Brainstorm-gate:** richiede UN nuovo stato `gate_1b_brainstorm_decision` tra
-  `gate_1_spec_review` e `step_2_architecture`, perché è un punto in cui può partire una
-  sessione di brainstorming potenzialmente lunga e l'utente può scegliere y/n. Nuove
-  transizioni legali:
-  - `gate_1_spec_review → gate_1b_brainstorm_decision` (sostituisce di fatto il path
-    diretto; ma il path diretto `gate_1_spec_review → step_2_architecture` RESTA legale
-    per retrocompat con manifest v1.0 e smoke-e2e esistente).
-  - `gate_1b_brainstorm_decision → step_2_architecture` (esito n, o esito y completato).
+- **Gate 0:** is NOT a state. It is a check executed in `step_0_init` before the transition
+  to `step_1_interview`. Outcome recorded in the `gate0` field of the manifest. The transition
+  `step_0_init -> step_1_interview` remains legal and unchanged. `[l]`/`[a]` use the
+  wildcard transition `* -> aborted` already supported.
+- **Brownfield:** is NOT a state. It is the flag `mode: brownfield`. In brownfield, Step 1
+  is skipped -> the **existing** transition `step_1_interview -> gate_1_spec_review` is used,
+  but we need to reach it without a real interview. Solution: in brownfield the orchestrator
+  still transitions `step_0_init -> step_1_interview` (the "interview" state exists but is a
+  no-op: it points `artifacts.spec` to the existing one) -> `step_1_interview -> gate_1_spec_review`.
+  No new transition required. Gate 1 marked "pre-existing spec".
+- **Brainstorm-gate:** requires ONE new state `gate_1b_brainstorm_decision` between
+  `gate_1_spec_review` and `step_2_architecture`, because it is a point where a potentially
+  long brainstorming session can begin and the user can choose y/n. New legal transitions:
+  - `gate_1_spec_review -> gate_1b_brainstorm_decision` (effectively replaces the direct path;
+    but the direct path `gate_1_spec_review -> step_2_architecture` REMAINS legal for
+    retrocompat with v1.0 manifests and existing smoke-e2e).
+  - `gate_1b_brainstorm_decision -> step_2_architecture` (outcome n, or completed outcome y).
 
-  Il brainstorm-gate `n` → transizione diretta a `step_2_architecture` (comportamento
-  identico a oggi: architect diretto). Il brainstorm-gate `y` → la skill
-  `design-brainstorm` viene invocata in-session, scrive `BRAINSTORM.md`, popola
-  `artifacts.brainstorm`, poi transizione a `step_2_architecture` con il brief incluso
-  nel dispatch architect.
+  Brainstorm-gate `n` -> direct transition to `step_2_architecture` (identical behavior to
+  today: direct architect). Brainstorm-gate `y` -> the `design-brainstorm` skill is invoked
+  in-session, writes `BRAINSTORM.md`, populates `artifacts.brainstorm`, then transitions to
+  `step_2_architecture` with the brief included in the architect dispatch.
 
-- **Schema version:** si passa a `manifest_schema_version: "1.1"`. La validate accetta
-  **sia 1.0 sia 1.1** (retrocompat: i manifest rempay completati restano validi). I
-  campi nuovi (`mode`, `gate0`, `artifacts.brainstorm`) sono **opzionali** in 1.1:
-  `manifest-validate.sh` non li richiede, ma se presenti ne valida i valori. Migrazione
-  documentata: un manifest 1.0 è un manifest 1.1 valido senza i campi nuovi (additive,
-  forward-only). `manifest-init.sh` scrive 1.1 con i campi nuovi popolati.
+- **Schema version:** moved to `manifest_schema_version: "1.1"`. The validator accepts
+  **both 1.0 and 1.1** (retrocompat: the completed rempay manifests remain valid). New fields
+  (`mode`, `gate0`, `artifacts.brainstorm`) are **optional** in 1.1: `manifest-validate.sh`
+  does not require them, but if present validates their values. Documented migration: a 1.0
+  manifest is a valid 1.1 manifest without the new fields (additive, forward-only).
+  `manifest-init.sh` writes 1.1 with new fields populated.
 
-### 2.6 (Q6) Chi scrive il manifest: **la skill `design-brainstorm` scrive SOLO `BRAINSTORM.md`; l'orchestrator (concept-to-code) aggiorna `artifacts.brainstorm`**
+### 2.6 (Q6) Who writes the manifest: **the `design-brainstorm` skill writes ONLY `BRAINSTORM.md`; the orchestrator (concept-to-code) updates `artifacts.brainstorm`**
 
-Separazione delle responsabilità coerente con ADR-0003: le skill foglia (interview-driver,
-claude-md-generator) producono artefatti, l'orchestrator (concept-to-code) possiede il
-manifest. `design-brainstorm` non conosce il manifest né lo schema → resta riusabile
-standalone fuori dal chain. Dopo che `design-brainstorm` ritorna, l'orchestrator scrive
-`artifacts.brainstorm = <project-root>/BRAINSTORM.md` con lo stesso pattern di edit YAML
-già usato per `artifacts.spec`/`adr`/`plan`.
+Separation of responsibilities consistent with ADR-0003: leaf skills (interview-driver,
+claude-md-generator) produce artifacts, the orchestrator (concept-to-code) owns the manifest.
+`design-brainstorm` does not know the manifest or the schema -> remains reusable standalone
+outside the chain. After `design-brainstorm` returns, the orchestrator writes
+`artifacts.brainstorm = <project-root>/BRAINSTORM.md` with the same YAML edit pattern already
+used for `artifacts.spec`/`adr`/`plan`.
 
-### 2.7 Helper bash nuovo e modifiche agli script esistenti
+### 2.7 New bash helper and changes to existing scripts
 
-- **Nuovo `scripts/gate0-detect.sh`** (bash 3.2): args `<project-root>`, stampa su
-  stdout i criteri attivi (`spec_adr_exist` se SPEC.md+ADR presenti; `mode=greenfield`
-  o `mode=brownfield`). Exit 0 sempre (è un detector, non un validatore). Testabile
-  isolatamente.
-- **`manifest-init.sh`:** scrive `manifest_schema_version: "1.1"`, aggiunge campi
-  `mode`, `gate0`, e `artifacts.brainstorm: null`. Il valore di `mode` è passato come
-  4° argomento opzionale (default `greenfield`); `init` può chiamare `gate0-detect.sh`
-  per derivarlo, oppure riceverlo dall'orchestrator.
-- **`manifest-validate.sh`:** accetta schema 1.0 OR 1.1; aggiunge `gate_1b_brainstorm_decision`
-  alla enum degli stati validi; se `mode` presente, valida ∈ {greenfield, brownfield};
-  invariante hitl_gates resta `>= 4` (era `== 4`; si rilassa a `>= 4` per ammettere un
-  eventuale gate0/gate1b nell'audit trail senza rompere i manifest a 4 gate). Vedi 3.5.
-- **`manifest-transition.sh`:** aggiunge le 2 nuove pair legali (vedi 2.5),
-  preservando le 16 esistenti.
+- **New `scripts/gate0-detect.sh`** (bash 3.2): args `<project-root>`, prints active
+  criteria to stdout (`spec_adr_exist` if SPEC.md+ADR present; `mode=greenfield` or
+  `mode=brownfield`). Always exit 0 (it is a detector, not a validator). Independently
+  testable.
+- **`manifest-init.sh`:** writes `manifest_schema_version: "1.1"`, adds fields
+  `mode`, `gate0`, and `artifacts.brainstorm: null`. The value of `mode` is passed as
+  4th optional argument (default `greenfield`); `init` can call `gate0-detect.sh` to
+  derive it, or receive it from the orchestrator.
+- **`manifest-validate.sh`:** accepts schema 1.0 OR 1.1; adds `gate_1b_brainstorm_decision`
+  to the enum of valid states; if `mode` present, validates it is in {greenfield, brownfield};
+  hitl_gates invariant changed from `== 4` to `>= 4` (relaxed to admit a gate0/gate1b in
+  the audit trail without breaking manifests with 4 gates). See 3.5.
+- **`manifest-transition.sh`:** adds the 2 new legal pairs (see 2.5), preserving the 16
+  existing ones.
 
-### 2.8 La skill `design-brainstorm` (riassunto; dettaglio nella spec dedicata)
+### 2.8 The `design-brainstorm` skill (summary; detail in dedicated spec)
 
-Esplora **metodologia applicativa** e **idee nuove** PRIMA che l'architettura sia
-fissata. NON estrae requisiti (interview-driver), NON scrive SPEC/plan (resto del chain),
-NON invoca writing-plans (differenza chiave da `superpowers:brainstorming`, che è uno
-stato terminale e confliggerebbe col chain). Usa `AskUserQuestion` in flusso dialogico
-multiple-choice, una tecnica alla volta. Tecniche cardine: first-principles, analogie
-cross-dominio, inversione, vincoli forzati, assumption-busting, alternative genuinamente
-diverse (2-4), idee adiacenti. Output: `BRAINSTORM.md` strutturato (problema riformulato,
-assunzioni sfidate, 2-4 alternative con trade-off, idee adiacenti, raccomandazione
-preliminare). Lingua: comunicazione in italiano, template in inglese. No
-`disable-model-invocation`.
+Explores **application methodology** and **new ideas** BEFORE the architecture is fixed.
+Does NOT extract requirements (interview-driver), does NOT write SPEC/plan (rest of chain),
+does NOT invoke writing-plans (key difference from `superpowers:brainstorming`, which is a
+terminal state and would conflict with the chain). Uses `AskUserQuestion` in a multi-choice
+dialogical flow, one technique at a time. Core techniques: first-principles, cross-domain
+analogies, inversion, forced constraints, assumption-busting, genuinely different alternatives
+(2-4), adjacent ideas. Output: structured `BRAINSTORM.md` (restated problem, challenged
+assumptions, 2-4 alternatives with trade-offs, adjacent ideas, preliminary recommendation).
+Language: communication in Italian, template in English. No `disable-model-invocation`.
 
 ---
 
-## 3. Alternative considerate e scartate
+## 3. Alternatives considered and rejected
 
-### 3.1 (Q1) Nome skill — alternative
+### 3.1 (Q1) Skill name — alternatives
 
-- **`brainstorm-explore`** — scartato: ridondante (brainstorm già implica esplorazione)
-  e non comunica la fase di design. Confondibile con un tool generico di esplorazione.
-- **`design-explore`** — scartato: troppo generico, si sovrappone semanticamente a
-  `interview-driver` (anche l'interview "esplora").
-- **`approach-brainstorm`** — scartato: "approach" è preciso ma poco idiomatico;
-  `design-` come prefisso è più leggibile nel namespace skill.
-- **Scelto `design-brainstorm`:** prefisso `design-` ancora la fase, `-brainstorm`
-  il metodo. Distinto da `interview-driver` (requisiti) e da `superpowers:brainstorming`
-  (che scrive spec).
+- **`brainstorm-explore`** — rejected: redundant (brainstorm already implies exploration)
+  and does not communicate the design phase. Confusable with a generic exploration tool.
+- **`design-explore`** — rejected: too generic, semantically overlaps with `interview-driver`
+  (the interview also "explores").
+- **`approach-brainstorm`** — rejected: "approach" is precise but not idiomatic; `design-`
+  as prefix is more readable in the skill namespace.
+- **Chosen `design-brainstorm`:** prefix `design-` anchors the phase, `-brainstorm` the
+  method. Distinct from `interview-driver` (requirements) and from `superpowers:brainstorming`
+  (which writes spec).
 
-### 3.2 (Q2) Gate 0 — alternative
+### 3.2 (Q2) Gate 0 — alternatives
 
-- **Conteggio file automatico per il micro-scope** — scartato: impossibile stimare i
-  file toccati prima di interview/architettura senza euristiche fragili (numero di file
-  esistenti ≠ file da toccare). Falsi positivi/negativi minerebbero la fiducia nel gate.
-  Lezione `swarm-testcmd`: preferire tier autoritativo (l'utente) all'euristica.
-- **Decisione automatica dell'orchestrator (status quo)** — scartato: è esattamente il
-  Gap #1. La scelta è di processo/costo, appartiene all'utente.
-- **Gate 0 sempre mostrato anche in greenfield pulito** — scartato: gate fatigue
-  inutile sul caso comune (nuovo progetto senza SPEC/ADR). Gate 0 è silenzioso quando
-  nessun criterio è attivo.
-- **Scelto:** check deterministici (file presence) per criterio A; flag dichiarativo
-  utente-confermato per criterio B; gate mostrato solo se almeno un criterio attivo.
+- **Automatic file count for micro-scope** — rejected: impossible to estimate files to touch
+  before interview/architecture without fragile heuristics (number of existing files !=
+  files to touch). False positives/negatives would undermine trust in the gate. Lesson from
+  `swarm-testcmd`: prefer authoritative tier (the user) over heuristic.
+- **Automatic orchestrator decision (status quo)** — rejected: it is exactly Gap #1. The
+  choice is a process/cost decision, belongs to the user.
+- **Gate 0 always shown even in clean greenfield** — rejected: unnecessary gate fatigue on
+  the common case (new project without SPEC/ADR). Gate 0 is silent when no criterion is active.
+- **Chosen:** deterministic checks (file presence) for criterion A; user-confirmed declarative
+  flag for criterion B; gate shown only if at least one criterion is active.
 
-### 3.3 (Q3) Brownfield detection — alternative
+### 3.3 (Q3) Brownfield detection — alternatives
 
-- **Esplicita via flag CLI** (`/concept-to-code --brownfield <topic>`) — scartato:
-  l'utente non dovrebbe dover sapere se è greenfield/brownfield; la presenza di SPEC.md
-  è il segnale autoritativo. Flag manuale = dimenticabile = drift.
-- **Solo automatica, senza conferma** — scartato: rischierebbe di saltare l'interview su
-  un progetto dove l'utente VOLEVA rigenerare la SPEC. La conferma implicita al Gate 0
-  copre il caso senza un gate dedicato.
-- **Gate brownfield dedicato separato da Gate 0** — scartato: due gate consecutivi
-  all'avvio = fatigue. Si fonde nella scelta `[c]` del Gate 0.
-- **Scelto:** automatica (presenza SPEC.md) + conferma implicita nella scelta `[c]` del
-  Gate 0 + flag `mode` nel manifest per determinismo.
+- **Explicit via CLI flag** (`/concept-to-code --brownfield <topic>`) — rejected: the user
+  should not need to know if it is greenfield/brownfield; the presence of SPEC.md is the
+  authoritative signal. Manual flag = forgettable = drift.
+- **Only automatic, without confirmation** — rejected: would risk skipping the interview on
+  a project where the user WANTED to regenerate the SPEC. The implicit confirmation at Gate 0
+  covers the case without a dedicated gate.
+- **Dedicated brownfield gate separate from Gate 0** — rejected: two consecutive gates at
+  startup = fatigue. Merged into the `[c]` choice of Gate 0.
+- **Chosen:** automatic (SPEC.md presence) + implicit confirmation in the `[c]` choice of
+  Gate 0 + `mode` flag in manifest for determinism.
 
-### 3.4 (Q4) Posizione di BRAINSTORM.md — alternative
+### 3.4 (Q4) Position of BRAINSTORM.md — alternatives
 
-- **Sezione del manifest YAML** — scartato: il brief è prosa lunga e dialogica; inquinerebbe
-  il manifest (che deve restare parsabile da grep in bash 3.2) e violerebbe la
-  separazione "manifest = stato, file = artefatto" di ADR-0003.
-- **`docs/brainstorm/<date>-<topic>.md`** — scartato: troppo nascosto per un artefatto
-  che l'utente deve leggere prima di approvare l'architettura; incoerente con
-  SPEC.md/ARCH.md a project root.
-- **`docs/superpowers/specs/`** — scartato: quella cartella è per gli spec di design del
-  *sistema*, non per i brief di brainstorming dei *progetti target*.
-- **Scelto:** `<project-root>/BRAINSTORM.md` + `artifacts.brainstorm` nel manifest.
+- **Section of the YAML manifest** — rejected: the brief is long and dialogical prose;
+  it would pollute the manifest (which must remain parsable via grep in bash 3.2) and
+  violate the "manifest = state, file = artifact" separation of ADR-0003.
+- **`docs/brainstorm/<date>-<topic>.md`** — rejected: too hidden for an artifact the user
+  must read before approving the architecture; inconsistent with SPEC.md/ARCH.md at project
+  root.
+- **`docs/superpowers/specs/`** — rejected: that folder is for design specs of the *system*,
+  not for brainstorming briefs of *target projects*.
+- **Chosen:** `<project-root>/BRAINSTORM.md` + `artifacts.brainstorm` in the manifest.
 
-### 3.5 (Q5) State machine — alternative
+### 3.5 (Q5) State machine — alternatives
 
-- **Nessun nuovo stato, tutto a flag** — scartato per il brainstorm-gate: il brainstorm
-  può essere una sessione lunga; serve un punto di ripresa nominato e un esito
-  ispezionabile. Per Gate 0 e brownfield invece i flag bastano (nessun lavoro lungo da
-  riprendere).
-- **Tre nuovi stati (gate_0, brownfield_skip, gate_1b)** — scartato: gate_0 e
-  brownfield non hanno bisogno di un punto di ripresa cross-sessione (sono istantanei
-  all'avvio); aggiungere stati = più transizioni legali = più superficie di rottura per
-  lo smoke-e2e e la validate. Si aggiunge solo `gate_1b_brainstorm_decision`.
-- **Riscrivere lo schema da zero a 2.0** — scartato: romperebbe i manifest rempay
-  completati. Schema 1.1 additive è retrocompatibile.
-- **Invariante `hitl_gates == 4` mantenuta rigida** — scartato: bloccherebbe
-  l'eventuale audit trail di Gate 0/1b. Si rilassa a `>= 4` (additive: i manifest
-  esistenti a 4 gate restano validi).
-- **Scelto:** schema 1.1 additive; 1 nuovo stato (`gate_1b_brainstorm_decision`); 2
-  nuove pair; path diretto `gate_1_spec_review → step_2_architecture` preservato per
-  retrocompat; `hitl_gates >= 4`.
+- **No new states, everything as flags** — rejected for the brainstorm-gate: the brainstorm
+  can be a long session; a named resume point and an inspectable outcome are needed. For Gate 0
+  and brownfield, flags suffice (no long work to resume).
+- **Three new states (gate_0, brownfield_skip, gate_1b)** — rejected: gate_0 and brownfield
+  do not need a cross-session resume point (they are instantaneous at startup); adding states
+  = more legal transitions = more breakage surface for smoke-e2e and validate. Only
+  `gate_1b_brainstorm_decision` is added.
+- **Rewrite schema from scratch to 2.0** — rejected: would break the completed rempay
+  manifests. Additive schema 1.1 is retrocompatible.
+- **Strict `hitl_gates == 4` invariant maintained** — rejected: would block the possible
+  Gate 0/1b audit trail. Relaxed to `>= 4` (additive: existing manifests with 4 gates
+  remain valid).
+- **Chosen:** additive schema 1.1; 1 new state (`gate_1b_brainstorm_decision`); 2 new pairs;
+  direct path `gate_1_spec_review -> step_2_architecture` preserved for retrocompat;
+  `hitl_gates >= 4`.
 
-### 3.6 (Q6) Chi scrive il manifest — alternative
+### 3.6 (Q6) Who writes the manifest — alternatives
 
-- **`design-brainstorm` scrive anche `artifacts.brainstorm`** — scartato: accoppierebbe
-  la skill al manifest schema, rompendo la sua riusabilità standalone e violando la
-  separazione di responsabilità di ADR-0003 (le foglie non conoscono il manifest).
-- **Scelto:** `design-brainstorm` scrive solo `BRAINSTORM.md`; concept-to-code aggiorna
+- **`design-brainstorm` also writes `artifacts.brainstorm`** — rejected: would couple the
+  skill to the manifest schema, breaking its standalone reusability and violating the
+  separation of responsibilities of ADR-0003 (leaf skills do not know the manifest).
+- **Chosen:** `design-brainstorm` writes only `BRAINSTORM.md`; concept-to-code updates
   `artifacts.brainstorm`.
 
-### 3.7 (Q7) Fallback brainstorm-gate=n — alternative
+### 3.7 (Q7) Brainstorm-gate=n fallback — alternatives
 
-- **Comportamento diverso da oggi (es. mini-prompt)** — scartato: il brief richiede
-  esplicitamente che `n` sia identico al comportamento attuale (architect diretto). Zero
-  regressioni per chi non usa il brainstorm.
-- **Scelto:** `n` → transizione a `step_2_architecture`, dispatch architect identico ad
-  ADR-0003 (nessun `BRAINSTORM.md`, `artifacts.brainstorm` resta null).
+- **Different behavior from today (e.g. mini-prompt)** — rejected: the brief explicitly
+  requires that `n` be identical to the current behavior (direct architect). Zero regressions
+  for users who do not use the brainstorm.
+- **Chosen:** `n` -> transition to `step_2_architecture`, identical architect dispatch to
+  ADR-0003 (no `BRAINSTORM.md`, `artifacts.brainstorm` remains null).
 
 ---
 
@@ -356,34 +344,33 @@ preliminare). Lingua: comunicazione in italiano, template in inglese. No
 
 ### Positive
 
-- Gap #1/#2/#3 risolti insieme su un unico punto di intervento → zero debito di
-  coordinamento sullo SKILL.md.
-- La decisione chain-vs-leggero e greenfield-vs-brownfield diventano **deterministiche e
-  riproducibili**, non dipendenti dalla sveglieria dell'orchestrator.
-- Il brainstorm-gate aggiunge esplorazione dialogica di alta qualità senza alterare il
-  path di default (n = comportamento attuale).
-- Retrocompat totale: schema 1.1 additive, path diretto preservato, manifest rempay
-  completati restano validi.
-- `design-brainstorm` è riusabile standalone e dal chain (no `disable-model-invocation`).
+- Gaps #1/#2/#3 resolved together at a single intervention point -> zero coordination debt
+  on SKILL.md.
+- The chain-vs-lightweight and greenfield-vs-brownfield decisions become **deterministic and
+  reproducible**, no longer dependent on the orchestrator's alertness.
+- The brainstorm-gate adds high-quality dialogical exploration without altering the default
+  path (n = current behavior).
+- Total retrocompat: additive schema 1.1, direct path preserved, completed rempay manifests
+  remain valid.
+- `design-brainstorm` is reusable standalone and from the chain (no `disable-model-invocation`).
 
 ### Negative
 
-- Aumenta la superficie dello SKILL.md (Gate 0 + 1b + brownfield branching) → più
-  complesso da leggere. Mitigato dalla sez. State machine aggiornata e da uno schema
-  diagram chiaro.
-- Schema 1.1 introduce un check di versione dual (1.0 OR 1.1) nella validate → leggera
-  complessità in più.
-- Nuova skill = nuovo harness da mantenere verde (debito di manutenzione).
-- Il flag `mode` aggiunge un punto in cui l'orchestrator deve agire correttamente; è
-  mitigato dal fatto che `gate0-detect.sh` lo deriva deterministicamente.
+- Increases the surface of SKILL.md (Gate 0 + 1b + brownfield branching) -> more complex
+  to read. Mitigated by the updated State machine section and a clear schema diagram.
+- Schema 1.1 introduces a dual version check (1.0 OR 1.1) in the validator -> slightly more
+  complexity.
+- New skill = new harness to keep green (maintenance debt).
+- The `mode` flag adds a point where the orchestrator must act correctly; mitigated by the
+  fact that `gate0-detect.sh` derives it deterministically.
 
 ### Neutral
 
-- `BRAINSTORM.md` è opzionale: assente quando il brainstorm-gate è `n`.
-- Il workflow leggero scelto al Gate 0 esce dal chain (manifest `aborted` con
-  `next_action` documentato); non è gestito dal chain oltre quel punto.
-- Numero di gate HITL variabile (4 senza brainstorm, 5+ con) — coerente con la natura
-  opzionale del brainstorm-gate.
+- `BRAINSTORM.md` is optional: absent when the brainstorm-gate is `n`.
+- The lightweight workflow chosen at Gate 0 exits the chain (manifest `aborted` with
+  `next_action` documented); it is not managed by the chain beyond that point.
+- Number of HITL gates variable (4 without brainstorm, 5+ with) — consistent with the
+  optional nature of the brainstorm-gate.
 
 ---
 
@@ -393,6 +380,6 @@ preliminare). Lingua: comunicazione in italiano, template in inglese. No
 - Spec workflow v2: `docs/superpowers/specs/2026-05-21-concept-to-code-workflow-v2-design.md`.
 - Spec skill: `docs/superpowers/specs/2026-05-21-design-brainstorm-skill-design.md`.
 - Plan: `docs/superpowers/plans/2026-05-21-concept-to-code-workflow-v2.md`.
-- Blueprint §11 (workflow concept→code), §8 (skill).
+- Blueprint §11 (concept->code workflow), §8 (skill).
 - Memory: `feedback_bash32-constraint.md`, `feedback_disable-model-invocation-strong.md`,
   `feedback_micropiano-refactor-cleanup.md`.
