@@ -1,204 +1,202 @@
-# Vibe Coding System per Stefano Ferri — Architettura Multi-Agente v2.1
+# Vibe Coding System for Stefano Ferri — Multi-Agent Architecture v2.1
 
-**Versione:** 2.1 (terza verifica integrale contro documentazione Anthropic ufficiale completa)
-**Autore:** Adriano per Stefano Ferri
-**Data:** 17 maggio 2026
-**Target:** Claude Code (CLI) v2.1.32+ con orchestrazione hybrid, sub-agenti, agent teams (experimental), skill, hook e MCP
+**Version:** 2.1 (third full audit against complete official Anthropic documentation)
+**Author:** Adriano per Stefano Ferri
+**Date:** 17 May 2026
+**Target:** Claude Code (CLI) v2.1.32+ with hybrid orchestration, sub-agents, agent teams (experimental), skills, hooks, and MCP
 
 ---
 
-## Cambiamenti rispetto alle versioni precedenti
+## Changes from previous versions
 
 ### v1.0 → v2.0
-Correzioni strutturali (sub-agent come entità formali con YAML, agent-teams come pattern separato, CLAUDE.md size limit, path-scoped rules, hook completi, worktree isolation, skill bundled, 6 permission modes).
+Structural corrections (sub-agents as formal entities with YAML, agent-teams as a separate pattern, CLAUDE.md size limit, path-scoped rules, complete hooks, worktree isolation, bundled skills, 6 permission modes).
 
-### v2.0 → v2.1 (questa versione)
-Verifica integrale contro le pagine ufficiali `code.claude.com/docs` (best-practices, sub-agents, agent-teams, memory, skills, hooks-guide, permission-modes, common-workflows, features-overview, mcp, claude-directory, settings, plugins, worktrees). Correzioni puntuali aggiunte:
+### v2.0 → v2.1 (this version)
+Full audit against official `code.claude.com/docs` pages (best-practices, sub-agents, agent-teams, memory, skills, hooks-guide, permission-modes, common-workflows, features-overview, mcp, claude-directory, settings, plugins, worktrees). Point corrections added:
 
-- **`attribution` setting** (sez. 4): disabilita la firma "Co-Authored-By: Claude" nei commit per branding professionale. Importante perché di default Claude Code aggiunge il trailer ai commit
-- **`$schema` in settings.json**: abilita validation JSON in Cursor/VS Code
-- **MCP GitHub remote via HTTP**: il pattern moderno è `https://api.githubcopilot.com/mcp/` con Bearer token, non più stdio. Sezione 9.1 aggiornata
-- **`claude mcp add` CLI**: pattern raccomandato Anthropic vs editing diretto di `.mcp.json`
-- **`alwaysLoad: true`** per MCP server con tool sempre necessari (saltare tool search)
-- **`MAX_MCP_OUTPUT_TOKENS`** per limit output MCP (default 25,000)
-- **Worktrees: dettagli operativi** (sez. 12): path `.claude/worktrees/<name>/`, branch `worktree-<name>`, `worktree.baseRef: "head"` per branchare da local HEAD, PR worktree con `#<num>`, caveat su `node_modules`/`uv venv` non portati
-- **`.worktreeinclude`**: file root del progetto per copiare gitignored (`.env`, `secrets`) nei worktree creati
-- **Comandi diagnostici completi** (sez. 16): `/config`, `/context`, `/status`, `/doctor`, `/skills`, `/permissions`, `/plugin`
-- **Plugin `--plugin-dir`/`--plugin-url`** (sez. 14): test locale e CI di plugin in development
-- **Hook `InstructionsLoaded`** (sez. 7): debug del caricamento path-scoped rules
+- **`attribution` setting** (sec. 4): disables the "Co-Authored-By: Claude" signature in commits for professional branding. Important because Claude Code adds the trailer to commits by default
+- **`$schema` in settings.json**: enables JSON validation in Cursor/VS Code
+- **MCP GitHub remote via HTTP**: the modern pattern is `https://api.githubcopilot.com/mcp/` with Bearer token, no longer stdio. Section 9.1 updated
+- **`claude mcp add` CLI**: Anthropic-recommended pattern vs direct editing of `.mcp.json`
+- **`alwaysLoad: true`** for MCP servers with always-needed tools (skip tool search)
+- **`MAX_MCP_OUTPUT_TOKENS`** to limit MCP output (default 25,000)
+- **Worktrees: operational details** (sec. 12): path `.claude/worktrees/<name>/`, branch `worktree-<name>`, `worktree.baseRef: "head"` to branch from local HEAD, PR worktree with `#<num>`, caveats on `node_modules`/`uv venv` not carried over
+- **`.worktreeinclude`**: project root file for copying gitignored files (`.env`, `secrets`) into newly created worktrees
+- **Full diagnostic commands** (sec. 16): `/config`, `/context`, `/status`, `/doctor`, `/skills`, `/permissions`, `/plugin`
+- **Plugin `--plugin-dir`/`--plugin-url`** (sec. 14): local and CI testing of plugins in development
+- **Hook `InstructionsLoaded`** (sec. 7): debug path-scoped rules loading
 
-### Correzione 2026-05-19 (post-verifica hooks live)
+### Correction 2026-05-19 (post-live hooks verification)
 
-Verifica diretta di `code.claude.com/docs/en/hooks` (2026-05-19) ha trovato due
-imprecisioni in sez. 7 e sez. 17, qui corrette inline:
+Direct verification of `code.claude.com/docs/en/hooks` (2026-05-19) found two
+inaccuracies in sec. 7 and sec. 17, corrected inline here:
 
-- **`type: prompt` e `type: agent` NON sono supportati sull'evento `Stop`**:
-  su `Stop` valgono solo `command`, `http`, `mcp_tool`. Le sez. 7.4 e 7.5
-  (gate Stop prompt/agent based) sono **errate come scritte** — vedi
-  admonition correttiva in loco. Il pattern corretto per un gate su `Stop` è
-  un hook `type: command` con contratto `{"decision":"block","reason":"…"}`
-  o exit code 2.
-- **Nessun `stop_hook_active` / loop-protection nativa per `Stop`**: un guardrail
-  anti-loop (contatore per-sessione su `session_id`) è responsabilità
-  dell'autore dell'hook, non fornito da Claude Code.
+- **`type: prompt` and `type: agent` are NOT supported on the `Stop` event**:
+  on `Stop` only `command`, `http`, `mcp_tool` are valid. Sections 7.4 and 7.5
+  (prompt/agent-based Stop gates) are **wrong as written** — see
+  corrective admonition in place. The correct pattern for a gate on `Stop` is
+  a `type: command` hook with the contract `{"decision":"block","reason":"…"}`
+  or exit code 2.
+- **No `stop_hook_active` / native loop-protection for `Stop`**: an
+  anti-loop guardrail (per-session counter on `session_id`) is the
+  hook author's responsibility, not provided by Claude Code.
 
-Confermati nella stessa verifica: `session_id` stabile per sessione,
-`tool_input.file_path` su PostToolUse, hook multipli per evento in parallelo
-(un "block" vince).
+Confirmed in the same verification: `session_id` stable per session,
+`tool_input.file_path` on PostToolUse, multiple hooks per event in parallel
+(one "block" wins).
 
-### Riconciliazione 2026-05-19 (Stop-gate testcmd — implementato e deployato live)
+### Reconciliation 2026-05-19 (Stop-gate testcmd — implemented and deployed live)
 
-Il pattern corretto indicato nella correzione precedente non è più solo un
-*design*: è stato **implementato e deployato live** in `~/.claude/` (esecuzione
-subagent-driven). Lo stato as-built sostituisce ogni descrizione di "design da
-fare":
+The correct pattern indicated in the previous correction is no longer just a
+*design*: it has been **implemented and deployed live** in `~/.claude/` (subagent-driven
+execution). The as-built state supersedes any description of "design to do":
 
-- Il gate `Stop` è un hook `type: command` (`~/.claude/hooks/stop-gate.sh`) con
-  ladder a 3 tier su una **dichiarazione esplicita per-progetto**
-  `<repo>/.claude/test-cmd`: assente→nudge bounded / `NONE`→opt-out fail-open /
-  presente-non-approvato→tier approve (NO exec) / approvato→esegue il comando
-  autorevolmente (exit code reale, timeout, anti-loop a contatore).
-- **Trust-on-first-use**: un comando reale gira solo dopo approvazione esplicita
-  via `~/.claude/hooks/approve-test-cmd.sh` (registro `<sha256>\t<root>` in
-  `~/.claude/state/stop-gate/trust`); modificare `test-cmd` invalida l'hash →
-  ri-approvazione. **Nel chain `concept-to-code` (Gate 2b, 2026-05-26):** l'approvazione
-  passa per `AskUserQuestion` — l'orchestratore chiama `approve-test-cmd.sh` solo dopo
-  il click esplicito dell'utente. Questo risolve il loop stop-hook/auto-approve in cui
-  l'orchestratore si auto-approvava prima che l'utente potesse rispondere.
-- **L'euristica grep `clear-dirty-on-test.sh` è RITIRATA** (eliminata e unwired
-  da `settings.json`): risolve strutturalmente il difetto per cui runner
-  non-standard non venivano riconosciuti. Niente più pattern-matching
-  sull'output dei test.
-- **Fail-open totale** (spec §7): jq/sha256/timeout/session_id mancanti, exit
-  124/125/126/127 → allow, mai exit≠0.
-- Le **Fasi B/C** del vecchio spec agentic-swarm sono **subsunte**
-  dall'autoritative tier (nessun lavoro separato residuo).
-- Autorità as-built: `docs/superpowers/specs/2026-05-19-swarm-testcmd-design.md`
+- The `Stop` gate is a `type: command` hook (`~/.claude/hooks/stop-gate.sh`) with
+  a 3-tier ladder on an **explicit per-project declaration**
+  `<repo>/.claude/test-cmd`: absent→bounded nudge / `NONE`→opt-out fail-open /
+  present-not-approved→approve tier (NO exec) / approved→runs the command
+  authoritatively (real exit code, timeout, counter-based anti-loop).
+- **Trust-on-first-use**: a real command runs only after explicit approval
+  via `~/.claude/hooks/approve-test-cmd.sh` (register `<sha256>\t<root>` in
+  `~/.claude/state/stop-gate/trust`); modifying `test-cmd` invalidates the hash →
+  re-approval required. **In the `concept-to-code` chain (Gate 2b, 2026-05-26):** approval
+  goes through `AskUserQuestion` — the orchestrator calls `approve-test-cmd.sh` only after
+  the user's explicit click. This resolves the stop-hook/auto-approve loop in which
+  the orchestrator self-approved before the user could respond.
+- **The grep heuristic `clear-dirty-on-test.sh` is RETIRED** (deleted and unwired
+  from `settings.json`): structurally resolves the defect by which non-standard runners
+  were not recognized. No more pattern-matching on test output.
+- **Total fail-open** (spec §7): missing jq/sha256/timeout/session_id, exit
+  124/125/126/127 → allow, never exit≠0.
+- **Phases B/C** of the old agentic-swarm spec are **subsumed**
+  by the authoritative tier (no separate remaining work).
+- As-built authority: `docs/superpowers/specs/2026-05-19-swarm-testcmd-design.md`
   + `docs/superpowers/plans/2026-05-19-swarm-testcmd.md`. Harness
-  `~/.claude/hooks/tests/run-hook-tests.sh` (PASS=28 FAIL=0). Backup pristine +
+  `~/.claude/hooks/tests/run-hook-tests.sh` (PASS=28 FAIL=0). Pristine backup +
   rollback §9 in `~/.claude/state/backups/2026-05-19-swarm-testcmd/`.
 
-Sez. 7.4/7.5 (admonition aggiornate al riferimento as-built) e 7.6 (layout
-filesystem aggiornato al deployato) riflettono questo. Validazione tier sul
-progetto pilota = unico punto aperto (vedi sez. 17).
+Sec. 7.4/7.5 (admonitions updated to the as-built reference) and 7.6 (filesystem
+layout updated to the deployed state) reflect this. Tier validation on the
+pilot project = single open item (see sec. 17).
 
-### Aggiornamento 2026-05-26
+### Update 2026-05-26
 
-- **`isolation: worktree` su coder — gap chiuso**: il frontmatter di `~/.claude/agents/coder.md` ora include `isolation: worktree` (era presente nel template doc ma non deployato). Comportamento verificato: su repo git crea un worktree isolato, su progetti senza git fa fallback silenzioso (nessun errore, edit diretti). Il chain `concept-to-code` non richiede modifiche: il worktree branch viene già gestito dall'orchestratore nella fase di review/merge (sez. 3.2, 12).
-- **`manifest-validate.sh` accetta schema 1.2** (fix post-recovery): un recovery accidentale di skill aveva revertito `scripts/manifest-validate.sh` alla versione pre-ADR-0011, che non accettava `schema_version: "1.2"`. Fix inline applicato; harness concept-to-code 27/0.
-- **Gate 2b TOFU redesign** (fix loop stop-hook + auto-approve): nel chain `concept-to-code`, il vecchio pattern "di' all'utente di eseguire `approve-test-cmd.sh`" causava un loop: lo stop hook bloccava prima che l'utente potesse rispondere, l'orchestratore tentava di aggirarlo chiamando lo script via Bash, auto mode lo lasciava passare → auto-approvazione senza revisione umana. Fix: Gate 2b ora usa `AskUserQuestion` con opzioni esplicite [Approvo / Modifica / Salta / Abort]. Solo dopo il click dell'utente l'orchestratore chiama `approve-test-cmd.sh`. Guardrail espliciti nel SKILL.md: MAI chiamare `approve-test-cmd.sh` prima del click; MAI modificare `.claude/test-cmd` autonomamente. Il meccanismo TOFU SHA-pinned è invariato. Harness concept-to-code 29/0.
-- **Gate 4 session boundary — reso BLOCKING**: nel chain `concept-to-code`, il confine di sessione tra Step 3 (architettura+CLAUDE.md) e Step 5 (implementazione) non era abbastanza forte — l'orchestratore interpretava lo stato `ready_for_implementation` come segnale per continuare direttamente nel dispatch dei coder. Fix: Gate 4 ora usa `AskUserQuestion` con singola opzione "Confermato — farò /clear e resume" + istruzione esplicita `**STOP — non dispatchare coder, non proseguire**` nel SKILL.md. Il confine `/clear` è un requisito architetturale: il context della sessione interview/architect inquina la fase di implementazione (context window + rischio di sovrascrivere decisioni già prese). Harness concept-to-code +1 anchor (30/0).
-- **Blueprint repo su git** (2026-05-26 pomeriggio): `vibe-coding-system` ha ora git inizializzato e remote privato su `github.com/istefox/vibe-coding-system`. `.gitignore` esclude i log di sessione (`.remember/logs/`, `tmp/`, `now.md`, `today-*.md`, ecc.) — solo artefatti source vengono committati. Skill `/commit` field-testata su questo repo: flow completo verifica→diff→gate HITL→commit→push funzionante. Il `CLAUDE.md` del blueprint è stato aggiornato di conseguenza (rimossa nota "git non inizializzato").
+- **`isolation: worktree` on coder — gap closed**: the frontmatter of `~/.claude/agents/coder.md` now includes `isolation: worktree` (was present in the doc template but not deployed). Verified behavior: on a git repo it creates an isolated worktree; on projects without git it silently falls back (no error, direct edits). The `concept-to-code` chain requires no changes: the worktree branch is already managed by the orchestrator in the review/merge phase (sec. 3.2, 12).
+- **`manifest-validate.sh` accepts schema 1.2** (post-recovery fix): an accidental skill recovery had reverted `scripts/manifest-validate.sh` to the pre-ADR-0011 version, which did not accept `schema_version: "1.2"`. Fix applied inline; concept-to-code harness 27/0.
+- **Gate 2b TOFU redesign** (fix stop-hook loop + auto-approve): in the `concept-to-code` chain, the old pattern "tell the user to run `approve-test-cmd.sh`" caused a loop: the stop hook blocked before the user could respond, the orchestrator tried to work around it by calling the script via Bash, auto mode let it through → auto-approval without human review. Fix: Gate 2b now uses `AskUserQuestion` with explicit options [Approve / Modify / Skip / Abort]. Only after the user's click does the orchestrator call `approve-test-cmd.sh`. Explicit guardrails in SKILL.md: NEVER call `approve-test-cmd.sh` before the click; NEVER modify `.claude/test-cmd` autonomously. The SHA-pinned TOFU mechanism is unchanged. Concept-to-code harness 29/0.
+- **Gate 4 session boundary — made BLOCKING**: in the `concept-to-code` chain, the session boundary between Step 3 (architecture+CLAUDE.md) and Step 5 (implementation) was not strong enough — the orchestrator interpreted the `ready_for_implementation` state as a signal to continue directly into coder dispatch. Fix: Gate 4 now uses `AskUserQuestion` with a single option "Confirmed — I will /clear and resume" + explicit instruction `**STOP — do not dispatch coders, do not continue**` in SKILL.md. The `/clear` boundary is an architectural requirement: the interview/architect session context contaminates the implementation phase (context window + risk of overwriting already-made decisions). Concept-to-code harness +1 anchor (30/0).
+- **Blueprint repo on git** (2026-05-26 afternoon): `vibe-coding-system` now has git initialized and a private remote at `github.com/istefox/vibe-coding-system`. `.gitignore` excludes session logs (`.remember/logs/`, `tmp/`, `now.md`, `today-*.md`, etc.) — only source artifacts are committed. Skill `/commit` field-tested on this repo: full flow verify→diff→HITL gate→commit→push working. The blueprint's `CLAUDE.md` has been updated accordingly (removed the "git not initialized" note).
 
-### Aggiornamento 2026-05-25 (CC 2.1.147–149)
+### Update 2026-05-25 (CC 2.1.147–149)
 
-Novità rilevanti per questo sistema, incorporate inline nelle sezioni indicate:
+Relevant news for this system, incorporated inline in the indicated sections:
 
-- **`effort: xhigh` su architect** (sez. 3.1, 3.9): `xhigh` è il livello di effort nativo di Opus 4.7 per task agentici/coding; è ora il default raccomandato. Il template frontmatter architect è aggiornato da `high` a `xhigh`. Fallback automatico a `high` su Sonnet 4.6 quando architect è dispatched con override `model: sonnet` (ADR di routine).
-- **Fix status bar effort frontmatter** (2.1.149): la status bar mostrava l'effort di sessione invece di quello del frontmatter skill/agent. Ora riflette correttamente l'override. Confermato funzionante per il nostro `effort: xhigh` su architect.
-- **Fix `AskUserQuestion` in auto mode** (2.1.149): l'auto mode sopprimeva `AskUserQuestion` anche quando la skill lo usava esplicitamente. Risolto: il classifier legge le risposte utente come segnale di intento. Rilevante per `interview-driver`, `design-brainstorm`, e tutti i HITL gate del chain `concept-to-code`.
-- **`/usage` breakdown per categoria** (2.1.149): mostra dettaglio costi per skill, subagent, plugin, MCP server. Aggiunto a sez. 16 comandi.
-- **`/code-review` (ex `/simplify`)** (2.1.147): `/simplify` rinominato; ora report bug di correttezza a effort configurabile (`/code-review high`); `--comment` per inline PR comment. Aggiornato sez. 16.
-- **Fix sandbox worktree** (2.1.149): la write allowlist in git worktrees copriva l'intero repo principale invece del solo `.git/` condiviso. Risolto. Rilevante per `isolation: worktree` del coder (sez. 12).
-- **Fix `find` macOS vnode table** (2.1.149): il Bash tool esauriva la vnode table di macOS su directory molto grandi, crashando il sistema. Risolto. Anti-pattern `find .` su repo grandi rimosso dalla lista rischi teorici.
-- **Meccanismo bootstrap remoto** (2.1.150): CC chiama `api.anthropic.com/api/claude_cli/bootstrap` all'avvio e GrowthBook (`tengu_heron_brook`) ogni 60s; il contenuto viene iniettato nel system prompt. È configurazione first-party (Anthropic), non injection da terze parti. Per ambienti con policy di immutabilità: `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` blocca entrambi i canali (aggiunto sez. 17).
-
----
-
-## Cambiamenti rispetto alla v1.0
-
-La v1.0 conteneva imprecisioni significative. Verificate contro `code.claude.com/docs`, queste sono le correzioni:
-
-- **Sub-agent**: sono entità formali con file `.claude/agents/<name>.md` e frontmatter YAML, non concetti astratti. Anthropic ne ha già di built-in (`Explore`, `Plan`, `general-purpose`)
-- **Sub-agent NON spawnano altri sub-agent**: limite duro. Per nesting serve `agent-teams`
-- **Agent teams** (v2.1.32+, experimental): pattern multi-sessione coordinata via task list condivisa. È il pattern corretto per work cross-layer (backend + frontend + test paralleli)
-- **CLAUDE.md target <200 righe** (era ~170, comunque alto): asciugato a ~90 righe efficaci
-- **`.claude/rules/`** con `paths:` frontmatter: pattern raccomandato per regole stack-specifiche (sostituisce gran parte del CLAUDE.md monolitico)
-- **Auto memory**: feature reale in `~/.claude/projects/<repo>/memory/`, da menzionare
-- **Hook**: sezione completa mancante in v1.0, è il meccanismo deterministico più importante
-- **Worktrees per Coder paralleli**: risolve il conflitto di lock file (punto aperto v1.0)
-- **Skill bundled**: `/batch`, `/simplify`, `/debug`, `/loop`, `/claude-api` esistono già out-of-the-box
-- **Permission modes**: 6 modi reali (`default`, `acceptEdits`, `plan`, `auto`, `dontAsk`, `bypassPermissions`), non solo "plan/bypass"
-- **`/init` con `CLAUDE_CODE_NEW_INIT=1`**: flow interattivo multi-phase per generare CLAUDE.md, skill e hook insieme
+- **`effort: xhigh` on architect** (sec. 3.1, 3.9): `xhigh` is the native effort level of Opus 4.7 for agentic/coding tasks; it is now the recommended default. The architect frontmatter template is updated from `high` to `xhigh`. Automatic fallback to `high` on Sonnet 4.6 when architect is dispatched with `model: sonnet` override (routine ADR).
+- **Fix status bar effort frontmatter** (2.1.149): the status bar showed the session effort instead of the skill/agent frontmatter effort. Now correctly reflects the override. Confirmed working for our `effort: xhigh` on architect.
+- **Fix `AskUserQuestion` in auto mode** (2.1.149): auto mode suppressed `AskUserQuestion` even when the skill used it explicitly. Resolved: the classifier reads user responses as intent signals. Relevant for `interview-driver`, `design-brainstorm`, and all HITL gates in the `concept-to-code` chain.
+- **`/usage` breakdown by category** (2.1.149): shows cost detail by skill, subagent, plugin, MCP server. Added to sec. 16 commands.
+- **`/code-review` (ex `/simplify`)** (2.1.147): `/simplify` renamed; now reports correctness bugs at configurable effort (`/code-review high`); `--comment` for inline PR comments. Updated sec. 16.
+- **Fix sandbox worktree** (2.1.149): the write allowlist in git worktrees covered the entire main repo instead of just the shared `.git/`. Resolved. Relevant for `isolation: worktree` on coder (sec. 12).
+- **Fix `find` macOS vnode table** (2.1.149): the Bash tool exhausted the macOS vnode table on very large directories, crashing the system. Resolved. The `find .` anti-pattern on large repos removed from the theoretical-risk list.
+- **Remote bootstrap mechanism** (2.1.150): CC calls `api.anthropic.com/api/claude_cli/bootstrap` at startup and GrowthBook (`tengu_heron_brook`) every 60s; the content is injected into the system prompt. This is first-party configuration (Anthropic), not injection from third parties. For environments with immutability policies: `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` blocks both channels (added sec. 17).
 
 ---
 
-## 1. Riepilogo
+## Changes from v1.0
 
-**Topologia.** Orchestrator centrale (Claude Code CLI) → fino a 4 sub-agenti in parallelo (dentro la sessione) per task focalizzati, oppure team di 3-5 teammates indipendenti (sessioni separate) per lavoro cross-layer.
+v1.0 contained significant inaccuracies. Verified against `code.claude.com/docs`, these are the corrections:
 
-**Extension stack.** CLAUDE.md globale (~90 righe, solo identità+comportamento) + path-scoped rules in `.claude/rules/` per stack-specific + sub-agent files in `.claude/agents/` + skill in `.claude/skills/` + hook in `settings.json` + MCP in `.mcp.json`.
+- **Sub-agents**: they are formal entities with `.claude/agents/<name>.md` files and YAML frontmatter, not abstract concepts. Anthropic already provides built-ins (`Explore`, `Plan`, `general-purpose`)
+- **Sub-agents do NOT spawn other sub-agents**: hard limit. For nesting, use `agent-teams`
+- **Agent teams** (v2.1.32+, experimental): multi-session coordinated pattern via shared task list. This is the correct pattern for cross-layer work (backend + frontend + test in parallel)
+- **CLAUDE.md target <200 lines** (was ~170, still high): trimmed to ~90 effective lines
+- **`.claude/rules/`** with `paths:` frontmatter: recommended pattern for stack-specific rules (replaces most of the monolithic CLAUDE.md)
+- **Auto memory**: real feature in `~/.claude/projects/<repo>/memory/`, worth mentioning
+- **Hooks**: full section missing in v1.0, it is the most important deterministic mechanism
+- **Worktrees for parallel Coders**: resolves the lock file conflict (open item v1.0)
+- **Bundled skills**: `/batch`, `/simplify`, `/debug`, `/loop`, `/claude-api` exist out-of-the-box
+- **Permission modes**: 6 real modes (`default`, `acceptEdits`, `plan`, `auto`, `dontAsk`, `bypassPermissions`), not just "plan/bypass"
+- **`/init` with `CLAUDE_CODE_NEW_INIT=1`**: interactive multi-phase flow to generate CLAUDE.md, skills, and hooks together
 
-**Permission strategy.** Plan mode di default per nuove feature, `acceptEdits` durante implementazione, `auto` mode (se piano Team/Enterprise) per lavoro lungo con safety classifier in background.
+---
+
+## 1. Summary
+
+**Topology.** Central orchestrator (Claude Code CLI) → up to 4 sub-agents in parallel (inside the session) for focused tasks, or teams of 3-5 independent teammates (separate sessions) for cross-layer work.
+
+**Extension stack.** Global CLAUDE.md (~90 lines, identity+behavior only) + path-scoped rules in `.claude/rules/` for stack-specific + sub-agent files in `.claude/agents/` + skills in `.claude/skills/` + hooks in `settings.json` + MCP in `.mcp.json`.
+
+**Permission strategy.** Plan mode by default for new features, `acceptEdits` during implementation, `auto` mode (if on Team/Enterprise plan) for long work with safety classifier in background.
 
 **MCP core.** sequential-thinking, XcodeBuildMCP, github, sqlite/postgres-mcp.
 
-**Workflow concept→code** (sez. 11) basato sul pattern ufficiale Anthropic: interview mode con `AskUserQuestion` → `SPEC.md` → fresh session con plan mode → implementazione parallela → commit + PR.
+**concept→code workflow** (sec. 11) based on the official Anthropic pattern: interview mode with `AskUserQuestion` → `SPEC.md` → fresh session with plan mode → parallel implementation → commit + PR.
 
 ---
 
-## 2. Architettura del sistema
+## 2. System architecture
 
-### 2.1 Topologia logica
+### 2.1 Logical topology
 
 ```
-Orchestrator (sessione principale Claude Code CLI)
+Orchestrator (main Claude Code CLI session)
     │
     ├─ Built-in sub-agent (Anthropic):
-    │  ├─ Explore        (read-only, Haiku, ricerca codebase)
-    │  ├─ Plan           (read-only, plan mode, ricerca per planning)
-    │  ├─ general-purpose (tutti i tool, multi-step generico)
+    │  ├─ Explore        (read-only, Haiku, codebase search)
+    │  ├─ Plan           (read-only, plan mode, research for planning)
+    │  ├─ general-purpose (all tools, generic multi-step)
     │  └─ Bash, statusline-setup, Claude Code Guide
     │
-    ├─ Sub-agent custom (.claude/agents/*.md, max 4 paralleli):
+    ├─ Custom sub-agents (.claude/agents/*.md, max 4 parallel):
     │  ├─ architect       (Opus, planning + ADR)
     │  ├─ coder           (Sonnet, edit, isolation: worktree)
     │  ├─ reviewer        (Sonnet, read-only, memory: project)
     │  ├─ tester          (Sonnet, bash + edit)
     │  ├─ debugger        (Sonnet, edit + bash, memory: project)
-    │  ├─ doc-writer      (Haiku, edit testo)
+    │  ├─ doc-writer      (Haiku, text edit)
     │  ├─ refactorer      (Sonnet, edit, memory: project)
     │  └─ researcher      (Haiku, read-only + web)
     │
-    └─ Agent team (experimental, sessioni separate):
-       Per lavoro cross-layer su progetti grandi (backend + frontend + test
-       in parallelo) o investigazione con ipotesi competenti
+    └─ Agent team (experimental, separate sessions):
+       For cross-layer work on large projects (backend + frontend + test
+       in parallel) or investigation with competing hypotheses
 ```
 
-### 2.2 Sub-agent vs agent team (decisione critica)
+### 2.2 Sub-agent vs agent team (critical decision)
 
-Documentazione ufficiale Anthropic distingue chiaramente:
+Official Anthropic documentation distinguishes clearly:
 
-| Caratteristica | Sub-agent | Agent team |
+| Characteristic | Sub-agent | Agent team |
 |---------------|-----------|-----------|
-| Architettura | Dentro la sessione corrente | Sessioni indipendenti coordinate |
-| Comunicazione | Solo verso il lead (riporto risultati) | Peer-to-peer + task list condivisa |
-| Spawn altri | NO | NO (anche nei team, no nested) |
-| Stato | `production-ready` | `experimental` (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) |
-| Token cost | Più basso (summary back) | Più alto (ogni teammate = sessione completa) |
-| Quando usare | Task isolato con output di sintesi | Work che richiede coordinamento e dibattito |
+| Architecture | Inside the current session | Independent coordinated sessions |
+| Communication | Only toward the lead (report results) | Peer-to-peer + shared task list |
+| Spawn others | NO | NO (also in teams, no nested) |
+| State | `production-ready` | `experimental` (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) |
+| Token cost | Lower (summary back) | Higher (each teammate = full session) |
+| When to use | Isolated task with summary output | Work requiring coordination and debate |
 
-**Regola per Stefano:**
-- Sub-agent per: review, research, debug isolato, test di un modulo, scaffold di un componente, doc generation. **Default per tutto.**
-- Agent team per: feature cross-strato grande (FastAPI router + React page + test in parallelo), investigazione bug con ipotesi competenti, code review multi-prospettiva. **Solo per task grandi e indipendenti.**
+**Rule for Stefano:**
+- Sub-agent for: review, research, isolated debug, module test, component scaffold, doc generation. **Default for everything.**
+- Agent team for: large cross-layer feature (FastAPI router + React page + tests in parallel), bug investigation with competing hypotheses, multi-perspective code review. **Only for large independent tasks.**
 
-### 2.3 Logica di parallelizzazione dell'orchestrator
+### 2.3 Orchestrator parallelization logic
 
-L'orchestrator decide quando spawnare sub-agent in parallelo applicando 3 criteri (in ordine):
+The orchestrator decides when to spawn sub-agents in parallel by applying 3 criteria (in order):
 
-1. **Indipendenza file**: i sub-agent toccano file/moduli diversi → parallelo possibile
-2. **Stato test**: test verdi → parallelo aggressivo; test rossi → seriale (prima fix)
-3. **Tipo task**: research+planning seriale; codifica+test+doc parallelizzabile
+1. **File independence**: sub-agents touch different files/modules → parallel possible
+2. **Test state**: green tests → aggressive parallel; red tests → serial (fix first)
+3. **Task type**: research+planning serial; coding+test+doc parallelizable
 
-**Conflitto lock file (risolto):** ogni `coder` parallelo gira con `isolation: worktree` nel frontmatter, ottenendo un copy git isolato. Niente race condition su import o file condivisi.
+**Lock file conflict (resolved):** each parallel `coder` runs with `isolation: worktree` in the frontmatter, getting an isolated git copy. No race conditions on imports or shared files.
 
-**Cap massimo:** 4 sub-agent paralleli. Se servono più, batch sequenziali da 3-4.
+**Maximum cap:** 4 sub-agents in parallel. If more are needed, sequential batches of 3-4.
 
 ---
 
-## 3. Sub-agent custom — definizioni complete
+## 3. Custom sub-agents — complete definitions
 
-Tutti i sub-agent vivono in `~/.claude/agents/` (user-level, validi in tutti i progetti) o `.claude/agents/` (project-level, in repo). Si gestiscono con `/agents`.
+All sub-agents live in `~/.claude/agents/` (user-level, valid in all projects) or `.claude/agents/` (project-level, in repo). Managed with `/agents`.
 
 ### 3.1 architect
 
@@ -262,7 +260,7 @@ Stack rules come from project CLAUDE.md and .claude/rules/. Read them before wri
 Run in an isolated worktree to avoid conflicts with other parallel coders.
 ```
 
-> **Nota deployment (2026-05-26):** `isolation: worktree` è ora attivo nel file deployato `~/.claude/agents/coder.md`. Comportamento su progetti senza git: fallback silenzioso, edit diretti (nessun errore). Il branch risultante su repo git viene gestito dall'orchestratore nella fase di review/merge — nessuna modifica richiesta al chain concept-to-code.
+> **Deployment note (2026-05-26):** `isolation: worktree` is now active in the deployed file `~/.claude/agents/coder.md`. Behavior on projects without git: silent fallback, direct edits (no error). The resulting branch on git repos is managed by the orchestrator in the review/merge phase — no changes required to the concept-to-code chain.
 
 ### 3.3 reviewer
 
@@ -379,11 +377,8 @@ model: haiku
 You are a technical writer for software projects.
 
 Language rules:
-- README user-facing: Italian
-- ADR and architectural docs: Italian
-- Inline docstrings on public API: English
+- All output in English.
 - Commit messages: English (Conventional Commits)
-- Comments explaining domain logic: Italian when it aids understanding
 
 Style:
 - Specific over abstract
@@ -391,7 +386,7 @@ Style:
 - Diagrams (ASCII) where structure helps
 - Maximum signal per token
 
-For long-form Italian content (LinkedIn posts, articles), invoke the human-writing-style skill.
+For long-form English prose (articles, posts), invoke the human-writing-style skill.
 ```
 
 ### 3.7 refactorer
@@ -449,99 +444,99 @@ Output discipline:
 - Every claim has a URL citation
 - Distinguish facts, opinions, and hypotheses
 - If sources disagree, report the disagreement
-- If you cannot verify, say "non verificato"
+- If you cannot verify, say "unverified"
 
 Return a concise brief, not an essay. The orchestrator decides what to act on.
 ```
 
-### 3.9 Modello di costi
+### 3.9 Cost model
 
-Modelli e effort scelti per ridurre token spend mantenendo qualità:
+Models and effort levels chosen to reduce token spend while maintaining quality:
 
-| Agente | Modello | Effort | Razionale |
+| Agent | Model | Effort | Rationale |
 |--------|---------|--------|-----------|
-| architect | opus (→ 4.7) | **xhigh** | Default nativo Opus 4.7; ADR/design = passo più impattante della chain. Fallback a `high` automatico se dispatch con `model: sonnet` |
-| reviewer, debugger | sonnet (→ 4.6) | **high** | Gate pre-commit e root-cause: richiede ragionamento, non solo esecuzione |
-| coder, refactorer, tester | sonnet (→ 4.6) | **medium** | Eseguono piano già definito; reviewer a valle e snapshot harness coprono errori |
-| doc-writer, researcher | haiku (→ 4.5) | **low** | Bottleneck è I/O (lettura codice/ricerca), non reasoning |
+| architect | opus (→ 4.7) | **xhigh** | Native default for Opus 4.7; ADR/design = most impactful step in the chain. Automatic fallback to `high` if dispatched with `model: sonnet` override |
+| reviewer, debugger | sonnet (→ 4.6) | **high** | Pre-commit gate and root-cause: requires reasoning, not just execution |
+| coder, refactorer, tester | sonnet (→ 4.6) | **medium** | Execute a pre-defined plan; downstream reviewer and snapshot harness cover errors |
+| doc-writer, researcher | haiku (→ 4.5) | **low** | Bottleneck is I/O (reading code/searching), not reasoning |
 
-**Livelli effort disponibili per modello:**
+**Available effort levels by model:**
 - Opus 4.7: `low`, `medium`, `high`, `xhigh`, `max`
-- Opus 4.6 / Sonnet 4.6: `low`, `medium`, `high`, `max` (`xhigh` → fallback a `high`)
-- `max` è solo session-level (non persistibile in settings.json)
+- Opus 4.6 / Sonnet 4.6: `low`, `medium`, `high`, `max` (`xhigh` → fallback to `high`)
+- `max` is session-level only (not persistable in settings.json)
 
-Override possibile a livello di singola invocazione via `CLAUDE_CODE_SUBAGENT_MODEL`.
-Il default di sessione (`effortLevel: high` in settings.json) è overridato dal frontmatter del sub-agent; l'env var `CLAUDE_CODE_EFFORT_LEVEL` prevale su tutto.
+Override possible at individual invocation level via `CLAUDE_CODE_SUBAGENT_MODEL`.
+The session default (`effortLevel: high` in settings.json) is overridden by the sub-agent frontmatter; the env var `CLAUDE_CODE_EFFORT_LEVEL` takes precedence over everything.
 
 ---
 
-## 4. CLAUDE.md globale (`~/.claude/CLAUDE.md`)
+## 4. Global CLAUDE.md (`~/.claude/CLAUDE.md`)
 
-**Target <200 righe** secondo best practice Anthropic. Solo cose che applicano a ogni sessione. Tutto il resto va in skill, rules, hook.
+**Target <200 lines** per Anthropic best practice. Only things that apply to every session. Everything else goes in skills, rules, hooks.
 
 ```markdown
 # CLAUDE.md — Stefano Ferri
 
-## Identità
+## Identity
 
-- Utente: Stefano Ferri
-- Mi chiamo Adriano. L'utente è Stefano. Mai invertire.
-- Lingua conversazione: italiano. Lingua codice e commit: inglese.
-- Tono: diretto, conciso, tecnico. Niente filler, hype, soft CTA.
+- User: Stefano Ferri
+- My name is Adriano. The user is Stefano. Never invert.
+- Language: English throughout — chat, docs, code, commits, docstrings.
+- Tone: direct, concise, technical. No filler, hype, soft CTAs.
 
-## Regole comportamentali invariabili
+## Invariant behavioral rules
 
-- IMPORTANT: Plan mode obbligatorio per qualunque task che modifica >1 file o tocca migrazioni/config produzione
-- IMPORTANT: Conventional Commits in inglese (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`)
-- IMPORTANT: Mai `git push --force` senza approvazione esplicita di Stefano
-- IMPORTANT: Mai modificare migration già applicate in produzione
-- IMPORTANT: Mai disabilitare test per farli passare. Se un test va cambiato, spiegare perché in chat prima.
-- IMPORTANT: Confidence dichiarata in chat a fine task. Mai nei deliverable.
+- IMPORTANT: Plan mode required for any task modifying >1 file or touching production migrations/config
+- IMPORTANT: Conventional Commits in English (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`)
+- IMPORTANT: Never `git push --force` without explicit approval from Stefano
+- IMPORTANT: Never modify migrations already applied in production
+- IMPORTANT: Never disable tests to make them pass. If a test needs changing, explain why in chat first.
+- IMPORTANT: Confidence declared in chat at end of task. Never in deliverables.
 
-## Workflow di default
+## Default workflow
 
-- Per task nuovo non triviale: interview mode → SPEC.md → fresh session → plan mode → implementazione
-- Per feature multi-strato grande: considerare agent-teams (richiede `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`)
-- Per task focalizzato: orchestrator + sub-agent custom
-- HITL gate sempre prima di: commit, push, deploy, modifica schema DB, eliminazioni permanenti
+- For a new non-trivial task: interview mode → SPEC.md → fresh session → plan mode → implementation
+- For a large cross-layer feature: consider agent-teams (requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`)
+- For a focused task: orchestrator + custom sub-agent
+- HITL gate always before: commit, push, deploy, DB schema changes, permanent deletions
 
-## Sub-agent custom (in ~/.claude/agents/)
+## Custom sub-agents (in ~/.claude/agents/)
 
 architect, coder, reviewer, tester, debugger, doc-writer, refactorer, researcher.
-Vedi /agents per dettagli. Max 4 paralleli.
+See /agents for details. Max 4 parallel.
 
-## Skill custom (in ~/.claude/skills/)
+## Custom skills (in ~/.claude/skills/)
 
-Da creare con `skill-creator` per workflow vibe coding:
+To create with `skill-creator` for vibe coding workflows:
 claude-md-generator, swift-vibe, fastapi-react-vibe, code-review-checklist,
 adr-writer, interview-driver, project-bootstrap.
 
-## MCP server attivi
+## Active MCP servers
 
 sequential-thinking, github, XcodeBuildMCP, sqlite/postgres-mcp.
-Opzionali se installati: serena, context7, playwright.
+Optional if installed: serena, context7, playwright.
 
-## Risposta finale a ogni task
+## Final response for each task
 
-Chiudi con (in ordine):
-1. Riepilogo 2-3 righe
-2. File modificati (lista)
-3. Test status: verde / rosso / non eseguito
-4. Confidence (es. "92% — verificato su sample, manca test edge case X")
+Close with (in order):
+1. 2-3 line summary
+2. Modified files (list)
+3. Test status: green / red / not run
+4. Confidence (e.g. "92% — verified on sample, missing edge case test X")
 
-## Importazioni
+## Imports
 
-Stack-specific va nei CLAUDE.md di progetto (root del progetto) o in .claude/rules/.
+Stack-specific goes in project CLAUDE.md (repo root) or in .claude/rules/.
 ```
 
-**Note di adesione (Anthropic):**
-- CLAUDE.md è caricato come user message dopo il system prompt, non come system prompt. L'adesione non è garantita: serve specificità
-- Parole chiave come "IMPORTANT" o "YOU MUST" aumentano l'adesione (verificato in best practice)
-- Block-level HTML comment `<!-- nota -->` non consumano context (vengono strippati). Utili per note di manutenzione
+**Adherence notes (Anthropic):**
+- CLAUDE.md is loaded as a user message after the system prompt, not as the system prompt. Adherence is not guaranteed: specificity is required
+- Keywords like "IMPORTANT" or "YOU MUST" increase adherence (verified in best practices)
+- Block-level HTML comment `<!-- note -->` does not consume context (gets stripped). Useful for maintenance notes
 
-**Settings complementari al CLAUDE.md (`~/.claude/settings.json`):**
+**Settings complementary to CLAUDE.md (`~/.claude/settings.json`):**
 
-Per branding professionale: disabilitare la firma automatica "Co-Authored-By: Claude" nei commit e nei PR.
+For professional branding: disable the automatic "Co-Authored-By: Claude" signature in commits and PRs.
 
 ```json
 {
@@ -556,18 +551,18 @@ Per branding professionale: disabilitare la firma automatica "Co-Authored-By: Cl
 }
 ```
 
-- `$schema`: abilita autocomplete e validazione JSON in Cursor/VS Code
-- `attribution.commit: ""`: rimuove "Co-Authored-By: Claude Sonnet ..." dal commit message. I commit appariranno come fatti da Stefano, niente attribution AI
-- `attribution.pr: ""`: stesso per i PR body
-- Senza questo override, Claude Code aggiunge di default un trailer `Co-Authored-By: Claude` (vecchio `includeCoAuthoredBy: false` è deprecato, usare `attribution`)
+- `$schema`: enables autocomplete and JSON validation in Cursor/VS Code
+- `attribution.commit: ""`: removes "Co-Authored-By: Claude Sonnet ..." from the commit message. Commits will appear as made by Stefano, no AI attribution
+- `attribution.pr: ""`: same for PR body
+- Without this override, Claude Code adds a `Co-Authored-By: Claude` trailer by default (old `includeCoAuthoredBy: false` is deprecated, use `attribution`)
 
 ---
 
 ## 5. Path-scoped rules (`.claude/rules/`)
 
-Pattern raccomandato da Anthropic per **non gonfiare CLAUDE.md**. Le rules con `paths:` frontmatter si caricano solo quando Claude tocca file matching.
+Pattern recommended by Anthropic to **avoid bloating CLAUDE.md**. Rules with `paths:` frontmatter load only when Claude touches matching files.
 
-### 5.1 Rules globali (`~/.claude/rules/`)
+### 5.1 Global rules (`~/.claude/rules/`)
 
 `~/.claude/rules/python.md`:
 
@@ -579,13 +574,13 @@ paths:
 
 # Python rules
 
-- Type hint obbligatori su funzioni pubbliche; mypy strict mode
-- Docstring stile Google per moduli e classi pubbliche
-- f-string per formatting, mai `%` o `.format()`
-- `pathlib.Path` invece di `os.path`
-- Mai `print()` in codice produttivo: usa `logging`
-- Async per I/O bound, sync per CPU bound
-- Package manager: `uv` (non pip)
+- Type hints required on public functions; mypy strict mode
+- Google-style docstrings on public modules and classes
+- f-strings for formatting, never `%` or `.format()`
+- `pathlib.Path` instead of `os.path`
+- Never `print()` in production code: use `logging`
+- Async for I/O bound, sync for CPU bound
+- Package manager: `uv` (not pip)
 ```
 
 `~/.claude/rules/typescript-react.md`:
@@ -598,13 +593,13 @@ paths:
 
 # TypeScript & React rules
 
-- `interface` per props, `type` per union/utility
-- Mai `any`: usa `unknown` + narrowing
+- `interface` for props, `type` for union/utility
+- Never `any`: use `unknown` + narrowing
 - Function components + hooks, no class components
-- `useState` per stato locale, Context/Zustand per condiviso
-- Niente prop drilling oltre 2 livelli
-- Mai `useEffect` senza dependencies array corretto
-- Mai mutazioni dirette di state React
+- `useState` for local state, Context/Zustand for shared
+- No prop drilling beyond 2 levels
+- Never `useEffect` without a correct dependencies array
+- Never direct React state mutations
 ```
 
 `~/.claude/rules/swift.md`:
@@ -617,15 +612,15 @@ paths:
 
 # Swift & SwiftUI rules
 
-- Preferisci `struct` su `class` salvo gerarchie reali
-- `@Observable` (iOS 17+) invece di `ObservableObject` per nuovo codice
-- `let` di default, `var` solo se serve mutabilità
-- `private` di default
-- Mai force-unwrap `!` in produzione, mai `try!` salvo casi documentati
-- View < 150 righe, estrai in private struct quando cresce
-- `body` puro: usa `.onAppear`, `.task`, `.onChange` per side effect
-- `LazyVStack`/`LazyHStack` per liste lunghe
-- Localizable.strings per tutti i testi utente
+- Prefer `struct` over `class` unless real hierarchies are needed
+- `@Observable` (iOS 17+) instead of `ObservableObject` for new code
+- `let` by default, `var` only when mutability is needed
+- `private` by default
+- Never force-unwrap `!` in production, never `try!` except in documented cases
+- View < 150 lines, extract into private structs when it grows
+- `body` pure: use `.onAppear`, `.task`, `.onChange` for side effects
+- `LazyVStack`/`LazyHStack` for long lists
+- Localizable.strings for all user-facing text
 ```
 
 `~/.claude/rules/sql-migrations.md`:
@@ -639,16 +634,16 @@ paths:
 
 # DB migration rules
 
-- IMPORTANT: Mai modificare una migration già applicata in produzione
-- Backup DB pre-migration in produzione
-- HITL gate prima di `alembic upgrade head` in qualunque ambiente diverso da dev
-- Migration generate con `alembic revision --autogenerate -m "..."`
-- Verificare sempre il diff generato prima del commit
+- IMPORTANT: Never modify a migration already applied in production
+- DB backup before production migration
+- HITL gate before `alembic upgrade head` in any environment other than dev
+- Migrations generated with `alembic revision --autogenerate -m "..."`
+- Always verify the generated diff before committing
 ```
 
-### 5.2 Rules di progetto (`<repo>/.claude/rules/`)
+### 5.2 Project rules (`<repo>/.claude/rules/`)
 
-Ogni progetto può avere rules specifiche commit-ate in git, condivise col team. Esempio per un'API in FastAPI:
+Each project can have specific rules committed in git, shared with the team. Example for a FastAPI API:
 
 `<repo>/.claude/rules/api-conventions.md`:
 
@@ -660,107 +655,107 @@ paths:
 
 # API conventions
 
-- Router per dominio in api/ (uno per feature)
-- Response model Pydantic esplicito su ogni endpoint
-- Status code: 200/201/204/400/401/403/404/422/500
-- Dependency injection per DB session, auth, settings
-- Mai `session.query(Model).filter(...)` (legacy): usa `select(Model).where(...)`
-- Eager loading esplicito con `selectinload` / `joinedload`
+- Router per domain in api/ (one per feature)
+- Explicit Pydantic response model on every endpoint
+- Status codes: 200/201/204/400/401/403/404/422/500
+- Dependency injection for DB session, auth, settings
+- Never `session.query(Model).filter(...)` (legacy): use `select(Model).where(...)`
+- Explicit eager loading with `selectinload` / `joinedload`
 ```
 
-### 5.3 Vantaggi pattern rules
+### 5.3 Advantages of the rules pattern
 
-1. CLAUDE.md resta sotto soglia <200 righe
-2. Stefano vede solo le rules pertinenti al file su cui lavora
-3. Context cost minimo (caricamento lazy per match path)
-4. Modulare: aggiungere/rimuovere senza toccare CLAUDE.md
+1. CLAUDE.md stays under the <200-line threshold
+2. Stefano sees only the rules relevant to the file being worked on
+3. Minimal context cost (lazy loading on path match)
+4. Modular: add/remove without touching CLAUDE.md
 
 ---
 
-## 6. Template CLAUDE.md di progetto
+## 6. Project CLAUDE.md templates
 
-### 6.1 Template SwiftUI / iOS
+### 6.1 SwiftUI / iOS template
 
-`<progetto-ios>/CLAUDE.md`:
+`<ios-project>/CLAUDE.md`:
 
 ```markdown
-# CLAUDE.md — [NOME_PROGETTO] (iOS)
+# CLAUDE.md — [PROJECT_NAME] (iOS)
 
-Eredita ~/.claude/CLAUDE.md. Specializza per questo progetto.
+Inherits ~/.claude/CLAUDE.md. Specializes for this project.
 
-## Progetto
+## Project
 
-- Tipo: iOS app SwiftUI
+- Type: iOS app SwiftUI
 - Target: iOS 17+
-- Bundle ID: com.example.[nome]
-- Swift 5.10+, SwiftUI puro, SwiftData
+- Bundle ID: com.example.[name]
+- Swift 5.10+, pure SwiftUI, SwiftData
 
-## Comandi (via XcodeBuildMCP)
+## Commands (via XcodeBuildMCP)
 
 - Build: `build` (Debug default)
 - Test: `test` (XCTest + Swift Testing)
 - Clean: `clean`
 - Simulator: `simulator boot/install`
-- Archive: solo su HITL gate esplicito
+- Archive: only on explicit HITL gate
 
-## Struttura
+## Structure
 
 App/, Features/<Feature>/, Core/, DesignSystem/, Resources/, Tests/.
 
 ## Test target
 
-70% coverage su business logic. UI test minimi: smoke + happy path.
-Snapshot test opzionali per DesignSystem.
+70% coverage on business logic. Minimal UI tests: smoke + happy path.
+Snapshot tests optional for DesignSystem.
 
-## Accessibility (obbligatoria)
+## Accessibility (required)
 
-- Ogni View interattiva ha .accessibilityLabel
-- VoiceOver testato sui flussi principali
-- Dynamic Type supportato
+- Every interactive View has .accessibilityLabel
+- VoiceOver tested on main flows
+- Dynamic Type supported
 
-## Importazioni
+## Imports
 
 @~/.claude/rules/swift.md
 ```
 
-### 6.2 Template generico (FastAPI + React + Python)
+### 6.2 Generic template (FastAPI + React + Python)
 
-`<progetto>/CLAUDE.md`:
+`<project>/CLAUDE.md`:
 
 ```markdown
-# CLAUDE.md — [NOME_PROGETTO]
+# CLAUDE.md — [PROJECT_NAME]
 
-Eredita ~/.claude/CLAUDE.md. Specializza per questo progetto.
+Inherits ~/.claude/CLAUDE.md. Specializes for this project.
 
-## Progetto
+## Project
 
-- Tipo: web app (FastAPI backend + React frontend)
+- Type: web app (FastAPI backend + React frontend)
 - Repository: [URL]
 - Maintainer: Stefano Ferri
 
 ## Stack
 
-| Layer | Scelte | Versione |
+| Layer | Choices | Version |
 |-------|--------|----------|
 | Backend | FastAPI + SQLAlchemy 2.x + Pydantic v2 + Alembic | latest |
 | Frontend | React 19.2 + TypeScript 5.9 + Vite 6.4 + Tailwind 4.2 + shadcn/ui 4.0 | latest |
 | DB dev | SQLite | — |
-| DB prod | [DB di produzione: SQL Server / PostgreSQL / MySQL] | — |
+| DB prod | [production DB: SQL Server / PostgreSQL / MySQL] | — |
 | Package | uv (Python), pnpm (Node) | — |
 
-## Comandi
+## Commands
 
 - Backend test: `uv run pytest`
 - Backend lint: `uv run ruff check`
 - Frontend test: `pnpm test`
 - Frontend lint: `pnpm lint`
-- Type check: `uv run mypy src/` e `pnpm tsc --noEmit`
+- Type check: `uv run mypy src/` and `pnpm tsc --noEmit`
 
-## Struttura
+## Structure
 
-Vedi ARCH.md per dettagli. Backend in backend/src/, frontend in frontend/src/.
+See ARCH.md for details. Backend in backend/src/, frontend in frontend/src/.
 
-## Importazioni
+## Imports
 
 @~/.claude/rules/python.md
 @~/.claude/rules/typescript-react.md
@@ -770,15 +765,15 @@ Vedi ARCH.md per dettagli. Backend in backend/src/, frontend in frontend/src/.
 
 ---
 
-## 7. Hook — automazione deterministica
+## 7. Hooks — deterministic automation
 
-Gli hook sono shell command che girano in punti precisi del lifecycle. Sono **deterministici**: niente LLM coinvolto (salvo `type: prompt` o `agent`, **non disponibili su `Stop`** — vedi correzione 2026-05-19 in testa e admonition in 7.4/7.5). Garantiscono che un'azione succeda sempre.
+Hooks are shell commands that run at precise points in the lifecycle. They are **deterministic**: no LLM involved (except `type: prompt` or `agent`, **not available on `Stop`** — see the 2026-05-19 correction at the top and admonitions in 7.4/7.5). They guarantee that an action always happens.
 
-**Ispezione:** `/hooks` apre l'hooks browser con tutti gli hook configurati per evento. Read-only, per modificare editare `settings.json`.
+**Inspection:** `/hooks` opens the hooks browser with all hooks configured per event. Read-only; to modify, edit `settings.json`.
 
-**Debug:** `InstructionsLoaded` hook fires quando un CLAUDE.md o un rules file viene caricato — utile per debug del path-scoped loading o lazy-load nei subdirectory.
+**Debug:** `InstructionsLoaded` hook fires when a CLAUDE.md or rules file is loaded — useful for debugging path-scoped loading or lazy-load in subdirectories.
 
-### 7.1 Hook critici da configurare in `~/.claude/settings.json`
+### 7.1 Critical hooks to configure in `~/.claude/settings.json`
 
 ```json
 {
@@ -811,7 +806,7 @@ Gli hook sono shell command che girano in punti precisi del lifecycle. Sono **de
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Reminder: stack è FastAPI+React+TS, NO Flask/Bootstrap. Conventional Commits in inglese. Test verdi prima del commit.'"
+            "command": "echo 'Reminder: stack is FastAPI+React+TS, NO Flask/Bootstrap. Conventional Commits in English. Green tests before commit.'"
           }
         ]
       }
@@ -822,7 +817,7 @@ Gli hook sono shell command che girano in punti precisi del lifecycle. Sono **de
         "hooks": [
           {
             "type": "command",
-            "command": "osascript -e 'display notification \"Claude attende input\" with title \"Claude Code\"'"
+            "command": "osascript -e 'display notification \"Claude is waiting for input\" with title \"Claude Code\"'"
           }
         ]
       }
@@ -831,7 +826,7 @@ Gli hook sono shell command che girano in punti precisi del lifecycle. Sono **de
 }
 ```
 
-### 7.2 Hook `protect-files.sh` (blocca .env, migration applicate, .git)
+### 7.2 Hook `protect-files.sh` (blocks .env, applied migrations, .git)
 
 `~/.claude/hooks/protect-files.sh`:
 
@@ -856,7 +851,7 @@ exit 0
 chmod +x ~/.claude/hooks/protect-files.sh
 ```
 
-### 7.3 Hook `auto-format.sh` (formattazione automatica dopo edit)
+### 7.3 Hook `auto-format.sh` (automatic formatting after edit)
 
 `~/.claude/hooks/auto-format.sh`:
 
@@ -883,20 +878,20 @@ esac
 exit 0
 ```
 
-### 7.4 Hook avanzato — verifica test green prima dello Stop (prompt-based)
+### 7.4 Advanced hook — verify green tests before Stop (prompt-based)
 
-> ⚠️ **CORREZIONE 2026-05-19 — questo esempio è ERRATO.** Verifica live di
-> `code.claude.com/docs/en/hooks`: `type: prompt` **non è supportato
-> sull'evento `Stop`** (solo `command`, `http`, `mcp_tool`). Inoltre il
-> contratto di blocco reale è `{"decision":"block","reason":"…"}` o exit code
-> 2, **non** `{"ok": false}`. Pattern corretto: hook `type: command` su `Stop`
-> + guardrail anti-loop a contatore (nessun `stop_hook_active` nativo).
-> **AS-BUILT 2026-05-19:** implementato e deployato live come gate testcmd
-> 3-tier + TOFU — vedi riconciliazione in testa e
-> `docs/superpowers/specs/2026-05-19-swarm-testcmd-design.md` (+ plan omonimo).
-> L'esempio JSON sotto è lasciato solo come storico.
+> ⚠️ **CORRECTION 2026-05-19 — this example is WRONG.** Live verification of
+> `code.claude.com/docs/en/hooks`: `type: prompt` **is not supported
+> on the `Stop` event** (only `command`, `http`, `mcp_tool`). Also the
+> real block contract is `{"decision":"block","reason":"…"}` or exit code
+> 2, **not** `{"ok": false}`. Correct pattern: `type: command` hook on `Stop`
+> + counter-based anti-loop guardrail (no native `stop_hook_active`).
+> **AS-BUILT 2026-05-19:** implemented and deployed live as a 3-tier testcmd
+> gate + TOFU — see reconciliation at the top and
+> `docs/superpowers/specs/2026-05-19-swarm-testcmd-design.md` (+ matching plan).
+> The JSON example below is kept for historical reference only.
 
-In `~/.claude/settings.json`, sotto `hooks`:
+In `~/.claude/settings.json`, under `hooks`:
 
 ```json
 {
@@ -913,20 +908,20 @@ In `~/.claude/settings.json`, sotto `hooks`:
 }
 ```
 
-Questo hook usa Haiku in background per verificare la completezza. Se non OK, restituisce feedback che fa proseguire Claude.
+This hook uses Haiku in the background to verify completeness. If not OK, it returns feedback that makes Claude continue.
 
-### 7.5 Hook agent-based — verifica test green effettiva (più costoso)
+### 7.5 Agent-based hook — effective green-test verification (more expensive)
 
-> ⚠️ **CORREZIONE 2026-05-19 — questo esempio è ERRATO.** `type: agent` **non
-> è supportato sull'evento `Stop`** (verifica live `code.claude.com/docs/en/hooks`).
-> Per eseguire davvero i test prima dello Stop usare un hook `type: command`
-> che invoca la test suite e blocca con `{"decision":"block","reason":"…"}` /
-> exit code 2. **AS-BUILT 2026-05-19:** questa è esattamente la funzione
-> dell'autoritative tier deployato (esegue il comando dichiarato in
-> `.claude/test-cmd`, approvato via TOFU, exit code reale) — la "Fase B" del
-> vecchio spec agentic-swarm è **subsunta** da esso. Vedi
-> `docs/superpowers/specs/2026-05-19-swarm-testcmd-design.md` (+ plan omonimo).
-> Esempio JSON sotto lasciato solo come storico.
+> ⚠️ **CORRECTION 2026-05-19 — this example is WRONG.** `type: agent` **is not
+> supported on the `Stop` event** (live verification `code.claude.com/docs/en/hooks`).
+> To actually run tests before Stop, use a `type: command` hook
+> that invokes the test suite and blocks with `{"decision":"block","reason":"…"}` /
+> exit code 2. **AS-BUILT 2026-05-19:** this is exactly the function
+> of the deployed authoritative tier (runs the command declared in
+> `.claude/test-cmd`, approved via TOFU, real exit code) — "Phase B" of
+> the old agentic-swarm spec is **subsumed** by it. See
+> `docs/superpowers/specs/2026-05-19-swarm-testcmd-design.md` (+ matching plan).
+> JSON example below kept for historical reference only.
 
 ```json
 {
@@ -944,185 +939,185 @@ Questo hook usa Haiku in background per verificare la completezza. Se non OK, re
 }
 ```
 
-Più affidabile (verifica reale), più costoso (subagent con tool access, fino a 50 turn).
+More reliable (real verification), more expensive (subagent with tool access, up to 50 turns).
 
-### 7.6 Filesystem layout hook
+### 7.6 Hook filesystem layout
 
 ```
 ~/.claude/                       # AS-BUILT 2026-05-19 (Stop-gate testcmd live)
-├── settings.json                # hook globali (Stop→stop-gate.sh)
+├── settings.json                # global hooks (Stop→stop-gate.sh)
 ├── hooks/
 │   ├── protect-files.sh         # PreToolUse  Edit|Write
 │   ├── auto-format.sh           # PostToolUse Edit|Write
-│   ├── mark-dirty.sh            # PostToolUse Edit|Write  → segna .dirty
-│   ├── ensure-state-dir.sh      # SessionStart            → crea state dir
-│   ├── reset-gate-counter.sh    # UserPromptSubmit        → reset anti-loop
-│   ├── stop-gate.sh             # Stop  → gate 3-tier testcmd (CANONICO)
-│   ├── stop-gate.v2.sh          #   gemello byte-identico (artefatto backout)
-│   ├── approve-test-cmd.sh      # CLI TOFU (non un hook): approva test-cmd
-│   ├── backup-before-deploy.sh  # utility backup pre-deploy
-│   └── tests/run-hook-tests.sh  # harness unit (PASS=28 FAIL=0)
-└── state/stop-gate/             # stato runtime: trust, <sid>.dirty/.count
+│   ├── mark-dirty.sh            # PostToolUse Edit|Write  → marks .dirty
+│   ├── ensure-state-dir.sh      # SessionStart            → creates state dir
+│   ├── reset-gate-counter.sh    # UserPromptSubmit        → resets anti-loop counter
+│   ├── stop-gate.sh             # Stop  → 3-tier testcmd gate (CANONICAL)
+│   ├── stop-gate.v2.sh          #   byte-identical twin (backout artifact)
+│   ├── approve-test-cmd.sh      # CLI TOFU (not a hook): approves test-cmd
+│   ├── backup-before-deploy.sh  # pre-deploy backup utility
+│   └── tests/run-hook-tests.sh  # unit harness (PASS=28 FAIL=0)
+└── state/stop-gate/             # runtime state: trust, <sid>.dirty/.count
 
 <repo>/.claude/
-├── test-cmd                     # dichiarazione per-progetto: comando | NONE
-└── settings.json                # eventuali hook progetto-specifici
+├── test-cmd                     # per-project declaration: command | NONE
+└── settings.json                # optional project-specific hooks
 ```
 
 ---
 
-## 8. Skill — knowledge e workflow
+## 8. Skills — knowledge and workflows
 
-### 8.1 Skill bundled (già disponibili in Claude Code)
+### 8.1 Bundled skills (already available in Claude Code)
 
-| Skill | Uso |
+| Skill | Use |
 |-------|-----|
-| `/batch <instruction>` | Migrazione/refactor large-scale: decompose in 5-30 unità, parallelizza in worktree git, apre PR. Pattern Anthropic ufficiale per batch ops |
-| `/simplify [focus]` | Review automatico recente: spawna 3 sub-agent review in parallelo, aggrega findings, applica fix |
-| `/debug [description]` | Abilita debug logging, analizza log della sessione |
-| `/loop [interval] <prompt>` | Esegui prompt ripetuto (utile per polling deploy, CI) |
-| `/claude-api` | Carica reference API Claude per il linguaggio del progetto (Python, TS, Java, Go, ecc.) |
+| `/batch <instruction>` | Large-scale migration/refactor: decompose into 5-30 units, parallelize in git worktrees, opens PR. Official Anthropic pattern for batch ops |
+| `/simplify [focus]` | Automated recent review: spawns 3 parallel review sub-agents, aggregates findings, applies fixes |
+| `/debug [description]` | Enables debug logging, analyzes session log |
+| `/loop [interval] <prompt>` | Execute prompt repeatedly (useful for deploy polling, CI) |
+| `/claude-api` | Loads Claude API reference for the project language (Python, TS, Java, Go, etc.) |
 
-### 8.2 Skill custom — mapping agente → skill
+### 8.2 Custom skills — agent to skill mapping
 
-| Sub-agent | Skill consigliate |
+| Sub-agent | Recommended skills |
 |-----------|-------------------|
-| architect | `adr-writer` (nuova), `multi-role-brainstorm` (se presente) |
-| coder | `swift-vibe` (nuova), `fastapi-react-vibe` (nuova), `json-validator` |
-| reviewer | `code-review-checklist` (nuova) |
-| tester | (nessuna specifica) |
+| architect | `adr-writer` (new), `multi-role-brainstorm` (if present) |
+| coder | `swift-vibe` (new), `fastapi-react-vibe` (new), `json-validator` |
+| reviewer | `code-review-checklist` (new) |
+| tester | (none specific) |
 | debugger | `pdf-reading`, `file-reading` |
-| doc-writer | `human-writing-style` (se presente), `docx`/`pptx`/`xlsx`/`pdf` |
-| refactorer | (nessuna specifica) |
-| researcher | `youtube-dl` (se presente) |
+| doc-writer | `human-writing-style` (if present), `docx`/`pptx`/`xlsx`/`pdf` |
+| refactorer | (none specific) |
+| researcher | `youtube-dl` (if present) |
 
-### 8.3 Skill nuove da creare (con `skill-creator`)
+### 8.3 New skills to create (with `skill-creator`)
 
-Tutte in `~/.claude/skills/<nome>/SKILL.md`.
+All in `~/.claude/skills/<name>/SKILL.md`.
 
-**`interview-driver`** — Avvia interview mode con prompt standard.
+**`interview-driver`** — Starts interview mode with a standard prompt.
 
 ```yaml
 ---
 name: interview-driver
-description: Avvia interview mode con AskUserQuestion per definire SPEC.md di un nuovo progetto o feature. Use proattivamente all'inizio di qualunque progetto nuovo o feature non triviale.
-argument-hint: [descrizione breve del progetto/feature]
+description: Starts interview mode with AskUserQuestion to define SPEC.md for a new project or feature. Use proactively at the start of any new project or non-trivial feature.
+argument-hint: [brief description of the project/feature]
 disable-model-invocation: true
 ---
 
-L'utente vuole costruire: $ARGUMENTS
+The user wants to build: $ARGUMENTS
 
-Usa il tool AskUserQuestion per intervistare in profondità.
-Copri: implementazione tecnica, UI/UX (se applicabile), edge case,
-trade-off, vincoli operativi, Definition of Done.
+Use the AskUserQuestion tool to interview in depth.
+Cover: technical implementation, UI/UX (if applicable), edge cases,
+trade-offs, operational constraints, Definition of Done.
 
-Non fare domande ovvie. Scava sui punti difficili. Una domanda alla volta,
-max 3-4 opzioni per domanda.
+Do not ask obvious questions. Dig into hard points. One question at a time,
+max 3-4 options per question.
 
-Continua finché non hai coperto tutto. Poi scrivi SPEC.md nella cartella corrente
-con: obiettivi, scope, stack, architettura, modello dati, API, UI flows,
-edge case, success criteria.
+Continue until you have covered everything. Then write SPEC.md in the current folder
+with: objectives, scope, stack, architecture, data model, API, UI flows,
+edge cases, success criteria.
 ```
 
-**`adr-writer`** — Genera ADR standardizzato.
+**`adr-writer`** — Generates a standardized ADR.
 
 ```yaml
 ---
 name: adr-writer
-description: Genera Architecture Decision Record nella cartella docs/architecture/. Use quando l'utente prende una decisione architetturale o usa l'agente architect.
-argument-hint: [titolo decisione]
+description: Generates an Architecture Decision Record in the docs/architecture/ folder. Use when the user makes an architectural decision or uses the architect agent.
+argument-hint: [decision title]
 ---
 
-Crea ADR-NNN-$ARGUMENTS.md in docs/architecture/ (con NNN incrementale).
+Create ADR-NNN-$ARGUMENTS.md in docs/architecture/ (with incremental NNN).
 
-Struttura obbligatoria:
+Required structure:
 1. Status (Proposed / Accepted / Deprecated / Superseded)
-2. Context (problema, vincoli, requisiti)
-3. Decision (scelta presa, in modo netto)
-4. Alternatives considered (almeno 2, con motivo del rifiuto)
-5. Consequences (positive, negative, neutre)
-6. References (link a ADR correlati, doc, issue)
+2. Context (problem, constraints, requirements)
+3. Decision (choice made, stated clearly)
+4. Alternatives considered (at least 2, with reason for rejection)
+5. Consequences (positive, negative, neutral)
+6. References (links to related ADRs, docs, issues)
 
-Niente fluff. Ogni sezione concreta e specifica.
+No fluff. Every section concrete and specific.
 ```
 
-**`claude-md-generator`** — Genera CLAUDE.md di progetto.
+**`claude-md-generator`** — Generates a project CLAUDE.md.
 
 ```yaml
 ---
 name: claude-md-generator
-description: Genera CLAUDE.md di root per un nuovo progetto basandosi su SPEC.md e ARCH.md. Use dopo che SPEC e ARCH sono pronti.
+description: Generates root CLAUDE.md for a new project based on SPEC.md and ARCH.md. Use after SPEC and ARCH are ready.
 ---
 
-Leggi SPEC.md e ARCH.md della cartella corrente.
+Read SPEC.md and ARCH.md in the current folder.
 
-Genera CLAUDE.md di progetto seguendo il template appropriato:
-- Se stack è SwiftUI/iOS → template iOS (sezione 6.1 del Vibe Coding System)
-- Altrimenti → template generico (sezione 6.2)
+Generate a project CLAUDE.md following the appropriate template:
+- If stack is SwiftUI/iOS → iOS template (section 6.1 of Vibe Coding System)
+- Otherwise → generic template (section 6.2)
 
-Adatta: nome progetto, stack effettivo, comandi reali, struttura cartelle scelta.
+Adapt: project name, actual stack, real commands, chosen folder structure.
 
-Importa @~/.claude/rules/ rilevanti per lo stack.
-Target: sotto 100 righe efficaci.
+Import @~/.claude/rules/ relevant to the stack.
+Target: under 100 effective lines.
 ```
 
-**`swift-vibe`** — Pattern e snippet SwiftUI.
+**`swift-vibe`** — SwiftUI patterns and snippets.
 
 ```yaml
 ---
 name: swift-vibe
-description: Best practice SwiftUI con snippet pronti per View, ViewModel, SwiftData, async/await. Use quando si lavora su progetti iOS/SwiftUI.
+description: SwiftUI best practices with ready-to-use snippets for View, ViewModel, SwiftData, async/await. Use when working on iOS/SwiftUI projects.
 paths:
   - "**/*.swift"
 ---
 
-Best practice SwiftUI con snippet pronti.
+SwiftUI best practices with ready-to-use snippets.
 Pattern: Observable+Bindable (iOS 17+), SwiftData @Query, URLSession async.
-Espandi questa skill con altri pattern man mano che li incontri.
+Expand this skill with additional patterns as you encounter them.
 ```
 
-**`fastapi-react-vibe`** — Scaffold endpoint FastAPI + componente React.
+**`fastapi-react-vibe`** — Scaffold FastAPI endpoint + React component.
 
 ```yaml
 ---
 name: fastapi-react-vibe
-description: Genera scaffold di un endpoint FastAPI con Pydantic schema, service, router, test, e relativo componente React con fetch hook. Use quando si aggiunge una feature CRUD a un progetto FastAPI+React.
-argument-hint: [nome risorsa]
+description: Generates scaffold for a FastAPI endpoint with Pydantic schema, service, router, test, and corresponding React component with fetch hook. Use when adding a CRUD feature to a FastAPI+React project.
+argument-hint: [resource name]
 disable-model-invocation: true
 ---
 
-Genera scaffold per la risorsa "$ARGUMENTS":
+Generate scaffold for resource "$ARGUMENTS":
 
 Backend (backend/src/<pkg>/):
-- models/<arguments>.py: SQLAlchemy 2.x model con Mapped[]
-- schemas/<arguments>.py: Pydantic v2 con Create/Update/Read
+- models/<arguments>.py: SQLAlchemy 2.x model with Mapped[]
+- schemas/<arguments>.py: Pydantic v2 with Create/Update/Read
 - services/<arguments>.py: business logic
-- api/<arguments>.py: FastAPI router con CRUD endpoints
-- tests/<arguments>_test.py: pytest con 4 test base
+- api/<arguments>.py: FastAPI router with CRUD endpoints
+- tests/<arguments>_test.py: pytest with 4 base tests
 
 Frontend (frontend/src/):
 - features/<arguments>/api.ts: fetch wrappers
 - features/<arguments>/hooks.ts: useQuery / useMutation
-- features/<arguments>/<Arguments>List.tsx: tabella shadcn/ui
-- features/<arguments>/<Arguments>Form.tsx: form react-hook-form + zod
-- routes: aggiungi route a routing config
+- features/<arguments>/<Arguments>List.tsx: shadcn/ui table
+- features/<arguments>/<Arguments>Form.tsx: react-hook-form + zod form
+- routes: add route to routing config
 
-Segui ADR esistenti. Match style con codice esistente.
+Follow existing ADRs. Match style with existing code.
 ```
 
-**`code-review-checklist`** — Output strutturato per reviewer agent.
+**`code-review-checklist`** — Structured output for the reviewer agent.
 
 ```yaml
 ---
 name: code-review-checklist
-description: Esegue review strutturata su git diff con checklist categorica. Use quando l'agente reviewer fa code review.
+description: Performs structured review on git diff with categorical checklist. Use when the reviewer agent does a code review.
 ---
 
-Esegui `git diff` e analizza le modifiche recenti.
+Run `git diff` and analyze recent changes.
 
-Output strutturato per severità:
+Structured output by severity:
 
-## BLOCKER (must fix prima di merge)
+## BLOCKER (must fix before merge)
 - ...
 
 ## MAJOR (should fix)
@@ -1134,89 +1129,89 @@ Output strutturato per severità:
 ## NIT (style/preference)
 - ...
 
-Per ogni issue: file:line + descrizione + suggested fix.
+For each issue: file:line + description + suggested fix.
 
-Categorie obbligatorie da coprire:
-- Sicurezza (input validation, secret, auth)
-- Correttezza (logica, edge case, error handling)
+Required categories to cover:
+- Security (input validation, secrets, auth)
+- Correctness (logic, edge cases, error handling)
 - Performance (N+1, blocking calls)
-- Consistenza (pattern, ADR alignment)
+- Consistency (patterns, ADR alignment)
 - Test coverage
 ```
 
-**`project-bootstrap`** — Esegue FASE 1 del workflow concept→code in un colpo.
+**`project-bootstrap`** — Runs PHASE 1 of the concept→code workflow in one shot.
 
 ```yaml
 ---
 name: project-bootstrap
-description: Esegue il bootstrap completo di un nuovo progetto (interview → SPEC.md → ARCH.md → CLAUDE.md). Use solo per progetti nuovi piccoli che giustificano un workflow rapido.
-argument-hint: [descrizione breve]
+description: Runs full bootstrap of a new project (interview → SPEC.md → ARCH.md → CLAUDE.md). Use only for small new projects that justify a fast workflow.
+argument-hint: [brief description]
 disable-model-invocation: true
 ---
 
-Bootstrap progetto: $ARGUMENTS
+Bootstrap project: $ARGUMENTS
 
-Step 1: invoca interview-driver con la descrizione
-Step 2: dopo SPEC.md, genera ARCH.md (decisioni architetturali principali con ADR-001..N)
-Step 3: invoca claude-md-generator per CLAUDE.md di root
-Step 4: inizializza git, fai commit iniziale "chore: initial spec and architecture"
-Step 5: presenta riepilogo dei file generati
+Step 1: invoke interview-driver with the description
+Step 2: after SPEC.md, generate ARCH.md (main architectural decisions with ADR-001..N)
+Step 3: invoke claude-md-generator for root CLAUDE.md
+Step 4: initialize git, make initial commit "chore: initial spec and architecture"
+Step 5: present a summary of generated files
 
-HITL gate dopo ogni step. Stefano deve approvare prima di proseguire.
+HITL gate after each step. Stefano must approve before proceeding.
 ```
 
 ### 8.4 Path-scoped skills
 
-Pattern: skill con `paths:` frontmatter si caricano solo per file matching. Riduce noise context.
+Pattern: skills with `paths:` frontmatter load only for matching files. Reduces context noise.
 
-Es. `swift-vibe` ha `paths: ["**/*.swift"]` — Claude vede la skill solo quando edita file Swift.
+E.g. `swift-vibe` has `paths: ["**/*.swift"]` — Claude sees the skill only when editing Swift files.
 
-### 8.5 Skill con `context: fork`
+### 8.5 Skills with `context: fork`
 
-Per skill che girano in sub-agent isolato (research pesante, batch ops):
+For skills that run in an isolated sub-agent (heavy research, batch ops):
 
 ```yaml
 ---
 name: deep-research
-description: Research approfondita in contesto isolato
+description: In-depth research in isolated context
 context: fork
 agent: Explore
 ---
 
 Research $ARGUMENTS:
-1. Usa Glob/Grep per trovare file rilevanti
-2. Leggi e analizza
-3. Riassumi findings con file references
+1. Use Glob/Grep to find relevant files
+2. Read and analyze
+3. Summarize findings with file references
 ```
 
-`agent: Explore` usa il built-in Explore (Haiku, read-only). Il subagent fa il lavoro, il context principale riceve solo il sintesi.
+`agent: Explore` uses the built-in Explore (Haiku, read-only). The subagent does the work, the main context receives only the summary.
 
 ---
 
-## 9. MCP server
+## 9. MCP servers
 
-### 9.1 MCP core (da installare con priorità)
+### 9.1 Core MCP (install with priority)
 
-**Pattern raccomandato Anthropic**: usare il CLI `claude mcp add` invece di editare a mano `.mcp.json`. Lo scope di default è `local` (solo nel progetto corrente, in `~/.claude.json`). Per condividere col team: `--scope project` scrive in `.mcp.json` versionato.
+**Anthropic-recommended pattern**: use the `claude mcp add` CLI instead of manually editing `.mcp.json`. The default scope is `local` (current project only, in `~/.claude.json`). To share with the team: `--scope project` writes to versioned `.mcp.json`.
 
 ```bash
 # Sequential thinking (stdio)
 claude mcp add --transport stdio --scope user sequential-thinking \
   -- npx -y @modelcontextprotocol/server-sequential-thinking
 
-# GitHub remote MCP (HTTP — sostituisce il vecchio stdio @modelcontextprotocol/server-github)
+# GitHub remote MCP (HTTP — replaces the old stdio @modelcontextprotocol/server-github)
 claude mcp add --transport http --scope user github \
   https://api.githubcopilot.com/mcp/ \
   --header "Authorization: Bearer $GITHUB_TOKEN"
 
-# SQLite locale (stdio)
+# SQLite local (stdio)
 claude mcp add --transport stdio --scope project sqlite \
   -- npx -y @modelcontextprotocol/server-sqlite --db-path ./dev.db
 
-# XcodeBuildMCP (già installato da Stefano)
+# XcodeBuildMCP (already installed by Stefano)
 ```
 
-In alternativa, `.mcp.json` in root progetto per scope project (versionato col team):
+Alternatively, `.mcp.json` in project root for project scope (versioned with team):
 
 ```json
 {
@@ -1243,64 +1238,64 @@ In alternativa, `.mcp.json` in root progetto per scope project (versionato col t
 }
 ```
 
-**Note importanti:**
-- `${VAR}` espande env var; `${VAR:-default}` con fallback. Secret token mai inline
-- Server-name `workspace` è riservato, mai usarlo
-- `alwaysLoad: true` forza il caricamento di tutti i tool del server a session start (vedi 9.3 tool search)
+**Important notes:**
+- `${VAR}` expands env vars; `${VAR:-default}` with fallback. Secret tokens never inline
+- Server name `workspace` is reserved, never use it
+- `alwaysLoad: true` forces loading all server tools at session start (see 9.3 tool search)
 
-### 9.2 MCP opzionali consigliati
+### 9.2 Recommended optional MCP
 
-- **serena**: LSP wrapper, code intelligence semantica. Utile su codebase grandi per refactor accurati
-- **context7**: docs aggiornate librerie. Riduce allucinazioni quando il researcher fa lookup su API
-- **playwright**: E2E test web automatici per il tester
-- **filesystem-mcp esteso**: operazioni file batch
+- **serena**: LSP wrapper, semantic code intelligence. Useful on large codebases for accurate refactors
+- **context7**: up-to-date library docs. Reduces hallucinations when the researcher does API lookups
+- **playwright**: automated web E2E tests for the tester
+- **extended filesystem-mcp**: batch file operations
 
-### 9.3 Tool search MCP
+### 9.3 MCP tool search
 
-Anthropic abilita tool search di default (`ENABLE_TOOL_SEARCH=true`): solo i nomi dei tool MCP caricano a startup, gli schema completi sono deferred fino all'uso. Cost MCP idle è minimo.
+Anthropic enables tool search by default (`ENABLE_TOOL_SEARCH=true`): only MCP tool names load at startup, full schemas are deferred until use. Idle MCP cost is minimal.
 
-Per server con tool che servono in ogni turn (es. github): `"alwaysLoad": true` nel server config. Carica tutti i tool a startup. Trade-off: più context consumato sempre, ma niente search step.
+For servers with tools needed every turn (e.g. github): `"alwaysLoad": true` in server config. Loads all tools at startup. Trade-off: more context consumed always, but no search step.
 
-**Limiti output MCP:**
-- Default 25,000 token per tool result; warning a 10,000
-- Override: `MAX_MCP_OUTPUT_TOKENS=50000` in env per tool che producono output grandi (database query, log file)
-- Server author può marcare singolo tool con `_meta["anthropic/maxResultSizeChars"]` fino a 500,000
+**MCP output limits:**
+- Default 25,000 tokens per tool result; warning at 10,000
+- Override: `MAX_MCP_OUTPUT_TOKENS=50000` in env for tools producing large output (database query, log file)
+- Server author can mark individual tool with `_meta["anthropic/maxResultSizeChars"]` up to 500,000
 
-**Diagnostica:** `/mcp` mostra status, token cost per server, e tool count. Disconnetti server inutilizzati.
+**Diagnostics:** `/mcp` shows status, token cost per server, and tool count. Disconnect unused servers.
 
 ---
 
-## 10. Permission modes — guida operativa
+## 10. Permission modes — operational guide
 
-Sei modi disponibili. Cycle con `Shift+Tab` (modalità incluse: default → acceptEdits → plan → auto). Auto e bypassPermissions richiedono attivazione esplicita.
+Six modes available. Cycle with `Shift+Tab` (modes included: default → acceptEdits → plan → auto). Auto and bypassPermissions require explicit activation.
 
-| Modo | Comportamento | Quando usarlo |
+| Mode | Behavior | When to use |
 |------|---------------|---------------|
-| `default` | Chiede per ogni edit e bash | Inizio sessione, task sensibili, esplorazione |
-| `acceptEdits` | Auto-accetta edit file, chiede per bash | Durante implementazione attiva |
-| `plan` | Read-only, propone piano senza eseguire | Inizio nuova feature, refactor strutturale |
-| `auto` | Classifier in background, blocca prompt injection e scope escalation | Task lunghi su Team/Enterprise plan |
-| `dontAsk` | Auto-deny tutto tranne allowlist | CI, ambienti locked |
-| `bypassPermissions` | Skip controlli (con eccezioni `.git`, `.claude`) | Container isolati, devcontainer |
+| `default` | Asks for every edit and bash | Session start, sensitive tasks, exploration |
+| `acceptEdits` | Auto-accepts file edits, asks for bash | During active implementation |
+| `plan` | Read-only, proposes plan without executing | Starting a new feature, structural refactor |
+| `auto` | Classifier in background, blocks prompt injection and scope escalation | Long tasks on Team/Enterprise plan |
+| `dontAsk` | Auto-deny everything except allowlist | CI, locked environments |
+| `bypassPermissions` | Skip controls (with exceptions for `.git`, `.claude`) | Isolated containers, devcontainer |
 
-### Per Stefano specificatamente
+### For Stefano specifically
 
-Memory dice "bypassPermissions mode configured". È OK ma rischioso per prompt injection. Alternative migliori:
+Memory says "bypassPermissions mode configured". That is OK but risky for prompt injection. Better alternatives:
 
-1. **Se piano Pro/Max** (caso probabile di Stefano):
-   - Default: `acceptEdits` (impostalo come default in `~/.claude/settings.json` → `permissions.defaultMode`)
-   - Plan mode esplicito per nuove feature (`/plan` o `Shift+Tab` in sessione, `--permission-mode plan` a startup)
-   - Allowlist per comandi ricorrenti (`uv run pytest`, `pnpm test`, `pnpm lint`, ecc.)
+1. **If on Pro/Max plan** (likely Stefano's case):
+   - Default: `acceptEdits` (set as default in `~/.claude/settings.json` → `permissions.defaultMode`)
+   - Explicit plan mode for new features (`/plan` or `Shift+Tab` in session, `--permission-mode plan` at startup)
+   - Allowlist for recurring commands (`uv run pytest`, `pnpm test`, `pnpm lint`, etc.)
 
-2. **Se passi a Team/Enterprise/API plan**:
-   - `auto` mode è la nuova best practice: classifier Sonnet 4.6 in background, blocca prompt injection automatico
-   - Richiede Sonnet 4.6 o Opus 4.6 come modello principale
+2. **If moving to Team/Enterprise/API plan**:
+   - `auto` mode is the new best practice: Sonnet 4.6 classifier in background, blocks prompt injection automatically
+   - Requires Sonnet 4.6 or Opus 4.6 as the main model
 
-3. **Per codebase grandi**: combina con hook `protect-files.sh` (sez. 7.2). I deny rules dei hook hanno precedenza su qualunque permission mode, inclusi `bypassPermissions`. Layered defense.
+3. **For large codebases**: combine with hook `protect-files.sh` (sec. 7.2). Hook deny rules take precedence over any permission mode, including `bypassPermissions`. Layered defense.
 
-### Allowlist consigliata per Stefano
+### Recommended allowlist for Stefano
 
-`~/.claude/settings.json` (esempio completo che combina permission mode, allowlist, attribution):
+`~/.claude/settings.json` (full example combining permission mode, allowlist, attribution):
 
 ```json
 {
@@ -1334,179 +1329,179 @@ Memory dice "bypassPermissions mode configured". È OK ma rischioso per prompt i
 }
 ```
 
-**Gestione UI:**
-- `/config` apre l'interfaccia tabbed settings (Status, Config). Più comodo dell'editing diretto del JSON
-- `/status` mostra quali setting source sono attive nella sessione corrente (User / Project / Local / Managed). Conferma che il file viene caricato
+**UI management:**
+- `/config` opens the tabbed settings interface (Status, Config). More convenient than direct JSON editing
+- `/status` shows which settings sources are active in the current session (User / Project / Local / Managed). Confirms the file is being loaded
 
-**Settings precedence** (alto → basso):
-1. Managed settings (server o MDM)
+**Settings precedence** (high → low):
+1. Managed settings (server or MDM)
 2. CLI args (`--permission-mode`, `--settings`)
-3. `.claude/settings.local.json` (gitignored, personale per il progetto)
-4. `.claude/settings.json` (progetto, versionato)
+3. `.claude/settings.local.json` (gitignored, personal per project)
+4. `.claude/settings.json` (project, versioned)
 5. `~/.claude/settings.json` (user)
 
-Array (`permissions.allow`, `deny`) si **concatenano e deduplicano** attraverso gli scope; scalari (`defaultMode`, `model`) usano il valore con priorità più alta.
+Arrays (`permissions.allow`, `deny`) are **concatenated and deduplicated** across scopes; scalars (`defaultMode`, `model`) use the value at the highest priority.
 
 ---
 
-## 11. Workflow end-to-end: concept → code
+## 11. End-to-end workflow: concept → code
 
-> Pattern ufficiale Anthropic da `code.claude.com/docs/en/best-practices`
-> (sezioni "Explore first, then plan, then code" e "Let Claude interview you").
+> Official Anthropic pattern from `code.claude.com/docs/en/best-practices`
+> (sections "Explore first, then plan, then code" and "Let Claude interview you").
 
-### 11.1 Principi fondanti
+### 11.1 Founding principles
 
-1. **Interview before code**: per feature/progetti non triviali, AskUserQuestion prima del codice. Decisioni scoperte quando ancora "a buon mercato"
-2. **Spec as source of truth**: output dell'intervista = `SPEC.md`
-3. **Fresh session per implementare**: sessione nuova per coding (context pulito). Mai mischiare interview e coding nella stessa sessione
-4. **Plan mode**: separa exploration da execution. `Ctrl+G` per editare il piano in editor
-5. **Verification**: ogni feature ha modo di auto-verifica (test, screenshot, output atteso)
-6. **Context aggressivo**: `/clear` tra task non correlati, `/compact` se serve compatibilità con focus, sub-agent per investigazioni profonde
+1. **Interview before code**: for non-trivial features/projects, AskUserQuestion before code. Decisions discovered while still "cheap"
+2. **Spec as source of truth**: interview output = `SPEC.md`
+3. **Fresh session to implement**: new session for coding (clean context). Never mix interview and coding in the same session
+4. **Plan mode**: separates exploration from execution. `Ctrl+G` to edit the plan in editor
+5. **Verification**: every feature has a self-verification method (tests, screenshot, expected output)
+6. **Aggressive context**: `/clear` between unrelated tasks, `/compact` if needed for focus, sub-agents for deep investigations
 
-### 11.2 Cowork vs Claude Code per fase
+### 11.2 Cowork vs Claude Code by phase
 
-| Fase | Strumento ottimale |
+| Phase | Optimal tool |
 |------|-------------------|
-| Brainstorming, raccolta sorgenti | **Cowork** (UI, connector Gmail/GDrive/Notion) |
-| Generazione SPEC.md (interview mode) | **Cowork** o **Claude Code** (entrambi validi) |
-| Generazione ARCH.md | **Claude Code** (preferito, vicino al codice) |
-| Generazione CLAUDE.md di root | **Claude Code** (testato subito) |
-| Scaffold, dipendenze, struttura | **Claude Code** |
-| Implementazione codice | **Claude Code** |
-| Test, refactor, debug | **Claude Code** |
+| Brainstorming, gathering sources | **Cowork** (UI, Gmail/GDrive/Notion connectors) |
+| SPEC.md generation (interview mode) | **Cowork** or **Claude Code** (both valid) |
+| ARCH.md generation | **Claude Code** (preferred, close to the code) |
+| Root CLAUDE.md generation | **Claude Code** (tested immediately) |
+| Scaffold, dependencies, structure | **Claude Code** |
+| Code implementation | **Claude Code** |
+| Tests, refactor, debug | **Claude Code** |
 | PR, review, CI | **Claude Code** + `gh` CLI |
-| Slide, doc cliente | **Cowork** (skill docx/pptx/pdf) |
+| Slides, client docs | **Cowork** (docx/pptx/pdf skills) |
 
 ### 11.3 Workflow A — Cowork → Claude Code
 
-**Tempo stimato:** FASE 1 in Cowork 30-90 minuti, FASE 2 dipende dal progetto.
+**Estimated time:** PHASE 1 in Cowork 30-90 minutes, PHASE 2 depends on project.
 
-#### FASE 1 — Cowork (concept → spec → struttura)
+#### PHASE 1 — Cowork (concept → spec → structure)
 
-**Step 1.1.** Apri Cowork. Tab Cowork → Nuovo progetto → nome `<nome-progetto>`. Allega cartella locale `~/dev/<nome>`. Mode: "Ask before acting".
+**Step 1.1.** Open Cowork. Tab Cowork → New project → name `<project-name>`. Attach local folder `~/dev/<name>`. Mode: "Ask before acting".
 
-**Step 1.2.** Brain dump. 2-3 paragrafi liberi dell'idea. Allega documenti, screenshot, mockup. Usa connettori (Notion, GDrive, GitHub) se utili.
+**Step 1.2.** Brain dump. 2-3 free paragraphs of the idea. Attach documents, screenshots, mockups. Use connectors (Notion, GDrive, GitHub) if useful.
 
-**Step 1.3.** Avvia Interview Mode. Prompt:
+**Step 1.3.** Start Interview Mode. Prompt:
 
 ```
-Voglio costruire [breve descrizione 1-2 righe].
+I want to build [1-2 line brief description].
 
-Intervistami in modo approfondito usando il tool AskUserQuestion.
-Copri: implementazione tecnica, UI/UX, edge case, trade-off,
-vincoli operativi, Definition of Done.
+Interview me in depth using the AskUserQuestion tool.
+Cover: technical implementation, UI/UX, edge cases, trade-offs,
+operational constraints, Definition of Done.
 
-Non fare domande ovvie. Una domanda alla volta, max 3-4 opzioni.
-Continua finché non hai coperto tutto. Poi scrivi SPEC.md.
+Do not ask obvious questions. One question at a time, max 3-4 options.
+Continue until you have covered everything. Then write SPEC.md.
 ```
 
-**Step 1.4.** Rispondi alle domande (tipicamente 15-40, fino a 40+ per progetti grandi).
+**Step 1.4.** Answer the questions (typically 15-40, up to 40+ for large projects).
 
-**Step 1.5.** Cowork genera SPEC.md. Verifica: obiettivi, scope, stack, architettura, dati, API, UI flows, edge case, success criteria.
+**Step 1.5.** Cowork generates SPEC.md. Verify: objectives, scope, stack, architecture, data, API, UI flows, edge cases, success criteria.
 
-**Step 1.6.** Genera ARCH.md:
+**Step 1.6.** Generate ARCH.md:
 ```
-Sulla base di SPEC.md, crea ARCH.md con diagramma a blocchi (ASCII),
-decisioni architetturali (ADR-001..N), trade-off scartati,
-struttura cartelle proposta.
+Based on SPEC.md, create ARCH.md with a block diagram (ASCII),
+architectural decisions (ADR-001..N), discarded trade-offs,
+proposed folder structure.
 ```
 
-**Step 1.7.** HITL gate: rileggi SPEC.md e ARCH.md. Modifica direttamente se serve. Quando ok, chiudi Cowork.
+**Step 1.7.** HITL gate: re-read SPEC.md and ARCH.md. Edit directly if needed. When satisfied, close Cowork.
 
-#### FASE 2 — Claude Code (CLAUDE.md → scaffold → implementazione)
+#### PHASE 2 — Claude Code (CLAUDE.md → scaffold → implementation)
 
-**Step 2.1.** Apri Claude Code:
+**Step 2.1.** Open Claude Code:
 ```bash
-cd ~/dev/<nome>
+cd ~/dev/<name>
 claude
 ```
 
-Verifica con `/memory` che `~/.claude/CLAUDE.md` sia caricato.
+Verify with `/memory` that `~/.claude/CLAUDE.md` is loaded.
 
-**Step 2.2.** Genera CLAUDE.md di progetto:
+**Step 2.2.** Generate project CLAUDE.md:
 ```
 /claude-md-generator
 ```
-(skill custom — sez. 8.3). Oppure prompt diretto:
+(custom skill — sec. 8.3). Or direct prompt:
 ```
-Sulla base di SPEC.md e ARCH.md, genera CLAUDE.md di root usando il template
-appropriato (SwiftUI/iOS o generico). Importa rules da ~/.claude/rules/.
-Target sotto 100 righe.
-```
-
-**Step 2.3.** Inizializza git e commit iniziale:
-```
-inizializza git, fai commit iniziale "chore: initial spec and architecture"
-con SPEC.md, ARCH.md, CLAUDE.md, docs/architecture/
+Based on SPEC.md and ARCH.md, generate root CLAUDE.md using the appropriate template
+(SwiftUI/iOS or generic). Import rules from ~/.claude/rules/.
+Target under 100 lines.
 ```
 
-**Step 2.4.** Scaffold del progetto. Entra in plan mode:
+**Step 2.3.** Initialize git and initial commit:
+```
+initialize git, make initial commit "chore: initial spec and architecture"
+with SPEC.md, ARCH.md, CLAUDE.md, docs/architecture/
+```
+
+**Step 2.4.** Project scaffold. Enter plan mode:
 ```
 /plan
-Leggi SPEC.md, ARCH.md, CLAUDE.md.
-Proponi piano per scaffold iniziale: struttura cartelle, config file
-(pyproject.toml / package.json / Package.swift), dipendenze minime,
+Read SPEC.md, ARCH.md, CLAUDE.md.
+Propose a plan for the initial scaffold: folder structure, config files
+(pyproject.toml / package.json / Package.swift), minimal dependencies,
 test framework, linter, .gitignore.
-Solo scaffold, no codice produttivo.
+Scaffold only, no production code.
 ```
 
-**Step 2.5.** HITL gate: approva il piano. `Ctrl+G` per editare.
+**Step 2.5.** HITL gate: approve the plan. `Ctrl+G` to edit.
 
-**Step 2.6.** Esci da plan mode (Shift+Tab → acceptEdits). Esecuzione scaffold. Verifica setup funzioni. Commit.
+**Step 2.6.** Exit plan mode (Shift+Tab → acceptEdits). Execute scaffold. Verify setup works. Commit.
 
-**Step 2.7.** Prima feature (workflow multi-agente):
+**Step 2.7.** First feature (multi-agent workflow):
 
 ```
-Implementa feature [nome] descritta in SPEC.md sezione [X].
+Implement feature [name] described in SPEC.md section [X].
 
 Workflow:
-1. Invoca @"architect (agent)" per ADR-NNN-<nome>.md
-2. STOP per mia approvazione
-3. Parallelizza max 4 sub-agenti:
-   - @"coder (agent)" backend (se applicabile, isolation: worktree)
-   - @"coder (agent)" frontend (se applicabile, isolation: worktree)
-   - @"tester (agent)" 
+1. Invoke @"architect (agent)" for ADR-NNN-<name>.md
+2. STOP for my approval
+3. Parallelize max 4 sub-agents:
+   - @"coder (agent)" backend (if applicable, isolation: worktree)
+   - @"coder (agent)" frontend (if applicable, isolation: worktree)
+   - @"tester (agent)"
    - @"doc-writer (agent)"
-4. @"reviewer (agent)" finale
-5. STOP per approvazione commit
-6. Commit Conventional Commits in inglese
+4. @"reviewer (agent)" final
+5. STOP for commit approval
+6. Commit Conventional Commits in English
 ```
 
-**Step 2.8.** Iterazione. Dopo ogni feature: `/clear` per pulire context. Per task non correlato: nuova sessione.
+**Step 2.8.** Iteration. After each feature: `/clear` to clean context. For an unrelated task: new session.
 
-**Step 2.9.** PR finale:
+**Step 2.9.** Final PR:
 ```
-Crea PR via github MCP. Titolo "feat(<scope>): <descrizione>".
-Body: riassunto, link SPEC.md sezione, file modificati, test results.
-```
-
-### 11.4 Workflow B — Tutto in Claude Code
-
-Identico ma con FASE 1 dentro Claude Code:
-
-**Step B.1.** Crea cartella e apri Claude Code.
-
-**Step B.2.** Invoca skill custom:
-```
-/project-bootstrap [descrizione breve]
+Create PR via github MCP. Title "feat(<scope>): <description>".
+Body: summary, link to SPEC.md section, modified files, test results.
 ```
 
-Oppure manualmente:
+### 11.4 Workflow B — All in Claude Code
+
+Identical but with PHASE 1 inside Claude Code:
+
+**Step B.1.** Create folder and open Claude Code.
+
+**Step B.2.** Invoke custom skill:
 ```
-/interview-driver [descrizione breve]
+/project-bootstrap [brief description]
 ```
 
-**Step B.3.** Stessi step 1.5-1.7 della variante A.
+Or manually:
+```
+/interview-driver [brief description]
+```
 
-**Step B.4.** CRUCIALE: `/clear` o fresh session prima di scaffold (`claude --continue` o nuovo `claude`). Il context della interview inquina l'implementazione.
+**Step B.3.** Same steps 1.5-1.7 as variant A.
 
-**Step B.5.** Procedi da Step 2.4 di variante A.
+**Step B.4.** CRITICAL: `/clear` or fresh session before scaffold (`claude --continue` or new `claude`). The interview context contaminates the implementation.
 
-### 11.5 Diagramma del workflow
+**Step B.5.** Proceed from Step 2.4 of variant A.
+
+### 11.5 Workflow diagram
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ FASE 1 — CONCEPT & SPEC (Cowork o Claude Code)             │
+│ PHASE 1 — CONCEPT & SPEC (Cowork or Claude Code)           │
 │                                                             │
 │   Brain dump → Interview mode (AskUserQuestion 15-40q)     │
 │        ↓                                                    │
@@ -1514,34 +1509,34 @@ Oppure manualmente:
 │        ↓                                                    │
 │   ARCH.md (+ ADR-001..N)  ←──── HITL Stefano               │
 │        ↓                                                    │
-│   CLAUDE.md di root  ←──── HITL Stefano                    │
+│   Root CLAUDE.md  ←──── HITL Stefano                       │
 └─────────────────────┬──────────────────────────────────────┘
                       │
-                /clear o fresh session
+                /clear or fresh session
                       │
                       ▼
 ┌────────────────────────────────────────────────────────────┐
-│ FASE 2 — IMPLEMENTAZIONE (Claude Code)                     │
+│ PHASE 2 — IMPLEMENTATION (Claude Code)                     │
 │                                                             │
 │   Scaffold (plan mode → HITL → execute → commit)           │
 │        ↓                                                    │
-│   ┌── Per ogni feature: ──────────────────────────────┐    │
+│   ┌── Per feature: ───────────────────────────────────┐    │
 │   │  architect → ADR → HITL                           │    │
 │   │       ↓                                            │    │
-│   │  [coder+tester+doc-writer paralleli (worktree)]   │    │
+│   │  [coder+tester+doc-writer parallel (worktree)]    │    │
 │   │       ↓                                            │    │
 │   │  reviewer → HITL                                   │    │
 │   │       ↓                                            │    │
-│   │  Commit Conventional → PR github MCP              │    │
+│   │  Conventional Commit → PR github MCP              │    │
 │   │       ↓                                            │    │
 │   │  /clear                                            │    │
 │   └────────────────────────────────────────────────────┘    │
 └────────────────────────────────────────────────────────────┘
 ```
 
-### 11.6 Quando usare agent-teams (anziché sub-agent)
+### 11.6 When to use agent-teams (instead of sub-agents)
 
-Per feature complesse cross-strato Stefano può valutare agent-teams. Esempio per un'app web FastAPI+React:
+For complex cross-layer features Stefano can consider agent-teams. Example for a FastAPI+React web app:
 
 ```bash
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
@@ -1550,54 +1545,54 @@ claude
 
 Prompt:
 ```
-Crea un team di 4 teammate per implementare la feature [X]:
-- backend-dev: implementa endpoint FastAPI + service + schema
-- frontend-dev: implementa pagina React + form + tabella
-- test-engineer: scrive test pytest e vitest per la feature
-- reviewer: revisiona tutto il lavoro e segnala issue
+Create a team of 4 teammates to implement feature [X]:
+- backend-dev: implement FastAPI endpoint + service + schema
+- frontend-dev: implement React page + form + table
+- test-engineer: write pytest and vitest tests for the feature
+- reviewer: review all work and flag issues
 
-Usa subagent definitions (architect per planning iniziale, poi spawna teammate
-con i tool del subagent corrispondente). Coordinati via task list condivisa.
+Use subagent definitions (architect for initial planning, then spawn teammates
+with the tools of the corresponding subagent). Coordinate via shared task list.
 ```
 
-Vantaggi vs sub-agent:
-- Ogni teammate ha context completo per il suo strato (vs sub-agent che ha solo summary)
-- Possono dibattere e sfidarsi (utile in debugging con ipotesi competenti)
-- Self-claim task: riducono coordinamento dell'orchestrator
+Advantages vs sub-agents:
+- Each teammate has full context for their layer (vs sub-agent that has only a summary)
+- They can debate and challenge each other (useful for debugging with competing hypotheses)
+- Self-claim tasks: reduce orchestrator coordination
 
-Limitazioni:
-- Solo Sonnet 4.6/Opus 4.6 per il lead
-- No `/resume` con teammate in-process
-- Più costoso (ogni teammate = sessione completa)
-- 3-5 teammate ottimale, no scaling oltre
-- `display mode`: `tmux` (split panes) o `in-process`. Su macOS Stefano può usare iTerm2 con `it2` CLI
+Limitations:
+- Lead limited to Sonnet 4.6/Opus 4.6
+- No `/resume` with in-process teammates
+- More expensive (each teammate = full session)
+- 3-5 teammates optimal, no scaling beyond
+- `display mode`: `tmux` (split panes) or `in-process`. On macOS Stefano can use iTerm2 with `it2` CLI
 
 ---
 
-## 12. Worktrees — parallelizzazione robusta
+## 12. Worktrees — robust parallelization
 
-I sub-agent `coder` paralleli usano `isolation: worktree` nel frontmatter: ottengono automaticamente un worktree git isolato. Pattern interno gestito da Claude Code, niente da configurare lato sub-agent.
+Parallel `coder` sub-agents use `isolation: worktree` in the frontmatter: they automatically get an isolated git worktree. Internal pattern managed by Claude Code, nothing to configure on the sub-agent side.
 
-**Per Stefano (worktree manuali):**
+**For Stefano (manual worktrees):**
 
 ```bash
-# Terminal 1: feature auth
+# Terminal 1: auth feature
 claude --worktree feature-auth
-# crea .claude/worktrees/feature-auth/ con branch worktree-feature-auth
+# creates .claude/worktrees/feature-auth/ with branch worktree-feature-auth
 
-# Terminal 2: bug fix in parallelo
+# Terminal 2: bug fix in parallel
 claude -w bugfix-payments
-# -w è alias short di --worktree
+# -w is short alias for --worktree
 
-# Worktree da PR specifico (review parallelo)
+# Worktree from specific PR (parallel review)
 claude --worktree "#456"
-# fetch pull/456/head e crea .claude/worktrees/pr-456/
+# fetches pull/456/head and creates .claude/worktrees/pr-456/
 ```
 
-**Pattern di branching (`worktree.baseRef` in settings.json):**
+**Branching pattern (`worktree.baseRef` in settings.json):**
 
-- Default `"fresh"`: branch da `origin/<default-branch>`. Worktree pulito, allineato col remote
-- `"head"`: branch da HEAD locale. Porta commit non-pushati e stato feature-branch nel worktree. Utile per sub-agent che lavorano su work in-progress
+- Default `"fresh"`: branch from `origin/<default-branch>`. Clean worktree, aligned with remote
+- `"head"`: branch from local HEAD. Carries unpushed commits and feature-branch state into the worktree. Useful for sub-agents working on in-progress work
 
 ```json
 {
@@ -1608,15 +1603,15 @@ claude --worktree "#456"
 }
 ```
 
-**Caveats importanti:**
-- Worktree NON copia automaticamente file gitignored (`.env`, `secrets.json`, ecc.) — vedi `.worktreeinclude` sotto
-- Worktree condivide `.git` object database con la repo principale (efficiente su disco) ma non porta `node_modules`, `uv venv`, `target/`, `.next/`. Per progetti grandi due opzioni:
-  - `worktree.symlinkDirectories: ["node_modules"]` — symlink dalla repo principale (rischio: lock file conflict, da testare)
-  - Reinstallare deps nel worktree (`uv sync`, `pnpm install`) — sicuro, più lento
+**Important caveats:**
+- Worktree does NOT automatically copy gitignored files (`.env`, `secrets.json`, etc.) — see `.worktreeinclude` below
+- Worktree shares the `.git` object database with the main repo (disk-efficient) but does not carry `node_modules`, `uv venv`, `target/`, `.next/`. For large projects two options:
+  - `worktree.symlinkDirectories: ["node_modules"]` — symlink from the main repo (risk: lock file conflict, needs testing)
+  - Reinstall deps in the worktree (`uv sync`, `pnpm install`) — safe, slower
 
-**`.worktreeinclude` — copia file gitignored nel worktree**
+**`.worktreeinclude` — copy gitignored files into the worktree**
 
-File a root del progetto (versionato col team) che lista file gitignored da copiare in ogni nuovo worktree. Sintassi gitignore.
+File at the project root (versioned with the team) that lists gitignored files to copy into every new worktree. Gitignore syntax.
 
 ```
 # .worktreeinclude
@@ -1625,264 +1620,264 @@ File a root del progetto (versionato col team) che lista file gitignored da copi
 config/secrets.json
 ```
 
-Senza questo, ogni worktree appena creato manca dei file di env e deve essere setup-pato manualmente prima che test/build funzionino.
+Without this, every freshly created worktree is missing env files and must be set up manually before tests/build work.
 
-**Cleanup automatico:** worktree senza modifiche viene cleaned up automaticamente quando la sessione finisce. Worktree con modifiche persiste per review/merge manuale.
+**Automatic cleanup:** a worktree with no changes is cleaned up automatically when the session ends. A worktree with changes persists for manual review/merge.
 
-> **Fix 2.1.149 — sandbox write allowlist:** prima di questa versione la write allowlist in un worktree copriva l'intero repo principale invece del solo `.git/` condiviso (con `hooks/` e `config` denied). Risolto. Il sub-agent `coder` con `isolation: worktree` è ora correttamente sandboxato.
+> **Fix 2.1.149 — sandbox write allowlist:** before this version the write allowlist in a worktree covered the entire main repo instead of just the shared `.git/` (with `hooks/` and `config` denied). Resolved. The `coder` sub-agent with `isolation: worktree` is now correctly sandboxed.
 
-**Limiti pratici:**
-- 2-4 worktree paralleli sono il ceiling ragionevole (oltre c'è solo overhead review)
-- IDE multi-checkout: VS Code/Cursor OK. Altri (Xcode su iOS, alcuni JetBrains) flaky con i worktree
+**Practical limits:**
+- 2-4 parallel worktrees are the reasonable ceiling (beyond that there is only review overhead)
+- Multi-checkout IDEs: VS Code/Cursor OK. Others (Xcode on iOS, some JetBrains) flaky with worktrees
 
 ---
 
 ## 13. Auto memory
 
-Feature reale di Claude Code (v2.1.59+). Salva learnings automatici in `~/.claude/projects/<repo>/memory/MEMORY.md`.
+Real Claude Code feature (v2.1.59+). Saves automatic learnings in `~/.claude/projects/<repo>/memory/MEMORY.md`.
 
-- Caricamento: prime 200 righe o 25KB di MEMORY.md ad ogni sessione
-- Topic files (debugging.md, patterns.md, ecc.) caricati on-demand
-- Ispezione: `/memory` per browse e edit
-- Disable: `autoMemoryEnabled: false` in settings.json oppure `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` come env var
-- Path personalizzato: `autoMemoryDirectory: "~/my-memory"` in settings (accettato solo da user settings, non da project — security: una repo clonata potrebbe redirigere le memory)
+- Loading: first 200 lines or 25KB of MEMORY.md at each session
+- Topic files (debugging.md, patterns.md, etc.) loaded on-demand
+- Inspection: `/memory` to browse and edit
+- Disable: `autoMemoryEnabled: false` in settings.json or `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` as env var
+- Custom path: `autoMemoryDirectory: "~/my-memory"` in settings (accepted only by user settings, not project — security: a cloned repo could redirect memory)
 
-Per Stefano: lascia attivo. Claude accumula nel tempo pattern dei tuoi progetti (build command, debug insight, convenzioni). Verifica periodicamente via `/memory` per controllare cosa ha salvato.
+For Stefano: leave it active. Claude accumulates patterns from your projects over time (build commands, debug insights, conventions). Periodically verify via `/memory` to check what has been saved.
 
-**Sub-agent con `memory: project`** (definiti in sez. 3): hanno memoria separata in `.claude/agent-memory/<name>/`. Il reviewer accumula recurring issues, il debugger pattern di bug, l'architect decisioni passate. Condivisibili via git (utile su codebase con più collaboratori).
+**Sub-agents with `memory: project`** (defined in sec. 3): have separate memory in `.claude/agent-memory/<name>/`. The reviewer accumulates recurring issues, the debugger bug patterns, the architect past decisions. Shareable via git (useful on codebases with multiple collaborators).
 
 ---
 
-## 14. Plugin Anthropic marketplace
+## 14. Anthropic marketplace plugins
 
-Pacchetti pronti da `/plugin`:
+Ready-made packages from `/plugin`:
 
-- **`superpowers`** (obra/superpowers): TDD enforcement, Socratic brainstorming, planning granulare, code review automatico tra task. Plugin ufficiale Anthropic marketplace.
-- **`spec-kit`** (GitHub): Spec-Driven Development toolkit. Struttura Constitution → Specify → Plan → Tasks. Compatibile con qualunque agente di coding.
-- **code intelligence plugin**: se installato per il linguaggio (Python, TypeScript, Swift), Claude ottiene symbol navigation precisa e error detection automatica dopo edit. Consigliato.
+- **`superpowers`** (obra/superpowers): TDD enforcement, Socratic brainstorming, granular planning, automatic code review between tasks. Official Anthropic marketplace plugin.
+- **`spec-kit`** (GitHub): Spec-Driven Development toolkit. Constitution → Specify → Plan → Tasks structure. Compatible with any coding agent.
+- **code intelligence plugin**: if installed for the language (Python, TypeScript, Swift), Claude gets precise symbol navigation and automatic error detection after edits. Recommended.
 
-Installazione: `/plugin` → browse marketplace → install.
+Installation: `/plugin` → browse marketplace → install.
 
-**Test locale prima di pacchettizzare un plugin:**
+**Testing a plugin locally before packaging:**
 
 ```bash
-# Carica plugin direttamente da cartella locale (development/test)
+# Load plugin directly from local folder (development/test)
 claude --plugin-dir ./my-plugin
 
-# Carica plugin da .zip remoto (CI/sharing veloce)
+# Load plugin from remote .zip (CI/fast sharing)
 claude --plugin-url https://example.com/plugin.zip
 ```
 
-**Quando Stefano avrà testato sul campo le 7 skill custom della sez. 8.3** (interview-driver, adr-writer, claude-md-generator, swift-vibe, fastapi-react-vibe, code-review-checklist, project-bootstrap), può impacchettarle in un plugin `stefano-vibe-coding` (skill + agents) e condividerlo via private GitHub repo. Vantaggio: versionato, aggiornabile, riutilizzabile.
+**When Stefano has field-tested the 7 custom skills from sec. 8.3** (interview-driver, adr-writer, claude-md-generator, swift-vibe, fastapi-react-vibe, code-review-checklist, project-bootstrap), he can package them into a `stefano-vibe-coding` plugin (skills + agents) and share it via a private GitHub repo. Advantage: versioned, updatable, reusable.
 
 ---
 
-## 15. Checklist installazione
+## 15. Installation checklist
 
-### Globale (una volta sola, sui Mac di lavoro)
+### Global (once, on work Macs)
 
-- [ ] Crea `~/.claude/CLAUDE.md` (sez. 4) — target <100 righe
-- [ ] Crea `~/.claude/settings.json` con `attribution: {commit:"", pr:""}` per disabilitare firma Claude nei commit
-- [ ] Crea `~/.claude/rules/python.md`, `typescript-react.md`, `swift.md`, `sql-migrations.md` (sez. 5.1)
-- [ ] Crea sub-agent files in `~/.claude/agents/` per architect, coder, reviewer, tester, debugger, doc-writer, refactorer, researcher (sez. 3) — usa `/agents` interactive
-- [ ] Crea hook globali in `~/.claude/settings.json` + script in `~/.claude/hooks/` (sez. 7)
-- [ ] Configura permission mode default `acceptEdits` + allowlist (sez. 10)
-- [ ] Installa MCP core via `claude mcp add --scope user` (sez. 9.1): sequential-thinking (stdio), github (HTTP), sqlite. XcodeBuildMCP già presente.
-- [ ] Crea skill custom in `~/.claude/skills/` (`interview-driver`, `adr-writer`, `claude-md-generator`, `swift-vibe`, `fastapi-react-vibe`, `code-review-checklist`, `project-bootstrap`) usando `skill-creator`
-- [ ] Valuta installazione plugin: `superpowers`, `spec-kit`, code intelligence per Python/TS/Swift
-- [ ] Sync skill custom e agent custom via Git repo privato tra le macchine di sviluppo. Mai dentro iCloud Drive.
+- [ ] Create `~/.claude/CLAUDE.md` (sec. 4) — target <100 lines
+- [ ] Create `~/.claude/settings.json` with `attribution: {commit:"", pr:""}` to disable Claude signature in commits
+- [ ] Create `~/.claude/rules/python.md`, `typescript-react.md`, `swift.md`, `sql-migrations.md` (sec. 5.1)
+- [ ] Create sub-agent files in `~/.claude/agents/` for architect, coder, reviewer, tester, debugger, doc-writer, refactorer, researcher (sec. 3) — use `/agents` interactive
+- [ ] Create global hooks in `~/.claude/settings.json` + scripts in `~/.claude/hooks/` (sec. 7)
+- [ ] Configure default permission mode `acceptEdits` + allowlist (sec. 10)
+- [ ] Install core MCP via `claude mcp add --scope user` (sec. 9.1): sequential-thinking (stdio), github (HTTP), sqlite. XcodeBuildMCP already present.
+- [ ] Create custom skills in `~/.claude/skills/` (`interview-driver`, `adr-writer`, `claude-md-generator`, `swift-vibe`, `fastapi-react-vibe`, `code-review-checklist`, `project-bootstrap`) using `skill-creator`
+- [ ] Evaluate plugin installation: `superpowers`, `spec-kit`, code intelligence for Python/TS/Swift
+- [ ] Sync custom skills and agent files via private Git repo across development machines. Never inside iCloud Drive.
 
-### Per progetto (per ogni nuovo progetto)
+### Per project (for each new project)
 
-- [ ] Crea SPEC.md (interview mode FASE 1)
-- [ ] Crea ARCH.md (con ADR-001..N)
-- [ ] Crea CLAUDE.md di root (template appropriato, sez. 6) — target <100 righe
-- [ ] Crea `.claude/rules/` con regole specifiche di progetto (es. API conventions, deployment)
-- [ ] Crea `.mcp.json` di progetto con server specifici (es. sqlite con path dev.db locale)
-- [ ] Crea `.claude/settings.json` con hook progetto-specifici (es. pre-commit lint)
-- [ ] Crea `.worktreeinclude` con file gitignored da copiare nei worktree paralleli (`.env`, `secrets.json`)
-- [ ] Aggiungi `CLAUDE.local.md` a `.gitignore` se servono preferenze personali non condivise
+- [ ] Create SPEC.md (interview mode PHASE 1)
+- [ ] Create ARCH.md (with ADR-001..N)
+- [ ] Create root CLAUDE.md (appropriate template, sec. 6) — target <100 lines
+- [ ] Create `.claude/rules/` with project-specific rules (e.g. API conventions, deployment)
+- [ ] Create project `.mcp.json` with specific servers (e.g. sqlite with local dev.db path)
+- [ ] Create `.claude/settings.json` with project-specific hooks (e.g. pre-commit lint)
+- [ ] Create `.worktreeinclude` with gitignored files to copy into parallel worktrees (`.env`, `secrets.json`)
+- [ ] Add `CLAUDE.local.md` to `.gitignore` if personal unshared preferences are needed
 
-### Test end-to-end
+### End-to-end test
 
-- [ ] Esegui workflow concept→code completo su un mini-progetto pilota (es. piccolo tool Python)
-- [ ] Verifica che sub-agent paralleli con `isolation: worktree` non creino conflitti
-- [ ] Verifica hook `protect-files.sh` blocchi tentativi di edit a `.env`
-- [ ] Verifica hook `auto-format.sh` formatti automaticamente dopo edit
-- [ ] (Solo se hai Team/Enterprise plan) Test `auto` mode su task lungo
+- [ ] Run the full concept→code workflow on a mini pilot project (e.g. small Python tool)
+- [ ] Verify parallel sub-agents with `isolation: worktree` do not create conflicts
+- [ ] Verify hook `protect-files.sh` blocks attempts to edit `.env`
+- [ ] Verify hook `auto-format.sh` automatically formats after edits
+- [ ] (Only if on Team/Enterprise plan) Test `auto` mode on a long task
 
 ---
 
-## 16. Best practice Anthropic — reference rapido
+## 16. Anthropic best practices — quick reference
 
-Top 10 da seguire sempre (da `code.claude.com/docs/en/best-practices`):
+Top 10 to always follow (from `code.claude.com/docs/en/best-practices`):
 
-1. **Verification path sempre presente**: test, screenshot, output atteso
-2. **Explore → Plan → Implement → Commit**: quattro fasi, mai mischiarle
-3. **Context specifico**: file con `@`, riferimenti a pattern, descrizione sintomo
-4. **Interview before code**: feature grandi → AskUserQuestion → SPEC.md
-5. **Context aggressivo**: `/clear` tra task non correlati, sub-agenti per investigare
-6. **Course-correct early**: `Esc` per stop, `/rewind` per checkpoint
-7. **CLAUDE.md <200 righe**: taglia tutto ciò che Claude può inferire dal codice
-8. **Hook per must-happen**: più deterministici di CLAUDE.md instructions
-9. **Trust then verify**: sempre verification before ship
-10. **Develop intuition**: queste regole sono starting point, non dogma
+1. **Verification path always present**: tests, screenshot, expected output
+2. **Explore → Plan → Implement → Commit**: four phases, never mix them
+3. **Specific context**: files with `@`, pattern references, symptom description
+4. **Interview before code**: large features → AskUserQuestion → SPEC.md
+5. **Aggressive context**: `/clear` between unrelated tasks, sub-agents for investigation
+6. **Course-correct early**: `Esc` to stop, `/rewind` for checkpoint
+7. **CLAUDE.md <200 lines**: cut everything Claude can infer from the code
+8. **Hooks for must-happen**: more deterministic than CLAUDE.md instructions
+9. **Trust then verify**: always verification before ship
+10. **Develop intuition**: these rules are a starting point, not dogma
 
-### Comandi e shortcut critici
+### Critical commands and shortcuts
 
-| Comando | Funzione |
+| Command | Function |
 |---------|----------|
-| `/init` (o `CLAUDE_CODE_NEW_INIT=1 /init`) | Genera CLAUDE.md base da codebase esistente |
-| `/config` | UI tabbed per gestire settings (Status, Config) |
-| `/status` | Mostra setting source attive nella sessione (User/Project/Local/Managed) |
-| `/context` | Token usage per categoria: system prompt, memory, skill, MCP, messages |
-| `/usage` | Breakdown costi per categoria: skill, subagent, plugin, MCP server (CC 2.1.149) |
-| `/doctor` | Diagnostica installazione e configurazione |
-| `/agents` | Browse/crea/edita sub-agent |
-| `/hooks` | Browse hook configurati (read-only) |
-| `/skills` | Skill disponibili da project, user, plugin |
-| `/permissions` | Allowlist/denylist tool corrente |
-| `/memory` | Browse CLAUDE.md, rules e auto memory |
-| `/mcp` | Status MCP server, token cost, autenticazione OAuth |
-| `/plugin` | Browse marketplace, install/enable plugin |
+| `/init` (or `CLAUDE_CODE_NEW_INIT=1 /init`) | Generates base CLAUDE.md from existing codebase |
+| `/config` | Tabbed UI for managing settings (Status, Config) |
+| `/status` | Shows active settings sources in the session (User/Project/Local/Managed) |
+| `/context` | Token usage by category: system prompt, memory, skill, MCP, messages |
+| `/usage` | Cost breakdown by category: skill, subagent, plugin, MCP server (CC 2.1.149) |
+| `/doctor` | Installation and configuration diagnostics |
+| `/agents` | Browse/create/edit sub-agents |
+| `/hooks` | Browse configured hooks (read-only) |
+| `/skills` | Skills available from project, user, plugin |
+| `/permissions` | Current tool allowlist/denylist |
+| `/memory` | Browse CLAUDE.md, rules, and auto memory |
+| `/mcp` | MCP server status, token cost, OAuth authentication |
+| `/plugin` | Browse marketplace, install/enable plugins |
 | `/clear` | Reset context |
-| `/compact <istruzioni>` | Compatta con focus |
-| `/rewind` o `Esc Esc` | Checkpoint precedenti |
-| `/plan` | Single-turn plan mode (prefisso al prompt) |
-| `/batch <instruction>` | Migrazione/refactor large-scale |
-| `/code-review [effort]` | Review correttezza a effort configurabile; `--comment` per inline PR comment (ex `/simplify`, rinominato CC 2.1.147) |
-| `/effort [level]` | Imposta effort level per la sessione; senza argomento apre slider interattivo |
-| `/debug [desc]` | Debug logging sessione |
+| `/compact <instructions>` | Compact with focus |
+| `/rewind` or `Esc Esc` | Previous checkpoints |
+| `/plan` | Single-turn plan mode (prompt prefix) |
+| `/batch <instruction>` | Large-scale migration/refactor |
+| `/code-review [effort]` | Correctness review at configurable effort; `--comment` for inline PR comments (ex `/simplify`, renamed CC 2.1.147) |
+| `/effort [level]` | Sets effort level for the session; without argument opens interactive slider |
+| `/debug [desc]` | Session debug logging |
 | `/loop [interval] <prompt>` | Polling task |
-| `/btw <domanda>` | Quick question fuori context |
-| `Ctrl+G` | Edita piano in editor |
-| `Ctrl+B` | Backgroundizza task corrente |
-| `Esc` | Stop Claude mid-action (mantiene context) |
+| `/btw <question>` | Quick question out of context |
+| `Ctrl+G` | Edit plan in editor |
+| `Ctrl+B` | Backgroundize current task |
+| `Esc` | Stop Claude mid-action (keeps context) |
 | `Shift+Tab` | Cycle permission modes |
 | `Shift+Down` | Cycle teammate (in agent-teams) |
-| `@<file>` | Riferimento file diretto |
-| `@"<agent-name> (agent)"` | Invocazione esplicita sub-agent |
-| `claude --continue` | Riprendi ultima sessione |
-| `claude --resume` | Scegli sessione da lista |
-| `claude --worktree <name>` o `-w <name>` | Sessione in worktree isolato |
-| `claude --worktree "#<pr>"` | Worktree da pull request |
-| `claude --from-pr <number>` | Riprendi sessione associata a PR |
-| `claude --agent <name>` | Avvia sessione come sub-agent (system prompt override) |
-| `claude --plugin-dir <path>` | Test locale di un plugin in development |
+| `@<file>` | Direct file reference |
+| `@"<agent-name> (agent)"` | Explicit sub-agent invocation |
+| `claude --continue` | Resume last session |
+| `claude --resume` | Choose session from list |
+| `claude --worktree <name>` or `-w <name>` | Session in isolated worktree |
+| `claude --worktree "#<pr>"` | Worktree from pull request |
+| `claude --from-pr <number>` | Resume session associated with a PR |
+| `claude --agent <name>` | Start session as sub-agent (system prompt override) |
+| `claude --plugin-dir <path>` | Local test of a plugin in development |
 | `claude -p "<prompt>"` | Non-interactive mode |
 
-### Pattern Writer/Reviewer
+### Writer/Reviewer pattern
 
-Per code review critici, due sessioni distinte:
+For critical code reviews, two distinct sessions:
 
-| Sessione A (Writer) | Sessione B (Reviewer) |
+| Session A (Writer) | Session B (Reviewer) |
 |---------------------|----------------------|
-| Implementa la feature | (fresh context) |
-| | Review @src/<file>.ts — cerca edge case, race condition, coerenza |
-| Applica feedback B | |
+| Implements the feature | (fresh context) |
+| | Review @src/<file>.ts — look for edge cases, race conditions, consistency |
+| Applies B's feedback | |
 
-Sessione B "fresh" → niente bias verso codice appena scritto.
+Session B "fresh" → no bias toward recently written code.
 
-### Anti-pattern Anthropic (da evitare)
+### Anthropic anti-patterns (to avoid)
 
-| Errore | Sintomo | Fix |
+| Error | Symptom | Fix |
 |--------|---------|-----|
-| Kitchen sink session | Context inquinato da task multipli | `/clear` tra task non correlati |
-| Correzioni infinite | Bug + correzione + bug + correzione | Dopo 2 correzioni: `/clear` + prompt migliore |
-| CLAUDE.md over-specified | Claude ignora regole | Pruning aggressivo, target <200 righe |
-| Trust-then-verify gap | Codice plausibile ma rotto | Sempre verification (test/screenshot) |
-| Infinite exploration | Claude legge 100 file, context pieno | Scope esplicito o sub-agente |
-| Stessa sessione per interview + code | Context inquinato | Sessione fresh per coding |
-| Saltare plan mode su multi-file | Codice "solve the wrong problem" | Plan mode quando: change multi-file, codice sconosciuto, approccio incerto |
+| Kitchen sink session | Context contaminated by multiple tasks | `/clear` between unrelated tasks |
+| Infinite corrections | Bug + fix + bug + fix | After 2 fixes: `/clear` + better prompt |
+| Over-specified CLAUDE.md | Claude ignores rules | Aggressive pruning, target <200 lines |
+| Trust-then-verify gap | Plausible but broken code | Always verification (test/screenshot) |
+| Infinite exploration | Claude reads 100 files, context full | Explicit scope or sub-agent |
+| Same session for interview + code | Contaminated context | Fresh session for coding |
+| Skip plan mode on multi-file | Code "solves the wrong problem" | Plan mode when: multi-file change, unfamiliar code, uncertain approach |
 
 ---
 
-## 17. Note finali
+## 17. Final notes
 
-### Decisioni che possono evolvere
+### Decisions that may evolve
 
-- **Modelli per agente**: oggi mappati su (Opus architect, Sonnet coder/reviewer/tester/debugger/refactorer, Haiku doc-writer/researcher). Da rivedere quando escono nuovi modelli o si misura il rapporto qualità/costo reale sui propri progetti
-- **Cap parallelizzazione 4**: può salire a 5-6 una volta validata stabilità. Anthropic non impone hard limit
-- **Coverage 70%**: alzabile a 85% sui moduli più critici (es. calcoli, validazione input sensibili, integrazioni esterne)
-- **Agent teams in produzione**: oggi experimental. Quando esce GA, può sostituire molti pattern di sub-agent + worktree manuali
+- **Models per agent**: today mapped as (Opus architect, Sonnet coder/reviewer/tester/debugger/refactorer, Haiku doc-writer/researcher). Revisit when new models are released or real quality/cost ratios are measured on your projects
+- **Parallelization cap 4**: can rise to 5-6 once stability is validated. Anthropic imposes no hard limit
+- **Coverage 70%**: can be raised to 85% on the most critical modules (e.g. calculations, sensitive input validation, external integrations)
+- **Agent teams in production**: experimental today. When GA ships, can replace many sub-agent + manual worktree patterns
 
-### Punti aperti residui
+### Remaining open items
 
-- **Validazione tier Stop-gate testcmd sul pilota**: il gate è deployato live e harness-verde, ma i 4 tier (nudge / opt-out / approve / autoritativo green+red) vanno validati end-to-end in sessione fresca su `~/developer/pricing-markup-cli` (piano swarm-testcmd Task 9 Steps 2-4, Stefano-run). Caveat: il pilota non ha test → serve almeno un test passante e un `test-cmd` robusto al PATH (es. `.venv/bin/pytest -q`)
-- **Performance reale `auto` mode**: richiede passaggio a Team/Enterprise plan per testarlo. Se Stefano resta su Pro/Max, `acceptEdits` + hook protect è la strada
-- **Auto memory hygiene**: pulire periodicamente `~/.claude/projects/<repo>/memory/` se cresce troppo o accumula errori. `/memory` per ispezione
-- **Bootstrap remoto (CC 2.1.150)**: CC chiama `api.anthropic.com/api/claude_cli/bootstrap` all'avvio e GrowthBook (`tengu_heron_brook`) ogni 60s; inietta contenuto nel system prompt. È configurazione first-party (Anthropic), non injection da terze parti. Per ambienti con policy di immutabilità del prompt: aggiungere `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` in `settings.json` `env` block — blocca entrambi i canali
-- **Skill testing**: le 7 skill custom proposte (sez. 8.3) vanno create con `skill-creator` e testate sul campo. Iterare description in base a trigger accuracy
-- **`CLAUDE_CODE_NEW_INIT=1`**: vale la pena testare il nuovo flow multi-phase di `/init` che esplora codebase, fa follow-up question, propone CLAUDE.md + skill + hook insieme. Potrebbe sostituire il workflow concept→code per progetti piccoli
+- **Stop-gate testcmd tier validation on the pilot**: the gate is deployed live and harness-green, but the 4 tiers (nudge / opt-out / approve / authoritative green+red) need end-to-end validation in a fresh session on `~/developer/pricing-markup-cli` (swarm-testcmd plan Task 9 Steps 2-4, Stefano-run). Caveat: the pilot has no tests → at least one passing test and a PATH-robust `test-cmd` are needed (e.g. `.venv/bin/pytest -q`)
+- **Real `auto` mode performance**: requires moving to Team/Enterprise plan to test. If Stefano stays on Pro/Max, `acceptEdits` + hook protect is the path
+- **Auto memory hygiene**: periodically clean `~/.claude/projects/<repo>/memory/` if it grows too large or accumulates errors. `/memory` for inspection
+- **Remote bootstrap (CC 2.1.150)**: CC calls `api.anthropic.com/api/claude_cli/bootstrap` at startup and GrowthBook (`tengu_heron_brook`) every 60s; injects content into the system prompt. This is first-party configuration (Anthropic), not injection from third parties. For environments with prompt immutability policies: add `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` in `settings.json` `env` block — blocks both channels
+- **Skill testing**: the 7 proposed custom skills (sec. 8.3) need to be created with `skill-creator` and field-tested. Iterate the description based on trigger accuracy
+- **`CLAUDE_CODE_NEW_INIT=1`**: worth testing the new multi-phase `/init` flow that explores the codebase, asks follow-up questions, and proposes CLAUDE.md + skills + hooks together. Could replace the concept→code workflow for small projects
 
-### Cose verificate vs assunte
+### Verified vs assumed
 
-**Verificate** contro doc Anthropic ufficiale:
-- Architettura sub-agent (file YAML, frontmatter, built-in)
-- Agent teams (architettura, limitazioni, attivazione)
-- Permission modes (sei modi, behaviour, classifier)
+**Verified** against official Anthropic docs:
+- Sub-agent architecture (YAML files, frontmatter, built-in)
+- Agent teams (architecture, limitations, activation)
+- Permission modes (six modes, behavior, classifier)
 - CLAUDE.md (load order, size target, AGENTS.md import)
-- Skill (path-scoped, bundled, context: fork)
-- Hook (eventi, type, esempi)
-- MCP (configurazione, scoping, tool search)
+- Skills (path-scoped, bundled, context: fork)
+- Hooks (events, type, examples)
+- MCP (configuration, scoping, tool search)
 - Workflow Explore→Plan→Implement→Commit
-- Interview mode con AskUserQuestion → SPEC.md → fresh session
+- Interview mode with AskUserQuestion → SPEC.md → fresh session
 
-**Assunte/da validare in uso**:
-- Modelli specifici per agente (Opus/Sonnet/Haiku mix proposto)
-- Coverage 70% come target sensato per progetti tipici
-- Cap 4 paralleli (può variare in pratica)
-- Trigger description efficaci per skill custom
-
----
-
-## Confidence finale
-
-**98%** — alta confidenza su:
-
-- Architettura sub-agent / agent-teams (sez. 2-3): verificata contro `code.claude.com/docs/en/sub-agents` e `agent-teams`. Built-in subagent, frontmatter fields, memory persistente, isolation worktree, model selection sono concetti reali e documentati Anthropic
-- CLAUDE.md hygiene + `attribution` setting (sez. 4): target <200 righe è raccomandazione esplicita Anthropic, `attribution.commit:""` è il pattern moderno per disabilitare firma Claude (sostituisce deprecato `includeCoAuthoredBy`)
-- Path-scoped rules in `.claude/rules/` (sez. 5): pattern documentato, glob support, frontmatter `paths:` verificato
-- Hook (sez. 7): esempi protect-files, auto-format, SessionStart compact reinjection sono pattern Anthropic ufficiali. `/hooks` browser e `InstructionsLoaded` debug confermati. **CORREZIONE 2026-05-19:** la claim "`Stop` prompt/agent based" era **errata** — `type: prompt`/`agent` non supportati su `Stop` (verifica live docs). Spostato da "verificato" a corretto; vedi correzione 2026-05-19 in testa e admonition 7.4/7.5. **AS-BUILT 2026-05-19:** il pattern corretto (gate `type: command` 3-tier testcmd + TOFU + anti-loop) è **implementato e deployato live**, harness verde (PASS=28 FAIL=0) e verificato in sessione — verifica *as-built interna* (deploy + test), distinta dalla verifica-doc Anthropic; euristica `clear-dirty` ritirata
-- MCP (sez. 9): `claude mcp add` CLI, scope local/project/user, transport http/sse/stdio, `alwaysLoad`, tool search, `MAX_MCP_OUTPUT_TOKENS` tutti verificati. GitHub HTTP remote endpoint è quello ufficiale corrente
-- Permission modes (sez. 10): sei modi mappati 1:1 con doc, settings precedence verificata, `/config` e `/status` confermati
-- Worktrees (sez. 12): `--worktree`, `-w`, `#<pr>`, `worktree.baseRef`, `.worktreeinclude`, path `.claude/worktrees/<name>/`, branch `worktree-<name>` tutti verificati da doc + search results recenti
-- Workflow concept→code (sez. 11): pattern interview → SPEC.md → fresh session direttamente da doc best-practices
-- Skill bundled (sez. 8.1): `/batch`, `/simplify`, `/debug`, `/loop`, `/claude-api` sono skill bundled reali, documentate
-- Comandi diagnostici (sez. 16): `/config`, `/context`, `/status`, `/doctor`, `/skills`, `/permissions`, `/plugin` tutti verificati da claude-directory.md
-
-**Resto 2%** — incertezza residua:
-
-- Comportamento esatto di `isolation: worktree` con import condivisi (es. Python virtual env, `node_modules`). Teoricamente worktree git separato basta; in pratica va testato su progetti reali dove `uv` e Node modules sono pesanti. Mitigazioni note: `worktree.symlinkDirectories` o reinstall deps nel worktree
-- Le 7 skill custom proposte (sez. 8.3) sono progettate ma non testate. Vanno create, testate sul trigger accuracy, iterate. Anthropic raccomanda iterazione su `description` field
-- `auto` mode classifier comportamento reale su workflow Stefano: senza piano Team/Enterprise non posso testarlo. Indicazioni Anthropic chiare ma performance dipende da codebase
-
-Riduzione del 2% richiede esecuzione reale + iterazione su progetto pilota.
+**Assumed/to validate in use**:
+- Specific models per agent (proposed Opus/Sonnet/Haiku mix)
+- 70% coverage as a sensible target for typical projects
+- Cap 4 parallel (may vary in practice)
+- Effective trigger descriptions for custom skills
 
 ---
 
-**Fonti primarie verificate** (`code.claude.com/docs/`):
+## Final confidence
 
-- `/en/best-practices` — best practice ufficiali
-- `/en/sub-agents` — architettura sub-agent
-- `/en/agent-teams` — multi-sessione coordinato
+**98%** — high confidence on:
+
+- Sub-agent / agent-teams architecture (sec. 2-3): verified against `code.claude.com/docs/en/sub-agents` and `agent-teams`. Built-in subagents, frontmatter fields, persistent memory, worktree isolation, model selection are real and documented Anthropic concepts
+- CLAUDE.md hygiene + `attribution` setting (sec. 4): target <200 lines is an explicit Anthropic recommendation, `attribution.commit:""` is the modern pattern for disabling Claude signature (replaces deprecated `includeCoAuthoredBy`)
+- Path-scoped rules in `.claude/rules/` (sec. 5): documented pattern, glob support, frontmatter `paths:` verified
+- Hooks (sec. 7): protect-files, auto-format, SessionStart compact reinjection examples are official Anthropic patterns. `/hooks` browser and `InstructionsLoaded` debug confirmed. **CORRECTION 2026-05-19:** the claim "`Stop` prompt/agent based" was **wrong** — `type: prompt`/`agent` not supported on `Stop` (live docs verification). Moved from "verified" to corrected; see correction 2026-05-19 at the top and admonitions 7.4/7.5. **AS-BUILT 2026-05-19:** the correct pattern (3-tier `type: command` testcmd gate + TOFU + anti-loop) is **implemented and deployed live**, harness green (PASS=28 FAIL=0) and verified in session — this is *internal as-built verification* (deploy + test), distinct from Anthropic-doc verification; `clear-dirty` heuristic retired
+- MCP (sec. 9): `claude mcp add` CLI, local/project/user scope, http/sse/stdio transport, `alwaysLoad`, tool search, `MAX_MCP_OUTPUT_TOKENS` all verified. GitHub HTTP remote endpoint is the current official one
+- Permission modes (sec. 10): six modes mapped 1:1 with docs, settings precedence verified, `/config` and `/status` confirmed
+- Worktrees (sec. 12): `--worktree`, `-w`, `#<pr>`, `worktree.baseRef`, `.worktreeinclude`, path `.claude/worktrees/<name>/`, branch `worktree-<name>` all verified from docs + recent search results
+- concept→code workflow (sec. 11): interview → SPEC.md → fresh session pattern directly from best-practices docs
+- Bundled skills (sec. 8.1): `/batch`, `/simplify`, `/debug`, `/loop`, `/claude-api` are real bundled skills, documented
+- Diagnostic commands (sec. 16): `/config`, `/context`, `/status`, `/doctor`, `/skills`, `/permissions`, `/plugin` all verified from claude-directory.md
+
+**Remaining 2%** — residual uncertainty:
+
+- Exact behavior of `isolation: worktree` with shared imports (e.g. Python virtual env, `node_modules`). Theoretically a separate git worktree is sufficient; in practice it needs testing on real projects where `uv` and Node modules are heavy. Known mitigations: `worktree.symlinkDirectories` or reinstall deps in the worktree
+- The 7 proposed custom skills (sec. 8.3) are designed but not tested. They need to be created, tested for trigger accuracy, and iterated. Anthropic recommends iteration on the `description` field
+- Real `auto` mode classifier behavior on Stefano's workflow: without a Team/Enterprise plan it cannot be tested. Anthropic guidance is clear but performance depends on the codebase
+
+Reducing the remaining 2% requires real execution + iteration on a pilot project.
+
+---
+
+**Verified primary sources** (`code.claude.com/docs/`):
+
+- `/en/best-practices` — official best practices
+- `/en/sub-agents` — sub-agent architecture
+- `/en/agent-teams` — coordinated multi-session
 - `/en/memory` — CLAUDE.md, rules, auto memory
-- `/en/skills` — skill system completo
-- `/en/hooks-guide` — automazione hook
-- `/en/permission-modes` — sei modi permission
-- `/en/common-workflows` — workflow comuni
-- `/en/features-overview` — quando usare cosa
-- `/en/mcp` — MCP completo (transport, scope, OAuth, tool search, managed)
-- `/en/claude-directory` — struttura `.claude/` e `~/.claude/`
-- `/en/settings` — settings.json schema completo, precedence, attribution
-- `/en/plugins` — sistema plugin completo
-- `/en/worktrees` — verificata via search (URL non direttamente fetchable)
-- `/en/llms.txt` — indice completo documentazione
+- `/en/skills` — complete skill system
+- `/en/hooks-guide` — hook automation
+- `/en/permission-modes` — six permission modes
+- `/en/common-workflows` — common workflows
+- `/en/features-overview` — when to use what
+- `/en/mcp` — complete MCP (transport, scope, OAuth, tool search, managed)
+- `/en/claude-directory` — `.claude/` and `~/.claude/` structure
+- `/en/settings` — complete settings.json schema, precedence, attribution
+- `/en/plugins` — complete plugin system
+- `/en/worktrees` — verified via search (URL not directly fetchable)
+- `/en/llms.txt` — complete documentation index
 
-Supplementari:
+Supplementary:
 - `anthropic.com/engineering/claude-code-best-practices` — engineering blog
-- `support.claude.com/.../get-started-with-claude-cowork` — help center Cowork
-- `kondasamy.com/blog/2026/claude-code-interview-mode/` — pattern interview mode
-- `developersdigest.tech/blog/claude-code-interview-mode` — pattern operativi
-- `datacamp.com/tutorial/claude-code-best-practices` — TDD e spec-driven
-- `pub.towardsai.net/...worktree-isolation...` — pattern worktree isolation aggiornato
+- `support.claude.com/.../get-started-with-claude-cowork` — Cowork help center
+- `kondasamy.com/blog/2026/claude-code-interview-mode/` — interview mode pattern
+- `developersdigest.tech/blog/claude-code-interview-mode` — operational patterns
+- `datacamp.com/tutorial/claude-code-best-practices` — TDD and spec-driven
+- `pub.towardsai.net/...worktree-isolation...` — updated worktree isolation pattern
