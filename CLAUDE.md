@@ -91,3 +91,12 @@ pubblico → flag `anonymize`) + skill `clean-public-repo` (audit/rimedio, fresh
 publish di default, rewrite chirurgico opt-in con backup+dry-run+HITL). Scopo:
 qualità + nessuna auto-attribuzione dello strumento; **mai** falsificare autori.
 Dettaglio: `docs/architecture/ADR-0011-clean-public-repo-anonymize.md`.
+
+## Decisioni dal chain humanize-en (ADR-0015)
+
+English prose humanizer: skill `humanize-en` + hook regex `PostToolUse` (hint, zero-LLM)
++ hook condizionale `UserPromptSubmit` (keyword detection EN prose, ~80 tok solo su match).
+Integrazione chain: Gate 0c (flag `humanize` post-anonimizzazione) + Gate 5.5 (humanize
+deliverable pre-commit) + commit Step 3.5 (humanize message su repo pubblici pre-HITL).
+Chat globale in EN (default) con preservazione terminologia Vibrofer IT.
+Dettaglio: `docs/architecture/ADR-0015-humanize-en-chain-integration.md`.
