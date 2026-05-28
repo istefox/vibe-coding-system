@@ -1,60 +1,60 @@
-# BRAINSTORM — Modalità anonimizzazione contributo strumento per repo pubblici
+# BRAINSTORM — Contribution anonymization mode for public repos
 
-**Data:** 2026-05-23
-**Fonte requisiti:** /Users/stefanoferri/Developer/vibe-coding-system/SPEC.md
-**Tecniche applicate:** first-principles, assumption-busting, prior-art, alternative genuinamente diverse, inversione/pre-mortem
+**Date:** 2026-05-23
+**Requirements source:** /Users/stefanoferri/Developer/vibe-coding-system/SPEC.md
+**Techniques applied:** first-principles, assumption-busting, prior-art, genuinely different alternatives, inversion/pre-mortem
 
-## Problema riformulato (first-principles)
+## Problem restated (first-principles)
 
-Il bisogno irriducibile non è "cancellare la parola claude", ma **un repo pubblico indistinguibile da uno scritto a mano da un professionista**: qualità olistica (commit essenziali, doc concisi, zero file inutili) + assenza di qualunque marcatore dello strumento. La pulizia è un sottoinsieme della qualità, non il fine.
+The irreducible need is not "delete the word claude", but **a public repo indistinguishable from one written by hand by a professional**: holistic quality (essential commits, concise docs, zero unnecessary files) + absence of any tool marker. Cleanup is a subset of quality, not the end goal.
 
-## Assunzioni sfidate
+## Challenged assumptions
 
-- **"Per ripulire serve sempre riscrivere la commit history"** — **CADUTA**. Vanno distinti 3 casi: (1) nuovi → commit puliti dall'inizio, zero rewrite; (2) esistenti non-ancora-pubblici → rewrite chirurgico pre-push; (3) esistenti già-pubblici → il rewrite richiede force-push (rompe cloni/fork, è visibile/sospetto) → meglio fresh-history publish.
-- **"La detection deve essere lessicale (grep stringhe)"** — **DA VERIFICARE**. Il pattern è identico al secret-scanning; esistono strumenti maturi (gitleaks, git-filter-repo, BFG) → confronto delegato al researcher.
-- **"Anonimo = niente claude"** — **CADUTA/ampliata**. First-principles sposta il target su "qualità indistinguibile", non solo rimozione di token.
+- **"Cleaning always requires rewriting commit history"** — **DROPPED**. Three cases must be distinguished: (1) new repos → clean commits from the start, zero rewrite; (2) existing not-yet-public → surgical rewrite pre-push; (3) existing already-public → rewrite requires force-push (breaks clones/forks, is visible/suspicious) → better fresh-history publish.
+- **"Detection must be lexical (grep strings)"** — **TO VERIFY**. The pattern is identical to secret-scanning; mature tools exist (gitleaks, git-filter-repo, BFG) → comparison delegated to researcher.
+- **"Anonymous = no claude"** — **DROPPED/expanded**. First-principles shifts the target to "indistinguishable quality", not just token removal.
 
-## Alternative di approccio
+## Approach alternatives
 
-### Alternativa A — Prevenzione (clean-by-construction)
-- **Idea:** la modalità anonima nel chain produce output già conforme (commit/doc puliti dall'inizio); la skill fa solo audit di verifica.
-- **Asse di differenza:** confine di responsabilità (prevenire vs rimediare).
-- **Pro:** zero rewrite per i nuovi; pulizia "gratis". **Contro:** non copre i repo esistenti (Obsidian). **Costo:** basso.
+### Alternative A — Prevention (clean-by-construction)
+- **Idea:** anonymous mode in the chain produces output already compliant (clean commits/docs from the start); the skill only does a verification audit.
+- **Axis of difference:** responsibility boundary (prevent vs remedy).
+- **Pros:** zero rewrite for new repos; cleanup "for free". **Cons:** does not cover existing repos (Obsidian). **Cost:** low.
 
-### Alternativa B — Rimedio (scan + scrub on-demand)
-- **Idea:** skill standalone che scansiona qualunque repo e rimedia (incluso history rewrite).
-- **Asse di differenza:** deployment (standalone vs integrato nel chain).
-- **Pro:** copre esistenti; disaccoppiato. **Contro:** i nuovi accumulano tracce da pulire ogni volta. **Costo:** medio.
+### Alternative B — Remedy (scan + scrub on-demand)
+- **Idea:** standalone skill that scans any repo and remediates (including history rewrite).
+- **Axis of difference:** deployment (standalone vs integrated in the chain).
+- **Pros:** covers existing; decoupled. **Cons:** new repos accumulate traces to clean each time. **Cost:** medium.
 
-### Alternativa C — Ibrido prevenzione+rimedio ★ (scelto)
-- **Idea:** nuovi → modalità anonima nel chain (A); esistenti → skill clean-public-repo standalone (B).
-- **Asse di differenza:** combinazione mirata allo scope (nuovi+retroattivo dello SPEC).
-- **Pro:** copre tutto; ogni caso usa l'approccio giusto. **Contro:** due superfici da mantenere. **Costo:** medio.
+### Alternative C — Prevention+remedy hybrid ★ (chosen)
+- **Idea:** new repos → anonymous mode in the chain (A); existing → standalone `clean-public-repo` skill (B).
+- **Axis of difference:** targeted combination for the scope (new + retroactive from SPEC).
+- **Pros:** covers everything; each case uses the right approach. **Cons:** two surfaces to maintain. **Cost:** medium.
 
-### Alternativa D — Fresh-history publish ★ (scelto per i già-pubblici)
-- **Idea:** per un repo già pubblico, non riscrivere la history ma pubblicare un repo pubblico **derivato** con pochi commit curati; la history di sviluppo (con tracce) resta privata.
-- **Asse di differenza:** modello di deployment (mirror pubblico pulito vs stesso repo riscritto).
-- **Pro:** niente force-push, niente buchi sospetti, niente rischio di corruzione del repo originale. **Contro:** si perde la granularità storica nel pubblico. **Costo:** basso-medio.
+### Alternative D — Fresh-history publish ★ (chosen for already-public repos)
+- **Idea:** for a repo already public, don't rewrite history but publish a **derived** public repo with a few curated commits; the development history (with traces) stays private.
+- **Axis of difference:** deployment model (clean public mirror vs same repo rewritten).
+- **Pros:** no force-push, no suspicious gaps, no risk of corrupting the original repo. **Cons:** granular historical detail is lost in the public copy. **Cost:** low-medium.
 
-## Rischi emersi (inversione / pre-mortem)
+## Risks surfaced (inversion / pre-mortem)
 
-- **[TOP] Rewrite distruttivo corrompe/perde un repo** → mitigazioni obbligatorie: backup branch/tag automatico + dry-run + conferma; e **preferire D (fresh-history) per i già-pubblici**, che evita del tutto il force-push sul repo originale. Il rewrite chirurgico in-place resta opzione di seconda scelta, mai default.
-- Falsi positivi (dipendenze `claude-*`, "AI" in nomi) → rimozione solo-su-conferma protegge.
-- Falso senso di sicurezza (traccia non rilevata in binari/metadati/file generati) → il report deve dichiarare esplicitamente la copertura e i limiti (cosa NON è stato scansionato).
+- **[TOP] Destructive rewrite corrupts/loses a repo** → mandatory mitigations: automatic backup branch/tag + dry-run + confirmation; and **prefer D (fresh-history) for already-public repos**, which avoids force-push on the original repo entirely. In-place surgical rewrite remains a second-choice option, never the default.
+- False positives (dependencies `claude-*`, "AI" in names) → removal-only-on-confirmation protects.
+- False sense of security (trace not detected in binaries/metadata/generated files) → the report must explicitly declare the coverage and its limits (what was NOT scanned).
 
-## Idee adiacenti emerse
+## Adjacent ideas surfaced
 
-- **Secret-scanning bonus:** lo stesso scan può segnalare secret veri (pattern gitleaks) — utile ma *fuori scope ora*, annotato come future.
-- **"Public mirror" riusabile:** il fresh-history publish è di fatto un workflow di pubblicazione mirror, potenzialmente utile a prescindere dall'anonimizzazione — future.
+- **Bonus secret-scanning:** the same scan can flag real secrets (gitleaks patterns) — useful but *out of scope now*, noted as future.
+- **Reusable "public mirror":** fresh-history publish is essentially a mirror-publication workflow, potentially useful regardless of anonymization — future.
 
-## Raccomandazione preliminare (NON vincolante, da validare dall'architect)
+## Preliminary recommendation (NOT binding, to be validated by architect)
 
-**Ibrido C** come architettura (prevenzione nei nuovi via modalità anonima nel chain + skill clean-public-repo per gli esistenti), con **D (fresh-history publish)** come strategia di default per i repo già pubblici e rewrite chirurgico solo come seconda scelta esplicita. Riuso di strumenti maturi (git-filter-repo/gitleaks) invece di un rewriter custom — **da confermare col researcher**. Priorità di sicurezza: backup + dry-run + conferma su ogni operazione distruttiva.
+**Hybrid C** as architecture (prevention for new repos via anonymous mode in the chain + `clean-public-repo` skill for existing ones), with **D (fresh-history publish)** as the default strategy for already-public repos and surgical rewrite only as an explicit second choice. Reuse of mature tools (git-filter-repo/gitleaks) instead of a custom rewriter — **to confirm with researcher**. Safety priority: backup + dry-run + confirmation on every destructive operation.
 
-## Note per l'architect
+## Notes for the architect
 
-- **Confronto strumenti (PRIORITARIO):** dispatch researcher per `git-filter-repo` vs `BFG` vs custom bash — affidabilità, dipendenze, idoneità al fresh-history vs rewrite chirurgico. (L'orchestrator lo lancia prima del dispatch architect.)
-- **Dove innestare il gate** nella state machine del chain (Gate 0 esteso vs gate dedicato): da decidere nell'ADR.
-- **Detection:** valutare riuso del pattern-set di gitleaks per le stringhe + set custom per i marcatori specifici dello strumento.
-- **Requisito nuovo emerso (da riportare in SPEC se confermato):** il report di clean deve dichiarare la **copertura e i limiti** della scansione (cosa non è coperto: binari, metadati, file generati) per evitare il falso senso di sicurezza.
-- Nome skill: `clean-public-repo` provvisorio; valutare se separare la parte "fresh-history publish" in una capability distinta.
+- **Tool comparison (PRIORITY):** dispatch researcher for `git-filter-repo` vs `BFG` vs custom bash — reliability, dependencies, suitability for fresh-history vs surgical rewrite. (The orchestrator launches this before dispatching the architect.)
+- **Where to graft the gate** in the chain state machine (extended Gate 0 vs dedicated gate): to decide in the ADR.
+- **Detection:** evaluate reusing the gitleaks pattern-set for strings + custom set for tool-specific markers.
+- **New requirement surfaced (add to SPEC if confirmed):** the clean report must declare the **coverage and limits** of the scan (what is not covered: binaries, metadata, generated files) to avoid a false sense of security.
+- Skill name: `clean-public-repo` provisional; evaluate whether to separate the "fresh-history publish" part into a distinct capability.

@@ -1,189 +1,189 @@
-# Guida operativa al workflow di orchestrazione
+# Orchestration workflow — operational guide
 
-**Per chi:** Stefano Ferri (utente esperto del sistema vibe-coding).
-**Scopo:** mostrare passo per passo come usare il chain `/concept-to-code` (workflow v2) + tutti i tool ausiliari, con i prompt esatti da inserire in ogni step.
-**Data:** 2026-05-21 (versione post-deploy ADR-0001…0008, workflow v2).
+**For:** Stefano Ferri (experienced user of the vibe-coding system).
+**Purpose:** show step by step how to use the `/concept-to-code` chain (workflow v2) + all auxiliary tools, with the exact prompts to enter at every step.
+**Date:** 2026-05-21 (post-deploy version ADR-0001...0008, workflow v2).
 
 ---
 
-## Sommario
+## Table of contents
 
-1. [Quando usare cosa — decision tree](#1-quando-usare-cosa)
-2. [Setup di una sessione pulita](#2-setup-di-una-sessione-pulita)
-3. [Workflow A: feature non-triviale con `/concept-to-code` (v2)](#3-workflow-a-feature-non-triviale)
-4. [La skill `design-brainstorm` (brainstorm-gate)](#4-la-skill-design-brainstorm)
-5. [Workflow B: hotfix o micro-edit (dispatch diretto coder)](#5-workflow-b-hotfix-o-micro-edit)
-6. [Workflow C: refactor con behavior-preservation](#6-workflow-c-refactor-behavior-preserving)
-7. [Workflow D: review/fix di codice già scritto](#7-workflow-d-reviewfix-codice-esistente)
-8. [Comandi di servizio](#8-comandi-di-servizio)
-9. [Come leggere il pattern classifier + hook](#9-pattern-classifier-e-hook)
+1. [When to use what — decision tree](#1-when-to-use-what)
+2. [Setting up a clean session](#2-setting-up-a-clean-session)
+3. [Workflow A: non-trivial feature with `/concept-to-code` (v2)](#3-workflow-a-non-trivial-feature)
+4. [The `design-brainstorm` skill (brainstorm-gate)](#4-the-design-brainstorm-skill)
+5. [Workflow B: hotfix or micro-edit (direct coder dispatch)](#5-workflow-b-hotfix-or-micro-edit)
+6. [Workflow C: refactor with behavior-preservation](#6-workflow-c-behavior-preserving-refactor)
+7. [Workflow D: review/fix of existing code](#7-workflow-d-review-fix-existing-code)
+8. [Utility commands](#8-utility-commands)
+9. [How to read the pattern classifier + hook](#9-pattern-classifier-and-hook)
 10. [Troubleshooting](#10-troubleshooting)
 11. [Cheat sheet](#11-cheat-sheet)
-12. [Prompt template riutilizzabili](#12-prompt-template-riutilizzabili)
-13. [Quando NON usare `/concept-to-code`](#13-quando-non-usare-concept-to-code)
-14. [Glossario rapido](#14-glossario-rapido)
+12. [Reusable prompt templates](#12-reusable-prompt-templates)
+13. [When NOT to use `/concept-to-code`](#13-when-not-to-use-concept-to-code)
+14. [Quick glossary](#14-quick-glossary)
 
 ---
 
-## 1. Quando usare cosa
+## 1. When to use what
 
 **Decision tree:**
 
 ```
-Devi fare qualcosa di nuovo?
-├── Vuoi solo ESPLORARE idee liberamente (interfacce, metodologia, niente impegno a costruire)?
-│   └── `/superpowers:brainstorming` (standalone, scollegato dal chain) → §11
-├── È una feature NON-TRIVIALE (richiede design, multi-file, decisioni architetturali)?
-│   └── Usa `/concept-to-code <topic>` → Workflow A
-│       (il chain ti offre, se serve, un brainstorm di design strutturato al gate 1b → §4)
-├── È un HOTFIX o micro-edit (bug noto, <3 file, no decisione architetturale)?
-│   └── Dispatch diretto coder → Workflow B
-├── È un REFACTOR (comportamento invariato, struttura migliorata)?
+Do you need to do something new?
+├── Do you just want to EXPLORE ideas freely (interfaces, methodology, no commitment to build)?
+│   └── `/superpowers:brainstorming` (standalone, disconnected from the chain) → §11
+├── Is it a NON-TRIVIAL feature (requires design, multi-file, architectural decisions)?
+│   └── Use `/concept-to-code <topic>` → Workflow A
+│       (the chain offers, if needed, a structured design brainstorm at gate 1b → §4)
+├── Is it a HOTFIX or micro-edit (known bug, <3 files, no architectural decision)?
+│   └── Direct coder dispatch → Workflow B
+├── Is it a REFACTOR (invariant behavior, improved structure)?
 │   └── Dispatch refactorer agent → Workflow C
-├── È REVIEW di codice già scritto (vuoi feedback strutturato + fix)?
-│   └── Invoca `/skill review-triage-fix` → Workflow D
-└── Vuoi SAPERE lo STATO del sistema?
+├── Is it a REVIEW of already-written code (want structured feedback + fixes)?
+│   └── Invoke `/skill review-triage-fix` → Workflow D
+└── Do you want to know the STATUS of the system?
     └── `bash ~/.claude/skills/vibe-status/scripts/aggregate.sh` → §8
 ```
 
-**Soglia "non-triviale":** ≥3 file modificati o creati, OR almeno una decisione architetturale da prendere, OR richiede una nuova ADR.
+**"Non-trivial" threshold:** ≥3 files modified or created, OR at least one architectural decision to make, OR requires a new ADR.
 
-**Due brainstorming, due usi distinti:**
-- **`/superpowers:brainstorming`** = standalone, esplora liberamente E scrive spec+plan da solo. Usalo fuori dal chain.
-- **`design-brainstorm`** (interno al chain, gate 1b) = esplora alternative di design e ritorna un brief che alimenta l'architect. NON scrive spec/plan. Vedi §4.
+**Two brainstormings, two distinct uses:**
+- **`/superpowers:brainstorming`** = standalone, explore freely AND writes spec+plan on its own. Use it outside the chain.
+- **`design-brainstorm`** (internal to the chain, gate 1b) = explores design alternatives and returns a brief that feeds the architect. Does NOT write spec/plan. See §4.
 
 ---
 
-## 2. Setup di una sessione pulita
+## 2. Setting up a clean session
 
-Apri terminale nella cartella del progetto (es. `cd ~/Developer/Apple/rempay`).
+Open terminal in the project folder (e.g., `cd ~/Developer/Apple/rempay`).
 
-Lancia Claude Code:
+Launch Claude Code:
 ```bash
 claude
 ```
 
-**Check iniziali (opzionali ma raccomandati):**
+**Initial checks (optional but recommended):**
 
-1. **Verifica stato del sistema:**
+1. **Verify system status:**
    ```
-   lancia vibe-status
+   run vibe-status
    ```
-   Output atteso: `Health: HEALTHY`, harness tutti verdi.
+   Expected output: `Health: HEALTHY`, all harnesses green.
 
-2. **Conferma che il progetto ha `.claude/test-cmd`** (necessario per refactor-snapshot e review):
+2. **Confirm the project has `.claude/test-cmd`** (needed for refactor-snapshot and review):
    ```
-   verifica che esista .claude/test-cmd e mostrami il contenuto
+   check that .claude/test-cmd exists and show me the content
    ```
 
-3. **Se il progetto è nuovo (no `.claude/`):** considera prima `/skill project-bootstrap` per scaffolding minimale.
+3. **If the project is new (no `.claude/`):** consider running `/skill project-bootstrap` first for minimal scaffolding.
 
 ---
 
-## 3. Workflow A: feature non-triviale
+## 3. Workflow A: non-trivial feature
 
-Workflow **default** per qualunque feature di una certa dimensione. Il chain `/concept-to-code` v2 orchestra: **Gate 0** → interview (o skip se brownfield) → Gate 1 → **brainstorm-gate 1b** → architect → Gate 2 → CLAUDE.md → Gate 3 → session boundary → implementation → Gate 5 review.
+**Default** workflow for any feature of a certain size. The `/concept-to-code` v2 chain orchestrates: **Gate 0** → interview (or skip if brownfield) → Gate 1 → **brainstorm-gate 1b** → architect → Gate 2 → CLAUDE.md → Gate 3 → session boundary → implementation → Gate 5 review.
 
-### Step 0 — Invocazione
+### Step 0 — Invocation
 
 ```
 /concept-to-code <topic-full-title>
 ```
 
-**Esempi:**
+**Examples:**
 ```
-/concept-to-code Rate limiter middleware per FastAPI
-/concept-to-code Wizard documenti a tre box per il nuovo piano
+/concept-to-code Rate limiter middleware for FastAPI
+/concept-to-code Three-box document wizard for the new plan
 ```
 
-Lo skill crea un manifest YAML in `docs/manifests/YYYY-MM-DD-<slug>.manifest.yml` (schema 1.1).
+The skill creates a YAML manifest in `docs/manifests/YYYY-MM-DD-<slug>.manifest.yml` (schema 1.1).
 
-### Gate 0 — Triage chain-vs-leggero (NUOVO in v2)
+### Gate 0 — Chain-vs-lightweight triage (NEW in v2)
 
-Prima di partire, il chain controlla se il progetto soddisfa criteri che **sconsigliano** il chain completo:
-- `SPEC.md` + ADR già esistenti (progetto "brownfield")
-- micro-scope dichiarato (<3 file, nessuna decisione architetturale)
+Before starting, the chain checks whether the project meets criteria that **advise against** the full chain:
+- `SPEC.md` + ADR already exist (brownfield project)
+- declared micro-scope (<3 files, no architectural decision)
 
-**Se nessun criterio è attivo:** Gate 0 è silenzioso, si procede dritti.
+**If no criterion is active:** Gate 0 is silent, proceed directly.
 
-**Se almeno un criterio è attivo, cosa vedi:**
+**If at least one criterion is active, what you see:**
 ```
 ============================================================
 concept-to-code · Gate 0 · TRIAGE
 ============================================================
-Criteri rilevati:
-  [X] SPEC.md + ADR già esistenti (brownfield)
-  [ ] micro-scope <3 file
+Criteria detected:
+  [X] SPEC.md + ADR already exist (brownfield)
+  [ ] micro-scope <3 files
 ============================================================
-  [c] chain completo (con brownfield mode)
-  [l] workflow leggero (plan diretto, no chain)
+  [c] full chain (with brownfield mode)
+  [l] lightweight workflow (direct plan, no chain)
   [a] abort
 > _
 ```
 
-**Cosa scegliere:**
-- **`c`** — chain completo. Se brownfield, attiva automaticamente il "brownfield mode" (vedi sotto).
-- **`l`** — workflow leggero: l'orchestrator fa un plan diretto in plan mode, senza interview/architect formali. Buono per micro-feature in progetti maturi.
+**What to choose:**
+- **`c`** — full chain. If brownfield, automatically activates "brownfield mode" (see below).
+- **`l`** — lightweight workflow: the orchestrator makes a direct plan in plan mode, without formal interview/architect. Good for micro-features in mature projects.
 - **`a`** — abort.
 
-> Questo gate esiste perché senza di esso, su progetti con SPEC esistente, l'orchestrator decideva *da solo* di saltare il chain. Ora **decidi tu**.
+> This gate exists because without it, on projects with an existing SPEC, the orchestrator would decide *on its own* to skip the chain. Now **you decide**.
 
-### Step 1 — Interview (GREENFIELD) o skip (BROWNFIELD)
+### Step 1 — Interview (GREENFIELD) or skip (BROWNFIELD)
 
-**Greenfield (progetto senza SPEC):** `interview-driver` ti fa domande via `AskUserQuestion` (multiple choice). Copri obiettivi, scope, stack, edge case, success criteria. Alla fine scrive `SPEC.md`.
+**Greenfield (project without SPEC):** `interview-driver` asks you questions via `AskUserQuestion` (multiple choice). Covers objectives, scope, stack, edge cases, success criteria. At the end it writes `SPEC.md`.
 
-**Brownfield (SPEC esiste già — es. rempay):** lo Step 1 è **SALTATO automaticamente**. Il manifest fa puntare `artifacts.spec` alla SPEC esistente (NON la rigenera, NON la sovrascrive) e marca Gate 1 come "spec pre-esistente approvata". Niente interview ridondante.
+**Brownfield (SPEC already exists — e.g., rempay):** Step 1 is **SKIPPED automatically**. The manifest points `artifacts.spec` at the existing SPEC (does NOT regenerate it, does NOT overwrite it) and marks Gate 1 as "pre-existing spec approved". No redundant interview.
 
-### Gate 1 — Spec review (solo greenfield)
+### Gate 1 — Spec review (greenfield only)
 
-In greenfield, dopo l'interview:
+In greenfield, after the interview:
 ```
 ============================================================
 concept-to-code · Step 1 · INTERVIEW COMPLETE
 ============================================================
 Artifact: /path/to/SPEC.md
-Summary:  <5 righe: obiettivo, scope, stack, edge case, criteri>
+Summary:  <5 lines: objective, scope, stack, edge cases, criteria>
 ============================================================
 HITL Gate 1: spec_review
-  [y] approva e procedi    [e] revisiona (note)    [a] abort
+  [y] approve and proceed    [e] revise (notes)    [a] abort
 > _
 ```
 
-- **`y`** approva
-- **`e`** + note per revisionare. Es: `e: restringi lo scope al solo endpoint GET /api/products`
+- **`y`** approve
+- **`e`** + notes to revise. E.g.: `e: narrow scope to the GET /api/products endpoint only`
 - **`a`** abort
 
-(In brownfield, questo gate è già marcato approvato e si salta al gate 1b.)
+(In brownfield, this gate is already marked approved and skipped to gate 1b.)
 
-### Gate 1b — Brainstorm di design (NUOVO in v2, opzionale)
+### Gate 1b — Design brainstorm (NEW in v2, optional)
 
-Tra la spec e l'architettura, il chain ti **offre** una sessione di brainstorming di design:
+Between the spec and the architecture, the chain **offers** a design brainstorming session:
 ```
 ============================================================
-concept-to-code · Gate 1b · BRAINSTORM DI DESIGN
+concept-to-code · Gate 1b · DESIGN BRAINSTORM
 ============================================================
-Vuoi esplorare alternative di approccio prima di fissare l'architettura?
-  [y] sì → sessione design-brainstorm (8 tecniche di ideazione)
-  [n] no → vai diretto all'architect (comportamento classico)
+Do you want to explore approach alternatives before fixing the architecture?
+  [y] yes → design-brainstorm session (8 ideation techniques)
+  [n] no → go directly to architect (classic behavior)
 > _
 ```
 
-**Quando rispondere `y`:** quando la feature ha più approcci possibili, quando vuoi idee applicative nuove, quando la decisione architetturale è importante e non scontata. È **il momento che fa la differenza** sull'architettura.
+**When to answer `y`:** when the feature has multiple possible approaches, when you want fresh applied ideas, when the architectural decision is important and not obvious. It is **the moment that makes the difference** on the architecture.
 
-**Quando rispondere `n`:** quando l'approccio è ovvio o già deciso (es. una modifica UI semplice).
+**When to answer `n`:** when the approach is obvious or already decided (e.g., a simple UI change).
 
-**Se `y`:** parte la skill `design-brainstorm` (vedi §4). Produce un `BRAINSTORM.md` con 2-4 alternative + trade-off, che viene passato all'architect come contesto. Le alternative del brainstorm diventano le "alternative considerate" dell'ADR.
+**If `y`:** the `design-brainstorm` skill starts (see §4). Produces a `BRAINSTORM.md` with 2-4 alternatives + trade-offs, which is passed to the architect as context. The brainstorm alternatives become the "alternatives considered" in the ADR.
 
-**Se `n`:** transizione diretta allo Step 2, architect opera come da v1.
+**If `n`:** direct transition to Step 2, architect operates as in v1.
 
 ### Step 2 — Architecture
 
-Dispatch del sub-agent **`architect`** (con `BRAINSTORM.md` allegato se hai fatto il gate 1b). Produce:
-- `docs/architecture/<NNNN>-<topic>.md` (ADR — **attenzione:** la convenzione di numerazione segue quella del repo target, es. rempay usa `0002-titolo.md`, vibe-coding-system usa `ADR-0002`)
-- `docs/superpowers/plans/YYYY-MM-DD-<topic>.md` (plan TDD a 6-10 task)
-- (opzionale) `ARCH.md`
+Dispatch of the **`architect`** sub-agent (with `BRAINSTORM.md` attached if you did gate 1b). Produces:
+- `docs/architecture/<NNNN>-<topic>.md` (ADR — **note:** the numbering convention follows the target repo, e.g., rempay uses `0002-title.md`, vibe-coding-system uses `ADR-0002`)
+- `docs/superpowers/plans/YYYY-MM-DD-<topic>.md` (TDD plan with 6-10 tasks)
+- (optional) `ARCH.md`
 
-**Cosa scrivere:** nulla. Aspetta.
+**What to type:** nothing. Wait.
 
 ### Gate 2 — Architecture review
 
@@ -197,21 +197,21 @@ Key decisions:   <top 3>
 Risk flags:      <top 3>
 ============================================================
 HITL Gate 2: architecture_review
-  [y] approva    [e] revisiona (note)    [a] abort
+  [y] approve    [e] revise (notes)    [a] abort
 > _
 ```
 
-**Cosa verificare:** ogni domanda architetturale ha risposta + alternativa scartata? Plan ha task con file path, red/green, verify command? Risk flag accettabili?
+**What to check:** does every architectural question have an answer + a rejected alternative? Does the plan have tasks with file paths, red/green, verify command? Are the risk flags acceptable?
 
-- **`y`** approva
-- **`e`** + note vincolanti. Es: `e: l'ADR ha scelto Redis ma serve standalone, no extra dependency. Rifai con LRU in-process.`
+- **`y`** approve
+- **`e`** + binding notes. E.g.: `e: the ADR chose Redis but it must be standalone, no extra dependency. Redo with in-process LRU.`
 
 ### Step 3 — Project memory (CLAUDE.md)
 
-Genera `CLAUDE.md.proposed`.
+Generates `CLAUDE.md.proposed`.
 
-**Greenfield (no CLAUDE.md):** genera da zero da SPEC + ADR.
-**Brownfield (CLAUDE.md curato a mano):** modalità **ADDITIVA** — parte dal CLAUDE.md esistente e aggiunge solo il riferimento al nuovo ADR + eventuali gotcha. Non degrada mai contenuto curato.
+**Greenfield (no CLAUDE.md):** generates from scratch from SPEC + ADR.
+**Brownfield (hand-crafted CLAUDE.md):** **ADDITIVE** mode — starts from the existing CLAUDE.md and only adds the reference to the new ADR + any gotchas. Never degrades curated content.
 
 ### Gate 3 — Project memory review
 
@@ -220,46 +220,46 @@ Genera `CLAUDE.md.proposed`.
 concept-to-code · Step 3 · PROJECT MEMORY COMPLETE
 ============================================================
 Proposed: <project-root>/CLAUDE.md.proposed
-<contenuto completo (greenfield) o diff (brownfield)>
+<full content (greenfield) or diff (brownfield)>
 ============================================================
 HITL Gate 3: project_memory_review
-  [y] applica    [e] revisiona    [s] skip    [a] abort
+  [y] apply    [e] revise    [s] skip    [a] abort
 > _
 ```
 
-- **`y`** applica (backup esistente in `.bak-<date>`)
-- **`s`** skip (mantieni CLAUDE.md attuale invariato — utile se è già perfetto)
-- **`e`** + note
+- **`y`** apply (existing backed up to `.bak-<date>`)
+- **`s`** skip (keep current CLAUDE.md unchanged — useful if it is already perfect)
+- **`e`** + notes
 
-### Step 4 — Session boundary (informativo)
+### Step 4 — Session boundary (informational)
 
 ```
 ============================================================
 concept-to-code · SESSION BOUNDARY
 ============================================================
-Step 1-3 completi. Ora:
-1. Chiudi questa sessione.
-2. Apri una NUOVA sessione in: <project-root>
-3. Lancia: /concept-to-code resume <manifest-path>
+Steps 1-3 complete. Now:
+1. Close this session.
+2. Open a NEW session in: <project-root>
+3. Run: /concept-to-code resume <manifest-path>
 
-Motivo: una sessione fresca evita di inquinare il context con
-i turni di design prima dell'implementazione.
+Reason: a fresh session avoids polluting the context with
+design turns before implementation.
 ============================================================
 ```
 
-**Cosa fare:**
-1. **Copia il path del manifest** mostrato
-2. Esci (`Ctrl+D` o `/exit`)
-3. Nuova sessione (`claude`) nella stessa cartella
+**What to do:**
+1. **Copy the manifest path** shown
+2. Exit (`Ctrl+D` or `/exit`)
+3. New session (`claude`) in the same folder
 4. `/concept-to-code resume <manifest-path>`
 
 ### Step 5 — Implementation
 
-Dispatch del **`coder`** col plan. Legge plan + ADR + SPEC + CLAUDE.md (+ BRAINSTORM.md se esiste). Esegue ogni task TDD (red → green → verify). **Emette `PATTERN:` prima di ogni Edit** (ora *enforced davvero* dall'hook v1.1 — vedi §9). Implementa su un branch dedicato. Non committa mai.
+Dispatch of the **`coder`** with the plan. Reads plan + ADR + SPEC + CLAUDE.md (+ BRAINSTORM.md if it exists). Runs each TDD task (red → green → verify). **Emits `PATTERN:` before every Edit** (now *truly enforced* by hook v1.1 — see §9). Implements on a dedicated branch. Never commits.
 
-**Cosa scrivere:** nulla. Aspetta il report.
+**What to type:** nothing. Wait for the report.
 
-### Gate 5 — Review cycle (opzionale)
+### Gate 5 — Review cycle (optional)
 
 ```
 ============================================================
@@ -269,282 +269,282 @@ Tasks completed:  N    Files modified: <list>
 Test results:     green | red    Harness deltas: <...>
 ============================================================
 HITL Gate 5: review_cycle_decision
-  [r] esegui review-triage-fix    [s] skip    [a] abort
+  [r] run review-triage-fix    [s] skip    [a] abort
 > _
 ```
 
-- **`r`** consigliato per feature >50 LOC: gira reviewer + triage + fix dei MAJOR
+- **`r`** recommended for features >50 LOC: runs reviewer + triage + fix of MAJOR items
 - **`s`** skip → manifest `completed`
 
 ### Finale
 
-Manifest → `completed`. Il coder NON committa: decidi tu commit/push (es. `/skill commit`). Per UI/frontend (es. SwiftUI), **verifica a mano** prima di push — gli agenti non testano la GUI.
+Manifest → `completed`. The coder does NOT commit: you decide commit/push (e.g., `/skill commit`). For UI/frontend (e.g., SwiftUI), **verify manually** before push — agents do not test the GUI.
 
 ---
 
-## 4. La skill `design-brainstorm`
+## 4. The `design-brainstorm` skill
 
-Si attiva al **gate 1b** (rispondendo `y`) oppure standalone (`/skill design-brainstorm <topic>`). È la skill che esplora **come** realizzare e **cosa di nuovo** è possibile, prima di fissare l'architettura.
+Activated at **gate 1b** (by answering `y`) or standalone (`/skill design-brainstorm <topic>`). This skill explores **how** to build something and **what new things** are possible, before fixing the architecture.
 
-**Non confonderla con:**
-- `interview-driver` — quella estrae *requisiti* (cosa), questa esplora *approcci* (come)
-- `/superpowers:brainstorming` — quella scrive spec+plan da sola; `design-brainstorm` ritorna solo un brief
+**Do not confuse it with:**
+- `interview-driver` — that extracts *requirements* (what), this explores *approaches* (how)
+- `/superpowers:brainstorming` — that writes spec+plan on its own; `design-brainstorm` only returns a brief
 
-### Le 8 tecniche di ideazione
+### The 8 ideation techniques
 
-La skill non le usa tutte: ne **seleziona 3-4** in base al problema, una tecnica → 1-2 domande → sintesi → avanti.
+The skill does not use all of them: it **selects 3-4** based on the problem, one technique → 1-2 questions → synthesis → next.
 
-| # | Tecnica | A cosa serve |
+| # | Technique | What it is for |
 |---|---------|--------------|
-| 1 ★ | **First-principles** | scompone il problema agli elementi irriducibili, ricostruisce senza assunzioni ereditate (anti-anchoring) |
-| 2 ★ | **Analogie cross-dominio** | "come risolverebbe questo flusso un videogioco / una banca / un sistema biologico / la logistica?" |
-| 3 ★ | **Inversione (pre-mortem)** | "come garantiremmo il FALLIMENTO totale?" → inverti per trovare rischi e requisiti nascosti |
-| 4 | **Vincoli forzati** | "e se avessi 1/10 del tempo? niente database? offline?" → scova la versione snella |
-| 5 | **Assumption-busting** | rende esplicite le assunzioni implicite e le sfida una per una |
-| 6 | **Alternative genuinamente diverse** | 2-4 approcci che differiscono per dati/concorrenza/confini/deployment (non varianti) |
-| 7 | **Idee adiacenti** | feature vicine che emergono — in-scope / future / esplicitamente escluse |
-| 8 | **Prior-art** | "cosa fanno i prodotti concorrenti? dove c'è spazio per fare meglio/diverso?" (delega al `researcher` se serve ricerca) |
+| 1 ★ | **First-principles** | decomposes the problem to its irreducible elements, rebuilds without inherited assumptions (anti-anchoring) |
+| 2 ★ | **Cross-domain analogies** | "how would a video game / a bank / a biological system / logistics solve this flow?" |
+| 3 ★ | **Inversion (pre-mortem)** | "how would we guarantee TOTAL FAILURE?" → invert to find hidden risks and requirements |
+| 4 | **Forced constraints** | "what if I had 1/10 of the time? no database? offline?" → finds the lean version |
+| 5 | **Assumption-busting** | makes implicit assumptions explicit and challenges them one by one |
+| 6 | **Genuinely different alternatives** | 2-4 approaches that differ in data/concurrency/boundaries/deployment (not variants) |
+| 7 | **Adjacent ideas** | nearby features that emerge — in-scope / future / explicitly excluded |
+| 8 | **Prior-art** | "what do competing products do? where is there room to do better/differently?" (delegates to `researcher` if research is needed) |
 
-★ = cardine, sempre considerate per prime.
+★ = cornerstone, always considered first.
 
 ### Output: `BRAINSTORM.md`
 
-Scrive `<project-root>/BRAINSTORM.md` con: problema riformulato, assunzioni sfidate, 2-4 alternative con trade-off, rischi pre-mortem, idee adiacenti, raccomandazione **preliminare** (non vincolante). NON scrive SPEC/plan. L'architect lo legge e ne riusa le alternative nell'ADR.
+Writes `<project-root>/BRAINSTORM.md` with: problem restated, challenged assumptions, 2-4 alternatives with trade-offs, pre-mortem risks, adjacent ideas, **preliminary** recommendation (not binding). Does NOT write SPEC/plan. The architect reads it and reuses the alternatives in the ADR.
 
-### Cosa fai tu durante il brainstorm
+### What you do during the brainstorm
 
-Rispondi alle domande `AskUserQuestion` (multiple choice + "Altro/scrivilo"). La skill sintetizza dopo ogni risposta. Se non sai rispondere a una tecnica, scegli "salta". Convergi in ~6-7 scambi.
-
----
-
-## 5. Workflow B: hotfix o micro-edit
-
-**Quando:** bug noto, fix piccolo, no decisione architetturale. (Anche l'esito `[l]` del Gate 0 finisce qui.)
-
-**Cosa scrivere:**
-```
-fixa il bug in validate.py linea 42: regex troppo lasca, deve richiedere path quotato.
-contesto: [...].
-fix proposto: regex `^"/[^"]+"$`.
-aggiungi test che dimostri il bug pre-fix e il fix post-fix.
-```
-
-**Cosa fa l'orchestrator:** dispatch diretto al `coder` (no architect, no chain). Il coder scrive test red, fixa, verifica green, emette `PATTERN:`. Nessun gate HITL (auto mode).
-
-**Pattern utile:** mini-piano TDD embedded nel prompt:
-```
-Task TDD a 3 step:
-1. RED: aggiungi test in tests/test_validate.py che dimostra il bug.
-2. GREEN: fixa la regex.
-3. VERIFY: pytest tests/test_validate.py deve essere green.
-```
+Answer the `AskUserQuestion` questions (multiple choice + "Other/write it"). The skill synthesizes after each answer. If you don't know how to answer a technique, choose "skip". Converge in ~6-7 exchanges.
 
 ---
 
-## 6. Workflow C: refactor behavior-preserving
+## 5. Workflow B: hotfix or micro-edit
 
-**Quando:** migliorare struttura/leggibilità senza cambiare comportamento.
+**When:** known bug, small fix, no architectural decision. (The `[l]` outcome of Gate 0 also ends up here.)
 
-**Cosa scrivere:**
+**What to type:**
 ```
-refattora le 3 fixture autouse in tests/conftest.py + test_cli.py + test_pricing.py
-in una sola in conftest.py. comportamento osservabile identico.
-usa il refactorer agent con snapshot harness.
+fix the bug in validate.py line 42: regex too loose, must require quoted path.
+context: [...].
+proposed fix: regex `^"/[^"]+"$`.
+add a test that demonstrates the bug pre-fix and the fix post-fix.
 ```
 
-**Cosa fa il refactorer (Process 8-step, ADR-0002):**
-1. Baseline check (`.claude/test-cmd` verde pre-refactor)
-2-3. PRE-snapshot × N + determinism check (SHA256 identici)
+**What the orchestrator does:** direct dispatch to `coder` (no architect, no chain). The coder writes red test, fixes, verifies green, emits `PATTERN:`. No HITL gate (auto mode).
+
+**Useful pattern:** embedded TDD mini-plan in the prompt:
+```
+TDD task in 3 steps:
+1. RED: add test in tests/test_validate.py that demonstrates the bug.
+2. GREEN: fix the regex.
+3. VERIFY: pytest tests/test_validate.py must be green.
+```
+
+---
+
+## 6. Workflow C: behavior-preserving refactor
+
+**When:** improve structure/readability without changing behavior.
+
+**What to type:**
+```
+refactor the 3 autouse fixtures in tests/conftest.py + test_cli.py + test_pricing.py
+into one in conftest.py. identical observable behavior.
+use the refactorer agent with snapshot harness.
+```
+
+**What the refactorer does (8-step Process, ADR-0002):**
+1. Baseline check (`.claude/test-cmd` green pre-refactor)
+2-3. PRE-snapshot × N + determinism check (identical SHA256)
 4. Apply refactor
 5. POST-snapshot
 6. Diff PRE vs POST → PASS / FAIL / UNVERIFIED
-7. Se FAIL → STOP + HITL ("behavior cambiato, è voluto?")
-8. Se PASS → report
+7. If FAIL → STOP + HITL ("behavior changed, is it intentional?")
+8. If PASS → report
 
 **Env vars:**
-- `RFS_RUNS=5` più confidenza determinism (suite flaky) · `RFS_RUNS=1` skip determinism (test deterministico)
-- `RFS_FULL=1` suite completa (default = filter sui file toccati)
-- `RFS_FILTER='-k test_pricing'` narrowing · `RFS_TIMEOUT=300` timeout per-run (default 120s)
+- `RFS_RUNS=5` more confidence in determinism (flaky suite) · `RFS_RUNS=1` skip determinism (deterministic test)
+- `RFS_FULL=1` full suite (default = filter on touched files)
+- `RFS_FILTER='-k test_pricing'` narrowing · `RFS_TIMEOUT=300` per-run timeout (default 120s)
 
 ---
 
-## 7. Workflow D: review/fix codice esistente
+## 7. Workflow D: review/fix of existing code
 
-**Quando:** codice già scritto, vuoi review strutturata + fix dei MAJOR.
+**When:** code already written, want structured review + fix of MAJOR items.
 
-**Cosa scrivere:**
+**What to type:**
 ```
-fai una review-triage-fix sui file modificati nelle ultime 2 ore.
+run review-triage-fix on files modified in the last 2 hours.
 focus: src/pricing/*.py
 ```
 
-**Cosa fa:** reviewer → findings per severità (BLOCKER/MAJOR/MINOR/NIT) → triage → fix dei MAJOR/BLOCKER → re-review → recap. **Variante v1.2:** un `PATTERN: REPLACE` senza `Remove:` viene escalato a MAJOR (ADR-0001).
+**What it does:** reviewer → findings by severity (BLOCKER/MAJOR/MINOR/NIT) → triage → fix of MAJOR/BLOCKER → re-review → recap. **Variant v1.2:** a `PATTERN: REPLACE` without `Remove:` is escalated to MAJOR (ADR-0001).
 
-> Nota: nel test reale il review ha correttamente lasciato 5 finding come REPORT-ONLY (design-level / fuori-scope / effort Swift6 differito) senza inventare fix. Il triage maturo *non* fixa tutto a forza.
+> Note: in the real test the review correctly left 5 findings as REPORT-ONLY (design-level / out-of-scope / Swift6 effort deferred) without inventing fixes. Mature triage does *not* force-fix everything.
 
 ---
 
-## 8. Comandi di servizio
+## 8. Utility commands
 
-### `vibe-status` — stato del sistema
+### `vibe-status` — system status
 ```
-lancia vibe-status
+run vibe-status
 ```
-Report Markdown con harness/ADR/manifest/skill/hook/memory. <3s. Flag: `--json`, `--skip-harness`, `--plain`.
+Markdown report with harness/ADR/manifest/skill/hook/memory. <3s. Flags: `--json`, `--skip-harness`, `--plain`.
 
 ### `concept-to-code resume / abort`
 ```
-/concept-to-code resume <manifest-path>     # riprendi dopo session boundary
-/concept-to-code abort <manifest-path>      # marca aborted, preserva artifact
+/concept-to-code resume <manifest-path>     # resume after session boundary
+/concept-to-code abort <manifest-path>      # mark aborted, preserve artifacts
 ```
 
-### Hook pattern-enforce (raro)
+### Hook pattern-enforce (rare)
 ```bash
 tail -50 ~/.claude/state/pattern-enforce/audit.log   # audit: allow/block/bypass per Edit
-touch ~/.claude/state/pattern-enforce/disabled       # disabilita temporaneo
-rm ~/.claude/state/pattern-enforce/disabled          # riabilita
-PATTERN_ENFORCE=off claude                            # disabilita per una sessione
+touch ~/.claude/state/pattern-enforce/disabled       # temporarily disable
+rm ~/.claude/state/pattern-enforce/disabled          # re-enable
+PATTERN_ENFORCE=off claude                            # disable for one session
 ```
 
 ---
 
-## 9. Pattern classifier e hook
+## 9. Pattern classifier and hook
 
-Il `coder` emette **sempre** un header `PATTERN:` prima di ogni Edit/Write, e l'**hook `pre-flight-pattern-enforce` v1.1 lo enforce davvero** (blocca l'Edit se manca).
+The `coder` always emits a `PATTERN:` header before every Edit/Write, and the **`pre-flight-pattern-enforce` hook v1.1 truly enforces it** (blocks the Edit if missing).
 
-| Pattern | Cosa è | Cosa aspettarsi |
+| Pattern | What it is | What to expect |
 |---------|--------|-----------------|
-| `ADD` | codice nuovo | solo righe aggiunte |
-| `REMOVE` | cancellazione | payload con "Callers checked: ..." |
-| `REPLACE` | sostituzione di pattern | OBBLIGATORIA coppia `Add: ... \| Remove: ...` |
-| `MODIFY` | edit in-place senza cambio struttura | rename, typo, refactor interno |
+| `ADD` | new code | only added lines |
+| `REMOVE` | deletion | payload with "Callers checked: ..." |
+| `REPLACE` | pattern substitution | MANDATORY `Add: ... \| Remove: ...` pair |
+| `MODIFY` | in-place edit without structural change | rename, typo, internal refactor |
 
-**Come funziona l'hook (v1.1):** legge `agent_type` dal payload PreToolUse. Se `coder` → verifica che ci sia un `PATTERN:` negli ultimi 6 messaggi del transcript del sub-agent → `allow`; altrimenti `block`. Altri agent (architect, ecc.) e l'orchestrator → `bypass-noncoder`.
+**How the hook works (v1.1):** reads `agent_type` from the PreToolUse payload. If `coder` → checks that a `PATTERN:` exists within the last 6 messages of the sub-agent transcript → `allow`; otherwise `block`. Other agents (architect, etc.) and the orchestrator → `bypass-noncoder`.
 
-**Verifica live (2026-05-21):** su un coder reale, 26 Edit `allow` / 0 `block` indebiti. Funziona.
+**Live verification (2026-05-21):** on a real coder, 26 Edit `allow` / 0 wrongful `block`. Works.
 
-**Quando insospettirti:** `PATTERN: ADD` con cancellazioni non-banali nel diff → mis-classificato (reviewer lo prende come `pattern-drift` MINOR). `PATTERN: REPLACE` con solo `Add:` → l'hook avrebbe dovuto bloccare, controlla audit log.
+**When to be suspicious:** `PATTERN: ADD` with non-trivial deletions in the diff → mis-classified (reviewer catches it as `pattern-drift` MINOR). `PATTERN: REPLACE` with only `Add:` → the hook should have blocked it, check the audit log.
 
 ---
 
 ## 10. Troubleshooting
 
-### "La skill X non è invocabile da skill"
-**Causa:** la skill ha `disable-model-invocation: true`, incompatibile con invocazione da chain.
-**Fix:** rimuovere il flag se la skill è parte di un chain. Rif: memory `feedback_disable-model-invocation-strong.md`.
+### "Skill X cannot be invoked from a skill"
+**Cause:** the skill has `disable-model-invocation: true`, incompatible with chain invocation.
+**Fix:** remove the flag if the skill is part of a chain. Ref: memory `feedback_disable-model-invocation-strong.md`.
 
-### Hook blocca un Edit del coder ("PATTERN missing in window=6")
-**Causa:** il coder non ha emesso il `PATTERN:` negli ultimi 6 messaggi prima dell'Edit.
-**Fix:** chiedi al coder di re-emettere il PATTERN: corretto e ritentare. **Non** disabilitare l'hook. Diagnostica: `tail ~/.claude/state/pattern-enforce/audit.log`.
+### Hook blocks a coder Edit ("PATTERN missing in window=6")
+**Cause:** the coder did not emit the `PATTERN:` within the last 6 messages before the Edit.
+**Fix:** ask the coder to re-emit the correct PATTERN: and retry. Do **not** disable the hook. Diagnose: `tail ~/.claude/state/pattern-enforce/audit.log`.
 
-### Il chain salta interview / non chiede nulla su progetto con SPEC
-**Non è un bug:** è il **brownfield mode** (v2). Se SPEC esiste, l'interview viene saltata di proposito e `artifacts.spec` punta all'esistente. Se vuoi comunque rifare la spec, gestiscilo a Gate 0 con `[c]` e poi richiedi esplicitamente.
+### The chain skips interview / asks nothing on a project with SPEC
+**This is not a bug:** it is **brownfield mode** (v2). If SPEC exists, the interview is intentionally skipped and `artifacts.spec` points to the existing one. If you still want to redo the spec, handle it at Gate 0 with `[c]` and then explicitly request it.
 
 ### Refactor in UNVERIFIED
-**Causa:** test non-deterministici (timestamp, ID random, ordine dict).
-**Fix 1:** sistema il non-determinismo. **Fix 2 (workaround):** crea `.claude/refactor-snapshot-override`:
+**Cause:** non-deterministic tests (timestamps, random IDs, dict ordering).
+**Fix 1:** fix the non-determinism. **Fix 2 (workaround):** create `.claude/refactor-snapshot-override`:
 ```
 REASON: timestamps in test output, intentional
 SCOPE: stdout
 EXPIRES: 2026-07-20
 ```
 
-### Manifest invalid / chain bloccato
-- Manifest già esistente stesso topic/giorno → `/concept-to-code abort <path>` o rinomina topic.
-- YAML editato a mano e validate fallisce → ripristina o abort + nuovo manifest. (Schema 1.1 è retrocompatibile con 1.0.)
+### Manifest invalid / chain blocked
+- Manifest already exists for same topic/day → `/concept-to-code abort <path>` or rename topic.
+- YAML edited by hand and validate fails → restore or abort + new manifest. (Schema 1.1 is backward-compatible with 1.0.)
 
-### vibe-status mostra "Harness X/N" con N basso
-**Causa:** glob non scopre un harness in posizione non-standard.
-**Fix:** già copre `~/.claude/skills/*/tests/run-tests.sh` + `~/.claude/hooks/tests/*.sh`. Aggiungi altri path al glob in `aggregate.sh` se servono.
+### vibe-status shows "Harness X/N" with low N
+**Cause:** glob does not discover a harness in a non-standard location.
+**Fix:** already covers `~/.claude/skills/*/tests/run-tests.sh` + `~/.claude/hooks/tests/*.sh`. Add other paths to the glob in `aggregate.sh` if needed.
 
-### Label "Ready to code?" anche quando il chain fa solo design
-**Non è un nostro bug:** è il template fisso dell'harness ExitPlanMode. Quando il plan dichiara "solo artefatti di design", uscire dalla plan mode NON scrive codice — fidati del contenuto del plan, non della label.
+### Label "Ready to code?" even when the chain only does design
+**This is not our bug:** it is the fixed template of the ExitPlanMode harness. When the plan declares "design artifacts only", exiting plan mode does NOT write code — trust the content of the plan, not the label.
 
 ---
 
 ## 11. Cheat sheet
 
-| Cosa vuoi fare | Comando |
+| What you want to do | Command |
 |----------------|---------|
-| Esplorare idee liberamente (standalone) | `/superpowers:brainstorming` |
-| Brainstorm di design (standalone) | `/skill design-brainstorm <topic>` |
-| Feature nuova non-triviale | `/concept-to-code <topic>` |
-| Resume dopo session boundary | `/concept-to-code resume <manifest-path>` |
-| Abortire chain | `/concept-to-code abort <manifest-path>` |
-| Hotfix piccolo | Prompt diretto al coder con micro-piano TDD |
-| Refactor sicuro | Prompt al refactorer (snapshot automatico) |
-| Review + fix codice | `/skill review-triage-fix` |
-| Stato del sistema | `bash ~/.claude/skills/vibe-status/scripts/aggregate.sh` |
-| Audit del hook | `tail -50 ~/.claude/state/pattern-enforce/audit.log` |
-| Disabilita/riabilita hook | `touch`/`rm ~/.claude/state/pattern-enforce/disabled` |
-| Refactor con N runs determinism | `RFS_RUNS=N` env var |
-| Commit (se git) | `/skill commit` |
+| Explore ideas freely (standalone) | `/superpowers:brainstorming` |
+| Design brainstorm (standalone) | `/skill design-brainstorm <topic>` |
+| New non-trivial feature | `/concept-to-code <topic>` |
+| Resume after session boundary | `/concept-to-code resume <manifest-path>` |
+| Abort chain | `/concept-to-code abort <manifest-path>` |
+| Small hotfix | Direct prompt to coder with TDD mini-plan |
+| Safe refactor | Prompt to refactorer (automatic snapshot) |
+| Review + fix code | `/skill review-triage-fix` |
+| System status | `bash ~/.claude/skills/vibe-status/scripts/aggregate.sh` |
+| Hook audit | `tail -50 ~/.claude/state/pattern-enforce/audit.log` |
+| Disable/re-enable hook | `touch`/`rm ~/.claude/state/pattern-enforce/disabled` |
+| Refactor with N runs determinism | `RFS_RUNS=N` env var |
+| Commit (if git) | `/skill commit` |
 
 ---
 
-## 12. Prompt template riutilizzabili
+## 12. Reusable prompt templates
 
-### Feature non-triviale
+### Non-trivial feature
 ```
-/concept-to-code <Titolo Feature Completo>
+/concept-to-code <Full Feature Title>
 ```
 
-### Scelta ai gate
+### Gate choices
 ```
-c        # Gate 0: chain completo
-l        # Gate 0: workflow leggero
-y        # Gate 1/2/3: approva  ·  Gate 1b: sì al brainstorm  ·  Gate 5: (r per review)
-n        # Gate 1b: no al brainstorm, vai diretto all'architect
+c        # Gate 0: full chain
+l        # Gate 0: lightweight workflow
+y        # Gate 1/2/3: approve  ·  Gate 1b: yes to brainstorm  ·  Gate 5: (r for review)
+n        # Gate 1b: no to brainstorm, go directly to architect
 s        # Gate 3: skip CLAUDE.md  ·  Gate 5: skip review
-e: <note concrete su cosa cambiare>     # rifiuto con feedback
+e: <concrete notes on what to change>     # rejection with feedback
 a        # abort chain
 ```
 
-### Hotfix con micro-piano TDD
+### Hotfix with TDD mini-plan
 ```
-fix bug in <file:line>: <descrizione>.
-contesto: <cosa fa ora, cosa dovrebbe>.
-plan TDD: T1 RED test che dimostra il bug · T2 GREEN fix · T3 VERIFY .claude/test-cmd.
-```
-
-### Refactor con snapshot
-```
-refattora <area>: <obiettivo, no cambio comportamento>.
-usa refactorer agent con snapshot harness. env: RFS_RUNS=<N> RFS_FILTER=<filter>.
+fix bug in <file:line>: <description>.
+context: <what it does now, what it should do>.
+TDD plan: T1 RED test that demonstrates the bug · T2 GREEN fix · T3 VERIFY .claude/test-cmd.
 ```
 
-### Review on demand
+### Refactor with snapshot
 ```
-fai una review-triage-fix sui file modificati <da quando> nel path <pattern>. focus: MAJOR.
+refactor <area>: <objective, no behavior change>.
+use refactorer agent with snapshot harness. env: RFS_RUNS=<N> RFS_FILTER=<filter>.
+```
+
+### On-demand review
+```
+run review-triage-fix on files modified <since when> in path <pattern>. focus: MAJOR.
 ```
 
 ---
 
-## 13. Quando NON usare `/concept-to-code`
+## 13. When NOT to use `/concept-to-code`
 
-- **Hotfix sotto i 30 minuti:** overhead non giustificato → coder diretto (o Gate 0 `[l]`).
-- **Esperimento usa-e-getta:** non ti serve persistere ADR + plan → coder con prompt esplorativo.
-- **Tweak a feature esistente** (es. cambio default): è MODIFY, non new feature → coder diretto.
-- **Progetto brownfield con micro-scope:** il Gate 0 te lo segnalerà e potrai scegliere `[l]`.
+- **Hotfix under 30 minutes:** overhead not justified → direct coder (or Gate 0 `[l]`).
+- **Throwaway experiment:** you don't need to persist ADR + plan → coder with exploratory prompt.
+- **Tweak to an existing feature** (e.g., changing a default): it is MODIFY, not a new feature → direct coder.
+- **Brownfield project with micro-scope:** Gate 0 will flag it and you can choose `[l]`.
 
 ---
 
-## 14. Glossario rapido
+## 14. Quick glossary
 
-- **Orchestrator:** la sessione `claude` principale che dispatcha sub-agent.
-- **Sub-agent:** processo isolato (`coder`, `architect`, `reviewer`, ecc.) che riceve un prompt e ritorna un report. NON spawna altri sub-agent.
-- **Skill:** modulo markdown in `~/.claude/skills/<name>/SKILL.md` che istruisce l'orchestrator (o un sub-agent).
-- **Hook:** script bash in `~/.claude/hooks/` che si attiva su eventi (PreToolUse, ecc.). `pre-flight-pattern-enforce` v1.1 enforce il PATTERN: del coder.
-- **Manifest:** YAML che traccia lo stato del chain. In `<project>/docs/manifests/`. Schema 1.1 (retrocompat 1.0).
-- **Gate 0:** triage iniziale chain-vs-leggero (v2).
-- **Brownfield mode:** modalità per progetti con SPEC/CLAUDE.md esistenti — skip interview, CLAUDE.md additivo (v2).
-- **Brainstorm-gate (1b):** gate opzionale tra spec e architettura che invoca `design-brainstorm` (v2).
-- **HITL gate:** punto che richiede approvazione esplicita dell'utente.
-- **PATTERN: header:** dichiarazione obbligatoria del coder prima di ogni Edit (ADR-0001), enforced dall'hook (ADR-0004).
+- **Orchestrator:** the main `claude` session that dispatches sub-agents.
+- **Sub-agent:** isolated process (`coder`, `architect`, `reviewer`, etc.) that receives a prompt and returns a report. Does NOT spawn other sub-agents.
+- **Skill:** markdown module in `~/.claude/skills/<name>/SKILL.md` that instructs the orchestrator (or a sub-agent).
+- **Hook:** bash script in `~/.claude/hooks/` that fires on events (PreToolUse, etc.). `pre-flight-pattern-enforce` v1.1 enforces the coder's PATTERN:.
+- **Manifest:** YAML that tracks the chain state. In `<project>/docs/manifests/`. Schema 1.1 (backward-compatible with 1.0).
+- **Gate 0:** initial chain-vs-lightweight triage (v2).
+- **Brownfield mode:** mode for projects with existing SPEC/CLAUDE.md — skip interview, additive CLAUDE.md (v2).
+- **Brainstorm-gate (1b):** optional gate between spec and architecture that invokes `design-brainstorm` (v2).
+- **HITL gate:** point that requires explicit user approval.
+- **PATTERN: header:** mandatory coder declaration before every Edit (ADR-0001), enforced by the hook (ADR-0004).
 - **ADR:** Architecture Decision Record, in `docs/architecture/`.
-- **BRAINSTORM.md:** output di `design-brainstorm` — alternative + trade-off, alimenta l'architect (non è SPEC né plan).
-- **Harness:** script di test automatici (`tests/run-tests.sh`). **Anchor:** grep-pattern che il harness verifica; "anchor preservation" = non romperli.
+- **BRAINSTORM.md:** output of `design-brainstorm` — alternatives + trade-offs, feeds the architect (not SPEC nor plan).
+- **Harness:** automatic test scripts (`tests/run-tests.sh`). **Anchor:** grep-pattern that the harness verifies; "anchor preservation" = don't break them.
 
 ---
 
-*Fine guida. Per la versione "kid-friendly", vedi `guida-per-ragazzi-12-anni.md`. Per la spec tecnica completa, vedi `vibe-coding-system.md`. Workflow v2 dettagliato: `ADR-0008` + `2026-05-21-concept-to-code-workflow-v2-design.md`.*
+*End of guide. For the "kid-friendly" version, see `guida-per-ragazzi-12-anni.md`. For the complete technical spec, see `vibe-coding-system.md`. Workflow v2 detail: `ADR-0008` + `2026-05-21-concept-to-code-workflow-v2-design.md`.*

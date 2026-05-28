@@ -1,284 +1,280 @@
-# Guida — Come creare un progetto con il tuo sistema Vibe Coding
+# Guide — How to create a project with your Vibe Coding system
 
-Spiegata semplice, passo per passo. Niente cose date per scontate.
-
----
-
-## 1. Cos'è questo sistema (in 30 secondi)
-
-Immagina di avere una **squadra di assistenti specializzati** dentro Claude
-Code. Ognuno è bravo in una cosa sola:
-
-- chi **progetta** (architect),
-- chi **scrive il codice** (coder),
-- chi **scrive i test** (tester),
-- chi **trova i bug** (debugger),
-- chi **controlla la qualità** (reviewer),
-- chi **scrive la documentazione** (doc-writer),
-- chi **riordina il codice** (refactorer),
-- chi **cerca informazioni** (researcher).
-
-Più dei **comandi speciali** (le "skill", iniziano con `/`) che fanno partire
-procedure pronte (es. l'intervista per capire cosa vuoi costruire).
-
-Più delle **regole automatiche** che si attivano da sole (es. quando tocchi un
-file `.py` partono le regole Python; dopo ogni modifica il codice viene
-formattato; i file segreti tipo `.env` sono bloccati).
-
-Tu sei il **capo**. Dai gli ordini, approvi le decisioni importanti, e la
-squadra lavora.
+Explained simply, step by step. Nothing taken for granted.
 
 ---
 
-## 2. Le 2 fasi (la regola d'oro più importante)
+## 1. What this system is (in 30 seconds)
 
-Costruire un progetto si fa in **due fasi separate**, in **due sessioni
-diverse** di Claude:
+Imagine having a **team of specialized assistants** inside Claude
+Code. Each one is good at exactly one thing:
 
-- **FASE 1 — PENSARE**: decidi *cosa* costruire. Si crea un documento `SPEC.md`
-  (la "lista della spesa" del progetto) e le decisioni di architettura (ADR).
-- **FASE 2 — COSTRUIRE**: scrivi il codice vero, seguendo quello che hai deciso
-  in Fase 1.
+- who **designs** (architect),
+- who **writes code** (coder),
+- who **writes tests** (tester),
+- who **finds bugs** (debugger),
+- who **checks quality** (reviewer),
+- who **writes documentation** (doc-writer),
+- who **tidies up code** (refactorer),
+- who **searches for information** (researcher).
 
-**Perché separate?** Perché se mischi "pensare" e "scrivere codice" nella stessa
-chat, Claude si confonde (troppa roba in testa). Tra Fase 1 e Fase 2 si apre una
-**sessione nuova e pulita**.
+Plus **special commands** ("skills", starting with `/`) that launch
+ready-made procedures (e.g., the interview to understand what you want to build).
 
-> Parola difficile spiegata:
-> - **SPEC.md** = il foglio che dice *cosa* deve fare il progetto.
-> - **ADR** = il foglio che dice *come* è stato deciso di farlo e *perché*
->   (Architecture Decision Record). Si trova in `docs/architecture/`.
-> - **HITL gate** = un punto in cui Claude si ferma e aspetta il tuo OK
->   ("Human In The Loop" = c'è l'umano nel giro). Succede prima di commit,
->   push, deploy, cancellazioni.
+Plus **automatic rules** that activate on their own (e.g., when you touch a
+`.py` file the Python rules kick in; after every change the code gets
+formatted; secret files like `.env` are blocked).
+
+You are the **boss**. You give orders, approve important decisions, and the
+team works.
 
 ---
 
-## 3. Prima di iniziare (controllo veloce, 1 volta)
+## 2. The 2 phases (the most important golden rule)
 
-Il sistema è **già installato**. Per essere sicuro che funzioni, apri Claude in
-una cartella qualsiasi e digita questi comandi (uno alla volta), premi Invio,
-guarda:
+Building a project happens in **two separate phases**, in **two different
+sessions** of Claude:
 
-- `/agents` → devi vedere: architect, coder, reviewer, tester, debugger,
+- **PHASE 1 — THINK**: decide *what* to build. A `SPEC.md` document is created
+  (the project "shopping list") along with architecture decisions (ADR).
+- **PHASE 2 — BUILD**: write the actual code, following what you decided
+  in Phase 1.
+
+**Why separate?** Because if you mix "thinking" and "writing code" in the same
+chat, Claude gets confused (too much in its head). Between Phase 1 and Phase 2
+you open a **fresh, clean session**.
+
+> Hard words explained:
+> - **SPEC.md** = the sheet that says *what* the project must do.
+> - **ADR** = the sheet that says *how* a decision was made and *why*
+>   (Architecture Decision Record). Found in `docs/architecture/`.
+> - **HITL gate** = a point where Claude stops and waits for your OK
+>   ("Human In The Loop" = there's a human in the loop). Happens before commits,
+>   pushes, deploys, deletions.
+
+---
+
+## 3. Before you start (quick check, once)
+
+The system is **already installed**. To make sure it works, open Claude in
+any folder and type these commands (one at a time), press Enter, and check:
+
+- `/agents` → you should see: architect, coder, reviewer, tester, debugger,
   doc-writer, refactorer, researcher.
-- `/skills` → devi vedere le skill custom (adr-writer, claude-md-generator,
-  swift-vibe, ecc.).
-- `/mcp` → `github` e `sequential-thinking` devono essere "connected".
+- `/skills` → you should see the custom skills (adr-writer, claude-md-generator,
+  swift-vibe, etc.).
+- `/mcp` → `github` and `sequential-thinking` should be "connected".
 
-Se li vedi, sei pronto.
+If you see them, you are ready.
 
 ---
 
-## 4. Creare un progetto — passo per passo
+## 4. Creating a project — step by step
 
-### Passo 0 — Crea la cartella del progetto
+### Step 0 — Create the project folder
 
-Apri il Terminale. Scrivi questi comandi **uno alla volta** (sostituisci
-`nome-progetto` col nome vero, senza spazi):
-
-```
-mkdir -p ~/developer/nome-progetto
-```
-```
-cd ~/developer/nome-progetto && git init
-```
-```
-cd ~/developer/nome-progetto && python3 -m venv .venv && source .venv/bin/activate
-```
-
-> Cosa hai fatto: creato la cartella, acceso il "salvataggio storia" (git),
-> creato un ambiente Python isolato (venv) così non sporchi il computer.
-
-### Passo 1 — Apri Claude DENTRO la cartella
+Open the Terminal. Type these commands **one at a time** (replace
+`project-name` with the real name, no spaces):
 
 ```
-cd ~/developer/nome-progetto
+mkdir -p ~/developer/project-name
+```
+```
+cd ~/developer/project-name && git init
+```
+```
+cd ~/developer/project-name && python3 -m venv .venv && source .venv/bin/activate
+```
+
+> What you did: created the folder, turned on "history saving" (git),
+> created an isolated Python environment (venv) so you don't pollute your machine.
+
+### Step 1 — Open Claude INSIDE the folder
+
+```
+cd ~/developer/project-name
 claude
 ```
 
-Da qui in poi, i comandi `/...` e `@...` si scrivono **dentro Claude**, non nel
-Terminale.
+From here on, `/...` and `@...` commands are typed **inside Claude**, not in
+the Terminal.
 
-### Passo 2 — FASE 1: l'intervista (cosa vuoi costruire)
+### Step 2 — PHASE 1: the interview (what you want to build)
 
-Scrivi dentro Claude:
-
-```
-/interview-driver descrivi qui in una riga cosa vuoi costruire
-```
-
-Claude ti farà **domande, una alla volta**. Rispondi con calma: scava sui punti
-difficili, non dare risposte vaghe. Alla fine scrive il file `SPEC.md`.
-
-> Trucco: se è un progetto piccolo e vuoi fare tutto in colpo solo, usa
-> `/project-bootstrap descrizione` al posto di `/interview-driver`: fa
-> l'intervista, l'architettura e il CLAUDE.md di fila (fermandosi a chiederti
-> OK tra un passo e l'altro).
-
-### Passo 3 — Le decisioni di architettura (ADR)
-
-Sempre dentro Claude, chiama l'**architetto**:
+Type inside Claude:
 
 ```
-@"architect (agent)" leggi SPEC.md e scrivi un ADR in docs/architecture/ con le decisioni principali e le alternative scartate. Non scrivere codice.
+/interview-driver describe in one line what you want to build
 ```
 
-Leggi l'ADR che produce. Se ti convince → **approva**. Se c'è qualcosa che non
-va → diglielo e lo corregge.
+Claude will ask you **questions, one at a time**. Answer carefully: dig into
+the hard parts, don't give vague answers. At the end it writes `SPEC.md`.
 
-> Importante: l'**ADR è il piano**. Per progetti piccoli/medi non serve un piano
-> separato: l'ADR con i suoi passi basta.
+> Tip: for a small project where you want to do everything at once, use
+> `/project-bootstrap description` instead of `/interview-driver`: it runs
+> the interview, architecture, and CLAUDE.md in sequence (stopping to ask for
+> your OK between each step).
 
-### Passo 4 — Il CLAUDE.md del progetto
+### Step 3 — Architecture decisions (ADR)
+
+Still inside Claude, call the **architect**:
+
+```
+@"architect (agent)" read SPEC.md and write an ADR in docs/architecture/ with the main decisions and the rejected alternatives. Do not write code.
+```
+
+Read the ADR it produces. If it convinces you → **approve**. If something is
+off → tell it and it will correct.
+
+> Important: the **ADR is the plan**. For small/medium projects a separate plan
+> is not needed: the ADR with its steps is enough.
+
+### Step 4 — The project CLAUDE.md
 
 ```
 /claude-md-generator
 ```
 
-Crea il `CLAUDE.md` del progetto: un foglietto di istruzioni specifiche di
-*questo* progetto (comandi, struttura, regole sue). Eredita le regole globali,
-non le ripete. Controlla che sia sensato e corto (< ~100 righe).
+Creates the project `CLAUDE.md`: a sheet of instructions specific to
+*this* project (commands, structure, its own rules). It inherits global rules
+and does not repeat them. Check that it makes sense and is short (< ~100 lines).
 
-### Passo 5 — STOP e pulisci (passaggio Fase 1 → Fase 2)
+### Step 5 — STOP and clean up (Phase 1 → Phase 2 transition)
 
-per orHai finito di "pensare". Ora:
+You have finished "thinking". Now:
 
-1. Fai il primo salvataggio nel progetto (nel Terminale):
+1. Make the first save in the project (in Terminal):
    ```
-   cd ~/developer/nome-progetto && git add -A && git commit -m "chore: spec e architettura iniziali"
+   cd ~/developer/project-name && git add -A && git commit -m "chore: initial spec and architecture"
    ```
-2. **Chiudi questa sessione Claude** e **aprine una nuova** nella stessa
-   cartella (sessione pulita per la Fase 2). Oppure dentro Claude scrivi
-   `/clear`.
+2. **Close this Claude session** and **open a new one** in the same
+   folder (clean session for Phase 2). Or type `/clear` inside Claude.
 
-### Passo 6 — FASE 2: scrivere il codice
+### Step 6 — PHASE 2: writing the code
 
-Chiama il **coder**, dicendogli di seguire SPEC e ADR:
-
-```
-@"coder (agent)" implementa il progetto seguendo SPEC.md, l'ADR in docs/architecture/ e CLAUDE.md. Non committare.
-```
-
-Il coder scrive il codice. Tu non tocchi niente, guardi.
-
-### Passo 7 — I test
+Call the **coder**, telling it to follow the SPEC and ADR:
 
 ```
-@"tester (agent)" scrivi ed esegui i test (pytest) per la logica principale, inclusi i casi limite. Non modificare il codice di produzione.
+@"coder (agent)" implement the project following SPEC.md, the ADR in docs/architecture/ and CLAUDE.md. Do not commit.
 ```
 
-### Passo 8 — Se qualcosa è rotto
+The coder writes the code. You don't touch anything, just watch.
+
+### Step 7 — The tests
 
 ```
-@"debugger (agent)" [incolla qui l'errore o il test che fallisce]. Trova la causa vera e applica il fix minimo.
+@"tester (agent)" write and run tests (pytest) for the main logic, including edge cases. Do not modify production code.
 ```
 
-### Passo 9 — Il controllo qualità
+### Step 8 — If something is broken
 
 ```
-@"reviewer (agent)" rivedi le modifiche recenti per sicurezza, correttezza, performance e coerenza. Output per gravità.
+@"debugger (agent)" [paste the error or failing test here]. Find the root cause and apply the minimum fix.
 ```
 
-Ti dà una lista divisa in BLOCKER (bloccante) / MAJOR / MINOR / NIT. Decidi tu
-cosa applicare.
-
-### Passo 10 — La documentazione (opzionale)
+### Step 9 — Quality check
 
 ```
-@"doc-writer (agent)" aggiorna il README e il CHANGELOG con quello che è stato fatto.
+@"reviewer (agent)" review the recent changes for security, correctness, performance and consistency. Output by severity.
 ```
 
-### Passo 11 — Salva e (se vuoi) apri la Pull Request
+It gives you a list split into BLOCKER / MAJOR / MINOR / NIT. You decide
+what to apply.
 
-Nel Terminale:
+### Step 10 — Documentation (optional)
+
 ```
-cd ~/developer/nome-progetto && git add -A && git commit -m "feat: descrizione di cosa hai fatto"
-```
-Per una PR (serve `gh` configurato):
-```
-cd ~/developer/nome-progetto && gh pr create --fill
+@"doc-writer (agent)" update the README and CHANGELOG with what was done.
 ```
 
-> Claude ti chiederà conferma prima di azioni importanti (commit, push): è
-> l'HITL gate. È normale e voluto.
+### Step 11 — Save and (optionally) open a Pull Request
 
-### Passo 12 — Ripeti per ogni nuova funzione
+In Terminal:
+```
+cd ~/developer/project-name && git add -A && git commit -m "feat: description of what you did"
+```
+For a PR (`gh` must be configured):
+```
+cd ~/developer/project-name && gh pr create --fill
+```
 
-Per ogni funzione nuova: torna al Passo 6 (coder → tester → reviewer → commit).
-**Tra funzioni diverse e non collegate, scrivi `/clear`** per ripulire la testa
-di Claude.
+> Claude will ask for confirmation before important actions (commit, push): that's
+> the HITL gate. It is normal and intentional.
+
+### Step 12 — Repeat for each new feature
+
+For each new feature: go back to Step 6 (coder → tester → reviewer → commit).
+**Between different unrelated features, type `/clear`** to clear Claude's context.
 
 ---
 
-## 5. Tabella rapida — le skill (comandi `/`)
+## 5. Quick reference — skills (`/` commands)
 
-| Comando | Quando si usa | Si attiva da... |
+| Command | When to use | Triggered by... |
 |---|---|---|
-| `/interview-driver` | inizio progetto/feature: capire cosa costruire | solo tu (a mano) |
-| `/project-bootstrap` | progetto piccolo: fa tutta la Fase 1 in fila | solo tu (a mano) |
-| `/claude-md-generator` | creare il CLAUDE.md del progetto | a mano (o da solo) |
-| `/adr-writer` | scrivere una decisione di architettura | da solo quando serve |
-| `/fastapi-react-vibe` | creare un pezzo CRUD FastAPI+React | solo tu (a mano) |
-| `/code-review-checklist` | review strutturata | da solo / via reviewer |
-| `/swift-vibe` | aiuto pattern SwiftUI | da solo quando serve |
+| `/interview-driver` | start of project/feature: understand what to build | you only (manually) |
+| `/project-bootstrap` | small project: runs all of Phase 1 in sequence | you only (manually) |
+| `/claude-md-generator` | create the project CLAUDE.md | manually (or automatic) |
+| `/adr-writer` | write an architecture decision | automatic when needed |
+| `/fastapi-react-vibe` | create a CRUD FastAPI+React piece | you only (manually) |
+| `/code-review-checklist` | structured review | automatic / via reviewer |
+| `/swift-vibe` | SwiftUI pattern help | automatic when needed |
 
-> "solo tu (a mano)" = Claude NON la fa partire da solo, devi scriverla tu.
+> "you only (manually)" = Claude does NOT trigger it on its own, you must type it.
 
-## 6. Tabella rapida — gli agenti (`@"nome (agent)"`)
+## 6. Quick reference — agents (`@"name (agent)"`)
 
-| Agente | Cosa fa | Quando |
+| Agent | What it does | When |
 |---|---|---|
-| architect | progetta, scrive ADR, NON scrive codice | inizio feature non banale |
-| coder | scrive il codice seguendo l'ADR | dopo l'ADR approvato |
-| tester | scrive ed esegue i test | dopo il coder |
-| debugger | trova la causa vera dei bug | quando qualcosa è rotto |
-| reviewer | controlla qualità/sicurezza (solo legge) | prima del commit |
-| doc-writer | README, CHANGELOG, docstring | a feature finita |
-| refactorer | riordina senza cambiare comportamento | su richiesta / dopo review |
-| researcher | cerca documentazione con fonti | libreria/API sconosciuta |
+| architect | designs, writes ADR, does NOT write code | start of non-trivial feature |
+| coder | writes code following the ADR | after the ADR is approved |
+| tester | writes and runs tests | after the coder |
+| debugger | finds the root cause of bugs | when something is broken |
+| reviewer | checks quality/security (read-only) | before commit |
+| doc-writer | README, CHANGELOG, docstrings | when a feature is done |
+| refactorer | tidies up without changing behavior | on request / after review |
+| researcher | searches documentation with sources | unknown library/API |
 
-## 7. Comandi utili da sapere
+## 7. Useful commands to know
 
-| Comando / tasti | A cosa serve |
+| Command / keys | What it does |
 |---|---|
-| `/clear` | pulisce la memoria di Claude tra task diversi |
-| `/memory` | mostra CLAUDE.md e regole caricate |
-| `/agents` `/skills` `/hooks` `/mcp` | mostrano cosa è attivo |
-| `Shift+Tab` | cambia "modalità permessi" (plan mode, ecc.) |
-| `Esc` | ferma Claude a metà azione (senza perdere il contesto) |
-| `Esc Esc` o `/rewind` | torna indietro a un punto precedente |
-| `! comando` | esegue un comando di terminale da dentro Claude |
-| `@nomefile` | fa leggere a Claude un file specifico |
+| `/clear` | clears Claude's memory between different tasks |
+| `/memory` | shows CLAUDE.md and loaded rules |
+| `/agents` `/skills` `/hooks` `/mcp` | show what is active |
+| `Shift+Tab` | changes "permission mode" (plan mode, etc.) |
+| `Esc` | stops Claude mid-action (without losing context) |
+| `Esc Esc` or `/rewind` | goes back to a previous point |
+| `! command` | runs a terminal command from inside Claude |
+| `@filename` | makes Claude read a specific file |
 
-## 8. Le 7 regole d'oro (stampatele in testa)
+## 8. The 7 golden rules (memorize them)
 
-1. **Fase 1 e Fase 2 in sessioni separate.** Mai mischiare pensare e codificare.
-2. **`/clear` tra task diversi.** Contesto pulito = Claude più bravo.
-3. **L'ADR è il piano.** Se c'è l'ADR approvato, il coder può partire.
-4. **Approva tu le cose importanti** (commit, push, deploy): è l'HITL gate.
-5. **Mai incollare segreti in chat** (token, password). Vanno in `~/.zshrc` o
-   file di config, mai nei messaggi.
-6. **Se un test fallisce, NON disabilitarlo per farlo passare.** Chiama il
-   debugger.
-7. **Comandi lunghi nel terminale**: incollali uno alla volta, corti, per
-   evitare che si spezzino.
+1. **Phase 1 and Phase 2 in separate sessions.** Never mix thinking and coding.
+2. **`/clear` between different tasks.** Clean context = better Claude.
+3. **The ADR is the plan.** If the ADR is approved, the coder can start.
+4. **You approve the important things** (commit, push, deploy): that's the HITL gate.
+5. **Never paste secrets in chat** (tokens, passwords). They go in `~/.zshrc` or
+   config files, never in messages.
+6. **If a test fails, do NOT disable it to make it pass.** Call the debugger.
+7. **Long terminal commands**: paste them one at a time, short, to
+   avoid them getting cut off.
 
-## 9. Cosa succede da solo (non te ne preoccupare)
+## 9. What happens automatically (don't worry about it)
 
-- Apri un file `.py` → si caricano le regole Python (type hint, docstring…).
-  Stesso per `.swift`, `.ts/.tsx`, ecc.
-- Salvi un file → viene **formattato automaticamente** (ruff/prettier).
-- Provi a toccare `.env` o file segreti → **bloccato** automaticamente.
-- Comando rischioso → la modalità **auto** ti chiede conferma; comando sicuro e
-  noto → parte senza disturbarti.
+- Open a `.py` file → Python rules load (type hints, docstrings...).
+  Same for `.swift`, `.ts/.tsx`, etc.
+- Save a file → it gets **automatically formatted** (ruff/prettier).
+- Try to touch `.env` or secret files → **automatically blocked**.
+- Risky command → **auto** mode asks for confirmation; safe, known command →
+  runs without interrupting you.
 
 ---
 
-## 10. Il giro completo, in una riga
+## 10. The full cycle, in one line
 
-**cartella + git + venv → `claude` dentro → `/interview-driver` → `@architect`
-(ADR) → `/claude-md-generator` → sessione nuova → `@coder` → `@tester` →
-(`@debugger` se serve) → `@reviewer` → commit → ripeti.**
+**folder + git + venv → `claude` inside → `/interview-driver` → `@architect`
+(ADR) → `/claude-md-generator` → new session → `@coder` → `@tester` →
+(`@debugger` if needed) → `@reviewer` → commit → repeat.**
 
-Fine. Se ti perdi, riapri questa guida al passo dove sei.
+Done. If you get lost, reopen this guide at the step where you are.

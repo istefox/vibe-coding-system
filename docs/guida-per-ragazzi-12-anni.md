@@ -1,310 +1,310 @@
-# La guida facile al sistema Vibe Coding
+# The easy guide to the Vibe Coding system
 
-**Per chi è questa guida:** per chi non ha mai programmato (anche un ragazzino di 12 anni), e vuole capire **cosa è stato costruito** e **come usarlo** senza impazzire con parole difficili.
+**Who this guide is for:** anyone who has never programmed (even a 12-year-old kid), and wants to understand **what was built** and **how to use it** without getting lost in hard words.
 
-**Cosa imparerai:**
-1. Cos'è Claude Code (in 1 minuto)
-2. La squadra di "robot programmatori" che ti aiuta
-3. Gli strumenti magici (skill)
-4. Le guardie del castello (hook)
-5. Il quaderno di appunti del computer (memory)
-6. Come fare il tuo primo progetto dall'inizio alla fine
-7. Cose da NON fare
-8. Glossario delle parole difficili
-
----
-
-## 1. Cos'è Claude Code (in 1 minuto)
-
-Immagina di avere un **amico molto bravo a programmare** che vive dentro al tuo computer. Tu gli scrivi cosa vuoi fare e lui scrive il codice per te. Si chiama **Claude Code**.
-
-Però c'è un problema: un amico solo, anche se molto bravo, non sa fare tutto bene. Per esempio, è bravo a scrivere codice ma forse non è il migliore a controllarlo, o a fare test, o a riorganizzarlo.
-
-**La soluzione:** invece di un amico solo, abbiamo costruito **una squadra di amici-robot**, ognuno specializzato in una cosa diversa. Si chiama **sistema multi-agente** (multi = tanti, agente = robot che fa una cosa specifica).
+**What you will learn:**
+1. What Claude Code is (in 1 minute)
+2. The team of "programmer robots" that helps you
+3. The magic tools (skills)
+4. The castle guards (hooks)
+5. The computer's notebook (memory)
+6. How to do your first project from start to finish
+7. Things NOT to do
+8. Glossary of hard words
 
 ---
 
-## 2. La squadra di robot programmatori
+## 1. What Claude Code is (in 1 minute)
 
-Pensa a una squadra di calcio: ogni giocatore ha un ruolo. Anche qui abbiamo 8 "giocatori-robot", ognuno con il suo lavoro.
+Imagine having a **friend who is very good at programming** and lives inside your computer. You write what you want to do and they write the code for you. It is called **Claude Code**.
 
-| Robot | Cosa fa | Come ricordarlo |
+But there is a problem: one friend, even a very good one, cannot do everything well. For example, they are good at writing code but maybe not the best at checking it, or writing tests, or reorganizing it.
+
+**The solution:** instead of one friend, we built **a team of robot-friends**, each specializing in a different thing. It is called a **multi-agent system** (multi = many, agent = robot that does a specific thing).
+
+---
+
+## 2. The team of programmer robots
+
+Think of a soccer team: every player has a role. Here too we have 8 "robot-players", each with their own job.
+
+| Robot | What it does | How to remember it |
 |-------|---------|-----------------|
-| **architect** | Disegna i piani prima di costruire (come un architetto vero) | "Architetto" |
-| **coder** | Scrive il codice (il muratore della squadra) | "Codice = code" |
-| **reviewer** | Controlla che il codice sia fatto bene (il controllore) | "Review = controllare" |
-| **tester** | Fa i test (prova se tutto funziona) | "Test = prova" |
-| **debugger** | Trova i bug (i bachi nel codice) | "Bug = baco, debug = trova-baco" |
-| **refactorer** | Riorganizza il codice senza romperlo (mette in ordine) | "Refactor = rimettere insieme" |
-| **doc-writer** | Scrive la documentazione (i manuali di istruzione) | "Doc = documento" |
-| **researcher** | Ricerca informazioni su internet (il bibliotecario) | "Research = ricerca" |
+| **architect** | Draws the plans before building (like a real architect) | "Architect" |
+| **coder** | Writes the code (the bricklayer of the team) | "Code" |
+| **reviewer** | Checks that the code is well made (the inspector) | "Review = check" |
+| **tester** | Runs the tests (tries if everything works) | "Test = try" |
+| **debugger** | Finds bugs (the bugs in the code) | "Bug = bug, debug = find-the-bug" |
+| **refactorer** | Reorganizes the code without breaking it (tidies up) | "Refactor = put back together" |
+| **doc-writer** | Writes the documentation (instruction manuals) | "Doc = document" |
+| **researcher** | Searches for information online (the librarian) | "Research = search" |
 
-**Regola d'oro della squadra:**
-> Solo il "capitano" (l'**orchestrator**, cioè la sessione principale del terminale) può chiamare i giocatori. I giocatori NON possono chiamare altri giocatori. Sono come solisti.
+**The team's golden rule:**
+> Only the "captain" (the **orchestrator**, i.e., the main terminal session) can call the players. The players CANNOT call other players. They are like soloists.
 
-### Come si "chiama" un robot?
+### How do you "call" a robot?
 
-Tu non li chiami direttamente: scrivi cosa vuoi all'**orchestrator** (l'amico-Claude principale) e lui decide quale robot mandare. È un po' come dare un ordine all'allenatore, che poi manda in campo i giocatori giusti.
-
----
-
-## 3. Gli strumenti magici (skill)
-
-Ogni robot può usare degli **strumenti magici** chiamati **skill** (in inglese vuol dire "abilità"). Sono come gli oggetti di un videogioco: ognuno fa una cosa speciale.
-
-Ecco i 3 strumenti più importanti che abbiamo costruito **oggi**:
-
-### Strumento 1: `review-triage-fix` (il ciclo di controllo)
-
-**A cosa serve:** dopo che il coder scrive del codice, questo strumento fa girare il reviewer per trovare problemi, poi fa fixare al coder i problemi più gravi, e ripete finché tutto è a posto.
-
-**Esempio:** è come quando finisci i compiti, la mamma li controlla, ti dice "qui c'è un errore", tu correggi, e poi la mamma li ricontrolla.
-
-### Strumento 2: `refactor-snapshot` (il fotografo)
-
-**A cosa serve:** prima che il refactorer riorganizzi il codice, scatta una **fotografia** di come funziona. Dopo aver riorganizzato, scatta un'altra foto e le confronta. Se le foto sono uguali, perfetto. Se sono diverse, vuol dire che durante la riorganizzazione qualcosa si è rotto e ti avvisa.
-
-**Esempio:** è come quando rimetti in ordine la tua stanza e poi vuoi essere sicuro che tutti i giocattoli funzionino ancora. Prima li provi tutti (foto 1), li sposti, poi li riprovi tutti (foto 2). Se uno non funziona più, l'hai rotto durante il riordino.
-
-### Strumento 3: `concept-to-code` (il direttore d'orchestra)
-
-**A cosa serve:** è lo strumento più importante. Ti accompagna dall'**idea** ("voglio fare un gioco di dadi") al **codice finito**, passando per tutti gli step nel giusto ordine. Chiama in automatico l'architect, poi il coder, poi (se vuoi) il reviewer.
-
-**Esempio:** è come quando prepari un dolce. Non puoi mettere il forno acceso prima di avere gli ingredienti. C'è un ordine. `concept-to-code` è la ricetta che dice "prima fai X, poi Y, poi Z".
+You do not call them directly: you write what you want to the **orchestrator** (the main Claude-friend) and they decide which robot to send. It is a bit like giving an order to the coach, who then sends the right players onto the field.
 
 ---
 
-### Altri strumenti utili (li abbiamo trovati o costruiti)
+## 3. The magic tools (skills)
 
-| Strumento | Cosa fa |
+Every robot can use **magic tools** called **skills** (in English this means "abilities"). They are like items in a video game: each one does something special.
+
+Here are the 3 most important tools we built **today**:
+
+### Tool 1: `review-triage-fix` (the check cycle)
+
+**What it is for:** after the coder writes some code, this tool runs the reviewer to find problems, then gets the coder to fix the most serious ones, and repeats until everything is fine.
+
+**Example:** it is like when you finish your homework, your mum checks it, tells you "there is an error here", you correct it, and then your mum checks it again.
+
+### Tool 2: `refactor-snapshot` (the photographer)
+
+**What it is for:** before the refactorer reorganizes the code, it takes a **photograph** of how it works. After reorganizing, it takes another photo and compares them. If the photos are the same, perfect. If they are different, it means something broke during the reorganization and it warns you.
+
+**Example:** it is like when you tidy your room and want to make sure all your toys still work. First you try them all (photo 1), move them around, then try them all again (photo 2). If one no longer works, you broke it during the tidying.
+
+### Tool 3: `concept-to-code` (the orchestra conductor)
+
+**What it is for:** this is the most important tool. It takes you from the **idea** ("I want to make a dice game") to the **finished code**, going through all the steps in the right order. It automatically calls the architect, then the coder, then (if you want) the reviewer.
+
+**Example:** it is like when you bake a cake. You cannot turn the oven on before you have the ingredients. There is an order. `concept-to-code` is the recipe that says "first do X, then Y, then Z".
+
+---
+
+### Other useful tools (we found or built them)
+
+| Tool | What it does |
 |-----------|---------|
-| `interview-driver` | Ti fa tante domande per capire cosa vuoi davvero (intervista) |
-| `adr-writer` | Scrive un documento speciale chiamato ADR (vedi glossario) |
-| `claude-md-generator` | Crea il "manuale" del progetto (CLAUDE.md) |
-| `brainstorming` | Ti aiuta a pensare insieme prima di iniziare |
-| `commit` | Salva il tuo lavoro su Git (vedi glossario) |
+| `interview-driver` | Asks you lots of questions to understand what you really want (an interview) |
+| `adr-writer` | Writes a special document called an ADR (see glossary) |
+| `claude-md-generator` | Creates the project "manual" (CLAUDE.md) |
+| `brainstorming` | Helps you think together before starting |
+| `commit` | Saves your work on Git (see glossary) |
 
 ---
 
-## 4. Le guardie del castello (hook)
+## 4. The castle guards (hooks)
 
-Immagina che il tuo computer sia un castello. Ci sono dei punti pericolosi: per esempio, **eliminare un file** è pericoloso perché se sbagli perdi tutto.
+Imagine your computer is a castle. There are dangerous spots: for example, **deleting a file** is dangerous because if you make a mistake you lose everything.
 
-Per questo abbiamo messo delle **guardie automatiche** chiamate **hook** (in inglese "gancio", perché si "agganciano" alle azioni pericolose). Quando un robot sta per fare qualcosa di pericoloso, la guardia lo ferma e chiede prima di proseguire.
+That is why we put **automatic guards** called **hooks** (in English "hook", because they "hook onto" dangerous actions). When a robot is about to do something dangerous, the guard stops it and asks first before continuing.
 
-**Le nostre guardie:**
+**Our guards:**
 
-- **`stop-gate`**: ferma il robot prima che faccia cose pericolose (come eliminare file)
-- **`approve-test-cmd`**: chiede prima di lanciare un comando che fa partire i test (perché i test possono modificare file)
-- **`migrate-trust-paths`**: pulisce la lista degli "amici fidati" del castello
+- **`stop-gate`**: stops the robot before it does dangerous things (like deleting files)
+- **`approve-test-cmd`**: asks before running a command that launches tests (because tests can modify files)
+- **`migrate-trust-paths`**: cleans the list of "trusted friends" of the castle
 
-Tu non devi fare niente per le guardie: lavorano in automatico in sottofondo.
+You do not have to do anything for the guards: they work automatically in the background.
 
 ---
 
-## 5. Il quaderno di appunti del computer (memory)
+## 5. The computer's notebook (memory)
 
-Hai presente quando un compagno di scuola ti dice una cosa e tu te la scrivi in un quaderno per non dimenticartela? Il nostro sistema fa esattamente questo, ma in automatico.
+You know when a classmate tells you something and you write it in a notebook so you don't forget? Our system does exactly that, automatically.
 
-**Dove vive il quaderno:**
+**Where the notebook lives:**
 `~/.claude/projects/.../memory/`
 
-**Cosa scrive:**
-- Cose su di te (esempio: "Stefano preferisce risposte tecniche e brevi")
-- Lezioni imparate (esempio: "questo bash non supporta gli array associativi")
-- Stato dei progetti in corso
-- Link a sistemi esterni
+**What it writes:**
+- Things about you (example: "Stefano prefers technical, brief answers")
+- Lessons learned (example: "this bash does not support associative arrays")
+- Status of ongoing projects
+- Links to external systems
 
-**Quando lo usa:**
-Ogni volta che inizia una nuova sessione, il computer rilegge il quaderno e ricorda tutto.
+**When it is used:**
+Every time a new session starts, the computer re-reads the notebook and remembers everything.
 
-### Il manuale del progetto: `CLAUDE.md`
+### The project manual: `CLAUDE.md`
 
-Oltre al quaderno generale, ogni progetto ha il suo **manuale** chiamato **`CLAUDE.md`**. È come la guida di un videogioco: spiega le regole specifiche di quel progetto.
+Besides the general notebook, every project has its own **manual** called **`CLAUDE.md`**. It is like a video game guide: it explains the specific rules for that project.
 
 ---
 
-## 6. STEP-BY-STEP: come fare il tuo primo progetto
+## 6. STEP-BY-STEP: how to do your first project
 
-Diciamo che vuoi fare un piccolo gioco di indovinello. Ecco come faresti.
+Let's say you want to make a small guessing game. Here is how you would do it.
 
-### Step 1: Apri il terminale e scrivi `claude`
+### Step 1: Open the terminal and type `claude`
 
-Si apre la chat con l'amico-Claude (l'orchestrator).
+The chat with the Claude-friend (the orchestrator) opens.
 
-### Step 2: Lancia `/concept-to-code`
+### Step 2: Launch `/concept-to-code`
 
-Digita questo e premi invio:
+Type this and press enter:
 
 ```
-/concept-to-code gioco di indovinello dei numeri
+/concept-to-code number guessing game
 ```
 
-Da qui in avanti il sistema ti guida.
+From here on the system guides you.
 
-### Step 3: L'intervista (Step 1 del chain)
+### Step 3: The interview (Step 1 of the chain)
 
-L'`interview-driver` ti farà delle domande per capire bene cosa vuoi:
-- Quale linguaggio? (Python? JavaScript?)
-- Quanti tentativi può fare il giocatore?
-- Vuoi che il computer suggerisca "più alto" / "più basso"?
-- Vuoi un punteggio?
+The `interview-driver` will ask you questions to understand exactly what you want:
+- Which language? (Python? JavaScript?)
+- How many attempts can the player make?
+- Do you want the computer to suggest "higher" / "lower"?
+- Do you want a score?
 
-Tu rispondi. Alla fine viene scritto un file chiamato `SPEC.md` (la "ricetta" del tuo progetto).
+You answer. At the end a file called `SPEC.md` is written (the "recipe" for your project).
 
-### Step 4: PRIMO GATE — Tu approvi la spec
+### Step 4: FIRST GATE — You approve the spec
 
-Il sistema ti mostra `SPEC.md` e chiede: **"Va bene così?"**
+The system shows you `SPEC.md` and asks: **"Is this ok?"**
 
-Se sì, prosegui. Se no, modifichi e ripeti.
+If yes, continue. If no, you change it and repeat.
 
-### Step 5: L'architettura (Step 2 del chain)
+### Step 5: The architecture (Step 2 of the chain)
 
-Viene chiamato il robot **architect**. Lui legge `SPEC.md` e produce 3 cose:
-- Un **ADR** (decisione architetturale — vedi glossario)
-- Un file **`ARCH.md`** (come è organizzato il progetto)
-- Un **piano TDD** (i passi da seguire)
+The robot **architect** is called. They read `SPEC.md` and produce 3 things:
+- An **ADR** (architectural decision — see glossary)
+- A file **`ARCH.md`** (how the project is organized)
+- A **TDD plan** (the steps to follow)
 
-### Step 6: SECONDO GATE — Tu approvi l'architettura
+### Step 6: SECOND GATE — You approve the architecture
 
-Il sistema ti mostra i 3 file. Tu controlli e dici "ok, prosegui" oppure "cambia questo".
+The system shows you the 3 files. You check and say "ok, continue" or "change this".
 
-### Step 7: Il manuale del progetto (Step 3 del chain)
+### Step 7: The project manual (Step 3 of the chain)
 
-Viene chiamato lo strumento **`claude-md-generator`** che scrive il **manuale del progetto** (`CLAUDE.md`).
+The tool **`claude-md-generator`** is called, which writes the **project manual** (`CLAUDE.md`).
 
-### Step 8: TERZO GATE — Tu approvi il manuale
+### Step 8: THIRD GATE — You approve the manual
 
-Stessa cosa: controlli, approvi.
+Same thing: you check, you approve.
 
-### Step 9: Fresh session (Step 4 del chain — IMPORTANTE)
+### Step 9: Fresh session (Step 4 of the chain — IMPORTANT)
 
-Il sistema ti dice:
+The system tells you:
 
-> "Ora chiudi questa sessione e aprine una nuova. Quando sei nella nuova, scrivi: `/concept-to-code resume <percorso-del-manifest>`"
+> "Now close this session and open a new one. When you are in the new one, type: `/concept-to-code resume <manifest-path>`"
 
-**Perché?** Perché la sessione attuale è piena di domande/risposte dell'intervista. Per il prossimo step serve "una mente fresca" (in inglese "fresh session"). È come quando hai studiato 3 ore e devi fare una pausa prima di iniziare a fare il compito vero.
+**Why?** Because the current session is full of the interview questions and answers. For the next step you need "a fresh mind" (a fresh session). It is like when you have studied for 3 hours and need a break before starting the actual homework.
 
-### Step 10: L'implementazione (Step 5 del chain)
+### Step 10: The implementation (Step 5 of the chain)
 
-Nella nuova sessione, il sistema chiama il robot **coder** che, leggendo tutti i file (`SPEC.md`, ADR, `ARCH.md`, `CLAUDE.md`), inizia a scrivere il codice.
+In the new session, the system calls the robot **coder** who, reading all the files (`SPEC.md`, ADR, `ARCH.md`, `CLAUDE.md`), starts writing the code.
 
-**Cosa fa di speciale il coder:** prima di ogni modifica, dichiara una **etichetta** che dice che tipo di modifica sta facendo:
-- `PATTERN: ADD` = sto aggiungendo codice nuovo
-- `PATTERN: REMOVE` = sto cancellando codice
-- `PATTERN: REPLACE` = sto sostituendo codice vecchio con nuovo (e DEVE dire cosa toglie + cosa mette)
-- `PATTERN: MODIFY` = sto modificando una cosa esistente senza cambiare struttura
+**What the coder does specially:** before every change, it declares a **label** saying what kind of change it is making:
+- `PATTERN: ADD` = I am adding new code
+- `PATTERN: REMOVE` = I am deleting code
+- `PATTERN: REPLACE` = I am substituting old code with new (and MUST say what it removes + what it adds)
+- `PATTERN: MODIFY` = I am modifying something existing without changing structure
 
-Questa etichetta si chiama **Pre-flight Pattern Classifier** ed è una delle cose che abbiamo costruito oggi. Serve a evitare che il coder dimentichi di cancellare codice vecchio quando lo sostituisce con nuovo.
+This label is called the **Pre-flight Pattern Classifier** and is one of the things we built today. It prevents the coder from forgetting to delete old code when replacing it with new.
 
-### Step 11: Review (Step 6 del chain — opzionale)
+### Step 11: Review (Step 6 of the chain — optional)
 
-Se vuoi, lanci `review-triage-fix` che fa girare il **reviewer** per controllare il codice, segnalare problemi, e fa fixare al coder le cose importanti.
+If you want, you launch `review-triage-fix` which runs the **reviewer** to check the code, flag problems, and gets the coder to fix the important things.
 
-### Step 12: Hai finito!
+### Step 12: You are done!
 
-Il tuo gioco è pronto. Lo provi. Se funziona, festeggi. Se no, vedi sotto.
-
----
-
-## 7. Cose da NON fare (sicurezza)
-
-1. **MAI cancellare file** senza che ti venga chiesto. Il computer non può rimettere indietro le cose cancellate.
-2. **MAI commit di file segreti** (password, chiavi API, file `.env`). Sono come la chiave di casa: non li dai a nessuno.
-3. **MAI disabilitare un test** solo per farlo passare. Un test rosso ti dice che c'è un problema. Spegnerlo non risolve il problema, lo nasconde.
-4. **MAI lanciare `rm -rf`** senza pensarci 3 volte. Cancella tutto e per sempre.
-5. **MAI scrivere direttamente sul ramo `main`** di Git. Sempre su un **feature branch** (vedi glossario).
-6. **CHIEDI SEMPRE** prima di fare cose che non capisci. Meglio chiedere 10 volte che rompere tutto 1 volta.
+Your game is ready. You try it. If it works, celebrate. If not, see below.
 
 ---
 
-## 8. Se qualcosa va storto
+## 7. Things NOT to do (safety)
 
-### Caso A: il codice non funziona
-1. Chiama il robot **debugger**: "trova il problema in questo codice"
-2. Lui ti dice cosa non va e perché
-3. Tu (o il coder) lo fixate
-
-### Caso B: il computer dice "comando non trovato"
-1. Forse hai scritto male un comando
-2. Controlla le maiuscole/minuscole (il computer è schizzinoso)
-
-### Caso C: i test diventano rossi
-1. Vuol dire che qualcosa si è rotto
-2. NON disabilitare i test! Trova il problema.
-3. Lancia il **debugger** o chiedi all'amico-Claude
-
-### Caso D: hai paura di rompere tutto
-1. Prima di fare modifiche grandi, lancia il **refactor-snapshot** (il fotografo)
-2. Così se rompi qualcosa lo sai subito
+1. **NEVER delete files** without being asked. The computer cannot put back deleted things.
+2. **NEVER commit secret files** (passwords, API keys, `.env` files). They are like a house key: you don't give them to anyone.
+3. **NEVER disable a test** just to make it pass. A red test tells you there is a problem. Turning it off does not solve the problem, it hides it.
+4. **NEVER run `rm -rf`** without thinking 3 times. It deletes everything, permanently.
+5. **NEVER write directly to the `main` branch** of Git. Always on a **feature branch** (see glossary).
+6. **ALWAYS ASK** before doing things you don't understand. Better to ask 10 times than break everything 1 time.
 
 ---
 
-## 9. GLOSSARIO — parole difficili spiegate
+## 8. If something goes wrong
 
-| Parola | Cosa vuol dire (versione semplice) |
+### Case A: the code does not work
+1. Call the robot **debugger**: "find the problem in this code"
+2. It tells you what is wrong and why
+3. You (or the coder) fix it
+
+### Case B: the computer says "command not found"
+1. Maybe you typed a command wrong
+2. Check upper/lowercase (the computer is fussy)
+
+### Case C: tests turn red
+1. It means something broke
+2. Do NOT disable the tests! Find the problem.
+3. Launch the **debugger** or ask the Claude-friend
+
+### Case D: you are afraid of breaking everything
+1. Before making big changes, launch **refactor-snapshot** (the photographer)
+2. That way if you break something you know straight away
+
+---
+
+## 9. GLOSSARY — hard words explained
+
+| Word | What it means (simple version) |
 |--------|-----------------------------------|
-| **agent / agente** | Un robot che fa una cosa specifica |
-| **orchestrator** | Il robot-capo che chiama gli altri robot |
-| **skill** | Uno strumento magico che un robot può usare |
-| **hook** | Una guardia automatica che ferma cose pericolose |
-| **CLAUDE.md** | Il manuale di istruzioni di un progetto |
-| **memory** | Il quaderno di appunti del computer |
-| **terminal** | La finestra nera dove scrivi i comandi |
-| **prompt** | Quello che scrivi all'amico-Claude |
-| **Git** | Un sistema che salva tutte le versioni del tuo codice (come "salva con nome" su scala enorme) |
-| **commit** | Salvare una versione del codice in Git |
-| **branch** | Una "versione parallela" del codice, dove puoi sperimentare senza rompere quella principale |
-| **main branch** | La versione "ufficiale" del codice |
-| **feature branch** | Una versione di prova dove fai cose nuove |
-| **PR (Pull Request)** | Una richiesta di unire il tuo branch con il main |
-| **ADR** | Architecture Decision Record — un documento che spiega PERCHÉ abbiamo deciso una cosa in un certo modo |
-| **SPEC** | Specifica — cosa deve fare il programma (la ricetta) |
-| **ARCH** | Architettura — come è organizzato il programma (lo schema del palazzo) |
-| **TDD** | Test-Driven Development — scrivi prima i test, poi il codice. Funziona meglio di tutti gli altri metodi |
-| **plan / piano** | La lista dei passi da seguire (la to-do list) |
-| **harness** | Un sistema automatico che controlla che le cose siano ancora a posto |
-| **anchor** | Una specie di "segnalibro" nel codice che permette ai test automatici di trovare le cose |
-| **bash** | Il linguaggio dei comandi del terminale (Mac/Linux) |
-| **Python** | Un linguaggio di programmazione semplice e potente |
-| **MCP** | Una connessione a servizi esterni (es. GitHub, Slack) |
-| **fresh session** | Aprire una nuova chat con l'amico-Claude da zero |
-| **HITL gate** | "Human In The Loop" — un punto dove serve la tua approvazione |
-| **dispatch** | Mandare in campo un robot |
-| **manifest** | Una lista (in formato YAML) che dice cosa contiene un progetto e a che punto è |
+| **agent** | A robot that does a specific thing |
+| **orchestrator** | The boss-robot that calls the other robots |
+| **skill** | A magic tool that a robot can use |
+| **hook** | An automatic guard that stops dangerous things |
+| **CLAUDE.md** | The instruction manual of a project |
+| **memory** | The computer's notebook |
+| **terminal** | The black window where you type commands |
+| **prompt** | What you type to the Claude-friend |
+| **Git** | A system that saves all versions of your code (like "save as" on a huge scale) |
+| **commit** | Saving a version of the code in Git |
+| **branch** | A "parallel version" of the code, where you can experiment without breaking the main one |
+| **main branch** | The "official" version of the code |
+| **feature branch** | A trial version where you do new things |
+| **PR (Pull Request)** | A request to merge your branch with main |
+| **ADR** | Architecture Decision Record — a document that explains WHY we decided something in a certain way |
+| **SPEC** | Specification — what the program must do (the recipe) |
+| **ARCH** | Architecture — how the program is organized (the building plan) |
+| **TDD** | Test-Driven Development — write tests first, then the code. It works better than any other method |
+| **plan** | The list of steps to follow (the to-do list) |
+| **harness** | An automatic system that checks things are still working |
+| **anchor** | A kind of "bookmark" in the code that lets automatic tests find things |
+| **bash** | The language of terminal commands (Mac/Linux) |
+| **Python** | A simple and powerful programming language |
+| **MCP** | A connection to external services (e.g., GitHub, Slack) |
+| **fresh session** | Opening a new chat with the Claude-friend from scratch |
+| **HITL gate** | "Human In The Loop" — a point where your approval is needed |
+| **dispatch** | Sending a robot onto the field |
+| **manifest** | A list (in YAML format) that says what a project contains and where it is |
 
 ---
 
-## 10. Riassunto in 5 frasi
+## 10. Summary in 5 sentences
 
-1. **Claude Code** è un amico programmatore che vive nel terminale.
-2. Lavora con una **squadra di 8 robot specializzati**.
-3. Ognuno usa **strumenti magici (skill)** per fare il suo lavoro.
-4. Quando vuoi un nuovo progetto, lancia **`/concept-to-code`** e segui le istruzioni.
-5. **Mai cancellare cose senza pensarci** e **chiedi sempre** se non sei sicuro.
-
----
-
-## 11. Cose buffe da sapere
-
-- Il nostro sistema sa che **gli script bash girano su una versione del 2007** (bash 3.2 di Mac), quindi quando scrive codice bash sta attento a non usare cose nuove. È come scrivere a una nonna in dialetto.
-- I robot lavorano **in parallelo** (tipo fino a 4 contemporaneamente): l'orchestrator può mandare 4 robot in 4 finestre diverse a fare cose diverse, e poi raccoglie tutti i risultati. È come avere 4 cuochi che cucinano 4 piatti diversi nella stessa cucina.
-- Quando un robot sbaglia, **non si nasconde**: te lo dice. Per esempio se gli chiedi di cancellare un file importante, dice "no, fammi sapere se sei sicuro".
-- Ogni tanto **Anthropic** (la ditta che fa Claude) aggiorna i robot e diventano più bravi. Il sistema dietro è studiato per non rompersi con gli aggiornamenti.
+1. **Claude Code** is a programmer friend that lives in the terminal.
+2. It works with a **team of 8 specialized robots**.
+3. Each one uses **magic tools (skills)** to do their job.
+4. When you want a new project, launch **`/concept-to-code`** and follow the instructions.
+5. **Never delete things without thinking** and **always ask** if you are not sure.
 
 ---
 
-## 12. Cosa fare domani
+## 11. Fun things to know
 
-Se questa è la tua prima volta:
-
-1. **Apri il terminale** e scrivi `claude` per chiamare l'amico-Claude
-2. Chiedigli "**aiutami a fare un piccolo programma in Python che mi dice se un numero è pari o dispari**"
-3. Guarda cosa fa
-4. Quando hai finito quel programma, prova con `**/concept-to-code**` per qualcosa di più complicato
-
-E ricorda: **non c'è niente di magico**. È tutto codice e file. Se rompi qualcosa, di solito si può aggiustare. L'importante è **chiedere**, **controllare**, e **divertirsi**.
+- Our system knows that **bash scripts run on a 2007 version** (Mac's bash 3.2), so when it writes bash code it is careful not to use new features. It is like writing to a grandparent in dialect.
+- The robots work **in parallel** (up to 4 at the same time): the orchestrator can send 4 robots to 4 different windows to do 4 different things, and then collects all the results. It is like having 4 cooks making 4 different dishes in the same kitchen.
+- When a robot makes a mistake, **it does not hide it**: it tells you. For example if you ask it to delete an important file, it says "no, let me know if you are sure".
+- Every now and then **Anthropic** (the company that makes Claude) updates the robots and they get better. The system underneath is designed not to break with updates.
 
 ---
 
-*Questa guida è la versione "facile" del documento tecnico `vibe-coding-system.md`. Se un giorno vorrai i dettagli completi, quello è il file da leggere — ma non prima dei 16 anni, fa venire mal di testa anche agli adulti.*
+## 12. What to do tomorrow
+
+If this is your first time:
+
+1. **Open the terminal** and type `claude` to call the Claude-friend
+2. Ask it "**help me make a small Python program that tells me if a number is even or odd**"
+3. Watch what it does
+4. When you have finished that program, try **/concept-to-code** for something more complicated
+
+And remember: **there is nothing magic about it**. It is all code and files. If you break something, you can usually fix it. The important thing is to **ask**, **check**, and **have fun**.
+
+---
+
+*This guide is the "easy" version of the technical document `vibe-coding-system.md`. If you ever want the full details, that is the file to read — but not before you are 16, it gives adults headaches too.*

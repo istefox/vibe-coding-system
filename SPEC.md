@@ -1,71 +1,71 @@
-# SPEC — Modalità anonimizzazione contributo strumento per repo pubblici
+# SPEC — Contribution anonymization mode for public repos
 
-**Data:** 2026-05-23
-**Topic:** gate y/n nel chain `concept-to-code` + skill `clean-public-repo`
+**Date:** 2026-05-23
+**Topic:** y/n gate in the `concept-to-code` chain + skill `clean-public-repo`
 
-## Obiettivo
+## Objective
 
-Permettere che un repo pubblico sia giudicato per la **qualità del codice**, non penalizzato per lo strumento usato. Il sistema produce repo puliti (commit essenziali, doc concisi, nessun file inutile) e **senza tracce esplicite dello strumento** (trailer, commenti, stringhe, emoji-slop). Il lavoro resta dell'utente: lui lo dirige, rivede, testa ed è responsabile.
+Allow a public repo to be judged on **code quality**, not penalized for the tool used. The system produces clean repos (essential commits, concise docs, no unnecessary files) and **with no explicit traces of the tool** (trailers, comments, strings, emoji-slop). The work remains the user's: they direct it, review it, test it and are responsible for it.
 
-## Inquadramento etico (vincolo, non opzione)
+## Ethical framing (constraint, not option)
 
-- Scopo: **non sbandierare lo strumento** + **qualità del codice**.
-- NON è: falsificare autori (mai attribuire a persone reali che non hanno contribuito), né mentire attivamente se qualcuno chiede esplicitamente.
-- L'attribuzione dello strumento è già disattivata nativamente (`settings.json: attribution {commit:"", pr:""}`).
+- Purpose: **not advertising the tool** + **code quality**.
+- NOT: falsifying authors (never attributing to real people who did not contribute), nor actively lying if someone explicitly asks.
+- Tool attribution is already disabled natively (`settings.json: attribution {commit:"", pr:""}`).
 
 ## Scope
 
 **In scope:**
-1. **Gate di attivazione** nel chain `concept-to-code` (auto-detect + conferma): se il repo ha un remote GitHub **pubblico**, il chain propone la modalità anonima con `[y/n]`; su repo privati/locali resta **silenzioso**.
-2. **Modalità anonima durante il chain** (se attivata): commit corti/essenziali, doc concisi, nessun file slop, nessun commento-traccia — output già conforme.
-3. **Skill `clean-public-repo`** (nome provvisorio): audit + cleanup di un repo, sia nuovo sia **esistente** (cleanup retroattivo, es. plugin Obsidian già pubblicato).
+1. **Activation gate** in the `concept-to-code` chain (auto-detect + confirmation): if the repo has a **public** GitHub remote, the chain proposes anonymous mode with `[y/n]`; on private/local repos it stays **silent**.
+2. **Anonymous mode during the chain** (if activated): short/essential commits, concise docs, no slop files, no trace-comments — output already compliant.
+3. **Skill `clean-public-repo`** (provisional name): audit + cleanup of a repo, both new and **existing** (retroactive cleanup, e.g., already-published Obsidian plugin).
 
 **Out of scope:**
-- Normalizzazione stilistica per ingannare review umane (non si fa).
-- Test E2E / altri workflow (separati).
+- Stylistic normalization to deceive human reviews (not done).
+- E2E tests / other workflows (separate).
 
-## Requisiti funzionali
+## Functional requirements
 
-- **R1 — Attivazione:** auto-detect remote GitHub pubblico → gate `[y/n]`. Silenzioso su privati/locali. (Decisione utente, non auto-applicata.)
-- **R2 — Azione ibrida:** la skill **segnala** (report "pronto / da-pulire") e **rimuove su conferma** dell'utente. Mai rimozione cieca.
-- **R3 — Cosa pulire (tutto ove possa comparire la traccia):**
-  - Trailer commit (`Co-Authored-By: Claude`, `Generated with Claude Code`)
-  - Commenti-traccia nel codice (`// added by Claude`, riferimenti a task/AI, TODO generati)
-  - File slop / inutili (README ridondanti, scratch) + doc gonfi (da accorciare)
-  - Stringhe `claude`/`AI` + emoji decorative non richieste
-  - Qualunque altro residuo testuale riconducibile allo strumento
-- **R4 — Commit history esistente:** trattamento **caso per caso con conferma**. Il rewrite cambia gli SHA → solo **prima del push pubblico**.
-- **R5 — Safety del rewrite:** prima di riscrivere la history, **backup branch/tag automatico** + **dry-run** (mostra cosa cambierebbe) prima di applicare.
-- **R6 — Scope retroattivo:** la skill funziona anche standalone su repo esistenti, non solo dal chain.
+- **R1 — Activation:** auto-detect public GitHub remote → `[y/n]` gate. Silent on private/local. (User decision, not auto-applied.)
+- **R2 — Hybrid action:** the skill **reports** (report "ready / needs-cleaning") and **removes on user confirmation**. Never blind removal.
+- **R3 — What to clean (everywhere the trace may appear):**
+  - Commit trailers (`Co-Authored-By: Claude`, `Generated with Claude Code`)
+  - Trace comments in code (`// added by Claude`, references to tasks/AI, generated TODOs)
+  - Slop / unnecessary files (redundant READMEs, scratch files) + bloated docs (to shorten)
+  - `claude`/`AI` strings + decorative emojis not requested
+  - Any other textual residue traceable to the tool
+- **R4 — Existing commit history:** treatment **case by case with confirmation**. Rewrite changes SHAs → only **before a public push**.
+- **R5 — Rewrite safety:** before rewriting history, **automatic backup branch/tag** + **dry-run** (shows what would change) before applying.
+- **R6 — Retroactive scope:** the skill also works standalone on existing repos, not only from the chain.
 
-## Vincoli operativi
+## Operational constraints
 
-- Bash 3.2-clean per ogni script (ambiente macOS system bash).
-- Coexistenza con il sistema esistente (chain v2, hook attivi, harness verdi) — anchor-preserving.
-- Repo `vibe-coding-system` resta non-git; la feature opera sui **repo target** (git).
-- Lingua: doc/comunicazione in italiano; codice/commit in inglese.
+- Bash 3.2-clean for all scripts (macOS system bash environment).
+- Coexistence with the existing system (chain v2, active hooks, green harnesses) — anchor-preserving.
+- Repo `vibe-coding-system` stays non-git; the feature operates on **target repos** (git).
+- Language: docs/communication in English; code/commits in English.
 
-## Edge case
+## Edge cases
 
-- Repo senza remote / remote privato → gate silenzioso, modalità non proposta.
-- Repo con history lunga e molte tracce → dry-run + backup obbligatori; rewrite può essere oneroso.
-- Falso positivo su stringa legittima (es. una dipendenza che si chiama davvero "claude-*", o "AI" in un nome di dominio) → la rimozione su-conferma protegge; segnalare, non rimuovere ciecamente.
-- Repo già pushato pubblicamente → il rewrite della history richiede force-push (azione distruttiva remota): HITL esplicito, mai automatico.
-- Branch detached / non-git → la skill degrada senza errori.
+- Repo without remote / private remote → silent gate, mode not proposed.
+- Repo with long history and many traces → mandatory dry-run + backup; rewrite can be costly.
+- False positive on a legitimate string (e.g., a dependency genuinely named "claude-*", or "AI" in a domain name) → removal-on-confirmation protects; flag, do not remove blindly.
+- Repo already publicly pushed → history rewrite requires force-push (destructive remote action): explicit HITL, never automatic.
+- Detached branch / non-git → skill degrades without errors.
 
 ## Success criteria / Definition of Done
 
-- Lanciando `clean-public-repo` su un repo, ottengo un **report** che elenca ogni traccia trovata (per categoria R3) con posizione.
-- Su conferma, le tracce vengono rimosse; il repo resta funzionante (test verdi pre/post).
-- Il gate nel chain si attiva solo su remote pubblico e rispetta la scelta `y/n`.
-- Il rewrite della history avviene solo con backup + dry-run + conferma; mai force-push automatico.
-- Zero tracce esplicite residue nello scope R3 dopo un cleanup confermato.
-- Nessuna falsificazione di autori. Nessun test/guardrail del sistema rotto (harness verdi).
+- Running `clean-public-repo` on a repo gives a **report** listing every trace found (by R3 category) with location.
+- On confirmation, traces are removed; the repo stays functional (tests green pre/post).
+- The gate in the chain fires only on public remotes and respects the `y/n` choice.
+- History rewrite only happens with backup + dry-run + confirmation; never automatic force-push.
+- Zero explicit residual traces in the R3 scope after a confirmed cleanup.
+- No author falsification. No system test/guardrail broken (harnesses green).
 
-## Da decidere in fase di design (brainstorm/architect)
+## To decide in the design phase (brainstorm/architect)
 
-- Dove esattamente il gate nella state machine del chain (Gate 0 esteso / nuovo gate dedicato).
-- Se la modalità anonima è un flag nel manifest che influenza i template di dispatch, o un layer separato.
-- Tecnica di history rewrite (filter-repo / rebase / filter-branch) e relativi trade-off.
-- Architettura della skill: bash + git, set di pattern di detection, formato del report.
-- Nome definitivo della skill.
+- Exactly where the gate fits in the chain state machine (extended Gate 0 / dedicated new gate).
+- Whether anonymous mode is a manifest flag that influences dispatch templates, or a separate layer.
+- History rewrite technique (filter-repo / rebase / filter-branch) and related trade-offs.
+- Skill architecture: bash + git, detection pattern set, report format.
+- Definitive skill name.
