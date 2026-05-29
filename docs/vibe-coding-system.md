@@ -243,6 +243,7 @@ tools: Read, Edit, Write, Glob, Grep, Bash
 model: sonnet
 isolation: worktree
 effort: medium
+memory: local
 ---
 
 You are a senior implementation engineer.
@@ -258,9 +259,11 @@ Your job:
 
 Stack rules come from project CLAUDE.md and .claude/rules/. Read them before writing.
 Run in an isolated worktree to avoid conflicts with other parallel coders.
+Use the Memory tool (not Edit/Write) to persist context across batches — task completion status, discovered patterns, key decisions. Store sparingly; prefer the return report for anything that fits there.
 ```
 
-> **Deployment note (2026-05-26):** `isolation: worktree` is now active in the deployed file `~/.claude/agents/coder.md`. Behavior on projects without git: silent fallback, direct edits (no error). The resulting branch on git repos is managed by the orchestrator in the review/merge phase — no changes required to the concept-to-code chain.
+> **Deployment note (2026-05-26):** `isolation: worktree` is now active in the deployed file `~/.claude/agents/coder.md`.
+> **Deployment note (2026-05-29):** `memory: local` added. Coder gets a Memory tool scoped to `.claude/agent-memory-local/coder/`. Safety note: `memory:local` adds a dedicated Memory tool; coder must use ONLY that tool for memory writes — never Edit/Write on `.claude/` paths. The pattern-enforce hook (ADR-0001) gates all Edit/Write calls, providing an additional guardrail. See ADR-0016 §Smoke Test and ADR-0012 for memory architecture context.
 
 ### 3.3 reviewer
 
@@ -430,12 +433,18 @@ description: Researches library documentation, API references, best practices, n
 tools: Read, Grep, Glob, WebSearch, WebFetch
 model: haiku
 effort: low
+mcpServers:
+  context7:
+    command: npx
+    args:
+      - -y
+      - "@upstash/context7-mcp"
 ---
 
 You are a technical researcher.
 
 Sources priority:
-1. Official documentation of the library/standard
+1. Official documentation of the library/standard (prefer context7 MCP for library docs)
 2. Authoritative blogs (library author, language team)
 3. Well-cited Stack Overflow / GitHub discussions
 4. Recent dates only (last 18 months for fast-moving libraries)
@@ -449,7 +458,37 @@ Output discipline:
 Return a concise brief, not an essay. The orchestrator decides what to act on.
 ```
 
-### 3.9 Cost model
+> **Deployment note (2026-05-29):** `mcpServers: context7` added inline. This makes researcher self-contained — no dependency on the global context7 plugin being installed. If both global and inline are present, they resolve to the same server; no conflict.
+
+### 3.9 Agent frontmatter — available fields (v2.1.154+)
+
+| Field | Values | Purpose |
+|---|---|---|
+| `name` | string | Agent ID — used in dispatch and audit logs |
+| `description` | string | Trigger description for orchestrator routing |
+| `tools` | comma list | Allowed tools; omit a tool to restrict access |
+| `model` | `opus`, `sonnet`, `haiku` | Model tier; defaults to session model |
+| `effort` | `low`/`medium`/`high`/`xhigh`/`max` | Effort level; overrides session `effortLevel` |
+| `color` | color name | UI label color; cosmetic only |
+| `isolation` | `worktree` | Run in an isolated git worktree (coder only) |
+| `memory` | `local` / `project` / `user` | Persistent memory scope for this agent |
+| `mcpServers` | YAML map | Inline MCP server definitions scoped to this agent |
+
+**`memory: local`** scopes memory to `.claude/agent-memory-local/<name>/` — git-ignored, NOT the curated orchestrator auto-memory. The agent gets a dedicated Memory tool. All Edit/Write operations still go through the normal tool gate (pattern-enforce hook for coder). Use Memory tool only for memory writes, never Edit/Write on `.claude/` paths.
+
+**`mcpServers` scoping rule:** general-purpose MCPs (github, sequential-thinking) stay global (settings.json or plugins). Domain-specific MCPs (project-specific databases, APIs, Figma tokens) go in the agent's frontmatter — this avoids polluting every session with servers only one agent needs, and makes the agent self-contained when shared across repos.
+
+```yaml
+# Example: researcher with inline context7 (self-contained, no plugin dependency)
+mcpServers:
+  context7:
+    command: npx
+    args:
+      - -y
+      - "@upstash/context7-mcp"
+```
+
+### 3.10 Cost model
 
 Models and effort levels chosen to reduce token spend while maintaining quality:
 
