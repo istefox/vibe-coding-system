@@ -80,6 +80,10 @@ Sec. 7.4/7.5 (admonitions updated to the as-built reference) and 7.6 (filesystem
 layout updated to the deployed state) reflect this. Tier validation on the
 pilot project = single open item (see sec. 17).
 
+### Update 2026-05-29 (2)
+
+- **Chain-type routing at Gate 0** (sec. 11, ADR-0017): Gate 0 now fires on every invocation and routes to one of three paths. **Express** (chain_path=express): <10 files, single session, no sub-agents, plan mode + direct execution, manifest only. **Hybrid** (chain_path=hybrid): 5–20 files, single session, interview → SPEC.md → plan mode → direct execution, no fresh-session boundary. **Standard** (chain_path=standard): existing full chain unchanged. Auto-detect heuristic (file count + keyword vote on topic title) pre-selects a recommendation; user confirms or overrides. Gate 0 now always shows the routing choice — the old conditional/silent path is removed. Manifest schema bumped to 1.3 (new fields: `chain_path`, `gate0.chain_path`, `gate0.auto_detect_reason`). Validator accepts 1.0–1.3. 17 new transition pairs (5 Express + 12 Hybrid). Harness: 50/50 PASS.
+
 ### Update 2026-05-29
 
 - **Gate 0d — Project scaffolding gate** (sec. 11): New gate in the `concept-to-code` chain that fires unconditionally after Gate 0c, before Step 1. Four questions in one `AskUserQuestion` call: git repo (private/public/none), license (MIT/Apache-2.0/GPL-3.0/None), Xcode project (yes/no), initial commit behavior (commit+push/commit-only/none). Conditional follow-ups: remote URL (if push selected), anonymize re-confirm (if public). Sets 6 new manifest fields: `git_init`, `git_visibility`, `license`, `xcode_project`, `initial_commit_push`, `git_remote_url`. These cascade into Step 2 architect brief (Xcode hint), Step 5 coder dispatch (LICENSE file + Xcode scaffold tasks), and Step 7 push logic.
