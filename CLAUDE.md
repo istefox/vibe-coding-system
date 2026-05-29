@@ -94,3 +94,25 @@ Chain integration: Gate 0c (flag `humanize` post-anonymization) + Gate 5.5 (huma
 deliverable pre-commit) + commit Step 3.5 (humanize message on public repos pre-HITL).
 Global chat in EN (default) with preservation of Vibrofer IT terminology.
 Detail: `docs/architecture/ADR-0015-humanize-en-chain-integration.md`.
+
+## Decisions from the dynamic-workflows-step5 chain (ADR-0016)
+
+Dynamic Workflows integration into concept-to-code Step 5 (parallel coder dispatch):
+keyword trigger (`"workflow"` in the dispatch prompt) causes Claude Code to generate a JS
+orchestration script instead of turn-by-turn `Agent` tool calls. Max 16 concurrent subagents,
+1000 total; state in script variables (not context window); session-bound resumability.
+
+Key constraints:
+- **Hook safety is a hard blocker.** `PreToolUse`/`PostToolUse` hook propagation inside
+  workflow subagents is undocumented. A smoke test (`hook_verified` manifest field) must
+  confirm pattern-enforce fires before the workflow path is used in production.
+- **Fallback path.** If the keyword trigger fails or `hook_verified=false`, Step 5 reverts
+  to the current Agent-tool batch dispatch (2-3 tasks per batch). No chain breakage.
+- **File handoff.** Workflow writes `.claude/step5-report.json`; orchestrator reads it
+  instead of relying on an in-context coder report. Schema: `tasks_completed`, `tasks_failed`,
+  `test_result`, `files_modified`, `harness_deltas`.
+- **Manifest fields.** `hook_verified` (bool, default false) and `step5_mode`
+  (`workflow|agent_fallback|null`) added to `manifest-init.sh` as additive fields.
+  No schema version bump required.
+
+Detail: `docs/architecture/ADR-0016-dynamic-workflows-step5.md`.
