@@ -1,6 +1,6 @@
 # ADR-0016 — Dynamic Workflows: Replace Step 5 Batch Dispatch in concept-to-code
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-05-29
 **Author:** istefox
 
@@ -291,6 +291,36 @@ path. If the trigger fails, the chain is not broken: it degrades to current beha
   1-5. The workflow path changes only the Step 5 dispatch mechanism in SKILL.md.
 - The smoke test is a one-time user action per environment. After `hook_verified=true` is
   recorded, the gate is silent for all subsequent runs.
+
+---
+
+## Smoke Test Result (2026-05-29, v2.1.156)
+
+**Environment:** CLI v2.1.156, macOS 26, zsh. Workflow ran in session
+`2fc99ad3-0770-4b0a-8e90-b0a8d14608c1`.
+
+**Run 1 — baseline (hook v1.2):** `hook_verified=false`. The hook fired and correctly
+identified `agent_type=coder`, but reported PATTERN missing. Root cause: workflow subagent
+transcript stored at `subagents/workflows/<wf_id>/agent-<id>.jsonl`; hook searched only
+`subagents/agent-<id>.jsonl`. PATTERN: was present in the transcript but the hook read
+the main session jsonl (fallback), which contains no subagent text.
+
+**Fix — hook v1.3:** Added `find`-based fallback in `pre-flight-pattern-enforce.sh`:
+when the direct path is missing, search `$PROJ_DIR/$SID/subagents/workflows/` for
+`agent-$AGENT_ID.jsonl`. Bash 3.2 compatible.
+
+**Run 2 — post-fix (hook v1.3):** `hook_verified=true`. Audit log entry:
+`allow — PATTERN found in window`. File appended correctly.
+
+**Conclusions:**
+1. Hooks propagate into workflow subagents: `PreToolUse` fires and `agent_type` is
+   correctly set to the `agentType` passed in the workflow script.
+2. The transcript path for workflow subagents differs from regular subagents — a
+   previously undocumented path change introduced with Dynamic Workflows.
+3. With hook v1.3, `pattern-enforce` correctly enforces the ADR-0001 contract inside
+   workflow subagents.
+4. The workflow path in Step 5 is unblocked. `hook_verified=true` can be set in manifests
+   running on v2.1.154+ environments with hook v1.3 installed.
 
 ---
 
