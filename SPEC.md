@@ -1,225 +1,257 @@
-# SPEC — Dynamic Workflows integration into concept-to-code Step 5
+# SPEC — deep-refactor skill
 
-**Date:** 2026-05-29
-**Topic slug:** dynamic-workflows-step5
-**Manifest:** docs/manifests/2026-05-29-dynamic-workflows-step5.manifest.yml
+**Date:** 2026-05-30
+**Topic slug:** deep-refactor-skill
+**Manifest:** docs/manifests/2026-05-30-deep-refactor-skill.manifest.yml
 
 ---
 
 ## Objectives
 
-Replace the manual `Agent`-tool-based parallel coder dispatch in **Step 5 only** of the
-`concept-to-code` chain with Claude Code's **Dynamic Workflows** orchestration layer
-(research preview, Opus 4.8). Goals:
+Create a `deep-refactor` skill that performs a whole-codebase health audit on a working
+application and automatically fixes routable findings in a regression-safe incremental loop.
 
-1. Remove the ≥6-task batching workaround (truncation risk → Dynamic Workflows handles
-   scale via script variables + resumability).
-2. Enable reliable dispatch for large plans without silent mid-plan truncation.
-3. Produce a structured results file (`step5-report.json`) that the orchestrator reads
-   instead of trusting the coder's in-context report.
-4. Verify that all existing hooks fire correctly inside workflow subagents before shipping.
+Goals:
+1. Surface accumulated technical debt across four dimensions: dead code, performance,
+   structure/complexity, and security.
+2. Auto-fix low-to-medium risk findings with test verification after each dimension batch.
+3. Never introduce regressions: green baseline required; circuit breaker stops on any
+   red test; no fix proceeds without a verifiable baseline.
+4. Produce a committed findings report alongside the code changes.
+5. Integrate as Gate 5.1 in the concept-to-code chain (after RTF, before commit)
+   and as a standalone skill (`/skill deep-refactor`).
 
 ---
 
 ## Scope
 
 ### In scope
-- `~/.claude/skills/concept-to-code/SKILL.md` — Step 5 section rewrite:
-  - Trigger mechanism (keyword in dispatch prompt)
-  - Result handoff contract (`step5-report.json`)
-  - Batch policy removal in workflow mode
-  - Fallback path (Agent tool batch dispatch if workflow unavailable)
-  - Smoke test procedure (prerequisite step, first time only)
-- `step5-report.json` schema definition
-- `~/.claude/skills/concept-to-code/scripts/` — no new scripts required (results via file)
-- Manifest: minor extension (`step5_mode` and `hook_verified` fields) — additive, backward-compatible
+- `~/.claude/skills/deep-refactor/SKILL.md` — full skill definition
+- Integration into `~/.claude/skills/concept-to-code/SKILL.md` at Gate 5.1
+- Optional helper scripts in `~/.claude/skills/deep-refactor/scripts/` if needed
 
 ### Out of scope
-- Gates 1–5 (HITL): unchanged
-- `~/.claude/agents/coder.md`: unchanged (coder still runs with the same instructions)
-- `~/.claude/hooks/`: unchanged (pattern-enforce, stop-gate, db-backup-guardrail)
-- `~/.claude/skills/review-triage-fix/SKILL.md`: unchanged
-- `docs/vibe-coding-system.md` update: deferred to post-implementation doc pass
-- Manifest schema version bump: not required (additive fields)
+- Changes to existing agents (reviewer, refactorer, coder, debugger) — they are invoked as-is
+- Changes to the RTF skill — deep-refactor is additive, not a replacement
+- IDE-level or build-system integration (no Xcode project changes)
 
 ---
 
-## Stack
+## Invocation
 
-- **Claude Code** 2.1.154, Max plan (Dynamic Workflows research preview)
-- **Target files**: `~/.claude/skills/concept-to-code/SKILL.md` (primary),
-  manifest YAML (additive fields only)
-- **Runtime**: Dynamic Workflows triggered by "workflow" keyword in the Step 5 dispatch
-  prompt; Claude Code writes the JS orchestration script dynamically
-- **State handoff**: `<project_root>/.claude/step5-report.json` (written by the last
-  workflow subagent, read by the orchestrator)
-- **Bash 3.2**: no new shell scripts added; manifest updates use existing helpers
+**Standalone:**
+```
+/skill deep-refactor [<path-override>]
+```
+- `<path-override>`: optional glob or directory to restrict scope (default: all source files)
+- Runs from the current project directory
+
+**As c2c chain step (Gate 5.1):**
+- Offered after RTF completes (or is skipped), before the commit step
+- User sees a gate: "Run deep-refactor on the full codebase?"
+- If skipped, chain proceeds to commit unchanged
 
 ---
 
-## Architecture
+## Audit Dimensions
 
-### Current Step 5 (pre-feature)
+Four parallel audit agents, each with a dedicated scope:
 
-```
-Orchestrator
-  ├── git rev-parse (worktree check)
-  ├── Agent(coder, tasks 1-3)   ← batch 1
-  ├── [checkpoint: git status + verify.sh]
-  ├── Agent(coder, tasks 4-6)   ← batch 2
-  └── [controller verification]  → Gate 5
-```
+| Dimension | Agent type | What it finds |
+|---|---|---|
+| `dead-code` | reviewer | Unused functions, imports, variables, unreachable branches, dead `#if` blocks |
+| `performance` | reviewer | Unnecessary allocations, redundant recomputations, inefficient collection patterns, force-casts, synchronous I/O on main thread |
+| `structure` | reviewer | Oversized files (>400 lines), oversized functions (>60 lines), tangled dependencies, duplicated logic blocks |
+| `security` | reviewer | Hardcoded secrets/tokens, unsafe API usage, missing input validation, unguarded URL construction |
 
-State lives in the orchestrator's context window. Truncation risk above 5 tasks.
-
-### New Step 5 (post-feature)
-
-```
-Orchestrator
-  ├── Smoke test (first run, if hook_verified=false in manifest)
-  │     └── trigger trivial workflow in sandbox → user confirms hooks fire → hook_verified=true
-  ├── Step 5 dispatch prompt (includes "workflow" keyword + coder instructions)
-  │     └── CC generates JS script → dispatches coders as subagents (max 16 concurrent)
-  │           ├── Subagent 1: coder tasks 1-N
-  │           ├── Subagent 2: coder tasks N+1-M
-  │           └── Final subagent: writes <project_root>/.claude/step5-report.json
-  └── Orchestrator reads step5-report.json → Gate 5
-```
-
-State lives in workflow JS script variables (not context window).
-Resumability: if a subagent fails, the workflow script can restart from checkpoint.
-
-### Fallback path
-
-If Dynamic Workflows is unavailable or the keyword does not trigger script generation:
-the orchestrator falls back to the **current Agent tool batch dispatch** (unchanged).
-The fallback retains the ≥6-task batching policy.
-
-### Hook interaction (safety-critical)
-
-**Unverified at spec time.** Whether `PreToolUse`/`PostToolUse` hooks fire inside
-workflow subagents is unknown. The smoke test is a **hard prerequisite** before any
-production use of the workflow path.
-
-If hooks do NOT fire: Dynamic Workflows is blocked for this project. Not negotiable.
+Each agent returns findings as a JSON array matching the standard **Finding schema** (see Data Model).
 
 ---
 
-## Data model — `step5-report.json`
+## Data Model
 
-Written by the final workflow subagent to `<project_root>/.claude/step5-report.json`.
-Read by the orchestrator after the workflow completes.
-
+### Finding schema
 ```json
 {
-  "step5_mode": "workflow",
-  "workflow_completed_at": "ISO8601",
-  "tasks_completed": [1, 2, 3],
-  "tasks_failed": [],
-  "files_modified": [
-    { "path": "absolute/path", "operation": "edit|create|delete" }
-  ],
-  "test_result": "green | red | n/a",
-  "test_output_tail": "last 20 lines of test output",
-  "harness_deltas": "PASS=N FAIL=0 (delta from baseline)",
-  "errors": []
+  "id": "<dimension>-<file_basename>-<hash3>",
+  "dimension": "dead-code | perf | structure | security",
+  "severity": "P1 | P2 | P3",
+  "risk_level": "low | high",
+  "file": "<absolute path>",
+  "line": "<integer or null>",
+  "description": "<concise problem statement>",
+  "fix_type": "coder | refactorer | debugger | report-only",
+  "suggested_fix": "<1-2 line description>"
 }
 ```
 
-The orchestrator treats `tasks_failed` non-empty or `test_result: red` as a failure
-signal and does not proceed to Gate 5 without user acknowledgment.
+### Report schema (`docs/deep-refactor/YYYY-MM-DD-<project>.md`)
+```markdown
+# Deep Refactor Report — <project> — <date>
+
+## Summary
+- Baseline: PASS=N FAIL=0
+- Post-fix: PASS=M FAIL=0
+- Findings total: N
+- Fixed: N | Deferred: N | Report-only (security): N
+- Regressions caught by circuit breaker: N
+
+## Findings by dimension
+### Dead code
+...
+
+### Performance
+...
+
+### Structure
+...
+
+### Security (report-only)
+...
+
+## Deferred / Skipped
+...
+```
 
 ---
 
-## Trigger mechanism
+## Process — Phase by Phase
 
-The orchestrator's Step 5 dispatch prompt must include the word "**workflow**" to trigger
-CC to generate a JS orchestration script instead of doing turn-by-turn work.
+### Phase 0 — Pre-flight (blocking gate)
 
-Trigger phrase (embedded in the dispatch):
-> "Use a **workflow** to dispatch the following coders in parallel…"
+1. Verify `git rev-parse --git-dir` succeeds (git repo required).
+2. Capture baseline commit hash: `git rev-parse HEAD`.
+3. Read `.claude/test-cmd`. If `NONE` or absent:
+   - **Block auto-fix.** Present gate: "No test-cmd found. Proceed in report-only mode (no auto-fix) or abort?"
+   - Report-only mode: audit runs, findings are documented, NO fixes applied, NO commit.
+4. If test-cmd exists: run it. If RED:
+   - **Block auto-fix.** Present gate: "Baseline tests are RED. Fix the baseline first, or proceed in report-only mode?"
+   - Same report-only path as above.
+5. Capture baseline test count for delta reporting.
+6. Identify all source files via `git ls-files` (respects .gitignore). Exclude: `*.xcarchive`, `DerivedData/`, `Pods/`, `.build/`, `*.generated.swift`.
 
-The trigger is implicit — CC behavior when seeing "workflow" is not deterministically
-documented. If the keyword does not trigger script generation, the orchestrator detects
-it (still in turn-by-turn mode) and falls back to the Agent tool path.
+**HITL Gate 0 — Approval before starting:**
+```
+AskUserQuestion:
+  question: "deep-refactor — Ready to audit\n\nProject: <root>\nFiles to scan: <N>\nBaseline: PASS=<N> FAIL=0\nDimensions: dead-code, performance, structure, security\n\nThis will read all source files and dispatch 4 parallel audit agents.\nProceed?"
+  options:
+    - "Proceed with full audit"
+    - "Abort"
+```
+
+### Phase 1 — Parallel audit (4 agents)
+
+Dispatch all four dimension agents in parallel (Workflow if `hook_verified=true`, else sequential Agent-tool calls). Each agent:
+- Reads all source files identified in Phase 0
+- Returns a JSON findings array matching Finding schema
+- Tags each finding with `risk_level: high` if the finding requires human judgment (all security secrets/auth bypass; any finding touching public API contracts)
+
+Collect and merge findings. Sort by: dimension order (dead-code → perf → structure → security), then severity (P1 → P2 → P3).
+
+**HITL Gate 1 — Findings summary before fixing:**
+```
+AskUserQuestion:
+  question: "deep-refactor — Audit complete\n\nFindings:\n  dead-code: N (P1: x, P2: y, P3: z)\n  performance: N\n  structure: N\n  security: N (low-risk: x, high-risk: y — report-only)\n\nTotal routable (auto-fixable): N\nEstimated time: ~N min\n\nProceed with auto-fix?"
+  options:
+    - "Fix all routable findings"
+    - "Report only — no auto-fix"
+    - "Abort"
+```
+
+If "Report only": skip Phases 2-3, go directly to Phase 4 (report + commit report file only).
+
+### Phase 2 — Incremental fix loop (dimension by dimension)
+
+**Order:** dead-code → performance → structure → security (low-risk only)
+
+For each dimension batch:
+1. Group findings by file within the dimension.
+2. Dispatch fix agents in parallel per file group, using `model: "opus"`:
+   - `fix_type: coder` → coder agent with micro-piano
+   - `fix_type: refactorer` → refactorer agent
+   - `fix_type: debugger` → debugger agent
+   - `fix_type: report-only` → skip (goes to deferred list)
+   - `risk_level: high` → skip regardless of fix_type (goes to report-only section)
+3. After all fixes in the dimension complete: run test-cmd.
+   - **GREEN:** log "dimension <X> clean — N findings fixed", proceed to next dimension.
+   - **RED:** **circuit breaker fires.** Record which dimension caused regression. Skip remaining findings in this dimension. Log `REGRESSION: <dimension>` in report. Proceed to next dimension (do NOT abort entire skill — other dimensions may be safe).
+4. After all dimensions: run test-cmd once more for final verification.
+
+### Phase 3 — Security report-only section
+
+Collect all `security` findings with `risk_level: high`. Write them as a dedicated section in the report with:
+- File, line, description
+- Suggested remediation (from audit agent)
+- Tag: `ACTION REQUIRED — not auto-fixed`
+
+### Phase 4 — Output
+
+1. Write report to `<project-root>/docs/deep-refactor/YYYY-MM-DD-<slug>.md`.
+2. Stage report + all modified source files: `git add -A`.
+3. **HITL Gate 2 — Commit approval:**
+```
+AskUserQuestion:
+  question: "deep-refactor — Ready to commit\n\nFixed: N findings\nDeferred: N\nSecurity report-only: N\nRegressions caught: N\nTest delta: PASS=N (+M)\n\nApprove commit?"
+  options:
+    - "Approve and commit"
+    - "Stage only (no commit)"
+    - "Abort (discard changes)"
+```
+4. On approve: invoke `commit` skill with context-hint `"deep-refactor: <project> audit"`.
+5. On "Stage only": leave staged, user commits manually.
+6. On "Abort": `git reset HEAD` (unstage), leave working tree as-is.
 
 ---
 
-## Smoke test procedure
+## Integration — Gate 5.1 in concept-to-code
 
-Run ONCE per project before using the workflow path in production.
-Result recorded as `hook_verified: true|false` in the manifest (additive field).
+After RTF completes (or is skipped at Gate 5), before Gate 5.5 (humanize) and Step 7 (commit):
 
-Steps:
-1. Create a throwaway sandbox repo (`/tmp/wf-smoke-test/`), init git, add a minimal file.
-2. Invoke a workflow that triggers a single `Edit` tool call on that file.
-3. Observe the terminal: confirm the pattern-enforce hook fires (emits a `PATTERN:` check
-   message to stderr / visible in the terminal).
-4. If hook fires → `hook_verified: true`; proceed with workflow mode.
-5. If hook does NOT fire → `hook_verified: false`; stay on Agent tool path. Report finding.
+```
+AskUserQuestion:
+  question: "Gate 5.1 — Deep refactor (optional)\n\nRTF cycle complete. Run a full-codebase health audit?\nThis scans ALL source files (not just changed ones).\nEstimated: 10–20 min depending on codebase size.\n\nOnly meaningful if the project has accumulated technical debt."
+  options:
+    - "Run deep-refactor"
+    - "Skip (proceed to commit)"
+```
 
-User must observe the terminal during the smoke test. The chain records the result but
-cannot auto-verify hook firing.
-
----
-
-## UI flows
-
-### Happy path (workflow mode)
-1. Orchestrator checks `manifest.hook_verified`. If `false`: presents smoke test
-   instructions. User runs smoke test, reports result.
-2. If `hook_verified: true`: orchestrator dispatches Step 5 prompt (workflow keyword +
-   coder instructions + step5-report.json write contract).
-3. CC generates JS script, dispatches subagent coders (up to 16 concurrent).
-4. Workflow writes `.claude/step5-report.json`.
-5. Orchestrator reads report: verifies `tasks_failed` empty, `test_result` not red.
-6. Transitions to `step_6_review`. Presents Gate 5.
-
-### Fallback path (Agent tool)
-Identical to current Step 5 (batching, per-batch checkpoint, controller-side verify).
-
-### Failure path
-- `step5-report.json` absent → orchestrator falls back to `git diff + test run` directly.
-- `tasks_failed` non-empty → failure report; user decides how to proceed.
-- `test_result: red` → same failure signal as current behavior.
+"Run deep-refactor" → invoke `/skill deep-refactor` (Skill tool). After completion, transition to Gate 5.5 / Step 7.
+"Skip" → silent no-op, proceed to Gate 5.5 / Step 7 as before.
 
 ---
 
-## Edge cases
+## Edge Cases
 
-| Scenario | Behavior |
-|---|---|
-| Plan ≤5 tasks | Workflow mode still preferred; fallback available if latency too high |
-| Smoke test not yet run | Step 5 blocks; orchestrator presents smoke test before dispatch |
-| Workflow crashes mid-run | CC resumability handles it; if step5-report.json absent → git diff fallback |
-| Cross-repo (impl in ~/.claude, manifest in doc repo) | Coder uses absolute paths; `isolation: none` (files outside git repo) |
-| step5-report.json stale from a prior run | Orchestrator checks `workflow_completed_at` vs manifest `last_updated_at`; stale → ignore, use git diff |
-| Dynamic Workflows removed/gated after research preview | Fallback path activates; no chain breakage |
-
----
-
-## Success criteria (Definition of Done)
-
-1. **Smoke test passed**: `PreToolUse`/`PostToolUse` hooks confirmed firing inside
-   workflow subagents. `hook_verified: true` recorded in manifest.
-2. **SKILL.md updated**: Step 5 section in `~/.claude/skills/concept-to-code/SKILL.md`
-   contains workflow dispatch instructions, fallback path, and `step5-report.json`
-   read contract. Batch-dispatch template demoted to fallback only.
-3. **Existing harness green**: `bash ~/.claude/skills/concept-to-code/tests/run-tests.sh`
-   passes at ≥ PASS=32 FAIL=0 (pre-feature baseline).
-4. **End-to-end chain run**: a ≥6-task plan completes via workflow mode; PATTERN: hooks
-   observed firing; `step5-report.json` written with correct schema; harness green.
-5. **ADR-0016 written**: decision recorded in
-   `docs/architecture/ADR-0016-dynamic-workflows-step5.md`.
+- **No test-cmd (`NONE`):** skill blocks auto-fix, offers report-only mode explicitly.
+- **Xcode codesign-bound tests:** test-cmd fails without signed bundle. Same path as NONE — block, offer report-only.
+- **Circuit breaker fires mid-dimension:** remaining findings in that dimension are deferred; other dimensions continue. Report documents which dimension caused regression with the specific finding.
+- **All findings are `report-only`:** skill produces report, no code changes, no commit of source (only report file committed).
+- **Empty audit (0 findings):** emit "Codebase is clean across all dimensions" and exit without committing.
+- **Large codebase (>200 files):** Workflow dispatch required; sequential Agent-tool fallback may be slow but still correct.
+- **Skill invoked mid-chain (dirty working tree):** pre-flight warns if `git status` shows uncommitted changes. Gate 0 includes a warning; user can proceed (uncommitted changes mixed into refactor) or abort to commit first.
 
 ---
 
-## Constraints
+## Success Criteria
 
-- No changes to hooks (pattern-enforce, stop-gate, db-backup-guardrail).
-- No changes to `coder.md`.
-- No HITL gate changes (Gates 1–5 unchanged).
-- Bash 3.2-clean for any new helper scripts.
-- Manifest writes via helper scripts only (no direct Edit-tool writes to manifest).
-- Hook safety is a hard blocker: if hooks do not fire in the smoke test, the workflow
-  path is not shipped.
+- [ ] Pre-flight blocks when baseline is RED or test-cmd is absent — no silent auto-fix on unverifiable codebases
+- [ ] Parallel audit covers all four dimensions in a single invocation
+- [ ] HITL gate shows findings summary before any fix is applied
+- [ ] Fix loop runs dimension-by-dimension with test verification after each batch
+- [ ] Circuit breaker correctly stops a dimension on regression without aborting the whole skill
+- [ ] High-risk security findings are NEVER auto-fixed — always REPORT-ONLY
+- [ ] Report committed alongside code changes with accurate delta counts
+- [ ] Gate 5.1 integrates cleanly into c2c chain without regressions in existing paths
+- [ ] Skill invokable standalone on any project with a `.claude/test-cmd`
+- [ ] Empty result (0 findings) handled gracefully without committing
+
+---
+
+## Stack / Constraints
+
+- Bash 3.2 compatible for any helper scripts
+- Uses existing agents: reviewer (audit), coder/refactorer/debugger (fix), all at `model: opus`
+- Workflow dispatch (Parallel) for audit phase when `hook_verified=true`; sequential Agent-tool fallback otherwise
+- No new agent types required
+- Report stored at `<project-root>/docs/deep-refactor/` (directory created if absent)
+- Inherits all existing safety invariants: Pre-flight Pattern Classifier (ADR-0001), no test weakening (RTF weakening-scan not required here — circuit breaker is the equivalent)

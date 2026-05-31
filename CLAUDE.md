@@ -116,3 +116,17 @@ Key constraints:
   No schema version bump required.
 
 Detail: `docs/architecture/ADR-0016-dynamic-workflows-step5.md`.
+
+## Decisions from chain deep-refactor-skill (ADR-0018)
+
+Whole-codebase health audit + regression-safe incremental fix skill (`/skill deep-refactor`).
+Integrated as Gate 5.1 in the concept-to-code chain (after RTF, before commit).
+
+Key architectural decisions:
+- **Hybrid pipeline (Alt D):** dimension is the test-run unit (3 runs max — dead-code → perf → structure); severity governs fix order within each batch (P1 first). Audit phase uses Workflow fan-out (4 parallel reviewer agents); fix phase uses sequential Agent-tool (shared tree + mid-run HITL gate required).
+- **Two mandatory guards baked into reviewer prompts:** `@objc`/`dynamic`/protocol-witness dead code → `report-only`; `async`/`actor`/`DispatchQueue`/`Sendable` perf fixes → `report-only`. Static analysis cannot prove these safe; a green test suite does not either.
+- **Global circuit breaker:** any regression = full stop. Verified fixes committed per-dimension with a partial report tagged `CIRCUIT BREAKER FIRED AT: <dimension>`. Remaining dimensions tagged `SKIPPED`.
+- **No test-cmd = report-only mode:** if `.claude/test-cmd` is `NONE` or baseline is RED, auto-fix is blocked. Gate 0 messaging explains why no fixes landed.
+- **Security findings:** always `report-only` regardless of `risk_level`. High-risk findings (hardcoded secrets, auth bypass) are never auto-fixed.
+
+Detail: `docs/architecture/ADR-0018-deep-refactor-skill.md`.
