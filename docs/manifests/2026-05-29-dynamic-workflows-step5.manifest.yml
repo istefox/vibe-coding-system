@@ -1,7 +1,7 @@
 manifest_schema_version: "1.1"
 topic: "dynamic-workflows-step5"
 topic_full_title: "Dynamic Workflows integration into concept-to-code Step 5 (parallel coder dispatch)"
-project_root: "/Users/stefanoferri/developer/vibe-coding-system"
+project_root: "/Users/stefanoferri/Developer/vibe-coding-system"
 mode: "greenfield"
 anonymize: false
 created_at: "2026-05-29T09:03:54+00:00"
@@ -22,12 +22,12 @@ test_cmd_provisional: false
 
 # Artifacts (absolute paths, populated as steps complete)
 artifacts:
-  spec: "/Users/stefanoferri/developer/vibe-coding-system/SPEC.md"
+  spec: "/Users/stefanoferri/Developer/vibe-coding-system/SPEC.md"
   brainstorm: null
-  adr: "/Users/stefanoferri/developer/vibe-coding-system/docs/architecture/ADR-0016-dynamic-workflows-step5.md"
+  adr: "/Users/stefanoferri/Developer/vibe-coding-system/docs/architecture/ADR-0016-dynamic-workflows-step5.md"
   arch: null
-  plan: "/Users/stefanoferri/developer/vibe-coding-system/docs/superpowers/plans/2026-05-29-dynamic-workflows-step5.md"
-  project_claude_md: "/Users/stefanoferri/developer/vibe-coding-system/CLAUDE.md"
+  plan: "/Users/stefanoferri/Developer/vibe-coding-system/docs/superpowers/plans/2026-05-29-dynamic-workflows-step5.md"
+  project_claude_md: "/Users/stefanoferri/Developer/vibe-coding-system/CLAUDE.md"
 
 # HITL gates audit trail
 hitl_gates:
