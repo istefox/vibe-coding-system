@@ -1,9 +1,10 @@
 # ADR-0001 — Coder pre-flight pattern classifier
 
-**Status:** Accepted — 2026-05-20 (implemented via plan 2026-05-20-coder-preflight-pattern-classifier.md; harness PASS=43)
-**Authors:** Adriano (architect agent) per Stefano Ferri
-**Supersedes:** none
-**Superseded by:** none
+**Status:** Accepted  
+**Date:** 2026-05-20  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:**
 - `docs/superpowers/specs/2026-05-20-coder-preflight-pattern-classifier-design.md`
 - `docs/superpowers/plans/2026-05-20-coder-preflight-pattern-classifier.md`

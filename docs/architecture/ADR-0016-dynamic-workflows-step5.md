@@ -1,8 +1,11 @@
 # ADR-0016 — Dynamic Workflows: Replace Step 5 Batch Dispatch in concept-to-code
 
-**Status:** Accepted
-**Date:** 2026-05-29
-**Author:** istefox
+**Status:** Accepted  
+**Date:** 2026-05-29  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
+**Related:** none  
 
 ---
 

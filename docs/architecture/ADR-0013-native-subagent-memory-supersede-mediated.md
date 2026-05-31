@@ -1,9 +1,10 @@
 # ADR-0013 — Migrate cross-session agent memory to the NATIVE `memory:` feature (supersede ADR-0012, `local` scope)
 
-**Status:** Rejected after pilot — 2026-05-25. The migration had been accepted (scope `local`, Write/Edit on reviewer OK) and Phase 1 enabled in coexistence, but the **pilot failed**: architect dispatch with `memory: local` -> the native dir `.claude/agent-memory-local/architect/` remained UNCHANGED while the agent autonomously edited the curated auto-memory (`reference_cc-capabilities-research-2026-05.md`), OUTSIDE its write-scope. The broad-Write auto-enabled by `memory:` materialized the downside of axes 4-5 of this ADR. The pilot-gate (blocking precondition) did NOT pass -> **ADR-0012 remains the active mechanism** (orchestrator mediation, sub-agents without Write on memory). `memory: local` removed from the 3 agents, seeded dirs cleaned (data intact in the central store). Caveat: 1 run, possible confounders (prompt + Sonnet + discoverable thematic file), but the risk is structural.
-
-**Deciders:** architect (dispatch orchestrator), Stefano Ferri (final approval)
-
+**Status:** Rejected  
+**Date:** 2026-05-25  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:** ADR-0012 (`docs/architecture/ADR-0012-agent-memory-orchestrator-mediated.md` +
 `-implementation-plan.md` — the B-mediated solution deployed today, which this ADR proposes to
 supersede); ADR-0004 (`docs/architecture/ADR-0004-pre-flight-pattern-enforce-hook.md` — source
@@ -15,6 +16,8 @@ contract is inserted, to simplify); ADR-0005
 (`docs/architecture/ADR-0005-vibe-status-skill.md` — the Section 7b read-only to re-point);
 ADR-0011 (`docs/architecture/ADR-0011-clean-public-repo-anonymize.md` — constraint "outside the
 tracked tree", which the native satisfies only with the right scope).
+
+> **Rejected after pilot (2026-05-25).** The migration had been accepted (scope `local`, Write/Edit on reviewer OK) and Phase 1 enabled in coexistence, but the **pilot failed**: architect dispatch with `memory: local` -> the native dir `.claude/agent-memory-local/architect/` remained UNCHANGED while the agent autonomously edited the curated auto-memory (`reference_cc-capabilities-research-2026-05.md`), OUTSIDE its write-scope. The broad-Write auto-enabled by `memory:` materialized the downside of axes 4-5 of this ADR. The pilot-gate (blocking precondition) did NOT pass -> **ADR-0012 remains the active mechanism** (orchestrator mediation, sub-agents without Write on memory). `memory: local` removed from the 3 agents, seeded dirs cleaned (data intact in the central store). Caveat: 1 run, possible confounders (prompt + Sonnet + discoverable thematic file), but the risk is structural.
 
 ---
 

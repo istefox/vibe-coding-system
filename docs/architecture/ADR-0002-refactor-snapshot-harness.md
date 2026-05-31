@@ -1,9 +1,10 @@
 # ADR-0002 — Behavior-preservation Snapshot Harness for the refactorer agent
 
-**Status:** Accepted — 2026-05-20 (implemented via plan 2026-05-20-refactor-snapshot-harness.md; harness PASS=45; skill self-test PASS=11)
-**Authors:** Adriano (architect agent) per Stefano Ferri
-**Supersedes:** none
-**Superseded by:** none
+**Status:** Accepted  
+**Date:** 2026-05-20  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:**
 - `docs/superpowers/specs/2026-05-20-refactor-snapshot-harness-design.md`
 - `docs/superpowers/plans/2026-05-20-refactor-snapshot-harness.md`

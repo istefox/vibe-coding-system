@@ -1,9 +1,10 @@
 # ADR-0003 — `concept-to-code` orchestrator skill for the concept->code chain
 
-**Status:** Accepted — 2026-05-20 (implemented via plan 2026-05-20-concept-to-code-chain.md; review-triage-fix harness PASS=47; concept-to-code self-test PASS=10; refactor-snapshot self-test PASS=11 unchanged)
-**Authors:** Adriano (architect agent) per Stefano Ferri
-**Supersedes:** none
-**Superseded by:** none
+**Status:** Accepted  
+**Date:** 2026-05-20  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:**
 - `docs/superpowers/specs/2026-05-20-concept-to-code-chain-design.md`
 - `docs/superpowers/plans/2026-05-20-concept-to-code-chain.md`

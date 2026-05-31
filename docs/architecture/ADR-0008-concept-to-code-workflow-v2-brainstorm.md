@@ -1,9 +1,10 @@
 # ADR-0008 — `concept-to-code` workflow v2: Gate 0, brownfield mode, brainstorm-gate + new `design-brainstorm` skill
 
-**Status:** Accepted — 2026-05-21 (implemented via plan `2026-05-21-concept-to-code-workflow-v2.md`; design-brainstorm PASS=9; concept-to-code self-test PASS=20; review-triage-fix PASS=51; smoke-e2e PASS)
-**Authors:** Adriano (architect agent) per Stefano Ferri
-**Supersedes:** none (extends ADR-0003, does not replace it)
-**Superseded by:** none
+**Status:** Accepted  
+**Date:** 2026-05-21  
+**Author:** istefox  
+**Supersedes:** none (extends ADR-0003, does not replace it)  
+**Superseded by:** none  
 **Related:**
 - `docs/architecture/ADR-0003-concept-to-code-chain.md` (Accepted 2026-05-20 — chain v1)
 - `docs/architecture/ADR-0007-concept-to-code-e2e-smoke.md` (Accepted 2026-05-20 — smoke-e2e)

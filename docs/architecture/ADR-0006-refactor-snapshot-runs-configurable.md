@@ -1,9 +1,10 @@
 # ADR-0006 — `RFS_RUNS=N` configurable determinism check for refactor-snapshot
 
-**Status:** Accepted — 2026-05-20 (implemented; refactor-snapshot harness PASS=11->18, +7 anchors; RFS_DETERMINISM_RUNS dead code eliminated; smoke 4/4 scenarios OK)
-**Authors:** Adriano (architect agent) per Stefano Ferri
-**Supersedes:** none
-**Superseded by:** none
+**Status:** Accepted  
+**Date:** 2026-05-20  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:**
 - `docs/architecture/ADR-0002-refactor-snapshot-harness.md` (Accepted 2026-05-20, established the 3 hardcoded PRE runs)
 - `docs/superpowers/specs/2026-05-20-refactor-snapshot-runs-configurable-design.md`

@@ -3,6 +3,9 @@
 **Status:** Accepted  
 **Date:** 2026-05-28  
 **Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
+**Related:** ADR-0011 (clean-public-repo anonymize — humanizer reinforces the anonymize goal on public repos)  
 
 ---
 

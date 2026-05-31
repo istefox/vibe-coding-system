@@ -1,9 +1,10 @@
 # ADR-0011 — clean-public-repo + anonymous mode in the chain (tool contribution anonymization for public repos)
 
-**Status:** Accepted — 2026-05-23
-
-**Deciders:** architect (dispatch orchestrator), Stefano Ferri (final approval)
-
+**Status:** Accepted  
+**Date:** 2026-05-23  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:** ADR-0003 (concept-to-code chain — the chain where the activation gate is inserted),
 ADR-0008 (workflow v2 brainstorm — precedent of optional gate + non-terminal skill invoked by
 the chain; schema 1.0->1.1), ADR-0010 (web-e2e-test — immediate preceding precedent of the

@@ -1,9 +1,10 @@
 # ADR-0010 — web-e2e-test (live web E2E testing via Chrome MCP)
 
-**Status:** Proposed — 2026-05-22
-
-**Deciders:** architect (dispatch orchestrator), Stefano Ferri (final approval)
-
+**Status:** Proposed  
+**Date:** 2026-05-22  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:** ADR-0003 (concept-to-code chain — the chain where the gate is inserted),
 ADR-0008 (workflow v2 brainstorm — precedent of optional gate + non-terminal skill invoked
 by the chain), ADR-0005 (vibe-status — standalone skill with report), ADR-0007

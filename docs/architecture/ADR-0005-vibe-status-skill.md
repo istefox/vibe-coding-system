@@ -1,9 +1,10 @@
 # ADR-0005 — Vibe-status skill
 
-**Status:** Accepted — 2026-05-20 (implemented via plan 2026-05-20-vibe-status-skill.md; harness review-triage-fix PASS=49; dedicated PASS=9)
-**Authors:** Adriano (architect agent) per Stefano Ferri
-**Supersedes:** none
-**Superseded by:** none
+**Status:** Accepted  
+**Date:** 2026-05-20  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:**
 - `docs/superpowers/specs/2026-05-20-vibe-status-skill-design.md`
 - `docs/superpowers/plans/2026-05-20-vibe-status-skill.md`

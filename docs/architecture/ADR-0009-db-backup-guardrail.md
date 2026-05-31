@@ -1,9 +1,10 @@
 # ADR-0009 — db-backup-guardrail (PreToolUse hook anti-DB-destruction)
 
-**Status:** Accepted — 2026-05-22 (implemented; hook + harness PASS=16; settings.json pending orchestrator HITL)
-
-**Deciders:** architect (dispatch orchestrator), Stefano Ferri (final approval)
-
+**Status:** Accepted  
+**Date:** 2026-05-22  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:** ADR-0004 (pre-flight-pattern-enforce hook — reused bash 3.2-clean hook pattern),
 ADR-0001 (coder pre-flight classifier — defense-in-depth philosophy),
 `feedback_never-bypass-guardrails`, `feedback_pretooluse-payload-schema`,

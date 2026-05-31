@@ -1,9 +1,10 @@
 # ADR-0004 — Pre-flight Pattern Enforce Hook
 
-**Status:** Accepted — 2026-05-20 (implemented via plan 2026-05-20-pre-flight-pattern-enforce-hook.md; harness review-triage-fix PASS=48; dedicated harness PASS=10)
-**Authors:** Adriano (architect agent) per Stefano Ferri
-**Supersedes:** none
-**Superseded by:** none
+**Status:** Accepted  
+**Date:** 2026-05-20  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:**
 - `docs/architecture/ADR-0001-coder-preflight-pattern-classifier.md` (closes the enforcement gap of the classifier discipline)
 - `docs/superpowers/specs/2026-05-20-pre-flight-pattern-enforce-hook-design.md`

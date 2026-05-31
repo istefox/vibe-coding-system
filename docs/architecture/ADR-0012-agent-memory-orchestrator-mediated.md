@@ -1,16 +1,20 @@
 # ADR-0012 — Cross-session agent memory mediated by the orchestrator (removal of `docs/agent-notes/` from the project tree)
 
-**Status:** Accepted — 2026-05-24 (5 points confirmed by Stefano: label `DURABLE NOTES:`, path `memory/agent-notes/<agent>.md` separate from `MEMORY.md`, manual harvest outside chain, read-only watch in vibe-status, re-evaluation clause). **Remains the ACTIVE mechanism.**
-_(2026-05-25: ADR-0013 had attempted to replace it with the native `memory: local` feature, but the **pilot failed** — the agent with `memory:` wrote outside its sandbox, into the curated auto-memory; ADR-0012 mediation, in which sub-agents have no Write on memory, prevents that risk. Migration rejected, see ADR-0013 "Rejected after pilot".)_
-
-**Deciders:** architect (dispatch orchestrator), Stefano Ferri (final approval)
-
+**Status:** Accepted  
+**Date:** 2026-05-24  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:** ADR-0003 (`concept-to-code` skill orchestrator of the chain — is the point where
 the injection/collection agent-notes contract is inserted), ADR-0001 (Coder pre-flight pattern
 classifier — precedent of the "structured report contract" pattern in the subagent report,
 reused here for `DURABLE NOTES:`), ADR-0004 (Pre-flight Pattern Enforce Hook — source of the
 project-dir encoding fragility that this decision avoids on the subagent side), ADR-0005
 (Vibe-status skill — candidate read-only watch of the agent memory round-trip).
+
+> **Remains the ACTIVE mechanism.** Confirmed by Stefano (2026-05-24): label `DURABLE NOTES:`, path `memory/agent-notes/<agent>.md` separate from `MEMORY.md`, manual harvest outside chain, read-only watch in vibe-status, re-evaluation clause.
+>
+> _(2026-05-25: ADR-0013 had attempted to replace it with the native `memory: local` feature, but the **pilot failed** — the agent with `memory:` wrote outside its sandbox, into the curated auto-memory; ADR-0012 mediation, in which sub-agents have no Write on memory, prevents that risk. Migration rejected, see ADR-0013 "Rejected after pilot".)_
 
 ---
 

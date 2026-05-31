@@ -1,9 +1,10 @@
 # ADR-0014 — Architect proposes `.claude/test-cmd` in the `concept-to-code` chain (Step 2), unchanged human TOFU approval
 
-**Status:** Accepted — 2026-05-25 (Stefano: greenfield = **option A** "approve-the-intention-now + consumers fail-open until executable"; `TEST-CMD CANDIDATE:` / `TEST-CMD MODE:` block format confirmed. Implemented: edit to `concept-to-code` Step 2 + coexistence note; TOFU/`approve-test-cmd.sh` unchanged.)
-
-**Deciders:** architect (dispatch orchestrator), Stefano Ferri (final approval)
-
+**Status:** Accepted  
+**Date:** 2026-05-25  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:** ADR-0002 (`docs/architecture/ADR-0002-refactor-snapshot-harness.md` — defines
 `.claude/test-cmd` as the only stack-specific contact point for behavior-preservation,
 instrumented via SHA256 of the command output; this ADR automates its *proposal*, not the
@@ -13,6 +14,8 @@ TOFU SHA-pinned: "a wrong test-cmd gives false security -> better UNVERIFIED tha
 this ADR does NOT touch that gate); ADR-0012 (`docs/architecture/ADR-0012-agent-memory-orchestrator-mediated.md`
 — precedent for how architect contracts are conveyed by the **chain template**, not by inflating
 `architect.md`; pattern reused here for the `TEST-CMD CANDIDATE` block).
+
+> Stefano: greenfield = **option A** "approve-the-intention-now + consumers fail-open until executable"; `TEST-CMD CANDIDATE:` / `TEST-CMD MODE:` block format confirmed. Implemented: edit to `concept-to-code` Step 2 + coexistence note; TOFU/`approve-test-cmd.sh` unchanged.
 
 ---
 

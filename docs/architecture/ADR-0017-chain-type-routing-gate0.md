@@ -2,7 +2,12 @@
 
 **Status:** Accepted  
 **Date:** 2026-05-29  
-**Context:** concept-to-code skill v2 (schema 1.2 → 1.3)
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
+**Related:** ADR-0008 (concept-to-code workflow v2 — the Gate 0 this routing extends)  
+
+> Context: concept-to-code skill v2 (schema 1.2 → 1.3).
 
 ---
 

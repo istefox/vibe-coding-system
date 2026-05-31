@@ -1,9 +1,10 @@
 # ADR-0007 — End-to-end smoke test for the concept-to-code chain
 
-**Status:** Accepted — 2026-05-20 (implemented; concept-to-code harness PASS=12->13, +1 composite anchor; smoke-e2e.sh 3.78s wall; mutation test detection confirmed)
-**Authors:** Adriano (architect agent) per Stefano Ferri
-**Supersedes:** none
-**Superseded by:** none
+**Status:** Accepted  
+**Date:** 2026-05-20  
+**Author:** istefox  
+**Supersedes:** none  
+**Superseded by:** none  
 **Related:**
 - `docs/architecture/ADR-0003-concept-to-code-chain.md` (Accepted 2026-05-20; introduces
   the state machine with 16 transitions)
