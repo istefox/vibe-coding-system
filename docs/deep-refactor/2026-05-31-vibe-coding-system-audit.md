@@ -34,7 +34,7 @@
 ### structure
 
 - **P1** `docs/manifests/2026-05-29-dynamic-workflows-step5.manifest.yml:5` — `project_root` uses lowercase `/developer/` path (all other manifests use capitalized `/Developer/`); re-introduces the path-casing hazard documented in memory
-  Status: Deferred — risk_level: high (flagged for manual correction)
+  Status: Fixed — commit `8128a6d` normalized path casing (`/developer/` → `/Developer/`) across this manifest.
   Suggested fix: Normalize all paths in this manifest to `/Users/stefanoferri/Developer/vibe-coding-system`.
 
 - **P2** `docs/architecture/ADR-0015-humanize-en-chain-integration.md:2` — ADR header format drift between ADR-0001..0014 (inline status) and ADR-0015..0018 (separate Status + Date lines)
@@ -83,7 +83,6 @@
 |------|-------------|--------|
 | `docs/manifests/2026-05-23-clean-public-repo-anonymize.manifest.yml:12` | Null gate0 block in completed pre-ADR-0017 manifest | fix_type: report-only |
 | `docs/manifests/2026-05-30-deep-refactor-skill.manifest.yml.bak` | Stray .bak file | fix_type: report-only |
-| `docs/manifests/2026-05-29-dynamic-workflows-step5.manifest.yml:5` | Path casing mismatch `/developer/` vs `/Developer/` | risk_level: high |
 | `CLAUDE.md:81` | Decision sections accumulate without index | fix_type: report-only |
 | `docs/architecture/ADR-0010-web-e2e-test.md:2` | Stale Proposed status | fix_type: report-only |
 | `docs/architecture/:null` | No ADR index/README | fix_type: report-only |
