@@ -1,257 +1,260 @@
-# SPEC — deep-refactor skill
+# SPEC — claude-md-slim
 
-**Date:** 2026-05-30
-**Topic slug:** deep-refactor-skill
-**Manifest:** docs/manifests/2026-05-30-deep-refactor-skill.manifest.yml
+**Date:** 2026-06-06
+**Topic slug:** claude-md-slim
+**Manifest:** docs/manifests/2026-06-06-claude-md-slim.manifest.yml
 
 ---
 
 ## Objectives
 
-Create a `deep-refactor` skill that performs a whole-codebase health audit on a working
-application and automatically fixes routable findings in a regression-safe incremental loop.
+Build a Claude Code skill (`/skill claude-md-slim`) that audits a project's `CLAUDE.md`,
+identifies sections extractable to path-scoped `.claude/rules/` files, generates a unified
+diff, and applies the refactor after HITL approval. Goal: reduce CLAUDE.md token footprint
+by conditionally loading rules only when relevant files are in context.
 
-Goals:
-1. Surface accumulated technical debt across four dimensions: dead code, performance,
-   structure/complexity, and security.
-2. Auto-fix low-to-medium risk findings with test verification after each dimension batch.
-3. Never introduce regressions: green baseline required; circuit breaker stops on any
-   red test; no fix proceeds without a verifiable baseline.
-4. Produce a committed findings report alongside the code changes.
-5. Integrate as Gate 5.1 in the concept-to-code chain (after RTF, before commit)
-   and as a standalone skill (`/skill deep-refactor`).
+The skill also handles the optional `--global` flag to detect cross-file duplication between
+the project `CLAUDE.md` and the global `~/.claude/CLAUDE.md`.
 
 ---
 
 ## Scope
 
-### In scope
-- `~/.claude/skills/deep-refactor/SKILL.md` — full skill definition
-- Integration into `~/.claude/skills/concept-to-code/SKILL.md` at Gate 5.1
-- Optional helper scripts in `~/.claude/skills/deep-refactor/scripts/` if needed
+**In scope:**
+- Parsing project `CLAUDE.md` into H2-delimited sections
+- Detecting extractable sections via file-pattern keyword heuristics
+- Mapping sections to `.claude/rules/<domain>.md` target files with `paths:` glob frontmatter
+- Merging into existing rules files (deduplicating) or creating new ones
+- Generating a unified diff (rules file changes + trimmed CLAUDE.md)
+- HITL gate before any file writes
+- Backing up CLAUDE.md before overwriting
+- `--global` mode: detecting cross-file duplicates between project and global CLAUDE.md
 
-### Out of scope
-- Changes to existing agents (reviewer, refactorer, coder, debugger) — they are invoked as-is
-- Changes to the RTF skill — deep-refactor is additive, not a replacement
-- IDE-level or build-system integration (no Xcode project changes)
+**Out of scope:**
+- Modifying `~/.claude/CLAUDE.md` itself (read-only even in --global mode)
+- Sub-agent dispatch (single-session skill, LLM + bash)
+- Automatic re-run or iteration without user request
+- Detecting semantic duplication across sections (keyword-only heuristic, no LLM judging)
 
 ---
 
 ## Invocation
 
-**Standalone:**
 ```
-/skill deep-refactor [<path-override>]
+/skill claude-md-slim [--global] [<project-root>]
 ```
-- `<path-override>`: optional glob or directory to restrict scope (default: all source files)
-- Runs from the current project directory
 
-**As c2c chain step (Gate 5.1):**
-- Offered after RTF completes (or is skipped), before the commit step
-- User sees a gate: "Run deep-refactor on the full codebase?"
-- If skipped, chain proceeds to commit unchanged
+- `--global`: enable cross-file duplication check against `~/.claude/CLAUDE.md`
+- `<project-root>`: defaults to `$PWD`
 
 ---
 
-## Audit Dimensions
+## Architecture
 
-Four parallel audit agents, each with a dedicated scope:
+Single-session skill. No sub-agent dispatch. The orchestrator (LLM) drives all steps.
+Bash helpers (bash 3.2 compatible) handle file I/O and validation.
 
-| Dimension | Agent type | What it finds |
+### Pipeline
+
+```
+Step 0 — Locate & validate
+  → resolve project_root, CLAUDE.md path
+  → verify .claude/ directory exists (create .claude/rules/ if needed)
+  → read current CLAUDE.md line count (N_before)
+  → [--global] read ~/.claude/CLAUDE.md
+
+Step 1 — Parse sections
+  → split CLAUDE.md on H2 headings (`## `)
+  → for each section: extract heading + body text
+
+Step 2 — Classify sections
+  → apply keyword heuristic (file-pattern keywords → extractable)
+  → for each extractable section: map to rules file path + paths glob
+  → for remaining sections: keep in CLAUDE.md (non-extractable)
+
+Step 3 — [--global] Duplication scan
+  → compare each project-CLAUDE.md section body against global CLAUDE.md
+  → if substantial overlap (>60% line match): flag as DUPLICATE → propose deletion
+
+Step 4 — Plan extraction
+  → for each extractable section:
+      if target rules file exists → merge (append, deduplicate by exact-line match)
+      if target rules file absent → create new with YAML frontmatter
+  → compute trimmed CLAUDE.md (extractable sections removed/replaced by delegation note)
+
+Step 5 — Validate plan
+  → verify each planned rules file has valid paths: glob
+  → verify content-preservation invariant: union(trimmed CLAUDE.md + rules files) ≥ original
+  → compute N_after (trimmed CLAUDE.md line count)
+  → if (N_before - N_after) / N_before < 0.30 → warn "< 30% reduction achievable"
+
+Step 6 — HITL gate
+  → display unified diff in markdown code block
+  → AskUserQuestion: Approve / Reject / Abort
+  → on Reject: show diff again with optional notes (loop once)
+  → on Abort: exit, no writes
+
+Step 7 — Apply
+  → backup: cp CLAUDE.md CLAUDE.md.bak-<YYYY-MM-DD>
+  → write each rules file (create or overwrite with merged content)
+  → write trimmed CLAUDE.md
+  → report: N_before → N_after lines, files written, reduction %
+```
+
+---
+
+## Extraction Heuristic
+
+A section is **extractable** if its heading or body contains file-pattern keywords:
+
+| Keyword pattern | Maps to | paths: glob |
 |---|---|---|
-| `dead-code` | reviewer | Unused functions, imports, variables, unreachable branches, dead `#if` blocks |
-| `performance` | reviewer | Unnecessary allocations, redundant recomputations, inefficient collection patterns, force-casts, synchronous I/O on main thread |
-| `structure` | reviewer | Oversized files (>400 lines), oversized functions (>60 lines), tangled dependencies, duplicated logic blocks |
-| `security` | reviewer | Hardcoded secrets/tokens, unsafe API usage, missing input validation, unguarded URL construction |
+| `*.sh`, `bash`, `zsh`, `shell`, `AppleScript` | `shell.md` | `**/*.{sh,bash}` |
+| `*.py`, `Python`, `python3`, `venv`, `pip` | `python.md` | `**/*.py` |
+| `*.swift`, `SwiftUI`, `Swift`, `SwiftData`, `Xcode`, `xcodebuild` | `swift.md` | `**/*.swift` |
+| `*.ts`, `*.tsx`, `TypeScript`, `Node`, `npm` | `typescript.md` | `**/*.{ts,tsx}` |
+| `*.js`, `*.jsx`, `JavaScript` (no TS present) | `javascript.md` | `**/*.{js,jsx}` |
+| `migrations/`, `migration`, `ALTER TABLE`, `schema` | `migrations.md` | `**/migrations/**` |
+| `*.md`, `Markdown`, `documentation`, `docs/` | `markdown.md` | `**/*.md` |
+| `*.sql`, `SQL`, `database`, `DB` | `sql.md` | `**/*.sql` |
 
-Each agent returns findings as a JSON array matching the standard **Finding schema** (see Data Model).
+A section is **non-extractable** if it contains global behavioral rules (e.g., "Git conventions",
+"Tone", "Security guardrails", "Identity") — these apply to all contexts and must remain in CLAUDE.md.
+
+**Split rule:** if a section contains both extractable content (specific file patterns) AND
+global behavioral rules (always-apply constraints), the section is flagged as MIXED. The skill
+proposes a split: extractable part → rules file, non-extractable part stays in CLAUDE.md.
+The HITL diff shows both halves clearly.
 
 ---
 
-## Data Model
+## Rules File Format
 
-### Finding schema
-```json
-{
-  "id": "<dimension>-<file_basename>-<hash3>",
-  "dimension": "dead-code | perf | structure | security",
-  "severity": "P1 | P2 | P3",
-  "risk_level": "low | high",
-  "file": "<absolute path>",
-  "line": "<integer or null>",
-  "description": "<concise problem statement>",
-  "fix_type": "coder | refactorer | debugger | report-only",
-  "suggested_fix": "<1-2 line description>"
-}
-```
+Each generated or extended `.claude/rules/<domain>.md` follows:
 
-### Report schema (`docs/deep-refactor/YYYY-MM-DD-<project>.md`)
 ```markdown
-# Deep Refactor Report — <project> — <date>
+---
+paths:
+  - "<glob>"
+---
 
-## Summary
-- Baseline: PASS=N FAIL=0
-- Post-fix: PASS=M FAIL=0
-- Findings total: N
-- Fixed: N | Deferred: N | Report-only (security): N
-- Regressions caught by circuit breaker: N
+# <Domain heading>
 
-## Findings by dimension
-### Dead code
-...
-
-### Performance
-...
-
-### Structure
-...
-
-### Security (report-only)
-...
-
-## Deferred / Skipped
-...
+<content from CLAUDE.md section>
 ```
+
+The YAML frontmatter must have exactly one `paths:` list with at least one glob. The orchestrator
+validates this before showing the HITL gate.
 
 ---
 
-## Process — Phase by Phase
+## Trimmed CLAUDE.md Format
 
-### Phase 0 — Pre-flight (blocking gate)
+Extracted sections are replaced by a one-line delegation note pointing to the rules file:
 
-1. Verify `git rev-parse --git-dir` succeeds (git repo required).
-2. Capture baseline commit hash: `git rev-parse HEAD`.
-3. Read `.claude/test-cmd`. If `NONE` or absent:
-   - **Block auto-fix.** Present gate: "No test-cmd found. Proceed in report-only mode (no auto-fix) or abort?"
-   - Report-only mode: audit runs, findings are documented, NO fixes applied, NO commit.
-4. If test-cmd exists: run it. If RED:
-   - **Block auto-fix.** Present gate: "Baseline tests are RED. Fix the baseline first, or proceed in report-only mode?"
-   - Same report-only path as above.
-5. Capture baseline test count for delta reporting.
-6. Identify all source files via `git ls-files` (respects .gitignore). Exclude: `*.xcarchive`, `DerivedData/`, `Pods/`, `.build/`, `*.generated.swift`.
-
-**HITL Gate 0 — Approval before starting:**
-```
-AskUserQuestion:
-  question: "deep-refactor — Ready to audit\n\nProject: <root>\nFiles to scan: <N>\nBaseline: PASS=<N> FAIL=0\nDimensions: dead-code, performance, structure, security\n\nThis will read all source files and dispatch 4 parallel audit agents.\nProceed?"
-  options:
-    - "Proceed with full audit"
-    - "Abort"
+```markdown
+<!-- <domain> rules moved to .claude/rules/<domain>.md (paths: <glob>) -->
 ```
 
-### Phase 1 — Parallel audit (4 agents)
-
-Dispatch all four dimension agents in parallel (Workflow if `hook_verified=true`, else sequential Agent-tool calls). Each agent:
-- Reads all source files identified in Phase 0
-- Returns a JSON findings array matching Finding schema
-- Tags each finding with `risk_level: high` if the finding requires human judgment (all security secrets/auth bypass; any finding touching public API contracts)
-
-Collect and merge findings. Sort by: dimension order (dead-code → perf → structure → security), then severity (P1 → P2 → P3).
-
-**HITL Gate 1 — Findings summary before fixing:**
-```
-AskUserQuestion:
-  question: "deep-refactor — Audit complete\n\nFindings:\n  dead-code: N (P1: x, P2: y, P3: z)\n  performance: N\n  structure: N\n  security: N (low-risk: x, high-risk: y — report-only)\n\nTotal routable (auto-fixable): N\nEstimated time: ~N min\n\nProceed with auto-fix?"
-  options:
-    - "Fix all routable findings"
-    - "Report only — no auto-fix"
-    - "Abort"
-```
-
-If "Report only": skip Phases 2-3, go directly to Phase 4 (report + commit report file only).
-
-### Phase 2 — Incremental fix loop (dimension by dimension)
-
-**Order:** dead-code → performance → structure → security (low-risk only)
-
-For each dimension batch:
-1. Group findings by file within the dimension.
-2. Dispatch fix agents in parallel per file group, using `model: "opus"`:
-   - `fix_type: coder` → coder agent with micro-piano
-   - `fix_type: refactorer` → refactorer agent
-   - `fix_type: debugger` → debugger agent
-   - `fix_type: report-only` → skip (goes to deferred list)
-   - `risk_level: high` → skip regardless of fix_type (goes to report-only section)
-3. After all fixes in the dimension complete: run test-cmd.
-   - **GREEN:** log "dimension <X> clean — N findings fixed", proceed to next dimension.
-   - **RED:** **circuit breaker fires.** Record which dimension caused regression. Skip remaining findings in this dimension. Log `REGRESSION: <dimension>` in report. Proceed to next dimension (do NOT abort entire skill — other dimensions may be safe).
-4. After all dimensions: run test-cmd once more for final verification.
-
-### Phase 3 — Security report-only section
-
-Collect all `security` findings with `risk_level: high`. Write them as a dedicated section in the report with:
-- File, line, description
-- Suggested remediation (from audit agent)
-- Tag: `ACTION REQUIRED — not auto-fixed`
-
-### Phase 4 — Output
-
-1. Write report to `<project-root>/docs/deep-refactor/YYYY-MM-DD-<slug>.md`.
-2. Stage report + all modified source files: `git add -A`.
-3. **HITL Gate 2 — Commit approval:**
-```
-AskUserQuestion:
-  question: "deep-refactor — Ready to commit\n\nFixed: N findings\nDeferred: N\nSecurity report-only: N\nRegressions caught: N\nTest delta: PASS=N (+M)\n\nApprove commit?"
-  options:
-    - "Approve and commit"
-    - "Stage only (no commit)"
-    - "Abort (discard changes)"
-```
-4. On approve: invoke `commit` skill with context-hint `"deep-refactor: <project> audit"`.
-5. On "Stage only": leave staged, user commits manually.
-6. On "Abort": `git reset HEAD` (unstage), leave working tree as-is.
+This preserves discoverability: a reader of CLAUDE.md can see what was delegated and where.
+Alternatively, sections can be deleted entirely (no delegation note) — this is a HITL option
+shown at Step 6.
 
 ---
 
-## Integration — Gate 5.1 in concept-to-code
+## --global Mode: Duplication Scan
 
-After RTF completes (or is skipped at Gate 5), before Gate 5.5 (humanize) and Step 7 (commit):
+When `--global` is set, the skill reads `~/.claude/CLAUDE.md` and checks each project
+CLAUDE.md section for substantial overlap:
 
-```
-AskUserQuestion:
-  question: "Gate 5.1 — Deep refactor (optional)\n\nRTF cycle complete. Run a full-codebase health audit?\nThis scans ALL source files (not just changed ones).\nEstimated: 10–20 min depending on codebase size.\n\nOnly meaningful if the project has accumulated technical debt."
-  options:
-    - "Run deep-refactor"
-    - "Skip (proceed to commit)"
-```
+- **Substantial overlap**: ≥60% of section lines appear verbatim in the global file
+- **Action**: flag as DUPLICATE; propose deletion from project CLAUDE.md (not extraction to rules)
+- **Never**: modify `~/.claude/CLAUDE.md` (read-only in this skill)
 
-"Run deep-refactor" → invoke `/skill deep-refactor` (Skill tool). After completion, transition to Gate 5.5 / Step 7.
-"Skip" → silent no-op, proceed to Gate 5.5 / Step 7 as before.
+Duplicates are shown as a separate block in the HITL diff labeled `[DUPLICATE — delete from project]`.
 
 ---
 
 ## Edge Cases
 
-- **No test-cmd (`NONE`):** skill blocks auto-fix, offers report-only mode explicitly.
-- **Xcode codesign-bound tests:** test-cmd fails without signed bundle. Same path as NONE — block, offer report-only.
-- **Circuit breaker fires mid-dimension:** remaining findings in that dimension are deferred; other dimensions continue. Report documents which dimension caused regression with the specific finding.
-- **All findings are `report-only`:** skill produces report, no code changes, no commit of source (only report file committed).
-- **Empty audit (0 findings):** emit "Codebase is clean across all dimensions" and exit without committing.
-- **Large codebase (>200 files):** Workflow dispatch required; sequential Agent-tool fallback may be slow but still correct.
-- **Skill invoked mid-chain (dirty working tree):** pre-flight warns if `git status` shows uncommitted changes. Gate 0 includes a warning; user can proceed (uncommitted changes mixed into refactor) or abort to commit first.
+| Scenario | Behavior |
+|---|---|
+| CLAUDE.md has no extractable sections | Report "already lean — 0 extraction candidates", exit with no writes |
+| CLAUDE.md already under 200 lines | Warn "already under target — proceeding anyway" (user may still want rules) |
+| `.claude/rules/` does not exist | Create it as part of the apply step (no pre-check required) |
+| Target rules file already contains identical content | Skip (no duplicate appended) |
+| Section would be 100% extracted (nothing remains) | Remove section entirely from CLAUDE.md (no delegation note needed) |
+| MIXED section where split is ambiguous | Flag as MANUAL — show in report, skip auto-extraction |
+| project_root has no `.claude/` at all | Warn, offer to create `.claude/rules/` on approval |
+| CLAUDE.md.bak-<date> already exists | Abort with error: "backup file already exists — delete it manually first" |
+| --global but ~/.claude/CLAUDE.md absent | Disable duplication scan silently, warn in output |
+
+---
+
+## Backup Strategy
+
+Before any write:
+```bash
+cp "$CLAUDE_MD" "${CLAUDE_MD}.bak-$(date +%Y-%m-%d)"
+```
+
+Follows the global CLAUDE.md safety rule: "Back up before modifying critical files." The
+`.bak-YYYY-MM-DD` pattern is already in `.gitignore` (`*.bak-*`).
 
 ---
 
 ## Success Criteria
 
-- [ ] Pre-flight blocks when baseline is RED or test-cmd is absent — no silent auto-fix on unverifiable codebases
-- [ ] Parallel audit covers all four dimensions in a single invocation
-- [ ] HITL gate shows findings summary before any fix is applied
-- [ ] Fix loop runs dimension-by-dimension with test verification after each batch
-- [ ] Circuit breaker correctly stops a dimension on regression without aborting the whole skill
-- [ ] High-risk security findings are NEVER auto-fixed — always REPORT-ONLY
-- [ ] Report committed alongside code changes with accurate delta counts
-- [ ] Gate 5.1 integrates cleanly into c2c chain without regressions in existing paths
-- [ ] Skill invokable standalone on any project with a `.claude/test-cmd`
-- [ ] Empty result (0 findings) handled gracefully without committing
+1. **CLAUDE.md reduced by ≥30%** line count compared to pre-run state
+2. **All generated `.claude/rules/*.md`** have valid YAML frontmatter with `paths:` containing at least one glob
+3. **Content-preservation invariant**: union of trimmed CLAUDE.md + all rules files contains all content from original CLAUDE.md
+4. **No broken delegation references**: if delegation notes are added, they point to files that exist
+5. **Skill produces its own test harness** at `~/.claude/skills/claude-md-slim/tests/run-tests.sh`
 
 ---
 
-## Stack / Constraints
+## Tests
 
-- Bash 3.2 compatible for any helper scripts
-- Uses existing agents: reviewer (audit), coder/refactorer/debugger (fix), all at `model: opus`
-- Workflow dispatch (Parallel) for audit phase when `hook_verified=true`; sequential Agent-tool fallback otherwise
-- No new agent types required
-- Report stored at `<project-root>/docs/deep-refactor/` (directory created if absent)
-- Inherits all existing safety invariants: Pre-flight Pattern Classifier (ADR-0001), no test weakening (RTF weakening-scan not required here — circuit breaker is the equivalent)
+The test harness (`tests/run-tests.sh`) covers:
+
+- **T01**: section parser correctly splits a multi-H2 CLAUDE.md
+- **T02**: keyword heuristic identifies shell/python/swift sections; skips git/tone/security sections
+- **T03**: MIXED section detection (section with both extractable + global content)
+- **T04**: rules file merge deduplicates identical lines
+- **T05**: trimmed CLAUDE.md ≥30% smaller than original (on the vibe-coding-system CLAUDE.md fixture)
+- **T06**: backup file created before writes
+- **T07**: CLAUDE.md.bak already-exists guard fires correctly
+- **T08**: --global flag detects cross-file duplicates (fixture: two files with shared content)
+- **T09**: edge case — no extractable sections → correct "already lean" exit
+- **T10**: generated rules files pass YAML frontmatter validation
+
+---
+
+## File Layout
+
+```
+~/.claude/skills/claude-md-slim/
+  SKILL.md                   ← skill prompt
+  scripts/
+    parse-sections.sh        ← split CLAUDE.md on H2 headings → TSV output
+    classify-sections.sh     ← keyword heuristic → TSV with domain + glob
+    validate-frontmatter.sh  ← verify YAML frontmatter in a rules file
+    content-union-check.sh   ← verify content-preservation invariant
+  tests/
+    run-tests.sh             ← harness (bash 3.2 compatible)
+    fixtures/
+      sample-claude-md.md
+      sample-global-claude-md.md
+      expected-shell-rules.md
+      expected-trimmed-claude-md.md
+```
+
+All scripts: bash 3.2 compatible (no associative arrays, no `${v^^}`, no `mapfile`).
+
+---
+
+## Stack
+
+- Language: Bash 3.2 (scripts), Markdown (output)
+- No external dependencies beyond standard macOS tools (`grep`, `sed`, `awk`, `diff`)
+- Operates entirely in `~/.claude/` and `<project-root>/` — no network access
