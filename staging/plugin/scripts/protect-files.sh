@@ -6,7 +6,7 @@ FILE_PATH=$(printf '%s\n' "$INPUT" | jq -r '.tool_input.file_path // empty')
 PROTECTED=(".env" ".env." "secrets" ".pem" ".key" "credentials" "/.git/" "package-lock.json")
 for p in "${PROTECTED[@]}"; do
   if [[ "$FILE_PATH" == *"$p"* ]]; then
-    echo "Blocked: $FILE_PATH matches protected pattern '$p'. Ask Stefano explicitly." >&2
+    printf 'Blocked: %s matches protected pattern '\''%s'\''. Ask Stefano explicitly.\n' "$FILE_PATH" "$p" >&2
     exit 2
   fi
 done
