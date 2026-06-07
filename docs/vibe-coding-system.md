@@ -80,6 +80,18 @@ Sec. 7.4/7.5 (admonitions updated to the as-built reference) and 7.6 (filesystem
 layout updated to the deployed state) reflect this. Tier validation on the
 pilot project = single open item (see sec. 17).
 
+### Update 2026-06 (post-deployment)
+
+- **`concept-to-code` orchestrator skill** (sec. 8.6): the canonical implementation of sec. 11 as a deterministic state machine. Three paths — Express (<10 files, single session, plan mode), Hybrid (5–20 files, single session, interview+plan), Standard (full chain, fresh session). YAML manifest (schema 1.3, `chain_path`, `gate0.*`). 7+ HITL gates. Harness 78/78.
+- **`review-triage-fix` skill** (sec. 8.6): per-branch JSON triage state machine, circuit breakers A–D, NIT batching. Step 6 in Standard chain. Prefix-cache discipline (PRIOR AGENT NOTES at END of dispatch briefs), no-op detection, hash-oscillation wording-preservation.
+- **`deep-refactor` skill** (sec. 8.6, ADR-0018): 4-dimension parallel audit (dead-code/perf/structure/security) → sequential fix loop with global circuit breaker. Gate 5.1 in Standard chain. Two mandatory report-only guards: `@objc`/`dynamic`/protocol-witness dead code; `async`/`actor`/`Sendable` perf. No test-cmd = report-only mode.
+- **`claude-md-slim` skill** (sec. 8.6, ADR-0019): audits project CLAUDE.md, extracts domain sections to `.claude/rules/<domain>.md`. Content-preservation hard gate. `--global` duplication scan. Harness 19/19.
+- **`humanize-en` skill** (sec. 8.6, ADR-0015): English prose humanizer. Triple-trigger via hint hook + conditional UserPromptSubmit hook + Gate 5.5/Step 3.5 in the chain.
+- **`design-brainstorm`, `macos-ux`, `ui-layout-audit`, `clean-public-repo`, `vibe-status`, `interview-driver`, `claude-md-generator`, `commit` skills** (sec. 8.6): chain-integrated skills and utilities — see sec. 8.6 table.
+- **`agent-design` knowledge base** (sec. 8.6): 7 Sayfan reference files covering prefix caching, multi-agent patterns, tool design, evaluation, deployment.
+- **Chain-stop fix** (sec. 11): CRITICAL continuation blocks for `interview-driver` and `design-brainstorm` now use positive-constraint imperative ("Your NEXT OUTPUT must be a Bash tool call") instead of passive prohibitions.
+- **Sayfan prefix-cache discipline** applied across all chain skills: PRIOR AGENT NOTES blocks moved to END of dispatch briefs (stable content first, dynamic notes last).
+
 ### Update 2026-05-29 (2)
 
 - **Chain-type routing at Gate 0** (sec. 11, ADR-0017): Gate 0 now fires on every invocation and routes to one of three paths. **Express** (chain_path=express): <10 files, single session, no sub-agents, plan mode + direct execution, manifest only. **Hybrid** (chain_path=hybrid): 5–20 files, single session, interview → SPEC.md → plan mode → direct execution, no fresh-session boundary. **Standard** (chain_path=standard): existing full chain unchanged. Auto-detect heuristic (file count + keyword vote on topic title) pre-selects a recommendation; user confirms or overrides. Gate 0 now always shows the routing choice — the old conditional/silent path is removed. Manifest schema bumped to 1.3 (new fields: `chain_path`, `gate0.chain_path`, `gate0.auto_detect_reason`). Validator accepts 1.0–1.3. 17 new transition pairs (5 Express + 12 Hybrid). Harness: 50/50 PASS.
@@ -1238,6 +1250,27 @@ Research $ARGUMENTS:
 
 `agent: Explore` uses the built-in Explore (Haiku, read-only). The subagent does the work, the main context receives only the summary.
 
+### 8.6 Deployed custom skills (active as of 2026-06)
+
+| Skill | Invocation | When to use | Notes |
+|-------|-----------|------------|-------|
+| `concept-to-code` | `/skill concept-to-code [express\|hybrid\|standard] <title>` | Start any non-trivial feature | Orchestrator: 3 paths, manifest 1.3, 7+ HITL gates. Canonical implementation of §11 |
+| `review-triage-fix` | `/skill review-triage-fix` | After implementation, before merge | Per-branch JSON state, circuit breakers A–D, NIT batching. Step 6 in Standard chain |
+| `deep-refactor` | `/skill deep-refactor` | Whole-codebase health audit | 4-dim parallel audit → sequential fix. Gate 5.1 in Standard chain (ADR-0018) |
+| `claude-md-slim` | `/skill claude-md-slim [--global] [<root>]` | CLAUDE.md has grown >100 lines | Extracts domain sections to rules files. ≥30% reduction target (ADR-0019) |
+| `humanize-en` | `/skill humanize-en` | Before publishing prose (docs, commits, PR bodies) | Strips AI tells, preserves Vibrofer IT terms (ADR-0015) |
+| `design-brainstorm` | invoked by `concept-to-code` at Gate 1b | When design space is wide, before architecture | Structured ideation → BRAINSTORM.md |
+| `macos-ux` | invoked by `concept-to-code` at Gate 1c | macOS/SwiftUI projects | HIG + accessibility rules. Auto-detected from SPEC.md |
+| `ui-layout-audit` | invoked by `concept-to-code` at Gate 5.05 | When UI files are present after implementation | Layout conformance review |
+| `clean-public-repo` | `/skill clean-public-repo` or Gate 0b | Before pushing to a public remote | Anonymization + optional history rewrite (ADR-0011) |
+| `vibe-status` | `/skill vibe-status` | System health check any time | Aggregates harness results for all skills, hooks, agents. <10s |
+| `interview-driver` | invoked by `concept-to-code` at Step 1 | Start of any interview | AskUserQuestion loop → SPEC.md |
+| `claude-md-generator` | invoked at Step 3 | After SPEC.md + ARCH.md ready | Generates project CLAUDE.md from spec |
+| `commit` | `/skill commit [hint]` | After any implementation cycle | HITL-verified Conventional Commit wizard. Step 7 in all chain paths |
+| `agent-design` | reference via Read | When designing new agents or multi-agent patterns | 7 Sayfan reference files (01–07) |
+
+All live in `~/.claude/skills/<name>/`. Each has a `SKILL.md`, optional `scripts/` helpers, and a `tests/` harness. The chain skills (rows 1–4) are integrated into the `concept-to-code` orchestrator; they can also be invoked standalone.
+
 ---
 
 ## 9. MCP servers
@@ -1400,6 +1433,8 @@ Arrays (`permissions.allow`, `deny`) are **concatenated and deduplicated** acros
 
 > Official Anthropic pattern from `code.claude.com/docs/en/best-practices`
 > (sections "Explore first, then plan, then code" and "Let Claude interview you").
+
+**Canonical implementation.** The manual workflow described in §11.3–11.5 is codified as the `concept-to-code` orchestrator skill (§8.6). Use `/skill concept-to-code` for all non-trivial features. The skill selects the path (Express/Hybrid/Standard) via Gate 0, manages the manifest state machine, calls the sub-skills at the right gates, and enforces all HITL gates. The manual steps below remain accurate as a reference for understanding the workflow, but they are superseded in practice.
 
 ### 11.1 Founding principles
 
