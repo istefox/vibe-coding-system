@@ -1,6 +1,6 @@
 # ADR-0018 — deep-refactor skill: whole-codebase health audit with regression-safe incremental fix
 
-**Status:** Proposed  
+**Status:** Accepted  
 **Date:** 2026-05-30  
 **Author:** istefox  
 **Supersedes:** none  

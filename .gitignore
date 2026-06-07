@@ -7,6 +7,14 @@
 .claude/.triage-fix-last*.json
 .claude/test-cmd
 
+# Chain runtime artifacts (machine-local, never commit)
+.claude/step5-report.json
+.claude/scheduled_tasks.lock
+.claude/agent-memory-local/
+.claude/worktrees/
+*.bak
+*.bak-*
+
 # Session memory (runtime, not source of truth)
 .remember/logs/
 .remember/tmp/

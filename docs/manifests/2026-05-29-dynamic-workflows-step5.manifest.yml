@@ -33,24 +33,24 @@ artifacts:
 hitl_gates:
   - gate: 1
     label: "spec_review"
-    status: "pending"
+    status: "approved"
     approved_at: null
-    notes: null
+    notes: "approved during chain run 2026-05-29 (per-gate timestamp not recorded)"
   - gate: 2
     label: "architecture_review"
-    status: "pending"
+    status: "approved"
     approved_at: null
-    notes: null
+    notes: "approved during chain run 2026-05-29 (per-gate timestamp not recorded)"
   - gate: 3
     label: "project_memory_review"
-    status: "pending"
+    status: "approved"
     approved_at: null
-    notes: null
+    notes: "approved during chain run 2026-05-29 (per-gate timestamp not recorded)"
   - gate: 5
     label: "review_cycle_decision"
-    status: "pending"
+    status: "approved"
     approved_at: null
-    notes: null
+    notes: "approved during chain run 2026-05-29 (per-gate timestamp not recorded)"
 
 # Session boundary tracking
 session_boundary:

@@ -130,3 +130,27 @@ Key architectural decisions:
 - **Security findings:** always `report-only` regardless of `risk_level`. High-risk findings (hardcoded secrets, auth bypass) are never auto-fixed.
 
 Detail: `docs/architecture/ADR-0018-deep-refactor-skill.md`.
+
+## Decisions from the claude-md-slim chain (ADR-0019)
+
+CLAUDE.md token-reduction skill (`/skill claude-md-slim [--global] [<project-root>]`): audits
+project CLAUDE.md, identifies sections extractable to path-scoped `.claude/rules/` files, proposes
+a unified diff, and applies the refactor after HITL approval.
+
+Key architectural decisions:
+- **Extraction heuristic:** file-pattern keywords (shell/python/swift/ts/migrations/markdown/sql) map
+  sections to `.claude/rules/<domain>.md` with `paths:` globs. MIXED sections (domain + global
+  behavioral keywords) are flagged but not auto-split in v1.
+- **Apply after HITL:** unified diff shown → `AskUserQuestion` (Approve/Reject/Abort) → on Approve:
+  backup (`.bak-YYYY-MM-DD`) + write rules files + write trimmed CLAUDE.md.
+- **Merge strategy:** merge extracted content into existing rules files (deduplicate by exact-line
+  match); create new rules file if absent.
+- **Content-preservation invariant (hard gate):** union(trimmed CLAUDE.md + all rules files) must
+  contain every line of the original. Verified by `content-union-check.sh` before the HITL gate;
+  abort if violated.
+- **`--global` flag:** enables cross-file duplication scan against `~/.claude/CLAUDE.md` (read-only);
+  duplicated sections proposed for deletion from project CLAUDE.md only.
+- **DoD:** ≥30% line reduction + valid `paths:` frontmatter on all rules files + no broken delegation
+  references. Implementation: 4 bash 3.2-compatible scripts + SKILL.md 7-step pipeline + 10-test harness.
+
+Detail: `docs/architecture/ADR-0019-claude-md-slim-skill.md`.
