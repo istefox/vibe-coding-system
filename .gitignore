@@ -6,6 +6,7 @@
 .claude/settings.local.json
 .claude/.triage-fix-last*.json
 .claude/test-cmd
+.claude/context.md
 
 # Chain runtime artifacts (machine-local, never commit)
 .claude/step5-report.json
