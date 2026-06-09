@@ -2,6 +2,9 @@
 
 **Status:** Accepted  
 **Date:** 2026-05-29  
+**Amended:** 2026-06-09 — CC v2.1.160 renamed the dynamic-workflow trigger keyword from
+`workflow` to `ultracode`; the bare word "workflow" no longer triggers a run (an explicit
+request phrased in natural language still does). All trigger references updated below.  
 **Author:** istefox  
 **Supersedes:** none  
 **Superseded by:** none  
@@ -48,8 +51,10 @@ Claude Code v2.1.154 introduces **Dynamic Workflows** (research preview), availa
 plans including Pro, Max, Team, and Enterprise. The feature lets Claude write a JavaScript
 orchestration script that the runtime executes outside the conversation:
 
-- **Trigger:** include the word `workflow` anywhere in the user-visible prompt. Claude Code
-  highlights the word; Claude writes a JS script instead of working turn-by-turn.
+- **Trigger:** include the keyword `ultracode` anywhere in the user-visible prompt (renamed
+  from `workflow` in CC v2.1.160). Claude Code highlights the keyword in violet; Claude writes
+  a JS script instead of working turn-by-turn. An explicit request phrased in natural language
+  ("use a workflow to…") also triggers, but only the keyword is deterministic.
 - **State model:** intermediate results live in script variables, not in Claude's context
   window. The orchestrator's context holds only the final answer.
 - **Scale:** up to 16 concurrent agents, 1000 agents total per run.
@@ -88,9 +93,9 @@ and absolute paths in all read/write operations — already the convention in th
 
 ### Assumptions (unvalidated at spec time)
 
-1. The keyword trigger ("workflow" in prompt) reliably causes CC to generate a JS script rather
-   than work turn-by-turn. If it does not, the orchestrator falls back to the current Agent-tool
-   batch dispatch. The smoke test confirms the trigger works.
+1. The keyword trigger (`ultracode` in prompt; `workflow` before CC v2.1.160) reliably causes
+   CC to generate a JS script rather than work turn-by-turn. If it does not, the orchestrator
+   falls back to the current Agent-tool batch dispatch. The smoke test confirms the trigger works.
 2. Dynamic Workflows remains available in its current form through the research preview period.
    If the feature is removed or gated differently, the fallback path activates with no chain
    breakage.
@@ -113,7 +118,7 @@ Orchestrator
   │     └── trivial workflow in sandbox → user observes hooks → hook_verified=true|false
   │         If hook_verified=false: block. Workflow path is not used. Fallback activates.
   │
-  ├── Step 5 dispatch prompt (includes "workflow" keyword + coder instructions)
+  ├── Step 5 dispatch prompt (includes "ultracode" keyword + coder instructions)
   │     └── CC generates JS script → dispatches coders as subagents (up to 16 concurrent)
   │           ├── Subagent 1: coder tasks 1-N
   │           ├── Subagent 2: coder tasks N+1-M
@@ -124,9 +129,9 @@ Orchestrator
 
 ### Trigger mechanism
 
-The orchestrator's Step 5 dispatch prompt embeds the word "workflow":
+The orchestrator's Step 5 dispatch prompt embeds the keyword "ultracode":
 
-> "Use a **workflow** to dispatch the following coders in parallel…"
+> "**ultracode** — use a workflow to dispatch the following coders in parallel…"
 
 CC highlights the keyword and writes a JS orchestration script. If the keyword does not trigger
 script generation (Claude Code version too old, feature disabled via `disableWorkflows: true`,
@@ -167,7 +172,7 @@ true|false` in the manifest (additive field, schema 1.2-compatible, default `fal
 
 Steps:
 1. Create a throwaway sandbox repo (`/tmp/wf-smoke-test/`), `git init`, add a minimal file.
-2. Include the word "workflow" in a prompt that triggers a single `Edit` tool call on that file.
+2. Include the keyword "ultracode" in a prompt that triggers a single `Edit` tool call on that file.
 3. Observe the terminal: confirm the pattern-enforce hook fires (emits a `PATTERN:` check
    message visible in the terminal output).
 4. `hook_verified: true` → workflow path is available. `hook_verified: false` → fallback only.
@@ -219,9 +224,9 @@ The keyword-trigger approach (Alternative C, chosen) achieves the same runtime b
 
 ### Alternative C — Keyword-in-prompt trigger with file handoff (chosen)
 
-Embed the word "workflow" in the orchestrator's dispatch prompt; have the final workflow
-subagent write `step5-report.json`; have the orchestrator read that file after the workflow
-completes.
+Embed the trigger keyword (`ultracode` since CC v2.1.160; originally `workflow`) in the
+orchestrator's dispatch prompt; have the final workflow subagent write `step5-report.json`;
+have the orchestrator read that file after the workflow completes.
 
 **Chosen because:**
 
@@ -255,12 +260,14 @@ path. If the trigger fails, the chain is not broken: it degrades to current beha
 
 ### Negative / risks
 
-- **Keyword trigger is implicit and fragile.** The word "workflow" triggering JS script
-  generation is a CC behavior, not a stable documented API contract. If Anthropic changes the
-  trigger condition, keyword sensitivity, or the behavior of the feature during or after the
-  research preview, the orchestrator's dispatch prompt will silently fall through to turn-by-turn
-  mode. The fallback path handles this, but the operator may not notice the degradation without
-  monitoring `step5_mode` in the manifest.
+- **Keyword trigger is implicit and fragile.** The trigger keyword is a CC behavior, not a
+  stable documented API contract. If Anthropic changes the trigger condition, keyword
+  sensitivity, or the behavior of the feature during or after the research preview, the
+  orchestrator's dispatch prompt will silently fall through to turn-by-turn mode. The fallback
+  path handles this, but the operator may not notice the degradation without monitoring
+  `step5_mode` in the manifest. *This risk materialized on 2026-06-09: CC v2.1.160 renamed the
+  keyword from `workflow` to `ultracode` (see Amended note above). Mitigation held — explicit
+  natural-language requests still trigger, and the fallback path was never broken.*
 - **Hook behavior inside workflow subagents is unverified.** This is the highest-risk unknown.
   The smoke test is the only mechanism to verify hook propagation before production use. If
   hooks do not fire, the entire workflow path is blocked — not as a degradation but as a hard
