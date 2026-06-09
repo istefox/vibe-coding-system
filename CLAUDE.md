@@ -98,7 +98,8 @@ Detail: `docs/architecture/ADR-0015-humanize-en-chain-integration.md`.
 ## Decisions from the dynamic-workflows-step5 chain (ADR-0016)
 
 Dynamic Workflows integration into concept-to-code Step 5 (parallel coder dispatch):
-keyword trigger (`"workflow"` in the dispatch prompt) causes Claude Code to generate a JS
+keyword trigger (`"ultracode"` in the dispatch prompt; renamed from `"workflow"` in CC
+v2.1.160 — the bare word "workflow" no longer triggers) causes Claude Code to generate a JS
 orchestration script instead of turn-by-turn `Agent` tool calls. Max 16 concurrent subagents,
 1000 total; state in script variables (not context window); session-bound resumability.
 
