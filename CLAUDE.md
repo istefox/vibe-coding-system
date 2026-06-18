@@ -155,3 +155,27 @@ Key architectural decisions:
   references. Implementation: 4 bash 3.2-compatible scripts + SKILL.md 7-step pipeline + 10-test harness.
 
 Detail: `docs/architecture/ADR-0019-claude-md-slim-skill.md`.
+
+## Decisions from the autopilot-build skill (ADR-0020)
+
+Standalone unattended implementation skill (`/skill autopilot-build <manifest-path>`): picks up
+a concept-to-code manifest at `ready_for_implementation` (Gates 1–3 approved, SPEC+ADR+plan
+human-reviewed) and runs Steps 5–7 without any human in the loop, ending at a local feature
+branch commit plus a `autopilot-report.json`.
+
+Key architectural decisions:
+- **Autonomy boundary:** only local + reversible actions unattended (implement, test, review,
+  local commit). Push, PR, merge, and DB changes are never taken unattended.
+- **Eight hard pre-flight checks:** scope guard (script-level, not prompt-level), manifest state,
+  gates 1–3 approved, artifacts on disk, unchecked plan tasks, test-cmd real + TOFU-trusted,
+  `hook_verified` known, git repo present. Any failure → `aborted` report, no dispatch.
+- **TOFU trust must pre-exist:** autopilot never auto-grants test-cmd trust. The human must have
+  approved the command in a prior interactive session (ADR-0014 invariant preserved).
+- **Reuses c2c Step 5–7 mechanics verbatim:** Workflow dispatch or Agent-tool batch fallback
+  (ADR-0016), review cycle, `commit --autopilot` (local-only, no push). No reimplementation.
+- **Circuit breaker on RED tests:** halt without commit after Step 5 or Step 6 RED; write a
+  `partial` report for human inspection.
+- **Safety hooks always active:** `stop-gate.sh`, `pre-flight-pattern-enforce.sh`,
+  `protect-files.sh`, `db-backup-guardrail.sh` fire normally throughout.
+
+Detail: `docs/architecture/ADR-0020-autopilot-build-skill.md`.
