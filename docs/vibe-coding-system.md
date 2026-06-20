@@ -80,6 +80,15 @@ Sec. 7.4/7.5 (admonitions updated to the as-built reference) and 7.6 (filesystem
 layout updated to the deployed state) reflect this. Tier validation on the
 pilot project = single open item (see sec. 17).
 
+### Review 2026-06-20 (CC 2.1.170–2.1.183 cross-skill pass)
+
+Audit of the full 2.1.170–2.1.183 changelog range against 26 skills, 8 agents, and 15 hooks. One item required a documentation update; the rest are no-ops or already covered.
+
+- **Flat architecture decision record** (sec. 2.2): CC 2.1.172 enabled sub-agent nesting up to 5 levels deep (pre-launch classifier added in 2.1.178; depth cap enforced in 2.1.181). The system keeps the flat orchestrator → sub-agent model by design: predictable dispatch and cost, clean hook propagation for the ADR-0016 hook_verified smoke test, and bounded fan-out. The four dispatching skills now cross-reference §2.2 instead of presenting the flat model as a platform constraint. Source: `code.claude.com/docs/en/changelog.md` v2.1.172, v2.1.178, v2.1.181.
+- **Workflow `agent()` attribution confirmed** (sec. 3.10): CC 2.1.174 fixed Workflow tool `agent()` subagents missing attribution headers. All git commits in this system route through the `commit` skill via the Skill tool, not directly from workflow `agent()` subagents, so the fix has no behavioral impact. Config-level attribution (`commit`/`pr` empty, `sessionUrl: false`) still governs. Source: `code.claude.com/docs/en/changelog.md` v2.1.174.
+
+No-op confirmations: nested-skills double-load clean (26 unique names, no nested SKILL.md after PR #6 swiftui-pro fix); hook if-conditions (2.1.176) N/A, hooks use matcher-only config; MCP auth-stub fix (2.1.183) N/A, researcher/architect use only unauthenticated context7 tools; Fable 5 (2.1.170) no fit for the haiku/sonnet/opus tiering.
+
 ### Alignment 2026-06-20 (CC 2.1.181–2.1.183)
 
 Relevant capabilities from CC 2.1.181 and 2.1.183, incorporated inline in the indicated sections:
@@ -216,6 +225,8 @@ Official Anthropic documentation distinguishes clearly:
 **Rule for Stefano:**
 - Sub-agent for: review, research, isolated debug, module test, component scaffold, doc generation. **Default for everything.**
 - Agent team for: large cross-layer feature (FastAPI router + React page + tests in parallel), bug investigation with competing hypotheses, multi-perspective code review. **Only for large independent tasks.**
+
+**Flat architecture, deliberate decision (CC 2.1.172 context):** CC 2.1.172 enabled sub-agent nesting up to 5 levels deep (pre-launch classifier in 2.1.178; cap enforced in 2.1.181). The system keeps the orchestrator → sub-agent flat model by design. Reasons: predictable dispatch and bounded cost; clean `PreToolUse`/`PostToolUse` hook propagation (the ADR-0016 `hook_verified` smoke test covers only the one-level dispatch path); fan-out capped at 4 concurrent agents per batch. All four dispatching skills (concept-to-code, deep-refactor, review-triage-fix, autopilot-build) reference §2.2 for this decision rather than restating the constraint as a platform limitation. Source: `code.claude.com/docs/en/changelog.md` v2.1.172, v2.1.178, v2.1.181.
 
 ### 2.3 Orchestrator parallelization logic
 
@@ -538,7 +549,9 @@ Models and effort levels chosen to reduce token spend while maintaining quality:
 
 **CC 2.1.183:** WebSearch was returning empty results in subagents; now fixed. `researcher` and `architect` are the only agents with WebSearch and both benefit automatically.
 
-**CC 2.1.181:** foreground subagents now enforce a 5-level depth limit. The architecture is flat (orchestrator → subagent, 1–3 levels max); the "no sub-agent spawns sub-agent" invariant keeps it well below the limit.
+**CC 2.1.172/2.1.178/2.1.181 nesting context:** CC 2.1.172 enabled foreground sub-agent nesting (up to 5 levels); 2.1.178 added a pre-launch classifier that evaluates each sub-agent spawn before it runs; 2.1.181 enforces the depth cap. This system keeps the flat model by deliberate choice. See §2.2 for the rationale. The "no sub-agent spawns sub-agent" invariant in the four dispatching skills is a design decision, not a platform limitation.
+
+**CC 2.1.174 Workflow `agent()` attribution:** fixed Workflow tool `agent()` subagents missing attribution headers in commits and PRs. In this system all git commits route through the `commit` skill via the Skill tool (not from within workflow `agent()` subagents directly), so no behavioral change. Config-level attribution (`commit`/`pr` empty, `sessionUrl: false`) governs all commits regardless of dispatch path.
 
 **Available effort levels by model:**
 - Opus 4.7: `low`, `medium`, `high`, `xhigh`, `max`
