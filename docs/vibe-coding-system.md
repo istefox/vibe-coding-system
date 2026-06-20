@@ -80,6 +80,18 @@ Sec. 7.4/7.5 (admonitions updated to the as-built reference) and 7.6 (filesystem
 layout updated to the deployed state) reflect this. Tier validation on the
 pilot project = single open item (see sec. 17).
 
+### Alignment 2026-06-20 (CC 2.1.181–2.1.183)
+
+Relevant capabilities from CC 2.1.181 and 2.1.183, incorporated inline in the indicated sections:
+
+- **`attribution.sessionUrl: false`** (sec. 4, sec. 10, checklist sec. 15): new CC 2.1.183 setting that omits the claude.ai session link from commits and PRs in web and Remote Control sessions. Added to `settings.json` alongside `commit` and `pr`. Complemented by a `claude.ai/session` pattern added to `detect-tool-traces.sh` in the `clean-public-repo` skill, providing retroactive coverage for CLI-local sessions and any URL already in history. Source: `code.claude.com/docs/en/changelog.md` v2.1.183.
+- **Native auto-mode destructive-git blocking** (sec. 10): CC 2.1.183 blocks `git reset --hard`, `git checkout -- .`, `git clean -fd`, `git stash drop` (when not asked to discard local work) and `git commit --amend` (when the commit does not belong to the agent this session) in auto mode, plus `terraform/pulumi/cdk destroy`. Hardened here to defense-in-depth: explicit deny entries added for these commands plus `rm -rf *` (previously only `/` and `~` were denied). The native block covers auto mode only; deny entries cover all permission modes.
+- **`/config key=value` set-from-prompt** (sec. 10): added in CC 2.1.181. `/config --help` lists all available shorthand keys. Previously `/config` opened only the tabbed settings UI.
+- **Model-deprecation warnings now cover agent frontmatter** (sec. 3.9): CC 2.1.183 now shows a warning when a model declared in an agent's `model:` field is deprecated or auto-updated. All 8 system agents use bare tier aliases (`opus`/`sonnet`/`haiku`) that resolve at runtime, insulated from specific version IDs by design.
+- **WebSearch fix in subagents** (sec. 3.10): CC 2.1.183 fixed WebSearch returning empty results in subagents. The `researcher` and `architect` agents are the only two with WebSearch in their tool list; both benefit without any modification.
+- **Foreground subagent 5-level depth limit enforced** (sec. 3.10): CC 2.1.181 now enforces this for foreground subagents. The architecture here is flat (orchestrator → subagent, max 1–3 levels); the "no sub-agent spawns sub-agent" invariant keeps it comfortably below the limit with no impact.
+- **Autocomplete dedup of user-level skills** (sec. 8.6): CC 2.1.183 fixed duplicate entries in autocomplete when multiple plugins are active. A nested `~/.claude/skills/swiftui-pro/skills/swiftui-pro/` copy (v1.0, stale relative paths) was the root cause of a `swiftui-pro` duplicate in this system. Removed; canonical v1.1 retained.
+
 ### Update 2026-06 (post-deployment)
 
 - **`concept-to-code` orchestrator skill** (sec. 8.6): the canonical implementation of sec. 11 as a deterministic state machine. Three paths — Express (<10 files, single session, plan mode), Hybrid (5–20 files, single session, interview+plan), Standard (full chain, fresh session). YAML manifest (schema 1.3, `chain_path`, `gate0.*`). 7+ HITL gates. Harness 78/78.
@@ -492,7 +504,7 @@ Return a concise brief, not an essay. The orchestrator decides what to act on.
 | `name` | string | Agent ID — used in dispatch and audit logs |
 | `description` | string | Trigger description for orchestrator routing |
 | `tools` | comma list | Allowed tools; omit a tool to restrict access |
-| `model` | `opus`, `sonnet`, `haiku` | Model tier; defaults to session model |
+| `model` | `opus`, `sonnet`, `haiku` | Model tier; defaults to session model. CC 2.1.183 shows a deprecation warning when this field names a deprecated or auto-updated model. Use bare tier aliases, not version-specific IDs, to stay insulated |
 | `effort` | `low`/`medium`/`high`/`xhigh`/`max` | Effort level; overrides session `effortLevel` |
 | `color` | color name | UI label color; cosmetic only |
 | `isolation` | `worktree` | Run in an isolated git worktree (coder only) |
@@ -523,6 +535,10 @@ Models and effort levels chosen to reduce token spend while maintaining quality:
 | reviewer, debugger | sonnet (→ 4.6) | **high** | Pre-commit gate and root-cause: requires reasoning, not just execution |
 | coder, refactorer, tester | sonnet (→ 4.6) | **medium** | Execute a pre-defined plan; downstream reviewer and snapshot harness cover errors |
 | doc-writer, researcher | haiku (→ 4.5) | **low** | Bottleneck is I/O (reading code/searching), not reasoning |
+
+**CC 2.1.183:** WebSearch was returning empty results in subagents; now fixed. `researcher` and `architect` are the only agents with WebSearch and both benefit automatically.
+
+**CC 2.1.181:** foreground subagents now enforce a 5-level depth limit. The architecture is flat (orchestrator → subagent, 1–3 levels max); the "no sub-agent spawns sub-agent" invariant keeps it well below the limit.
 
 **Available effort levels by model:**
 - Opus 4.7: `low`, `medium`, `high`, `xhigh`, `max`
@@ -607,7 +623,8 @@ For professional branding: disable the automatic "Co-Authored-By: Claude" signat
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "attribution": {
     "commit": "",
-    "pr": ""
+    "pr": "",
+    "sessionUrl": false
   },
   "permissions": {
     "defaultMode": "acceptEdits"
@@ -618,6 +635,7 @@ For professional branding: disable the automatic "Co-Authored-By: Claude" signat
 - `$schema`: enables autocomplete and JSON validation in Cursor/VS Code
 - `attribution.commit: ""`: removes "Co-Authored-By: Claude Sonnet ..." from the commit message. Commits will appear as made by Stefano, no AI attribution
 - `attribution.pr: ""`: same for PR body
+- `attribution.sessionUrl: false` (CC 2.1.183): omits the claude.ai session link from commits and PRs in web and Remote Control sessions. Has no effect on local CLI sessions; `detect-tool-traces.sh` covers those retroactively
 - Without this override, Claude Code adds a `Co-Authored-By: Claude` trailer by default (old `includeCoAuthoredBy: false` is deprecated, use `attribution`)
 
 ---
@@ -1359,7 +1377,7 @@ Six modes available. Cycle with `Shift+Tab` (modes included: default → acceptE
 | `default` | Asks for every edit and bash | Session start, sensitive tasks, exploration |
 | `acceptEdits` | Auto-accepts file edits, asks for bash | During active implementation |
 | `plan` | Read-only, proposes plan without executing | Starting a new feature, structural refactor |
-| `auto` | Classifier in background, blocks prompt injection and scope escalation | Long tasks on Team/Enterprise plan |
+| `auto` | Classifier in background, blocks prompt injection and scope escalation. CC 2.1.183 adds native blocking of destructive git commands (`git reset --hard`, `git checkout -- .`, `git clean -fd`, `git stash drop`, `git commit --amend` on non-agent commits) and IaC destroy commands in this mode | Long tasks on Team/Enterprise plan |
 | `dontAsk` | Auto-deny everything except allowlist | CI, locked environments |
 | `bypassPermissions` | Skip controls (with exceptions for `.git`, `.claude`) | Isolated containers, devcontainer |
 
@@ -1387,7 +1405,8 @@ Memory says "bypassPermissions mode configured". That is OK but risky for prompt
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "attribution": {
     "commit": "",
-    "pr": ""
+    "pr": "",
+    "sessionUrl": false
   },
   "permissions": {
     "defaultMode": "acceptEdits",
@@ -1407,15 +1426,22 @@ Memory says "bypassPermissions mode configured". That is OK but risky for prompt
       "Bash(fd*)"
     ],
     "deny": [
+      "Bash(rm -rf *)",
       "Bash(git push --force*)",
-      "Bash(rm -rf*)"
+      "Bash(git reset --hard*)",
+      "Bash(git clean -f*)",
+      "Bash(git stash drop*)",
+      "Bash(git checkout -- *)"
     ]
   }
 }
 ```
 
+Note: `rm -rf *` replaces the narrower `rm -rf /` and `rm -rf ~` entries (the wildcard subsumes both). The git entries mirror the CC 2.1.183 native auto-mode block, extended to all permission modes via deny. `git commit --amend` is intentionally absent. The native block handles the agent-vs-human distinction correctly; a blanket deny would break legitimate amend of agent commits.
+
 **UI management:**
 - `/config` opens the tabbed settings interface (Status, Config). More convenient than direct JSON editing
+- `/config key=value` sets a specific setting from the prompt (CC 2.1.181). `/config --help` lists all available shorthand keys
 - `/status` shows which settings sources are active in the current session (User / Project / Local / Managed). Confirms the file is being loaded
 
 **Settings precedence** (high → low):
@@ -1764,7 +1790,7 @@ claude --plugin-url https://example.com/plugin.zip
 ### Global (once, on work Macs)
 
 - [ ] Create `~/.claude/CLAUDE.md` (sec. 4) — target <100 lines
-- [ ] Create `~/.claude/settings.json` with `attribution: {commit:"", pr:""}` to disable Claude signature in commits
+- [ ] Create `~/.claude/settings.json` with `attribution: {commit:"", pr:"", sessionUrl: false}` to disable Claude signature and session link in commits (CC 2.1.183)
 - [ ] Create `~/.claude/rules/python.md`, `typescript-react.md`, `swift.md`, `sql-migrations.md` (sec. 5.1)
 - [ ] Create sub-agent files in `~/.claude/agents/` for architect, coder, reviewer, tester, debugger, doc-writer, refactorer, researcher (sec. 3) — use `/agents` interactive
 - [ ] Create global hooks in `~/.claude/settings.json` + scripts in `~/.claude/hooks/` (sec. 7)
