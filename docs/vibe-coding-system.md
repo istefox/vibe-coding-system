@@ -101,6 +101,22 @@ Relevant capabilities from CC 2.1.181 and 2.1.183, incorporated inline in the in
 - **Foreground subagent 5-level depth limit enforced** (sec. 3.10): CC 2.1.181 now enforces this for foreground subagents. The architecture here is flat (orchestrator → subagent, max 1–3 levels); the "no sub-agent spawns sub-agent" invariant keeps it comfortably below the limit with no impact.
 - **Autocomplete dedup of user-level skills** (sec. 8.6): CC 2.1.183 fixed duplicate entries in autocomplete when multiple plugins are active. A nested `~/.claude/skills/swiftui-pro/skills/swiftui-pro/` copy (v1.0, stale relative paths) was the root cause of a `swiftui-pro` duplicate in this system. Removed; canonical v1.1 retained.
 
+### Update 2026-06-22 (chain memory, ADR-0021)
+
+- **Chain-memory PostToolUse hook** (sec. 7.7, sec. 13, ADR-0021): a deterministic `PostToolUse`
+  hook (matcher `Bash`) records `concept-to-code` chain task completion and current state of fact
+  into the native memory store, so progress persists across sessions and is browsable via
+  `/memory`. It fires in the orchestrator session only (manifest helpers are orchestrator-run), so
+  the ADR-0016 hook-propagation concern is out of scope. Per-topic files at
+  `memory/chain-history/<slug>.md` (mirroring the ADR-0012 `agent-notes/` namespace) carry a
+  rewritten-in-place STATE OF FACT header plus an append-only event log; a delimited managed block
+  in `MEMORY.md` lists Active chains (surfaced at SessionStart) and the last 10 Archived chains.
+  The writer is zero-LLM and bound to the session's own encoded dir (scope-safe), so the ADR-0013
+  auto-write failure mode cannot recur. **`CLAUDE.md` is never touched.** *Verified:* dry-run
+  harness (record/no-op/dedup/terminal-demote/preamble-preservation) green on bash 3.2. *Assumed,
+  to validate in pilot:* PostToolUse(Bash) fires on the live manifest-helper calls in a real chain
+  run.
+
 ### Update 2026-06 (post-deployment)
 
 - **`concept-to-code` orchestrator skill** (sec. 8.6): the canonical implementation of sec. 11 as a deterministic state machine. Three paths — Express (<10 files, single session, plan mode), Hybrid (5–20 files, single session, interview+plan), Standard (full chain, fresh session). YAML manifest (schema 1.3, `chain_path`, `gate0.*`). 7+ HITL gates. Harness 78/78.
@@ -1044,6 +1060,7 @@ More reliable (real verification), more expensive (subagent with tool access, up
 ├── hooks/
 │   ├── protect-files.sh         # PreToolUse  Edit|Write
 │   ├── auto-format.sh           # PostToolUse Edit|Write
+│   ├── chain-memory-capture.sh  # PostToolUse Bash  → records chain state (ADR-0021)
 │   ├── mark-dirty.sh            # PostToolUse Edit|Write  → marks .dirty
 │   ├── ensure-state-dir.sh      # SessionStart            → creates state dir
 │   ├── reset-gate-counter.sh    # UserPromptSubmit        → resets anti-loop counter
@@ -1058,6 +1075,47 @@ More reliable (real verification), more expensive (subagent with tool access, up
 ├── test-cmd                     # per-project declaration: command | NONE
 └── settings.json                # optional project-specific hooks
 ```
+
+### 7.7 Hook `chain-memory-capture.sh` (records chain state into the native store)
+
+`PostToolUse` hook, matcher `Bash` (ADR-0021). It records `concept-to-code` chain task completion
+and current state of fact into the native memory store, so progress persists across sessions and
+is browsable via `/memory`. It is **deterministic** (zero-LLM) and **observational**: it always
+exits 0 and never blocks the Bash tool.
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "\"$HOME\"/.claude/hooks/chain-memory-capture.sh" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+What it does on each Bash call:
+
+1. **Gate on helper identity.** Acts only when `.tool_input.command` invokes a manifest helper
+   (`manifest-transition.sh` / `manifest-set-gate.sh` / `manifest-set-flag.sh` /
+   `manifest-set-artifact.sh`). Everything else is an immediate no-op.
+2. **Gate on success.** If `.tool_response.exit_code` is present and non-zero, the mutation failed
+   → record nothing.
+3. **Resolve the store, scope-safely.** Derives `~/.claude/projects/<encoded>/memory/` from
+   `dirname(.transcript_path)` — never re-encodes `$PWD` (ADR-0012 D2). It cannot write to another
+   project's store.
+4. **Write** the event to `memory/chain-history/<slug>.md` (STATE OF FACT header rewritten in
+   place + append-only event log) and upsert a one-line pointer in the `MEMORY.md` managed block.
+
+**Why a hook and why it is safe here:** the manifest helpers are run only by the orchestrator (the
+main CLI session), where PostToolUse fires reliably — so the ADR-0016 question about hook
+propagation into Step-5 workflow subagents is out of scope. Because the writer is a deterministic
+hook bound to the session's own encoded dir (no LLM choosing the path), the ADR-0013 auto-write
+failure cannot recur. Storage format and rotation are documented in sec. 13.
 
 ---
 
@@ -1771,6 +1829,35 @@ Real Claude Code feature (v2.1.59+). Saves automatic learnings in `~/.claude/pro
 For Stefano: leave it active. Claude accumulates patterns from your projects over time (build commands, debug insights, conventions). Periodically verify via `/memory` to check what has been saved.
 
 **Sub-agents with `memory: project`** (defined in sec. 3): have separate memory in `.claude/agent-memory/<name>/`. The reviewer accumulates recurring issues, the debugger bug patterns, the architect past decisions. Shareable via git (useful on codebases with multiple collaborators).
+
+### 13.1 Chain memory — `memory/chain-history/` (ADR-0021)
+
+A third namespace under the native store records `concept-to-code` chain execution facts, written
+by the deterministic `chain-memory-capture.sh` hook (sec. 7.7), not by any agent. It sits alongside
+the curated `MEMORY.md` and the ADR-0012 `agent-notes/`, separate from both:
+
+```
+~/.claude/projects/<encoded>/memory/
+├── MEMORY.md            # curated index (human) + a delimited chain-memory managed block
+├── agent-notes/<agent>.md   # per-agent durable patterns (ADR-0012)
+└── chain-history/<slug>.md  # per-feature chain execution facts (ADR-0021)
+```
+
+Each `chain-history/<slug>.md` carries a **STATE OF FACT** header (`current_step`, `status`,
+`chain_path`, `last_gate`, `next_action`, `updated_at`) rewritten in place on each event, plus an
+**append-only event log** (one line per step/gate/flag/artifact). `MEMORY.md` holds only a
+one-line pointer per chain inside a delimited block (`<!-- chain-memory:begin -->` …
+`<!-- chain-memory:end -->`): a `### Active chains` section surfaced at SessionStart, and a
+`### Archived chains` section capped at the last 10 terminal chains. Human-curated content above the
+begin marker is never touched, and **no `CLAUDE.md` is involved**.
+
+- **Distinct from the manifest** (`docs/manifests/*.yml`): the manifest is the single-run live
+  state in the tree; chain-history is the cross-run, cross-session history in the curated store. The
+  hook reads the manifest to derive chain-history; it never replaces it.
+- **Rotation:** event log capped at 200 lines (oldest pruned), archived pointers at 10 — the
+  footprint stays well inside the 25KB SessionStart auto-load window.
+- **Recall:** `/memory` browses `chain-history/` directly; a read-only `vibe-status` section lists
+  active chains from the STATE OF FACT headers (follow-up live task).
 
 ---
 
