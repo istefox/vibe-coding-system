@@ -334,6 +334,14 @@ when the direct path is missing, search `$PROJ_DIR/$SID/subagents/workflows/` fo
 
 ---
 
+## CC 2.1.186 alignment (2026-06-23)
+
+Assumed from the changelog text, not yet verified live in this environment.
+
+Schema-validation abort (assumed, changelog 2.1.186). The release fixed Workflow `agent({schema})` subagents that used to loop forever on repeated schema validation failures; they now abort after 5 attempts. For Step 5 this removes a hang risk but changes the failure shape: a subagent whose output never satisfies the schema now returns null instead of spinning. The existing fallback already covers it, because a missing or incomplete `step5-report.json` routes Step 5 back to the Agent-tool batch dispatch. The Step-5 workflow script should filter aborted results with `.filter(Boolean)` before reading them, so one schema-failed agent does not poison the batch.
+
+---
+
 ## References
 
 - Dynamic Workflows docs: `https://code.claude.com/docs/en/workflows`

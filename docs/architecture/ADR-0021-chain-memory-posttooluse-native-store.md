@@ -206,6 +206,12 @@ entirely.
 
 ---
 
+## CC 2.1.186 alignment (2026-06-23)
+
+CC 2.1.186 added a native reminder that nudges the agent to compact its `MEMORY.md` index near the size limit (assumed, changelog 2.1.186). No conflict here: the chain-memory managed block is self-bounded, with the event log capped at 200 entries and archived pointers capped at 10, so the reminder targets the human-curated index above the managed markers and never the block this hook owns.
+
+---
+
 ## References
 
 - `staging/plugin/scripts/chain-memory-capture.sh` — the hook (this ADR's primary artifact).
