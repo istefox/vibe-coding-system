@@ -225,6 +225,18 @@ entire TOFU model. The human must have run the interactive chain at least once.
 
 ---
 
+## CC 2.1.186 alignment (2026-06-23)
+
+Two changes in this release touch the unattended guarantee. Both are assumed from the changelog text and are not yet verified live in this environment (see the verified-vs-assumed note).
+
+Background subagent permission prompts (assumed, changelog 2.1.186). The release changed background subagents to surface permission prompts in the main session instead of auto-denying them. Before, a subagent that reached for a tool outside the allowlist was denied silently and deterministically, and autopilot kept going. Now that same case raises a prompt, and with no human at the keyboard the run stalls instead of failing closed. New pre-flight invariant: an unattended dispatch is only safe when the Step-5 allowlist covers every tool the subagents actually use, and the subagents run in `acceptEdits` (already true per ADR-0016). Any tool outside the allowlist now stalls the run instead of failing closed. Read the allowlist-completeness check together with pre-flight check 6 (test-cmd trust).
+
+Retry watchdog (assumed, changelog 2.1.186). `CLAUDE_CODE_MAX_RETRIES` now caps at 15, and the changelog points unattended sessions at `CLAUDE_CODE_RETRY_WATCHDOG` instead. The autopilot session env should set `CLAUDE_CODE_RETRY_WATCHDOG` so a hung or looping dispatch stays bounded instead of open-ended. The changelog does not give the value format, so this stays a documented recommendation and is not pinned in `staging/user/settings.json`.
+
+Follow-up: either item needs a live smoke test of the permission-prompt path under autopilot before it moves from assumed to verified, the same way `hook_verified` gates the workflow path.
+
+---
+
 ## References
 
 - ADR-0014 `docs/architecture/ADR-0014-architect-proposes-test-cmd.md` — TOFU trust model and `approve-test-cmd.sh`

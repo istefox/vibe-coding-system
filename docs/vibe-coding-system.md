@@ -101,6 +101,27 @@ Relevant capabilities from CC 2.1.181 and 2.1.183, incorporated inline in the in
 - **Foreground subagent 5-level depth limit enforced** (sec. 3.10): CC 2.1.181 now enforces this for foreground subagents. The architecture here is flat (orchestrator → subagent, max 1–3 levels); the "no sub-agent spawns sub-agent" invariant keeps it comfortably below the limit with no impact.
 - **Autocomplete dedup of user-level skills** (sec. 8.6): CC 2.1.183 fixed duplicate entries in autocomplete when multiple plugins are active. A nested `~/.claude/skills/swiftui-pro/skills/swiftui-pro/` copy (v1.0, stale relative paths) was the root cause of a `swiftui-pro` duplicate in this system. Removed; canonical v1.1 retained.
 
+### Audit 2026-06-23 (CC 2.1.186)
+
+Changelog items reconciled with the blueprint. The behavior-changing items (autopilot prompt stall, retry watchdog, workflow schema abort) are assumed from the changelog text and are not yet verified live here.
+
+- **Background subagents surface permission prompts in the main session** instead of auto-denying
+  (sec. 10, ADR-0020 addendum). For unattended autopilot this turns an out-of-allowlist tool call
+  into a stall rather than a silent deny. The fix is an allowlist-completeness pre-flight, paired
+  with the retry watchdog below.
+- **`CLAUDE_CODE_MAX_RETRIES` caps at 15**, with `CLAUDE_CODE_RETRY_WATCHDOG` recommended for
+  unattended sessions (ADR-0020 addendum, set in the autopilot session env not in `settings.json`).
+- **Workflow `agent({schema})` subagents abort after 5 schema-validation failures** instead of
+  looping (ADR-0016 addendum). The existing Step-5 fallback already covers the incomplete-report case.
+- **`Agent(type)` deny and `Agent(x,y)` allow rules are now enforced for named subagent spawns**
+  (sec. 10). The blueprint documents the capability but ships no active Agent allowlist, since a
+  restrictive rule would also have to enumerate the built-in Explore/Plan/general-purpose and
+  Workflow agent types or it would break plan mode and parallel dispatch.
+- **New settings adopted/documented:** `respondToBashCommands: false` in `staging/user/settings.json`
+  (sec. 10), `claude mcp login`/`logout` with `--no-browser` SSH (sec. 9), `teammateMode: "iterm2"`
+  (sec. 2). The `MEMORY.md` compaction reminder (sec. 13) and flexible skill-frontmatter casing
+  (sec. 8) need no change on our side. `/review <pr>` now matches `/code-review medium`.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -1172,6 +1193,12 @@ failure cannot recur. Storage format and rotation are documented in sec. 13.
 
 All in `~/.claude/skills/<name>/SKILL.md`.
 
+**Frontmatter casing and resilience (CC 2.1.186).** The `display-name`, `default-enabled`,
+`fallback`, and `metadata.*` keys now accept kebab-case, snake_case, and camelCase interchangeably.
+The blueprint skills already use kebab-case, so nothing migrates. A malformed `SKILL.md` YAML
+frontmatter block now loads the skill body with empty metadata instead of failing silently, which
+makes a broken header visible rather than dropping the skill.
+
 **`interview-driver`** — Starts interview mode with a standard prompt.
 
 ```yaml
@@ -1461,6 +1488,12 @@ For servers with tools needed every turn (e.g. github): `"alwaysLoad": true` in 
 
 **Diagnostics:** `/mcp` shows status, token cost per server, and tool count. Disconnect unused servers.
 
+**CLI auth (CC 2.1.186).** `claude mcp login <name>` and `claude mcp logout <name>` authenticate a
+server straight from the CLI without opening the interactive `/mcp` menu, and `--no-browser`
+redirects the flow through stdin so it completes over SSH. This is the headless-friendly path for
+the GitHub remote MCP. `claude mcp get` and `claude mcp remove` now suggest the closest configured
+server name on a typo and truncate long server lists.
+
 ---
 
 ## 10. Permission modes — operational guide
@@ -1547,6 +1580,21 @@ Note: `rm -rf *` replaces the narrower `rm -rf /` and `rm -rf ~` entries (the wi
 5. `~/.claude/settings.json` (user)
 
 Arrays (`permissions.allow`, `deny`) are **concatenated and deduplicated** across scopes; scalars (`defaultMode`, `model`) use the value at the highest priority.
+
+**Subagent-spawn permission rules (CC 2.1.186).** `Agent(type)` deny rules and `Agent(x,y)`
+allowed-types restrictions are now enforced for named subagent spawns; before 2.1.186 they were
+ignored. This extends the layered-defense model to the spawn boundary: a deny rule can block a
+specific agent type, and an allow rule can pin the set of types that may run. The blueprint does not
+ship an active Agent allowlist in `staging/user/settings.json` on purpose. A restrictive allow rule
+would also have to enumerate the built-in `Explore`, `Plan`, and `general-purpose` agents plus any
+plugin agent types and the Workflow runtime, or it would silently break plan mode and the parallel
+dispatch paths. The capability is documented here so a target project with a fixed agent set can opt
+in; the blueprint default stays permissive and relies on hook-level guards.
+
+**`respondToBashCommands` (CC 2.1.186).** The release made `!` bash commands trigger an automatic
+Claude response to their output. The blueprint sets `respondToBashCommands: false` in
+`staging/user/settings.json` to keep the previous context-only behavior, which suits the `!`-prefix
+pattern used for quick checks and interactive logins where an auto-response each time is just noise.
 
 ---
 
@@ -1775,6 +1823,12 @@ Limitations:
 - 3-5 teammates optimal, no scaling beyond
 - `display mode`: `tmux` (split panes) or `in-process`. On macOS Stefano can use iTerm2 with `it2` CLI
 
+**Teammate display backend (CC 2.1.186).** Agent-team display is now selectable with the
+`teammateMode` setting; `teammateMode: "iterm2"` drives split sessions through the `it2` CLI, with a
+warning when auto mode cannot find `it2` on PATH. This formalizes the iTerm2 note above and sits
+alongside the `tmux` and `in-process` options. CC 2.1.186 also fixed teammates spawned through tmux
+or pane backends so they inherit the leader's `--effort` level.
+
 ---
 
 ## 12. Worktrees — robust parallelization
@@ -1849,6 +1903,7 @@ Real Claude Code feature (v2.1.59+). Saves automatic learnings in `~/.claude/pro
 - Inspection: `/memory` to browse and edit
 - Disable: `autoMemoryEnabled: false` in settings.json or `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` as env var
 - Custom path: `autoMemoryDirectory: "~/my-memory"` in settings (accepted only by user settings, not project — security: a cloned repo could redirect memory)
+- Compaction reminder (CC 2.1.186): the agent is reminded to compact its `MEMORY.md` index when the file nears the size limit. For chain memory (sec. 13.1, ADR-0021) this is a no-op, since the auto-maintained block is already bounded; the reminder applies only to the human-curated index above it.
 
 For Stefano: leave it active. Claude accumulates patterns from your projects over time (build commands, debug insights, conventions). Periodically verify via `/memory` to check what has been saved.
 
@@ -2065,6 +2120,10 @@ Session B "fresh" → no bias toward recently written code.
 - 70% coverage as a sensible target for typical projects
 - Cap 4 parallel (may vary in practice)
 - Effective trigger descriptions for custom skills
+- CC 2.1.186 behavior items, taken from the changelog text and not yet smoke-tested here: background
+  subagents stall an unattended autopilot run when a tool falls outside the allowlist (ADR-0020);
+  `CLAUDE_CODE_RETRY_WATCHDOG` is the unattended retry control and its value format is unspecified;
+  Workflow `agent({schema})` aborts after 5 validation failures (ADR-0016)
 
 ---
 

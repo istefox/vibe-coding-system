@@ -1,5 +1,6 @@
 {
   "cleanupPeriodDays": 30,
+  "respondToBashCommands": false,
   "env": {
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70"
   },
