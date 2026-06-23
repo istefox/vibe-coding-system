@@ -101,6 +101,21 @@ Relevant capabilities from CC 2.1.181 and 2.1.183, incorporated inline in the in
 - **Foreground subagent 5-level depth limit enforced** (sec. 3.10): CC 2.1.181 now enforces this for foreground subagents. The architecture here is flat (orchestrator → subagent, max 1–3 levels); the "no sub-agent spawns sub-agent" invariant keeps it comfortably below the limit with no impact.
 - **Autocomplete dedup of user-level skills** (sec. 8.6): CC 2.1.183 fixed duplicate entries in autocomplete when multiple plugins are active. A nested `~/.claude/skills/swiftui-pro/skills/swiftui-pro/` copy (v1.0, stale relative paths) was the root cause of a `swiftui-pro` duplicate in this system. Removed; canonical v1.1 retained.
 
+### Update 2026-06-23 (workflow model pinning)
+
+- **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
+  subagent dispatched with `agentType` but no `model` inherits the **main-loop (CLI session) model**,
+  not the agent's frontmatter. So when the orchestrator runs on Opus, an unpinned `agent({agentType:
+  "coder"})` would silently run the coder on Opus instead of its configured Sonnet. Fix: every
+  `agent()` call in the Step 5/6 workflow scripts now passes an explicit `model` (coder → its
+  `coder_model`, sonnet by default; reviewer → sonnet; fix agents → opus by chain choice). The
+  Agent-tool dispatch paths (Step 2 architect, Step 5/6 fallback) already honor frontmatter and were
+  unaffected. Net effect: the chain keeps its configured per-agent models regardless of which model
+  the CLI session is set to.
+- **`debugger` aligned to blueprint** (sec. 3.5): the live `~/.claude/agents/debugger.md` had drifted
+  to `model: opus`; reset to `model: sonnet` with `effort: high`, matching sec. 3.5 and the sec. 3.10
+  cost table (root-cause reasoning comes from high effort, not the model tier).
+
 ### Update 2026-06-22 (chain memory, ADR-0021)
 
 - **Chain-memory PostToolUse hook** (sec. 7.7, sec. 13, ADR-0021): a deterministic `PostToolUse`
@@ -568,6 +583,15 @@ Models and effort levels chosen to reduce token spend while maintaining quality:
 **CC 2.1.172/2.1.178/2.1.181 nesting context:** CC 2.1.172 enabled foreground sub-agent nesting (up to 5 levels); 2.1.178 added a pre-launch classifier that evaluates each sub-agent spawn before it runs; 2.1.181 enforces the depth cap. This system keeps the flat model by deliberate choice. See §2.2 for the rationale. The "no sub-agent spawns sub-agent" invariant in the four dispatching skills is a design decision, not a platform limitation.
 
 **CC 2.1.174 Workflow `agent()` attribution:** fixed Workflow tool `agent()` subagents missing attribution headers in commits and PRs. In this system all git commits route through the `commit` skill via the Skill tool (not from within workflow `agent()` subagents directly), so no behavioral change. Config-level attribution (`commit`/`pr` empty, `sessionUrl: false`) governs all commits regardless of dispatch path.
+
+**Workflow `agent()` model inheritance (CLI model does NOT cascade into the chain):** a workflow
+subagent dispatched with `agentType` but no `model` option inherits the **main-loop (CLI session)
+model**, not the agent's frontmatter. The Agent-tool dispatch paths honor frontmatter; the Workflow
+path does not unless `model` is passed. So the `concept-to-code` Step 5/6 workflow scripts pin
+`model` on every `agent()` call (coder → `coder_model`, sonnet default; reviewer → sonnet; fix
+agents → opus). This keeps the chain on the table above no matter which model the orchestrator
+session runs — e.g. reasoning strategy in Opus while the chain still executes coder/reviewer on
+Sonnet. See `concept-to-code` SKILL.md §4 Step 5/6.
 
 **Available effort levels by model:**
 - Opus 4.7: `low`, `medium`, `high`, `xhigh`, `max`
