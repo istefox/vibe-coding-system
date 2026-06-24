@@ -122,6 +122,35 @@ Changelog items reconciled with the blueprint. The behavior-changing items (auto
   (sec. 2). The `MEMORY.md` compaction reminder (sec. 13) and flexible skill-frontmatter casing
   (sec. 8) need no change on our side. `/review <pr>` now matches `/code-review medium`.
 
+### Audit 2026-06-24 (CC 2.1.187)
+
+Changelog items reconciled with the blueprint. The behavior-changing items are assumed from the changelog text and are not yet verified live here.
+
+- **Workflow `agent({schema})` structured-output success-path fix** (ADR-0016 addendum). The model
+  no longer re-calls `StructuredOutput` after a valid result and follow-up turns return structured
+  output reliably. Completes the 2.1.186 abort-after-5 fix and makes `step5-report.json` more
+  dependable.
+- **Background jobs no longer hang on empty output** (ADR-0020 addendum). A subagent that ends a
+  turn without structured output used to leave the agents view stuck in "working"; it now resolves.
+  Closes one autopilot hang mode but not the 2.1.186 permission-prompt stall.
+- **`sandbox.credentials` setting** (sec. 10) blocks sandboxed commands from reading credential
+  files and secret env vars. Documented, not pinned: the settings schema does not yet list it, so
+  the value format is unconfirmed (same discipline as `CLAUDE_CODE_RETRY_WATCHDOG`).
+- **Remote MCP idle abort** (sec. 9): a remote MCP tool call with no response for 5 minutes now
+  aborts with an error instead of blocking forever, with `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` as the
+  override. Documented; not pinned.
+- **Subagent depth tracking** (sec. 3.10): forked subagents now count toward the depth cap and
+  resumed subagents restore their original spawn depth. Tightens the cap the flat model already
+  stays under.
+- **Leaked worktree-registration cleanup** (sec. 12): locked `.git/worktrees/` entries from killed
+  agents now clean up automatically, removing a manual-cleanup footgun for parallel `coder` dispatch.
+
+Out of scope (no blueprint impact): org-configured model restrictions, mouse-click menu selection,
+`--resume`/`-p` no-turn fix, CJK paste mojibake, Ghostty Cmd+click, optional `/install-github-app`
+workflow, `/btw` navigation, `/plugin` cleanup surfacing, VSCode resume fix, stop-notification
+wording. `staging/user/settings.json` is unchanged this pass, deliberately (sandbox.credentials and
+the MCP idle-timeout override are document-only until the schema confirms their format).
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -601,7 +630,7 @@ Models and effort levels chosen to reduce token spend while maintaining quality:
 
 **CC 2.1.183:** WebSearch was returning empty results in subagents; now fixed. `researcher` and `architect` are the only agents with WebSearch and both benefit automatically.
 
-**CC 2.1.172/2.1.178/2.1.181 nesting context:** CC 2.1.172 enabled foreground sub-agent nesting (up to 5 levels); 2.1.178 added a pre-launch classifier that evaluates each sub-agent spawn before it runs; 2.1.181 enforces the depth cap. This system keeps the flat model by deliberate choice. See §2.2 for the rationale. The "no sub-agent spawns sub-agent" invariant in the four dispatching skills is a design decision, not a platform limitation.
+**CC 2.1.172/2.1.178/2.1.181 nesting context:** CC 2.1.172 enabled foreground sub-agent nesting (up to 5 levels); 2.1.178 added a pre-launch classifier that evaluates each sub-agent spawn before it runs; 2.1.181 enforces the depth cap. This system keeps the flat model by deliberate choice. See §2.2 for the rationale. The "no sub-agent spawns sub-agent" invariant in the four dispatching skills is a design decision, not a platform limitation. CC 2.1.187 tightened depth tracking further: forked subagents now count toward the cap and resumed subagents restore their original spawn depth, so the limit holds across forks and resumes. The flat model stays comfortably under it regardless.
 
 **CC 2.1.174 Workflow `agent()` attribution:** fixed Workflow tool `agent()` subagents missing attribution headers in commits and PRs. In this system all git commits route through the `commit` skill via the Skill tool (not from within workflow `agent()` subagents directly), so no behavioral change. Config-level attribution (`commit`/`pr` empty, `sessionUrl: false`) governs all commits regardless of dispatch path.
 
@@ -1494,6 +1523,12 @@ redirects the flow through stdin so it completes over SSH. This is the headless-
 the GitHub remote MCP. `claude mcp get` and `claude mcp remove` now suggest the closest configured
 server name on a typo and truncate long server lists.
 
+**Remote-MCP idle abort (CC 2.1.187).** A remote MCP tool call that returns no response for five
+minutes now aborts with an error instead of blocking indefinitely; `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT`
+overrides the threshold. This bounds a hung GitHub remote MCP call the same way the 2.1.186 retry
+watchdog bounds an unattended retry loop. The env var name is documented here; its value format is
+not pinned, since the settings schema does not yet list it.
+
 ---
 
 ## 10. Permission modes — operational guide
@@ -1595,6 +1630,13 @@ in; the blueprint default stays permissive and relies on hook-level guards.
 Claude response to their output. The blueprint sets `respondToBashCommands: false` in
 `staging/user/settings.json` to keep the previous context-only behavior, which suits the `!`-prefix
 pattern used for quick checks and interactive logins where an auto-response each time is just noise.
+
+**`sandbox.credentials` (CC 2.1.187).** The release added a `sandbox.credentials` setting that blocks
+sandboxed commands from reading credential files and secret environment variables, hardening the
+sandbox layer against secret exfiltration. This reinforces the global guardrail against exposing
+secrets. It is documented here but not pinned in `staging/user/settings.json`: the settings schema
+does not yet list the key, so its value shape (boolean or object) is unconfirmed. Pin it once the
+schema confirms the format, the same discipline applied to `CLAUDE_CODE_RETRY_WATCHDOG` in 2.1.186.
 
 ---
 
@@ -1834,6 +1876,8 @@ or pane backends so they inherit the leader's `--effort` level.
 ## 12. Worktrees — robust parallelization
 
 Parallel `coder` sub-agents use `isolation: worktree` in the frontmatter: they automatically get an isolated git worktree. Internal pattern managed by Claude Code, nothing to configure on the sub-agent side.
+
+**Killed-agent worktree cleanup (CC 2.1.187).** Locked `.git/worktrees/` entries left behind by killed agents are now cleaned up automatically, so a `coder` or workflow agent terminated mid-run no longer leaks a stale worktree registration that would need manual pruning.
 
 **For Stefano (manual worktrees):**
 
@@ -2124,6 +2168,12 @@ Session B "fresh" → no bias toward recently written code.
   subagents stall an unattended autopilot run when a tool falls outside the allowlist (ADR-0020);
   `CLAUDE_CODE_RETRY_WATCHDOG` is the unattended retry control and its value format is unspecified;
   Workflow `agent({schema})` aborts after 5 validation failures (ADR-0016)
+- CC 2.1.187 behavior items, taken from the changelog text and not yet smoke-tested here: the
+  Workflow `agent({schema})` success-path fix (no re-call after a valid result, reliable follow-up
+  turns; ADR-0016); background jobs no longer hang on empty subagent output (ADR-0020);
+  `sandbox.credentials` blocks sandboxed secret reads but its value format is unconfirmed in the
+  schema; remote MCP calls abort after a 5-minute idle with `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` as
+  override
 
 ---
 
