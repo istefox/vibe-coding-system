@@ -342,6 +342,12 @@ Schema-validation abort (assumed, changelog 2.1.186). The release fixed Workflow
 
 ---
 
+## CC 2.1.187 alignment (2026-06-24)
+
+Structured-output success path (assumed, changelog 2.1.187). The release fixed Workflow `agent({schema})` and `--json-schema` output on the success side: the model can no longer re-call `StructuredOutput` after a valid result, and follow-up turns now reliably return structured output. This completes the 2.1.186 fix, which only bounded the failure side (abort after 5 validation failures). For Step 5 the net effect is a more dependable `step5-report.json`: a subagent that produces a valid report no longer risks looping or dropping the result on a later turn. The existing fallback and the `.filter(Boolean)` guidance from the 2.1.186 note still hold unchanged; this release narrows the failure surface rather than altering the contract.
+
+---
+
 ## References
 
 - Dynamic Workflows docs: `https://code.claude.com/docs/en/workflows`

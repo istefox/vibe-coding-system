@@ -237,6 +237,12 @@ Follow-up: either item needs a live smoke test of the permission-prompt path und
 
 ---
 
+## CC 2.1.187 alignment (2026-06-24)
+
+Background-job hang on empty output (assumed, changelog 2.1.187). The release fixed background jobs in the agents view that got stuck in "working" indefinitely when a subagent ended its turn without producing structured output. For autopilot this closes one unattended hang mode: a dispatched subagent that finishes with no structured result now resolves instead of hanging the view. It does not close the permission-prompt stall from the 2.1.186 note, which is a separate path and still needs the allowlist-completeness pre-flight. Read the two together: 2.1.187 removes the empty-output hang, 2.1.186 leaves the out-of-allowlist prompt as the remaining stall risk under autopilot. See the ADR-0016 2.1.187 note for the workflow-side structured-output fix that pairs with this one.
+
+---
+
 ## References
 
 - ADR-0014 `docs/architecture/ADR-0014-architect-proposes-test-cmd.md` — TOFU trust model and `approve-test-cmd.sh`
