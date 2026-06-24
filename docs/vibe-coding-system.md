@@ -122,6 +122,15 @@ Changelog items reconciled with the blueprint. The behavior-changing items (auto
   (sec. 2). The `MEMORY.md` compaction reminder (sec. 13) and flexible skill-frontmatter casing
   (sec. 8) need no change on our side. `/review <pr>` now matches `/code-review medium`.
 
+### Update 2026-06-24 (in-chain autopilot at Gate 4)
+
+- The concept-to-code Standard path now offers "Implement now (autopilot, this session)" as a third
+  Gate-4 option, so unattended Steps 5-7 can run from the planning session without the fresh-session
+  resume. Coexists with the standalone `autopilot-build` skill (ADR-0020 addendum). Supporting fixes:
+  restored `hook_verified` default to `false` in `manifest-init.sh` (re-enables the Step-5 smoke gate)
+  and added an autopilot default to the smoke gate (no unattended stall). Live `~/.claude` changes;
+  repo docs unchanged elsewhere.
+
 ### Audit 2026-06-24 (CC 2.1.187)
 
 Changelog items reconciled with the blueprint. The behavior-changing items are assumed from the changelog text and are not yet verified live here.
