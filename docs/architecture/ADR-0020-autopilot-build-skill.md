@@ -243,6 +243,18 @@ Background-job hang on empty output (assumed, changelog 2.1.187). The release fi
 
 ---
 
+## In-chain autopilot entry point (Gate 4, 2026-06-24)
+
+The concept-to-code Standard path now offers unattended implementation from the planning session itself, not only via this standalone skill. At the session boundary (Gate 4, after Gate 3) the chain presents a third option, "Implement now (autopilot, this session)", which sets `manifest.autopilot = true` and continues into Steps 5-7 in the same session: implement, local commit via `commit --autopilot`, no push, no PR. This reuses the chain's built-in autopilot mode, where every gate auto-selects its safe default, so it stays inside the chain's skill allowlist and does not invoke this skill. TOFU is already approved at Gate 2b earlier in the same chain, so there is no trust stall.
+
+Two entry points now coexist:
+- This skill (`autopilot-build`): picks up a manifest already paused at `ready_for_implementation` from a fresh session. Adds an 8-check pre-flight and writes `autopilot-report.json`.
+- Gate 4 "implement now": continues immediately from the planning session. No fresh session, no report; relies on the chain's normal output.
+
+Two supporting fixes landed with it. The shared `manifest-init.sh` default for `hook_verified` was `true`, which silently disabled the Step-5 smoke-test gate (the gate only fires when the value is `false` or `null`); restored to `false` so the gate runs once per environment and the safe Agent-tool fallback is the default until hooks are verified. The Step-5 smoke-test gate also gained an autopilot default, so an unattended run resolves to the fallback instead of stalling on the smoke-test prompt. These live in `~/.claude`; the repo already documented `hook_verified` default false (ADR-0016), so this brought the deployment back in line.
+
+---
+
 ## References
 
 - ADR-0014 `docs/architecture/ADR-0014-architect-proposes-test-cmd.md` — TOFU trust model and `approve-test-cmd.sh`
