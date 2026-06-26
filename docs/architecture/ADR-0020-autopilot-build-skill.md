@@ -255,6 +255,14 @@ Two supporting fixes landed with it. The shared `manifest-init.sh` default for `
 
 ---
 
+## CC 2.1.193 alignment (2026-06-26)
+
+Idle background-shell reaping (assumed, changelog 2.1.193). The release added automatic memory-pressure reaping of idle background shell commands, disabled with `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`. This is most material for autopilot, which runs unattended for long stretches and can hold idle background shells across Steps 5-7. The autopilot session env should set `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` alongside the `CLAUDE_CODE_RETRY_WATCHDOG` recommendation from the 2.1.186 note, so a background shell is not reaped mid-run. Like the watchdog, the changelog gives no further detail, so this stays a documented session-env recommendation and is not pinned in `staging/user/settings.json`.
+
+Background-agent dispatch fix (assumed, changelog 2.1.193). The release stopped the background-agent launch result from instructing Claude to "end your response", so the orchestrator keeps working while a dispatched agent runs. For unattended autopilot this reduces one stall surface during Step-5 dispatch, complementing the 2.1.187 empty-output hang fix. It does not close the 2.1.186 out-of-allowlist permission-prompt stall, which still needs the allowlist-completeness pre-flight.
+
+---
+
 ## References
 
 - ADR-0014 `docs/architecture/ADR-0014-architect-proposes-test-cmd.md` — TOFU trust model and `approve-test-cmd.sh`
