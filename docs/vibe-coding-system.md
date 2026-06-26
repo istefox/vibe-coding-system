@@ -160,6 +160,51 @@ workflow, `/btw` navigation, `/plugin` cleanup surfacing, VSCode resume fix, sto
 wording. `staging/user/settings.json` is unchanged this pass, deliberately (sandbox.credentials and
 the MCP idle-timeout override are document-only until the schema confirms their format).
 
+### Audit 2026-06-26 (CC 2.1.190–2.1.193)
+
+Changelog range reconciled with the blueprint. 2.1.192 does not exist (the changelog jumps
+2.1.191 to 2.1.193); 2.1.190 is detail-less ("Bug fixes and reliability improvements"). The
+behavior-changing items below are assumed from the changelog text and are not yet verified live
+here.
+
+- **Idle background-shell memory-pressure reaping** (ADR-0016 addendum, ADR-0020 addendum): CC
+  2.1.193 added automatic reaping of idle background shell commands under memory pressure, with
+  `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` to disable it. Long Workflow Step-5 runs and
+  unattended autopilot can hold idle background shells long enough to be reaped; the disable
+  variable is the mitigation, documented as a session-env recommendation (not pinned in
+  `settings.json`), same discipline as `CLAUDE_CODE_RETRY_WATCHDOG`.
+- **Background-agent dispatch fixes** (sec. 3.10, ADR-0016/0020 addenda): CC 2.1.193 stopped the
+  background-agent launch result from instructing Claude to "end your response", so the
+  orchestrator keeps working while a dispatched agent runs; it also fixed a phantom
+  `general-purpose (resumed)` subagent re-running the main conversation, pinned background agents
+  being re-prompted after each auto-update, and the agent panel hiding sibling agents. Net effect:
+  more reliable Step-5 parallel dispatch and unattended autopilot.
+- **`autoMode.classifyAllShell` (opt-in)** (sec. 10): CC 2.1.193 added a setting that routes all
+  Bash/PowerShell through the auto-mode classifier instead of only arbitrary-code-execution
+  patterns. Documented as opt-in only and left off: the deterministic `pre-flight-pattern-enforce`
+  hook stays authoritative regardless of permission mode (layered defense, ADR-0001/0004). The same
+  release surfaces auto-mode denial reasons in the transcript, the denial toast, and `/permissions`
+  recent denials, which complements the HITL gates as observability.
+- **OTEL `assistant_response` log event** (sec. 10, security note): CC 2.1.193 added
+  `claude_code.assistant_response`, redacted unless `OTEL_LOG_ASSISTANT_RESPONSES=1`; when that
+  variable is unset it follows `OTEL_LOG_USER_PROMPTS`, so a deployment already logging prompts
+  starts logging response text on upgrade. This system ships no OTEL config, so the item is N/A in
+  practice; the note records the mitigation (`OTEL_LOG_ASSISTANT_RESPONSES=0`) for any future
+  telemetry setup.
+
+Verified, not assumed: the CC 2.1.191 comma-separated-matcher bug (hooks with matchers like
+`"Bash,PowerShell"` silently never firing) does not affect this system. Every hook matcher in
+`staging/plugin/hooks/hooks.json` and `staging/user/settings.json` uses the pipe form
+(`Edit|Write`, `Bash`).
+
+Out of scope (no blueprint impact): plugin auto-rename `renames` map followed automatically
+(sec. 14, the system ships as a plugin but no rename is pending); MCP `headersHelper` re-run on
+401/403 and the MCP-auth startup notice (sec. 9, our context7 server is unauthenticated); 2.1.191
+reliability items (`/rewind` resuming from before `/clear`, −37% streaming CPU, MCP discovery
+retries, sandbox host-remember, background-agent resurrection fix); bash-mode `!` path
+autocomplete. `staging/user/settings.json` is unchanged this pass, deliberately. Source:
+`code.claude.com/docs/en/changelog.md` v2.1.190, v2.1.191, v2.1.193.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow

@@ -348,6 +348,16 @@ Structured-output success path (assumed, changelog 2.1.187). The release fixed W
 
 ---
 
+## CC 2.1.193 alignment (2026-06-26)
+
+Two items in this release touch Step-5 Workflow dispatch. Both are assumed from the changelog text and are not yet verified live here.
+
+Idle background-shell reaping (assumed, changelog 2.1.193). The release added automatic memory-pressure reaping of idle background shell commands, disabled with `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`. A long Workflow run can leave a background shell idle between stages long enough to be reaped, which would surface as a missing or truncated `step5-report.json`. The existing fallback already covers an incomplete report (it routes Step 5 back to the Agent-tool batch dispatch), so this does not break the chain; for long or memory-heavy runs the disable variable is the mitigation, set in the session env, not pinned in `staging/user/settings.json`.
+
+Background-agent dispatch fix (assumed, changelog 2.1.193). The release stopped the background-agent launch result from instructing Claude to "end your response", so the orchestrator now keeps working while a dispatched agent runs. This is a positive for the orchestrator-during-dispatch behavior the Step-5 design depends on: the orchestrator can fan out and then proceed instead of ending its turn prematurely. Companion fixes (phantom `general-purpose (resumed)` subagent, pinned-agent re-prompt) reduce noise in parallel dispatch without changing the contract.
+
+---
+
 ## References
 
 - Dynamic Workflows docs: `https://code.claude.com/docs/en/workflows`
