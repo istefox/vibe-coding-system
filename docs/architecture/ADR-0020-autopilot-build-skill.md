@@ -1,6 +1,6 @@
 # ADR-0020 — autopilot-build: standalone unattended-implementation skill
 
-**Status:** Proposed
+**Status:** Accepted (2026-06-26)
 **Date:** 2026-06-18
 **Author:** istefox
 **Supersedes:** none
@@ -222,6 +222,14 @@ entire TOFU model. The human must have run the interactive chain at least once.
 - Multi-feature queue (project-conductor extension), scheduling (CronCreate), and notification
   suppression (CLAUDE_CLIENT_PRESENCE_FILE) are out of scope for v1. Documented here for
   discoverability.
+
+---
+
+## Acceptance (2026-06-26)
+
+Promoted from Proposed to Accepted. The skill is built and deployed: harness 14/14 green, wired into the chain as the Gate-4 in-session option, and the standalone entry point is live in `~/.claude/skills/autopilot-build/`. The architectural decision is adopted: a standalone skill holding the full unattended contract, a local-and-reversible autonomy boundary, eight pre-flight checks, TOFU pre-existing trust, and a circuit breaker on RED tests.
+
+Open verification, not a blocker (same discipline as ADR-0016, which is Accepted while carrying assumed-not-verified addenda): the live smoke test of the permission-prompt path under autopilot from the CC 2.1.186 follow-up is still pending. The CC 2.1.186, 2.1.187, and 2.1.193 alignment items stay assumed-not-verified-live until that run. Acceptance records the adopted design; the smoke test promotes the runtime behavior from assumed to verified.
 
 ---
 
