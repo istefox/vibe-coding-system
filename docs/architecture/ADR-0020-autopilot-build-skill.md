@@ -271,6 +271,12 @@ Background-agent dispatch fix (assumed, changelog 2.1.193). The release stopped 
 
 ---
 
+## CC 2.1.195 alignment (2026-06-27)
+
+Background-agent reliability fixes (assumed, changelog 2.1.195). The release fixed background jobs disappearing from `claude agents`, a crashed background task reopening to a blank screen, and background-agent daemons running unreachable when the control socket fails. These reduce failure modes for a long unattended autopilot run, which holds background agents across Steps 5-7 with no human in the loop. The daemon-reachability fix matters most here: an unattended run cannot recover a wedged daemon by hand, so a fix that keeps the control socket reachable directly protects the autopilot path. This lowers the risk on the still-pending smoke test from the Acceptance note above without removing the need for it. Assumed-not-verified-live.
+
+---
+
 ## References
 
 - ADR-0014 `docs/architecture/ADR-0014-architect-proposes-test-cmd.md` — TOFU trust model and `approve-test-cmd.sh`

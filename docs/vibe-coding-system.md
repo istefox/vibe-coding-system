@@ -205,6 +205,35 @@ retries, sandbox host-remember, background-agent resurrection fix); bash-mode `!
 autocomplete. `staging/user/settings.json` is unchanged this pass, deliberately. Source:
 `code.claude.com/docs/en/changelog.md` v2.1.190, v2.1.191, v2.1.193.
 
+### Audit 2026-06-27 (CC 2.1.194–2.1.195)
+
+Changelog extended to the latest published release. 2.1.194 does not exist (the changelog
+jumps 2.1.193 to 2.1.195, the same gap pattern as 2.1.192); 2.1.195 is current. The
+behavior-changing item below is assumed from the changelog text and is not yet verified live
+here.
+
+- **Background-agent reliability fixes** (ADR-0016 addendum, ADR-0020 addendum): CC 2.1.195
+  fixed background jobs disappearing from `claude agents`, a crashed background task reopening
+  to a blank screen, and background-agent daemons running unreachable when the control socket
+  fails. These continue the 2.1.193 background-agent thread and are additive: they harden the
+  Step-5 parallel-dispatch path and the unattended autopilot run without changing any contract.
+  The daemon-reachability fix in particular lowers the risk on the deferred autopilot smoke
+  test, where a long unattended run holds background agents across Steps 5–7 with no human to
+  recover a wedged daemon.
+
+Verified, not assumed: the CC 2.1.195 hyphenated-matcher bug (hook matchers with hyphenated
+identifiers accidentally substring-matching) does not affect this system, the same conclusion
+and reason as the 2.1.191 comma-matcher item. No matcher uses a hyphenated identifier: every
+matcher in `staging/plugin/hooks/hooks.json` and `staging/user/settings.json` is a pipe or
+single-token form (`Edit|Write`, `Bash`, `compact`, `idle_prompt`).
+
+Out of scope (no blueprint impact): `CLAUDE_CODE_DISABLE_MOUSE_CLICKS` (fullscreen mouse
+toggle), voice-dictation fixes (macOS silence capture, no-space-language auto-submit, Linux
+voice mode), `/plugin` enable/disable and project `.claude/settings.json` plugin-load fixes
+(sec. 14, the system ships as a plugin but no such config is used), and the Remote-session
+provisioning checklist. `staging/` is unchanged this pass, deliberately. Source:
+`code.claude.com/docs/en/changelog.md` v2.1.195 (and the 2.1.194 gap).
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow

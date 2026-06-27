@@ -358,6 +358,12 @@ Background-agent dispatch fix (assumed, changelog 2.1.193). The release stopped 
 
 ---
 
+## CC 2.1.195 alignment (2026-06-27)
+
+Background-agent reliability fixes (assumed, changelog 2.1.195). The release fixed background jobs disappearing from `claude agents`, a crashed background task reopening to a blank screen, and background-agent daemons running unreachable when the control socket fails. All three harden the background-dispatch path Step 5 relies on for `agent()` fan-out, and they continue the 2.1.193 background-agent thread. The effect is additive: nothing changes in the `step5-report.json` contract or the Agent-tool fallback, the failure surface just narrows. Assumed-not-verified-live, same discipline as the prior addenda.
+
+---
+
 ## References
 
 - Dynamic Workflows docs: `https://code.claude.com/docs/en/workflows`
