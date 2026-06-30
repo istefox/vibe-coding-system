@@ -234,6 +234,56 @@ voice mode), `/plugin` enable/disable and project `.claude/settings.json` plugin
 provisioning checklist. `staging/` is unchanged this pass, deliberately. Source:
 `code.claude.com/docs/en/changelog.md` v2.1.195 (and the 2.1.194 gap).
 
+### Audit 2026-06-30 (CC 2.1.196–2.1.197)
+
+Changelog extended to the latest published release. 2.1.194 stays the only gap in this
+window (the jump 2.1.193 → 2.1.195 noted in the prior audit); 2.1.196 and 2.1.197 both
+exist. 2.1.197 is a single-item release (the model default); 2.1.196 is a large reliability
+release. Behavior-changing items below are assumed from the changelog text and not yet
+verified live here unless marked otherwise.
+
+- **Sonnet 5 is the new default model** (sec. 3.10): CC 2.1.197 makes Claude Sonnet 5 the
+  default in Claude Code, with a native 1M-token context and promotional pricing of $2/$10
+  per Mtok through Aug 31, after which it rises to $3/$15. All five Sonnet-pinned agents
+  (`coder`, `reviewer`, `tester`, `debugger`, `refactorer`) use the bare `sonnet` alias, so
+  the upgrade lands with no config change; the `opus` and `haiku` agents are unaffected. The
+  cost rationale in sec. 3.10 carries a known step-up date (Aug 31). On agentic coding Opus
+  4.8 still leads Sonnet 5 (roughly 69 vs 63 on the launch benchmark), so the `architect`
+  agent stays on Opus by design.
+- **Background-session durability and crash recovery** (ADR-0016 addendum, ADR-0020 addendum):
+  CC 2.1.196 made background sessions survive their process being stopped, restarted, or
+  updated, including a shell hand-off on Windows; daemon-killed workers now auto-resume when
+  the agents view opens, and Remote sessions interrupted by a server restart auto-resume on
+  the next worker. These continue the 2.1.193/2.1.195 background-agent thread and harden the
+  Step-5 fan-out and the long unattended autopilot run.
+- **Background-job conversation-deletion fix** (ADR-0016 addendum, ADR-0020 addendum): CC
+  2.1.196 fixed waking a background job permanently deleting its conversation and re-running
+  the original prompt when the transcript probe misread a real transcript; the file is now
+  set aside, never deleted. This is a data-loss fix on the background path Step 5 and
+  autopilot depend on.
+- **Duplicate-recap / StructuredOutput fix** (ADR-0016 addendum): CC 2.1.196 stopped a
+  schema-rejected StructuredOutput attempt rendering alongside its retry after a background
+  turn. This touches the `step5-report.json` handoff, which is StructuredOutput-backed.
+- **Stream idle watchdog on by default** (sec. 10): CC 2.1.196 turned the streaming idle
+  watchdog on by default for all providers; it aborts and retries when a response stream
+  produces no events for 5 minutes, disabled with `CLAUDE_ENABLE_STREAM_WATCHDOG=0`. This
+  was a documented session-env recommendation (alongside `CLAUDE_CODE_RETRY_WATCHDOG`) and is
+  now a platform default that benefits long Workflow and autopilot runs.
+
+Verified, not assumed: the CC 2.1.196 MCP self-approval hardening (`claude mcp list`/`get` no
+longer spawn `.mcp.json` servers a repo self-approved via a committed `.claude/settings.json`;
+untrusted workspaces show `⏸ Pending approval`) aligns with the sec. 9 MCP posture and the
+sec. 10 layered-permission model. The context7 server this system ships is unauthenticated and
+not committed-self-approved, so there is no behavior change; the item is recorded as upstream
+hardening consistent with the design.
+
+Out of scope (no blueprint impact): the `/code-review` finder-merge token cut (skill-internal,
+roughly −25%); `claude agents` side-panel UX fixes (focus, subagent-type retention, status
+labels); `/context` showing 0 tokens on Bedrock (not this stack); voice-dictation, PowerShell
+`git diff`/`grep` exit-code, and MCP-OAuth `scopes_supported` fixes; the single-`←` agents-view
+open. `staging/` is unchanged this pass, deliberately. Source:
+`code.claude.com/docs/en/changelog.md` v2.1.196, v2.1.197.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -706,10 +756,12 @@ Models and effort levels chosen to reduce token spend while maintaining quality:
 
 | Agent | Model | Effort | Rationale |
 |--------|---------|--------|-----------|
-| architect | opus (→ 4.7) | **xhigh** | Native default for Opus 4.7; ADR/design = most impactful step in the chain. Automatic fallback to `high` if dispatched with `model: sonnet` override |
-| reviewer, debugger | sonnet (→ 4.6) | **high** | Pre-commit gate and root-cause: requires reasoning, not just execution |
-| coder, refactorer, tester | sonnet (→ 4.6) | **medium** | Execute a pre-defined plan; downstream reviewer and snapshot harness cover errors |
+| architect | opus (→ 4.8) | **xhigh** | Native default for Opus; ADR/design = most impactful step in the chain. Opus 4.8 still leads Sonnet 5 on agentic coding, so this stays on Opus. Automatic fallback to `high` if dispatched with `model: sonnet` override |
+| reviewer, debugger | sonnet (→ 5) | **high** | Pre-commit gate and root-cause: requires reasoning, not just execution |
+| coder, refactorer, tester | sonnet (→ 5) | **medium** | Execute a pre-defined plan; downstream reviewer and snapshot harness cover errors |
 | doc-writer, researcher | haiku (→ 4.5) | **low** | Bottleneck is I/O (reading code/searching), not reasoning |
+
+**CC 2.1.197 default-model shift:** Sonnet 5 is now the Claude Code default. Every agent pins a bare tier alias (`opus`/`sonnet`/`haiku`), so the five Sonnet agents pick up Sonnet 5 with no config change and the table holds as written. Sonnet 5 closes much of the gap to Opus 4.8 at a lower price (promo $2/$10 per Mtok through Aug 31, then $3/$15, versus Opus 4.8 at $5/$25). Where accuracy matters most on a Sonnet agent (reviewer, debugger, or a complex coder task), prefer raising effort toward `xhigh` over escalating the model: Sonnet 5 approaches Opus 4.8 mid-effort quality at its top reasoning tier while staying at Sonnet pricing. This is a per-invocation recommendation, not a frontmatter change.
 
 **CC 2.1.183:** WebSearch was returning empty results in subagents; now fixed. `researcher` and `architect` are the only agents with WebSearch and both benefit automatically.
 
@@ -727,9 +779,11 @@ session runs — e.g. reasoning strategy in Opus while the chain still executes 
 Sonnet. See `concept-to-code` SKILL.md §4 Step 5/6.
 
 **Available effort levels by model:**
-- Opus 4.7: `low`, `medium`, `high`, `xhigh`, `max`
+- Opus 4.8 / Sonnet 5: `low`, `medium`, `high`, `xhigh`, `max` (Sonnet 5 exposes the `xhigh` "Extra High" tier the prior Sonnet generation lacked)
 - Opus 4.6 / Sonnet 4.6: `low`, `medium`, `high`, `max` (`xhigh` → fallback to `high`)
 - `max` is session-level only (not persistable in settings.json)
+
+Sonnet 5 gaining `xhigh` is what makes the effort-over-model recommendation in sec. 3.10 viable: a Sonnet agent can now run at the same top reasoning tier as Opus. (The `xhigh` support on Sonnet 5 is drawn from launch coverage, not yet confirmed live here.)
 
 Override possible at individual invocation level via `CLAUDE_CODE_SUBAGENT_MODEL`.
 The session default (`effortLevel: high` in settings.json) is overridden by the sub-agent frontmatter; the env var `CLAUDE_CODE_EFFORT_LEVEL` takes precedence over everything.
