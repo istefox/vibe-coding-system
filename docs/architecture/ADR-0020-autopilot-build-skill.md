@@ -275,6 +275,12 @@ Background-agent dispatch fix (assumed, changelog 2.1.193). The release stopped 
 
 Background-agent reliability fixes (assumed, changelog 2.1.195). The release fixed background jobs disappearing from `claude agents`, a crashed background task reopening to a blank screen, and background-agent daemons running unreachable when the control socket fails. These reduce failure modes for a long unattended autopilot run, which holds background agents across Steps 5-7 with no human in the loop. The daemon-reachability fix matters most here: an unattended run cannot recover a wedged daemon by hand, so a fix that keeps the control socket reachable directly protects the autopilot path. This lowers the risk on the still-pending smoke test from the Acceptance note above without removing the need for it. Assumed-not-verified-live.
 
+## CC 2.1.196 alignment (2026-06-30)
+
+Background-session durability, crash recovery, and the conversation-deletion fix (assumed, changelog 2.1.196). The release made background sessions survive their process being stopped, restarted, or updated; daemon-killed workers auto-resume when the agents view opens; Remote sessions auto-resume after a server restart; and waking a background job no longer deletes its conversation and re-runs the original prompt. For an unattended autopilot run holding background agents across Steps 5-7 with no human to intervene, these are the most material fixes yet in the background-agent thread: a process restart or a transcript misread mid-run no longer destroys in-progress work. Taken together they lower the risk on the still-pending smoke test from the Acceptance note further, without removing the need for it. Assumed-not-verified-live.
+
+Sonnet 5 default (changelog 2.1.197). Sonnet 5 is the new Claude Code default, and the autopilot dispatch reuses the c2c Step 5-7 model mapping, so unattended runs become cheaper at a small accuracy cost. Because autopilot has no human catching errors and agentic-coding accuracy still favors Opus 4.8 over Sonnet 5, the autopilot reviewer step is the place to consider pinning Opus: it is the unattended safety net, low-volume, and worth the accuracy there, while the coder/tester steps and all interactive runs stay on Sonnet 5. This is a recommendation recorded against the model mapping, not a change to the skill contract.
+
 ---
 
 ## References

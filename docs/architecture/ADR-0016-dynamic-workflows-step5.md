@@ -362,6 +362,16 @@ Background-agent dispatch fix (assumed, changelog 2.1.193). The release stopped 
 
 Background-agent reliability fixes (assumed, changelog 2.1.195). The release fixed background jobs disappearing from `claude agents`, a crashed background task reopening to a blank screen, and background-agent daemons running unreachable when the control socket fails. All three harden the background-dispatch path Step 5 relies on for `agent()` fan-out, and they continue the 2.1.193 background-agent thread. The effect is additive: nothing changes in the `step5-report.json` contract or the Agent-tool fallback, the failure surface just narrows. Assumed-not-verified-live, same discipline as the prior addenda.
 
+## CC 2.1.196 alignment (2026-06-30)
+
+Background-job conversation-deletion fix (assumed, changelog 2.1.196). The release fixed waking a background job permanently deleting its conversation and re-running the original prompt when the transcript probe misread a real transcript; the file is now set aside, never deleted. Step 5 fans `agent()` work out across background jobs and reads the result back, so a transcript that was deleted and re-run from the top would have surfaced as a lost or duplicated unit of work. This is a data-loss fix directly on the fan-out path, additive to the contract.
+
+Duplicate-recap / StructuredOutput fix (assumed, changelog 2.1.196). The release stopped a schema-rejected StructuredOutput attempt rendering alongside its retry after a background turn. The `step5-report.json` handoff is StructuredOutput-backed (`tasks_completed`, `tasks_failed`, `test_result`, `files_modified`, `harness_deltas`), so a cleaner retry path reduces the chance of a malformed or doubled report reaching the orchestrator. No schema change.
+
+These continue the 2.1.193/2.1.195 background-agent thread and are additive: the failure surface narrows, the contract and the Agent-tool fallback are unchanged. Assumed-not-verified-live.
+
+Still open, not resolved by this release: the `hook_verified` blocker. No 2.1.196/2.1.197 changelog item addresses `PreToolUse`/`PostToolUse` hook propagation inside Workflow subagents, so the smoke test gating the workflow path (and the Agent-tool fallback when `hook_verified=false`) remains required exactly as before.
+
 ---
 
 ## References
