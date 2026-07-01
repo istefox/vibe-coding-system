@@ -1,6 +1,6 @@
-# ADR-0022 — Morning report schema v2.0
+# ADR-0022 — Morning report schema (v2.1)
 
-**Companion to:** ADR-0022 (D9)
+**Companion to:** ADR-0022 (D9); v2.1 `prep` block added by ADR-0023
 **Extends:** `autopilot-report.json` v1.0 (ADR-0020 D7)
 
 The overnight run writes one run-level report at `<project_root>/.claude/nightly-report.json` on
@@ -17,13 +17,20 @@ report is the roll-up a human reads in the morning.
 
 ```json
 {
-  "schema": "2.0",
+  "schema": "2.1",
   "run_id": "<string, e.g. the launch timestamp or roadmap name>",
   "project_root": "<abs path>",
   "status": "success | partial | aborted",
   "abort_reason": "<string or null>",
   "started_at": "<ISO-8601>",
   "ended_at": "<ISO-8601>",
+  "prep": {
+    "source": "issues | null",
+    "issues_label": "<label or null>",
+    "features_generated": 0,
+    "features_skipped_thin": [ { "issue": 0, "reason": "<thin-issue reason>" } ],
+    "test_cmd_created": false
+  },
   "features": [
     {
       "feature": "<roadmap line text>",
@@ -66,6 +73,8 @@ report is the roll-up a human reads in the morning.
 ## Relationship to v1.0
 
 v1.0 (`autopilot-report.json`) is single-feature, local-commit-only, and has no publish or CI fields.
-v2.0 adds the `features[]` array, the per-feature `pr_url` / `ci_status` / `guard_halt`, the
+v2.1 adds the `prep` block (ADR-0023: `source`, `issues_label`, `features_generated`,
+`features_skipped_thin[]`, `test_cmd_created`); a run with no prep source leaves it null. v2.0 adds
+the `features[]` array, the per-feature `pr_url` / `ci_status` / `guard_halt`, the
 `guard_halts[]` roll-up, and `spend`. A v1.0 reader ignores the new fields; a v2.0 reader treats a
 missing `features[]` as a single-feature v1.0 report.

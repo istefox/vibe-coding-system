@@ -9,30 +9,60 @@ the guard halts and the report says what blocked it.
 
 ---
 
-## One-time setup per target repo
+## Two modes
 
-1. **Opt in.** Create `.claude/nightly-autopilot.yml` in the target repo:
+- **Pre-designed roadmap** (ADR-0022): you already wrote `PROJECT.md` and each feature's SPEC/ADR.
+- **Auto-design from issues** (ADR-0023): the run generates `PROJECT.md`, per-feature specs, and the
+  design itself from a labeled GitHub backlog. Add a `prep:` block to the opt-in marker (below).
+
+## One-time setup per target repo (the irreducible bootstrap)
+
+Two of these cannot be automated by design invariant (a self-approving system is forbidden). After
+this one-time bootstrap, every night is fully automatic.
+
+1. **`gh auth login`.** Once per machine (needed to push and open PRs).
+
+2. **Opt in.** Create `.claude/nightly-autopilot.yml` in the target repo. For auto-design, add the
+   prep source:
    ```yaml
    publish: true
+   prep:
+     source: issues
+     issues_label: release-blocker
    ```
-   Absent or `publish: false` means the run stops at a local commit (same as `autopilot-build`). This
-   marker is committed to the repo, so the opt-in is auditable in its history.
+   Absent or `publish: false` means the run stops at a local commit (same as `autopilot-build`). No
+   `prep:` block means the roadmap and specs must pre-exist. This marker is committed to the repo, so
+   the opt-in is auditable in its history.
 
-2. **Trust the test command.** Run the interactive chain once so the TOFU `(hash, root)` pair for
-   `.claude/test-cmd` is registered. `nightly-autopilot` never grants trust itself.
+3. **Trust the test command.** In auto-design mode the run's Phase P writes `.claude/test-cmd` from
+   stack detection, so you only review it and run the trust command once:
+   ```
+   bash ~/.claude/hooks/approve-test-cmd.sh "<repo>"
+   ```
+   `nightly-autopilot` never grants trust itself. Re-run this if you later edit `.claude/test-cmd`.
 
-3. **Verify hooks fire once.** Confirm `hook_verified` is set (true or false, not null) in the
-   roadmap's manifests. The smoke test in a fresh session establishes this.
+4. **Verify hooks fire once.** Confirm `hook_verified` is set (true or false, not null). The default
+   `false` runs on the safe Agent-tool fallback; the Step-5 smoke test in a fresh session promotes it
+   to `true` (optional, unlocks the faster Workflow dispatch).
 
-4. **CI.** On first run the skill drops `.github/workflows/ci.yml` (parameterized by your
+5. **CI.** On first run the skill drops `.github/workflows/ci.yml` (parameterized by your
    `.claude/test-cmd`) and sets branch protection on `main` (require the `ci` check, require a PR).
    Nothing to do by hand if `gh` has admin on the repo.
+
+### Auto-design flow (what Phase P does)
+
+Reads the labeled issues, writes `PROJECT.md` (one feature per issue) + `docs/specs/_issue-map.tsv`,
+and generates `docs/specs/<slug>.spec.md` per issue. A thin or vague issue is skipped (marked `[~]`
+with a `needs-human` note in the report), never fabricated. Downstream the design chain runs headless:
+architect writes the ADR + plan, the feature is implemented, and the generated SPEC + ADR are
+committed inside the feature PR for you to review at merge.
 
 ---
 
 ## The evening launch (every night)
 
-From inside the target repo, after the design gate is done and `PROJECT.md` holds the roadmap:
+From inside the target repo. In pre-designed mode `PROJECT.md` already holds the roadmap; in
+auto-design mode you only need the labeled issues and the `prep:` marker (Phase P builds the rest):
 
 1. **Set a non-blocking permission mode** so no per-tool prompt fires overnight:
    ```

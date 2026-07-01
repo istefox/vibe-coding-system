@@ -212,3 +212,30 @@ Detail: `docs/architecture/ADR-0022-nightly-autopilot-goal.md`,
 `docs/architecture/ADR-0022-implementation-plan.md`,
 `docs/architecture/ADR-0022-morning-report-schema.md`,
 `docs/RUNBOOK-nightly-autopilot.md`.
+
+## Decisions from the nightly auto-design capability (ADR-0023)
+
+`nightly-autopilot` gains a Phase P (prep) that generates the missing design inputs from a labeled
+GitHub backlog, so a set of issues becomes PR-ready overnight with no evening design work. Amends the
+ADR-0022 boundary: design-artifact generation (SPEC, ADR, plan, PROJECT.md, manifests) joins the
+unattended set under the same per-repo opt-in.
+
+Key architectural decisions:
+- **Only two headless gaps existed:** `SPEC.md` (only `interview-driver`, interactive; c2c autopilot
+  hard-aborts if absent) and `PROJECT.md` (only the 3-round setup). Everything downstream (architect
+  → ADR + plan, claude-md-generator → CLAUDE.md, manifest-init, c2c autopilot, conductor nightly) is
+  already headless and reused verbatim.
+- **The TOFU-trust and gh-auth wall stays human** (one-time per repo / per machine). ADR-0020 already
+  rejected a self-approving prep step. Phase P does auto-create the `.claude/test-cmd` *file* from
+  stack detection, so the human's per-repo action collapses to one `approve-test-cmd.sh`.
+- **Input = GitHub issues by label** (`prep.issues_label` in the opt-in marker); one issue = one
+  feature; the issue body replaces the interview.
+- **`spec-from-issue` is headless and refuses to fabricate:** a deterministic quality gate
+  (`spec-issue-gate.sh`) skips a thin/vague issue with a `needs-human` note rather than inventing
+  requirements.
+- **PR is the design checkpoint:** the generated SPEC + ADR are committed inside the feature PR and
+  reviewed at merge (merge stays human). No pre-implementation gate.
+- **Single-SPEC-path handled** by a just-in-time copy of `docs/specs/<slug>.spec.md` to
+  `<root>/SPEC.md` in `project-conductor nightly` before each feature's chain.
+
+Detail: `docs/architecture/ADR-0023-nightly-auto-design.md`.
