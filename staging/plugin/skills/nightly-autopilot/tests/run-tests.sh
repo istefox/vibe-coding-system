@@ -36,8 +36,13 @@ else
   no "phase1 script tests pass"
 fi
 
-# 2. The three helpers exist and are syntax-clean.
-for s in nightly-guard publish-feature set-branch-protection; do
+# 1b. Phase 2 prep tests (ADR-0023), if present in this layout.
+if [ -f "$SCRIPTS/tests/prep.test.sh" ]; then
+  bash "$SCRIPTS/tests/prep.test.sh" >/dev/null 2>&1 && ok "prep script tests pass" || no "prep script tests pass"
+fi
+
+# 2. The helpers exist and are syntax-clean.
+for s in nightly-guard publish-feature set-branch-protection detect-test-cmd roadmap-from-issues spec-issue-gate; do
   if [ -f "$SCRIPTS/$s.sh" ] && bash -n "$SCRIPTS/$s.sh" >/dev/null 2>&1; then
     ok "helper ok: $s.sh"
   else

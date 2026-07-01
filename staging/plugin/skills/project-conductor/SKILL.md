@@ -206,6 +206,28 @@ options:
 
 Emit: `"── Starting chain for: <next-feature> (autopilot: <on|off>) ──"`
 
+**Just-in-time SPEC copy (ADR-0023, nightly only).** If `_nightly=true`, resolve the feature's
+generated spec **by its issue number** (never by re-deriving the slug from the feature text, which
+would not match the roadmap's number-prefixed slug) and copy it to the single path c2c autopilot
+reads. Features run sequentially, so there is no collision, and this feature's SPEC is committed in
+its PR:
+```bash
+# Extract the issue number from the "(issue #N)" suffix of the feature line.
+_issue=$(printf '%s' "<next-feature>" | sed -n 's/.*(issue #\([0-9][0-9]*\)).*/\1/p')
+if [ -n "$_issue" ]; then
+  _spec=$(ls "$_root"/docs/specs/"$_issue"-*.spec.md 2>/dev/null | head -1)
+  if [ -n "$_spec" ] && [ -f "$_spec" ]; then
+    cp "$_spec" "$_root/SPEC.md"
+  else
+    echo "── no generated spec for issue #$_issue (thin-skipped in Phase P) — feature not implemented ──"
+  fi
+fi
+# No "(issue #N)" suffix = pre-designed mode: SPEC.md is already at the root, leave it untouched.
+```
+If no spec is found (issue was skipped as thin), the c2c autopilot pre-flight hard-aborts at Gate 0
+for a missing SPEC.md; treat that as a feature-level skip in Step 5C, and the log line above (not a
+silent no-op) tells the morning report why.
+
 If `_autopilot=true`:
 1. Set `autopilot: true` in the manifest via bash sed (create manifest first via `manifest-init.sh` if not yet created, or update if already exists).
 2. Emit: `"Autopilot mode ON — all HITL gates will be auto-approved."`

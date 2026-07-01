@@ -43,6 +43,39 @@ will not re-enter after a turn ends.
 
 ---
 
+## 1.5 Phase P — Prep: auto-generate the design inputs (ADR-0023)
+
+Runs before pre-flight, and only when the opt-in marker declares a prep source. Idempotent: each
+step skips whatever already exists. With no `prep:` block the phase is a no-op and the run behaves
+exactly as ADR-0022 (roadmap and specs must pre-exist).
+
+Read the source from `.claude/nightly-autopilot.yml`:
+```yaml
+publish: true
+prep:
+  source: issues
+  issues_label: release-blocker
+```
+
+Steps (each is skip-if-present):
+
+1. **test-cmd file** — if `.claude/test-cmd` is absent, run
+   `~/.claude/hooks/detect-test-cmd.sh --root "$PWD"` to write a candidate from stack detection.
+   This writes the FILE only; it never grants trust (that stays human, D3).
+2. **Roadmap** — if `PROJECT.md` is absent, run
+   `~/.claude/hooks/roadmap-from-issues.sh --root "$PWD" --label "<issues_label>"` to build
+   `PROJECT.md` (one feature per issue) and `docs/specs/_issue-map.tsv`.
+3. **Per-feature SPEC** — for each row in `docs/specs/_issue-map.tsv` whose
+   `docs/specs/<slug>.spec.md` is absent, invoke `Skill(spec-from-issue, "<issue#> --slug <slug>")`.
+   A thin or vague issue is SKIPPED (marked `[~]` in PROJECT.md with a `needs-human` note), never
+   fabricated.
+
+Record for the report (schema v2.1 `prep` block): `features_generated`, `features_skipped_thin`,
+`test_cmd_created`. Then fall into Phase 0. Phase 0 still enforces the TOFU-trust and gh-auth wall;
+Phase P grants neither.
+
+---
+
 ## 2. Phase 0 — Hard pre-flight (read-only, script-level)
 
 Any failure writes an `aborted` report and stops. No dispatch, no push. Emit one line per check.
@@ -58,11 +91,15 @@ Any failure writes an `aborted` report and stops. No dispatch, no push. Emit one
    test -f "$m" || { echo "✗ opt-in: $m missing"; exit 1; }
    grep -qE '^[[:space:]]*publish:[[:space:]]*true[[:space:]]*$' "$m" || { echo "✗ opt-in: publish not true"; exit 1; }
    ```
-4. **PROJECT.md present:** `test -f PROJECT.md`. Absent → abort ("no roadmap; run project-conductor
-   setup interactively first").
+4. **PROJECT.md present:** `test -f PROJECT.md`. Phase P generates it from issues; if it is still
+   absent (no prep source and none pre-existing) → abort ("no roadmap; add a `prep.issues_label` to
+   the opt-in marker or create PROJECT.md").
 5. **TOFU test-cmd trusted:** `.claude/test-cmd` is not `NONE`/placeholder and its SHA-pinned
    `(hash, normalized-root)` pair is in `~/.claude/state/stop-gate/trust` (same check as
-   autopilot-build check 6). Never auto-grant.
+   autopilot-build check 6). Never auto-grant. Phase P may have written the `.claude/test-cmd`
+   file, but trust is still human: if untrusted, abort with the exact one-liner,
+   "test-cmd not trusted — review `.claude/test-cmd` then run once:
+   `bash ~/.claude/hooks/approve-test-cmd.sh \"$PWD\"`".
 6. **hook_verified known:** the roadmap's manifests carry `hook_verified` true or false, not null
    (drives Workflow vs Agent-tool dispatch downstream).
 7. **`gh` authenticated:** `gh auth status` succeeds (needed to push and open PRs).
@@ -128,7 +165,8 @@ feature. A halted feature keeps its local commit but has no ready PR.
 
 ## 4. Phase 2 — Morning report and disarm
 
-On every exit path, write `<project_root>/.claude/nightly-report.json` (schema v2.0) with per-feature
+On every exit path, write `<project_root>/.claude/nightly-report.json` (schema v2.1: v2.0 fields plus
+the Phase P `prep` block) with per-feature
 `status`, `branch`, `commit_sha`, `pr_url`, `ci_status`, `guard_halt`, the `guard_halts[]` roll-up,
 and `spend` (from the `/goal` overlay). Set `ended_at` via `date -u`.
 
