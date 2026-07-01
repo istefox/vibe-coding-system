@@ -25,6 +25,11 @@ plugin/skills/nightly-autopilot/tests/run-tests.sh|skills/nightly-autopilot/test
 plugin/scripts/tests/phase1.test.sh|hooks/tests/phase1.test.sh
 plugin/skills/project-conductor/SKILL.md|skills/project-conductor/SKILL.md
 project-templates/ci/ci.yml|templates/ci.yml
+plugin/scripts/detect-test-cmd.sh|hooks/detect-test-cmd.sh
+plugin/scripts/roadmap-from-issues.sh|hooks/roadmap-from-issues.sh
+plugin/scripts/spec-issue-gate.sh|hooks/spec-issue-gate.sh
+plugin/scripts/tests/prep.test.sh|hooks/tests/prep.test.sh
+plugin/skills/spec-from-issue/SKILL.md|skills/spec-from-issue/SKILL.md
 "
 
 printf '%s\n' "$PAIRS" | while IFS='|' read -r src dst; do
@@ -44,7 +49,8 @@ done
 # Preserve executable bit on the shell helpers.
 if [ "$APPLY" -eq 1 ]; then
   chmod +x "$DEST/hooks/nightly-guard.sh" "$DEST/hooks/publish-feature.sh" \
-    "$DEST/hooks/set-branch-protection.sh" 2>/dev/null || true
+    "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
+    "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" 2>/dev/null || true
 fi
 
 cat <<'NOTE'
