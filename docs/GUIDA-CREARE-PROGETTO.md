@@ -59,8 +59,9 @@ you open a **fresh, clean session**.
 The system is **already installed**. To make sure it works, open Claude in
 any folder and type these commands (one at a time), press Enter, and check:
 
-- `/agents` → you should see: architect, coder, reviewer, tester, debugger,
-  doc-writer, refactorer, researcher.
+- `ls ~/.claude/agents/` (or ask Claude to list them) → you should see: architect,
+  coder, reviewer, tester, debugger, doc-writer, refactorer, researcher. The `/agents`
+  wizard was removed in CC 2.1.198.
 - `/skills` → you should see the custom skills (adr-writer, claude-md-generator,
   swift-vibe, etc.).
 - `/mcp` → `github` and `sequential-thinking` should be "connected".
@@ -241,7 +242,7 @@ For each new feature: go back to Step 6 (coder → tester → reviewer → commi
 |---|---|
 | `/clear` | clears Claude's memory between different tasks |
 | `/memory` | shows CLAUDE.md and loaded rules |
-| `/agents` `/skills` `/hooks` `/mcp` | show what is active |
+| `/skills` `/hooks` `/mcp` | show what is active (`/agents` wizard removed in 2.1.198; inspect `.claude/agents/`) |
 | `Shift+Tab` | changes "permission mode" (plan mode, etc.) |
 | `Esc` | stops Claude mid-action (without losing context) |
 | `Esc Esc` or `/rewind` | goes back to a previous point |

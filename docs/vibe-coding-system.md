@@ -284,6 +284,58 @@ labels); `/context` showing 0 tokens on Bedrock (not this stack); voice-dictatio
 open. `staging/` is unchanged this pass, deliberately. Source:
 `code.claude.com/docs/en/changelog.md` v2.1.196, v2.1.197.
 
+### Audit 2026-07-02 (CC 2.1.198)
+
+Changelog reconciled with the blueprint. Source note: the online pages at `code.claude.com/docs`
+still end at 2.1.196, so this pass verifies against the changelog bundled with the installed CLI at
+`~/.claude/cache/changelog.md`, the local primary source for 2.1.198. Two items below contradict the
+current online pages, which have not caught up; the bundled changelog confirms both as real changes.
+
+- **`claude agents` launcher now auto-commits, pushes, and opens a draft PR on worktree finish**
+  (ADR-0022 addendum): a background agent launched from `claude agents` commits, pushes, and opens a
+  draft PR when it finishes code work in a worktree, rather than stopping to ask. This is the
+  standalone launcher, a separate path from nightly-autopilot (skill + `/goal` + Agent/Workflow
+  dispatch) and from the `coder` sub-agent (Agent-tool, `isolation: worktree`); neither of those
+  auto-pushes. The ADR-0022 boundary holds. The guardrail (never drive nightly or autopilot through
+  `claude agents`) is recorded in the ADR-0022 addendum.
+- **Explore now inherits the session model, capped at opus** (sec. 3.10; was Haiku): the built-in
+  Explore agent no longer runs on Haiku by default. Broad Explore fan-out is no longer
+  cheap-by-default and now tracks the session model on cost.
+- **Subagents and compaction inherit the session extended-thinking config** (sec. 3.10): delegated
+  tasks and context compaction now carry the session thinking budget, which improves output quality
+  on dispatched work. No config change here.
+- **Transient network drops retry with backoff** (sec. 10): a brief mid-response drop such as
+  ECONNRESET no longer aborts the turn; it retries with backoff. This narrows the stream and retry
+  watchdogs to true hangs and promotes the earlier assumed transient-retry item toward verified.
+- **Workflow worktree edit-block fixed** (ADR-0016 addendum): Workflow agents spawned with
+  `isolation: 'worktree'` in background sessions were blocked from editing files inside their own
+  worktree; resolved. Removes a latent no-edit failure mode on the Step-5 Workflow coder path.
+- **Agent messages stay task direction, never approval** (sec. 4, boundary): 2.1.198 restates that a
+  message from the launching agent is normal task direction and never counts as the user's approval.
+  This is external confirmation of the HITL invariant the system already enforces.
+- **New Notification events `agent_needs_input` and `agent_completed`** (sec. 7): they fire for
+  `claude agents` sessions that need input or finish. Our nightly path is skill + `/goal`, not a
+  `claude agents` background session, so the events are available but not wired; recorded for a
+  revisit if nightly ever runs under `claude agents`.
+- **Agent-teams resilience and plan-mode read-only auto-allow** (sec. 2, sec. 11): a teammate that
+  dies on an API error now reports "failed" to the lead, and messaging a stuck teammate wakes it to
+  retry; plan mode now auto-allows read-only tool calls when a session starts in plan mode, matching
+  the interview and plan gates. Both are one-line behavior notes with no change here.
+- **`/agents` wizard removed** (sec. 16): the interactive wizard is gone; subagents are managed by
+  asking Claude or by editing `.claude/agents/` directly. The command table and the two guides are
+  corrected accordingly.
+
+Verified, not assumed: the `.claude/rules/` symlink-path fix (conditional rules failing to load when
+the target is reached through a symlink) does not affect this system. Rules deploy by copy through
+`sync-to-claude.sh`, never by symlink. `staging/` is unchanged this pass, deliberately. Source:
+`~/.claude/cache/changelog.md` (bundled CC 2.1.198); online `code.claude.com/docs` still at 2.1.196.
+
+Out of scope (no blueprint impact): Claude in Chrome general availability, the `/dataviz` skill, the
+AWS gateway provider and its failover, AWS/Mantle STS auto-refresh, the markdown-table fullscreen
+fix, SSH shortcut labels, highlight.js 11, the `--bg` plus `--print` conflict guard, the
+background-task "Running" unstick, classifier throttling, `/diff` refresh on branch switch, and
+`/branch` fork-name derivation.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -403,7 +455,7 @@ v1.0 contained significant inaccuracies. Verified against `code.claude.com/docs`
 Orchestrator (main Claude Code CLI session)
     │
     ├─ Built-in sub-agent (Anthropic):
-    │  ├─ Explore        (read-only, Haiku, codebase search)
+    │  ├─ Explore        (read-only, inherits session model cap opus, codebase search)
     │  ├─ Plan           (read-only, plan mode, research for planning)
     │  ├─ general-purpose (all tools, generic multi-step)
     │  └─ Bash, statusline-setup, Claude Code Guide
@@ -1554,7 +1606,7 @@ Research $ARGUMENTS:
 3. Summarize findings with file references
 ```
 
-`agent: Explore` uses the built-in Explore (Haiku, read-only). The subagent does the work, the main context receives only the summary.
+`agent: Explore` uses the built-in Explore (read-only; inherits the session model, capped at opus, since CC 2.1.198; was Haiku). The subagent does the work, the main context receives only the summary.
 
 ### 8.6 Deployed custom skills (active as of 2026-06)
 
@@ -2206,7 +2258,7 @@ Top 10 to always follow (from `code.claude.com/docs/en/best-practices`):
 | `/context` | Token usage by category: system prompt, memory, skill, MCP, messages |
 | `/usage` | Cost breakdown by category: skill, subagent, plugin, MCP server (CC 2.1.149) |
 | `/doctor` | Installation and configuration diagnostics |
-| `/agents` | Browse/create/edit sub-agents |
+| `/agents` | Wizard removed in CC 2.1.198; manage sub-agents by asking Claude or editing `.claude/agents/` directly |
 | `/hooks` | Browse configured hooks (read-only) |
 | `/skills` | Skills available from project, user, plugin |
 | `/permissions` | Current tool allowlist/denylist |
@@ -2311,6 +2363,12 @@ Session B "fresh" → no bias toward recently written code.
   `sandbox.credentials` blocks sandboxed secret reads but its value format is unconfirmed in the
   schema; remote MCP calls abort after a 5-minute idle with `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` as
   override
+- CC 2.1.198 behavior items, taken from the bundled changelog (`~/.claude/cache/changelog.md`) and
+  not yet smoke-tested here: the `claude agents` launcher auto-commits, pushes, and opens a draft PR
+  on worktree finish (ADR-0022, scoped to that launcher, not our path); Explore inherits the session
+  model capped at opus (was Haiku); subagents and compaction inherit the session extended-thinking
+  config; the Workflow worktree edit-block fix (ADR-0016). The online docs at `code.claude.com` still
+  end at 2.1.196, so these await re-confirmation against the primary pages once they catch up
 
 ---
 

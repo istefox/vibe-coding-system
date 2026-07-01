@@ -274,6 +274,28 @@ These promote the runtime behavior from assumed to verified, same discipline as 
 
 ---
 
+## CC 2.1.198 alignment (2026-07-02): `claude agents` auto-push guardrail
+
+CC 2.1.198 changed the `claude agents` background launcher: an agent that finishes code work in a
+worktree now commits, pushes, and opens a draft PR on its own, instead of stopping to ask. Source:
+`~/.claude/cache/changelog.md` (bundled 2.1.198; the online docs still end at 2.1.196).
+
+This is a different launch path from nightly-autopilot. Nightly runs as a skill under `/goal`, with
+work dispatched through the Agent tool or a Workflow script, and the `coder` sub-agent runs with
+`isolation: worktree` inside that session. None of those paths adopt the launcher's auto-push
+behavior, so the D2 boundary (push and open PR only on a per-repo opt-in; never merge, never
+force-push, never write to `main`) is unaffected.
+
+The residual risk is a human choosing to drive the roadmap through the `claude agents` launcher
+directly. There the launcher's push may not route through the Bash tool, so the `nightly-guard`
+PreToolUse Bash matcher would not see it. This is the same "wrapped push invisible to the hook
+matcher" case this ADR already anticipated, which is why the publish helper carries an in-script
+`--check` gate in addition to the hook. Guardrail: nightly-autopilot and autopilot-build must never
+be driven through the `claude agents` background launcher. The in-script `--check` publish gate stays
+the authoritative opt-in enforcement regardless of launch path.
+
+---
+
 ## References
 
 - `code.claude.com/docs/en/goal` — `/goal` command, CC v2.1.139+ (verified 2026-07-01)

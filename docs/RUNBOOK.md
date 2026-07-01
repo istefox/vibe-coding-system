@@ -107,7 +107,7 @@ ls ~/.claude/skills/   # 7 folders, each with SKILL.md
 In a new `claude` session in any project folder:
 ```
 /memory      # confirm that ~/.claude/CLAUDE.md and the rules are loaded
-/agents      # confirm the 7+1 custom agents (architect, coder, ...)
+ls ~/.claude/agents/   # confirm the 7+1 custom agents (architect, coder, ...); /agents wizard removed in 2.1.198
 /skills      # confirm the 7 custom skills
 /hooks       # confirm PreToolUse/PostToolUse/Stop registered
 /status      # confirm settings source = User

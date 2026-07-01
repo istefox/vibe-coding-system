@@ -372,6 +372,12 @@ These continue the 2.1.193/2.1.195 background-agent thread and are additive: the
 
 Still open, not resolved by this release: the `hook_verified` blocker. No 2.1.196/2.1.197 changelog item addresses `PreToolUse`/`PostToolUse` hook propagation inside Workflow subagents, so the smoke test gating the workflow path (and the Agent-tool fallback when `hook_verified=false`) remains required exactly as before.
 
+## CC 2.1.198 alignment (2026-07-02)
+
+Workflow worktree edit-block fixed (changelog 2.1.198). The release fixed Workflow agents spawned with `isolation: 'worktree'` in background sessions being blocked from editing files inside their own worktree. Step 5 dispatches `coder` work this way, so before the fix a worktree coder could have returned with no edits applied, surfacing as a silent no-op in `step5-report.json` rather than an error. The fix removes that latent failure mode; the report contract and the Agent-tool fallback are unchanged. Assumed-not-verified-live, same discipline as the prior addenda. Source: `~/.claude/cache/changelog.md` (bundled 2.1.198).
+
+The `hook_verified` blocker above is still not addressed by 2.1.198; the smoke test gating the workflow path remains required.
+
 ---
 
 ## References
