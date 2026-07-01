@@ -81,7 +81,7 @@ normalized (whitespace collapsed to single space) before matching. Two families:
 
 | # | Pattern (conceptual) | Regex EXT (case-insensitive) |
 |---|---|---|
-| A1 | DROP TABLE / DROP DATABASE / DROP SCHEMA | `\bdrop[[:space:]]+(table|database|schema)\b` |
+| A1 | DROP TABLE / DROP DATABASE / DROP SCHEMA | `\bdrop[[:space:]]+(table\|database\|schema)\b` |
 | A2 | TRUNCATE | `\btruncate[[:space:]]+(table[[:space:]]+)?` |
 | A3 | DELETE FROM without WHERE | `\bdelete[[:space:]]+from\b` **AND NOT** `\bwhere\b` (in the same statement) |
 | A4 | ALTER TABLE ... DROP COLUMN/CONSTRAINT | `\balter[[:space:]]+table\b.*\bdrop\b` |
@@ -92,11 +92,11 @@ normalized (whitespace collapsed to single space) before matching. Two families:
 | # | Tool | Regex EXT (case-insensitive) |
 |---|---|---|
 | B1 | alembic downgrade | `\balembic[[:space:]]+downgrade\b` |
-| B2 | prisma migrate reset / db push --force-reset | `\bprisma[[:space:]]+(migrate[[:space:]]+reset|db[[:space:]]+push)\b` |
-| B3 | django flush / migrate zero | `\bmanage\.py[[:space:]]+(flush|sqlflush)\b` or `\bmigrate[[:space:]]+\w+[[:space:]]+zero\b` |
-| B4 | knex migrate:rollback / down | `\bknex[[:space:]]+migrate:(rollback|down)\b` |
-| B5 | sequelize db:migrate:undo / db:drop | `\bsequelize[[:space:]]+db:(migrate:undo|drop)\b` |
-| B6 | rails db:drop / db:reset / db:rollback | `\brails[[:space:]]+db:(drop|reset|rollback)\b` or `\brake[[:space:]]+db:(drop|reset)\b` |
+| B2 | prisma migrate reset / db push --force-reset | `\bprisma[[:space:]]+(migrate[[:space:]]+reset\|db[[:space:]]+push)\b` |
+| B3 | django flush / migrate zero | `\bmanage\.py[[:space:]]+(flush\|sqlflush)\b` or `\bmigrate[[:space:]]+\w+[[:space:]]+zero\b` |
+| B4 | knex migrate:rollback / down | `\bknex[[:space:]]+migrate:(rollback\|down)\b` |
+| B5 | sequelize db:migrate:undo / db:drop | `\bsequelize[[:space:]]+db:(migrate:undo\|drop)\b` |
+| B6 | rails db:drop / db:reset / db:rollback | `\brails[[:space:]]+db:(drop\|reset\|rollback)\b` or `\brake[[:space:]]+db:(drop\|reset)\b` |
 
 **Controlled false positives (MUST remain allow):**
 
@@ -153,7 +153,7 @@ the `agent_id` field:
 | Condition | permissionDecision | Audience of reason |
 |------------|--------------------|----------------------|
 | non-Bash command / non-DB / missing jq / malformed JSON | **no output** (allow, fail-open upstream of match) | — |
-| destructive DB + valid backup (marker `.claude/db-backup-confirmed` or file `.backups/*.dump|*.sql[.gz]` fresh <N h) | **no output** (allow) | — |
+| destructive DB + valid backup (marker `.claude/db-backup-confirmed` or file `.backups/*.dump\|*.sql[.gz]` fresh <N h) | **no output** (allow) | — |
 | destructive DB + NO backup + bypass active (`DB_GUARDRAIL=off` or marker `.claude/db-is-ephemeral`) | **no output** (allow) | — |
 | destructive DB + NO backup + **`agent_id` ABSENT** (orchestrator / user in foreground) | **`ask`** + reason | legitimate remedies (backup + marker) |
 | destructive DB + NO backup + **`agent_id` PRESENT** (sub-agent in auto mode) | **`deny`** + reason | "STOP and report to orchestrator" — NO bypass |

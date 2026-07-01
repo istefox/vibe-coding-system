@@ -310,10 +310,10 @@ the rejected options are listed with the reason.
 - **Alternative B — remedy only (scan + scrub on-demand):** rejected as complete architecture.
   Covers existing, but new repos would accumulate traces to clean every iteration (avoidable
   repeated work). Adopted as *part* of the hybrid (standalone skill).
-- **Alternative C — prevention+remedy hybrid **: **adopted**. Each case uses the right approach
+- **Alternative C — prevention+remedy hybrid**: **adopted**. Each case uses the right approach
   (new->A, existing->B); covers the entire SPEC scope. Accepted against: two surfaces to maintain
   (mitigated by reuse — the chain does not duplicate the skill).
-- **Alternative D — fresh-history publish **: **adopted** as the **default strategy for
+- **Alternative D — fresh-history publish**: **adopted** as the **default strategy for
   already-public** (D5). Avoids force-push on the original repo entirely (TOP risk of the
   pre-mortem). Accepted against: historical granularity is lost in public (compensated by
   surgical rewrite as option 2 for those who want it).

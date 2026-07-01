@@ -329,7 +329,7 @@ shows it to the user at Gate 5 with options `append` / `skip`. No OS-level notif
 **Rationale:** markdown report is auditable and copy-paste-able. Manifest update is
 already implicit in the state machine, but making it explicit in the contract avoids
 stale manifest. Auto-suggested memory entry resolves the pattern observed in the current
-MEMORY.md (manual entries always written in the same format by the user: "[topic](project_<slug>.md)
+MEMORY.md (manual entries always written in the same format by the user: "`[topic](project_<slug>.md)`
 — DEPLOYED YYYY-MM-DD description"); auto-write would violate the "no unrequested side effects"
 principle (the brief itself cites the `agent-notes/architect.md` case as an unwanted
 preceding side effect).

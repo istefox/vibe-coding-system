@@ -14,7 +14,7 @@
 4. [The `design-brainstorm` skill (brainstorm-gate)](#4-the-design-brainstorm-skill)
 5. [Workflow B: hotfix or micro-edit (direct coder dispatch)](#5-workflow-b-hotfix-or-micro-edit)
 6. [Workflow C: refactor with behavior-preservation](#6-workflow-c-behavior-preserving-refactor)
-7. [Workflow D: review/fix of existing code](#7-workflow-d-review-fix-existing-code)
+7. [Workflow D: review/fix of existing code](#7-workflow-d-reviewfix-of-existing-code)
 8. [Utility commands](#8-utility-commands)
 9. [How to read the pattern classifier + hook](#9-pattern-classifier-and-hook)
 10. [Troubleshooting](#10-troubleshooting)
