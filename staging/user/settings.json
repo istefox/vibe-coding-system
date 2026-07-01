@@ -28,6 +28,15 @@
             "command": "\"$HOME\"/.claude/hooks/protect-files.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/nightly-guard.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
