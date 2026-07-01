@@ -142,7 +142,7 @@ diff.sh
 1. **Control granularity:** global env var `RFS_RUNS` *session-only*.
    No per-project config file in this iteration (YAGNI: the refactorer
    is invoked in an interactive session, the user knows which project it is working on
-   and can prefix `RFS_RUNS=5 ` to the dispatch). Config file adds
+   and can prefix `RFS_RUNS=5` to the dispatch). Config file adds
    parsing logic + precedence cases (env > file > default) for zero
    demonstrated benefit.
 

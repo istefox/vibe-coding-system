@@ -1,0 +1,24 @@
+{
+  // Docs-only repo: the lint catches structural Markdown errors, not whitespace style.
+  // The hand-written corpus deliberately violates blank-line and table-spacing cosmetic
+  // rules (MD060/031/032/022/004), so the baseline starts from `default: false` and turns
+  // on only rules that flag real rendering bugs (broken tables, dead anchors, bad spans).
+  "config": {
+    "default": false,
+    "MD001": true,
+    "MD003": true,
+    "MD009": true,
+    "MD010": true,
+    "MD018": true,
+    "MD019": true,
+    "MD023": true,
+    "MD037": true,
+    "MD038": true,
+    "MD039": true,
+    "MD042": true,
+    "MD051": true,
+    "MD056": true
+  },
+  "globs": ["**/*.md"],
+  "ignores": ["node_modules", "docs/superpowers"]
+}

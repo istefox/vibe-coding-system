@@ -1,0 +1,13 @@
+# Link-checker config for the docs CI (lychee).
+# The internal-links job runs --offline (blocking); the external-links job runs online
+# and never fails the build. These settings mostly soften the external pass.
+
+max_retries = 2
+retry_wait_time = 2
+
+# Treat rate-limit and partial-content as success so flaky external hosts do not
+# produce noise. 200 = OK, 206 = partial, 429 = rate limited.
+accept = [200, 206, 429]
+
+# Historical working drafts carry markdown-in-markdown snippets that are not real links.
+exclude_path = ["docs/superpowers"]
