@@ -179,3 +179,36 @@ Key architectural decisions:
   `protect-files.sh`, `db-backup-guardrail.sh` fire normally throughout.
 
 Detail: `docs/architecture/ADR-0020-autopilot-build-skill.md`.
+
+## Decisions from the nightly-autopilot capability (ADR-0022)
+
+Overnight autonomous roadmap-to-PR runner (`/skill nightly-autopilot`): the human approves
+SPEC/ADR/plan in the evening, sets `/goal` plus a non-blocking permission mode, launches the skill,
+and by morning each roadmap feature is on its own `feat/*` branch, pushed, with an open PR to `main`
+and CI green. Nothing is merged. A `nightly-guard` hook halts on real trouble and leaves a morning
+report (`nightly-report.json`, schema v2.0).
+
+Key architectural decisions:
+- **Amends ADR-0020 D2:** unattended `git push` + open PR are allowed, but only on repos that opt in
+  via a committed `.claude/nightly-autopilot.yml` (`publish: true`). Merge, force-push, `--no-verify`,
+  and any write to `main` stay forbidden. A pushed branch and an open PR are reversible; a merge is
+  not, so the merge stays human.
+- **`/goal` is the outer loop, not a HITL bypass:** verified native command (CC v2.1.139+). It removes
+  per-turn prompts only; it does not answer `AskUserQuestion` and its evaluator cannot call tools. So
+  the run prints a `NIGHTLY-PUBLISH` status line per feature for the evaluator to read, and carries a
+  `stop after N turns` hard budget.
+- **Thin skill + conductor extension:** `nightly-autopilot` owns launch, publish, guard, CI, and the
+  report; `project-conductor` gains a `nightly` roadmap-autopilot mode that pre-authorizes the whole
+  roadmap and skips the per-feature Step 3 gate (invariant amended, scoped to this mode only).
+- **`nightly-guard` fail-safe:** a `PreToolUse` hook on `git push`/`gh pr create` plus an in-script
+  `--check` gate called by the publish helper (a wrapped `git push` is invisible to the hook matcher,
+  so both paths are needed). Halts on red build, needs-human marker, RTF BLOCKER, or budget exceeded.
+  It blocks on internal error (opposite of stop-gate's fail-open), and is inert outside a nightly run.
+- **Blueprint here, synced to `~/.claude`:** ADR + plan + skill/hook/template source live in this repo
+  (`staging/`, `docs/`); an explicit sync step copies them into `~/.claude`, showing a diff before
+  overwriting any existing file.
+
+Detail: `docs/architecture/ADR-0022-nightly-autopilot-goal.md`,
+`docs/architecture/ADR-0022-implementation-plan.md`,
+`docs/architecture/ADR-0022-morning-report-schema.md`,
+`docs/RUNBOOK-nightly-autopilot.md`.

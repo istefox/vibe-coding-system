@@ -1,0 +1,33 @@
+# CI template (ADR-0022 D8) — dropped into a target repo as .github/workflows/ci.yml.
+#
+# The __TEST_CMD__ token is substituted by nightly-autopilot at drop time with the target
+# repo's TOFU-trusted command from .claude/test-cmd (fallback documented if absent).
+# The job name `ci` is the required status check that set-branch-protection.sh enforces on
+# main — keep the two in sync. No secrets are needed for a static build.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Add stack setup here if the test command needs a toolchain, e.g.:
+      #   - uses: actions/setup-node@v4
+      #     with: { node-version: '20' }
+      #   - uses: actions/setup-python@v5
+      #     with: { python-version: '3.12' }
+
+      - name: Run tests
+        run: __TEST_CMD__
