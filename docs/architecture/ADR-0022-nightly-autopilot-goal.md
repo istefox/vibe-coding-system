@@ -294,6 +294,33 @@ matcher" case this ADR already anticipated, which is why the publish helper carr
 be driven through the `claude agents` background launcher. The in-script `--check` publish gate stays
 the authoritative opt-in enforcement regardless of launch path.
 
+## CC 2.1.203–2.1.204 alignment (2026-07-08): headless SessionStart-hook + overnight reliability
+
+CC 2.1.204 fixed hook events not streaming during `SessionStart` hooks in headless sessions, which
+could get a remote or background worker idle-reaped mid-hook. Source: `~/.claude/cache/changelog.md`
+(bundled 2.1.204), cross-checked against upstream `CHANGELOG.md`.
+
+This lands directly on the overnight path. Nightly runs headless under `/goal`, and the `SessionStart`
+hook (session-context-inject, chain-memory surfacing) fires at the top of every session including the
+unattended one. Before the fix, a `SessionStart` hook whose events did not stream could get the worker
+idle-reaped in the middle of the hook — a run that dies before Feature 1 even starts. The fix removes
+that failure mode with no config change. It is distinct from the ADR-0016 `hook_verified` blocker
+(which concerns `PreToolUse`/`PostToolUse` inside Workflow subagents), which stays open.
+
+CC 2.1.203 adds a warning before the login expires so a re-authentication can happen before background
+sessions are interrupted. The RUNBOOK pre-flight already treats fresh auth as a launch precondition;
+the warning is interactive and does not by itself keep an unattended run alive, so the pre-flight stays
+the primary control. What changes is the failure signature: an expiring login is now flagged rather
+than silently dropping the remaining features.
+
+CC 2.1.203 also hardens the unattended runtime broadly: a background daemon auto-upgrade failure no
+longer silently kills all running sessions, a background agent whose working directory is deleted or
+replaced now fails once with a clear error instead of crash-looping, a stale daemon session token
+auto-recovers instead of leaving the session unresponsive to attach/reply/stop, and `TaskStop`/`TaskOutput`
+now resolve agents spawned by another agent. None of these change the D2 boundary (push and open PR
+only on a per-repo opt-in; never merge, never force-push, never write to `main`); they reduce the
+chance a nightly run dies for infrastructure reasons before it reaches a real stop condition.
+
 ---
 
 ## References

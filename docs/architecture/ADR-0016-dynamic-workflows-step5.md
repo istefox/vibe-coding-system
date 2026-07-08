@@ -390,6 +390,18 @@ CC 2.1.201 (Sonnet 5 harness-reminder delivery) has no bearing on this ADR: it c
 
 Still open, not resolved by this range: the `hook_verified` blocker. No 2.1.201/2.1.202 item addresses `PreToolUse`/`PostToolUse` hook propagation inside Workflow subagents, so the smoke test gating the workflow path (and the Agent-tool fallback when `hook_verified=false`) remains required exactly as before.
 
+## CC 2.1.203–2.1.204 alignment (2026-07-08)
+
+Worktree-isolated subagent shell fix (changelog 2.1.203). The release fixed worktree-isolated subagents that sometimes ran Bash in the parent checkout instead of their own worktree. Step 5 dispatches `coder` with `isolation: worktree`, so before the fix a coder's shell steps — test runs and shell-driven edits — could have executed against the main tree, contaminating it and mis-populating the `files_modified` list in `step5-report.json`. This is a correctness fix on the dispatch path, closing the worktree-shell gap left after the 2.1.198 edit-block and 2.1.200 plugin-load fixes. The report contract and the Agent-tool fallback are unchanged. Assumed-not-verified-live. Source: `~/.claude/cache/changelog.md` (bundled 2.1.203).
+
+Forked-session `effortLevel` fix (changelog 2.1.203). The release fixed background sessions ignoring `effortLevel` changes in settings.json when forked through the daemon. This complements the workflow model-pinning update: a Step-5/6 `agent()` call with an explicit `effort` (or the settings default) now has it honored on the forked background path, so per-agent reasoning effort holds regardless of how the subagent session is created. Additive; no contract change.
+
+`TaskStop`/`TaskOutput` nested-agent fix (changelog 2.1.203). The release fixed these tools failing to find background agents spawned by another agent, and made their errors list running agents by id and description. This hardens the Workflow orchestrator's inspect and kill path when a dispatched agent itself spawns work; the `step5-report.json` handoff and the Agent-tool fallback are unchanged.
+
+`SessionStart` headless-hook fix is not the `hook_verified` blocker (changelog 2.1.204). CC 2.1.204 fixed hook events not streaming during `SessionStart` hooks in headless sessions. This is a `SessionStart` event in a headless session, distinct from the `PreToolUse`/`PostToolUse` propagation inside Workflow subagents that `hook_verified` gates. It de-risks the headless overnight path (see ADR-0022) but does not touch, and must not be read as resolving, this ADR's blocker.
+
+Still open, not resolved by this range: the `hook_verified` blocker. No 2.1.203/2.1.204 item addresses `PreToolUse`/`PostToolUse` hook propagation inside Workflow subagents, so the smoke test gating the workflow path (and the Agent-tool fallback when `hook_verified=false`) remains required exactly as before.
+
 ---
 
 ## References

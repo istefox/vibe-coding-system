@@ -88,6 +88,12 @@ auto-design mode you only need the labeled issues and the `prep:` marker (Phase 
 reads only what the run prints to the transcript, which is why the publish step emits a
 `NIGHTLY-PUBLISH` line per feature and the guard emits `NIGHTLY-GUARD HALT` on a stop.
 
+**Auth freshness (CC 2.1.203+).** A long overnight run can outlive your Claude Code login. From CC
+2.1.203 the CLI warns before the login expires, but that warning is interactive and does not keep an
+unattended run alive on its own. Confirm your login is current right before you walk away — a recent
+interactive `claude` session is enough. An expired login mid-run halts the remaining features, which
+then show unpublished in the morning report.
+
 ---
 
 ## Reading the morning report
