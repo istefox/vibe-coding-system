@@ -323,6 +323,44 @@ chance a nightly run dies for infrastructure reasons before it reaches a real st
 
 ---
 
+## CC 2.1.205 alignment (2026-07-09): notification provenance + morning-report observability
+
+CC 2.1.205 made background task notifications explicitly state that no human input has occurred,
+preventing fabricated in-transcript approvals from being acted on. Source:
+`~/.claude/cache/changelog.md` (bundled 2.1.205), cross-checked against upstream `CHANGELOG.md`.
+
+This is the most directly relevant platform change to this ADR so far. The nightly run is the one
+place in the system where an agent operates for hours with no human able to answer anything, while
+holding the authority to push a branch and open a PR. The D2 boundary was written on the premise
+that authorization can only come from two places: a committed `.claude/nightly-autopilot.yml` with
+`publish: true`, checked by the in-script `--check` gate in the publish helper, and the `nightly-guard`
+`PreToolUse` hook on `git push` / `gh pr create`. Neither reads the transcript. That premise is
+unchanged, and the boundary is unchanged: push and open PR only on a per-repo opt-in; never merge,
+never force-push, never `--no-verify`, never write to `main`. The fix means the enforcement is now
+double-covered — a fabricated approval in the transcript was already inert against the `--check`
+gate, and is now labeled as human-free at the source too.
+
+The two new auto-mode rules (block tampering with session transcript files, ask before `rm -rf` on
+an unresolved variable) apply to the overnight run as well. The transcript is what a `NIGHTLY-GUARD
+HALT` sends the human back to in the morning, so protecting it protects the audit trail. `nightly-guard`
+still blocks on internal error (fail-closed, the opposite of `stop-gate`'s fail-open) and stays the
+authoritative control.
+
+Morning-report observability improves without any contract change. Session-to-PR linking now catches
+a PR created in a Bash call whose output exceeded the 30K inline limit — nightly opens every feature
+PR with `gh pr create` in Bash, and a verbose invocation could cross that limit, so overnight PRs
+previously risked not showing linked in `claude agents`. The agent list now shows a colored state word
+and a classifier-written headline rather than raw tool-call text, and the peek opens with full status
+including the exact ask for a blocked session, which makes a halted run faster to triage at breakfast.
+The `NIGHTLY-PUBLISH` status line and `nightly-report.json` (schema v2.0) remain the authoritative
+morning record; the agent view is a convenience on top of them.
+
+Version note: the installed CLI reports 2.1.206, but upstream published no changelog entry, tag, or
+release for it. Nothing in this ADR is reconciled against 2.1.206. All 2.1.205 items above are
+assumed-not-verified-live.
+
+---
+
 ## References
 
 - `code.claude.com/docs/en/goal` — `/goal` command, CC v2.1.139+ (verified 2026-07-01)

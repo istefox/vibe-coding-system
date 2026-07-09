@@ -283,6 +283,18 @@ Sonnet 5 default (changelog 2.1.197). Sonnet 5 is the new Claude Code default, a
 
 ---
 
+## CC 2.1.205 alignment (2026-07-09)
+
+Fabricated in-transcript approvals are now blocked at the notification layer (assumed, changelog 2.1.205). The release made background task notifications explicitly state that no human input has occurred, so an agent cannot act on a synthesized notification as though a human had approved something. This is upstream hardening for precisely the failure mode this ADR's autonomy boundary was built to survive: an unattended run convincing itself that authorization arrived.
+
+The boundary does not change. D1 stands — only local and reversible actions run unattended (implement, test, review, local commit); push, PR, merge, and DB changes are never taken unattended. TOFU trust must still pre-exist, and autopilot never auto-grants test-cmd trust. The skill has never treated in-transcript text as authorization, and it still does not. What the fix buys is redundancy: the structural defense (what autopilot is permitted to do at all) now sits behind a platform defense (what a notification is allowed to imply). A fabricated approval that somehow reached the transcript would previously have depended entirely on the skill's own discipline to be ignored; now it is labeled at the source. Assumed-not-verified-live.
+
+Two auto-mode rules narrow the unattended blast radius (assumed, changelog 2.1.205). Auto mode now blocks tampering with session transcript files and asks before running `rm -rf` on a variable it cannot resolve from context. The transcript is the audit record an `aborted` or `partial` autopilot report points a human at, and the `rm -rf` rule mirrors the destructive-command guardrail the safety hooks already enforce. The hook-level deny (`protect-files.sh`, `db-backup-guardrail.sh`) stays authoritative and fires regardless of permission mode; these rules are an additional outer layer, not a replacement.
+
+Neither item closes the 2.1.186 permission-prompt stall. An out-of-allowlist Bash command still stalls an unattended run waiting on a prompt no human will answer, so the allowlist-completeness pre-flight recorded in the 2.1.186 note remains necessary, and the live smoke test of the permission-prompt path under autopilot is still pending. Note also that upstream published no changelog entry, tag, or release for 2.1.206 despite the binary shipping; nothing here is reconciled against it. Source: `~/.claude/cache/changelog.md` (bundled 2.1.205), cross-checked against upstream `CHANGELOG.md`.
+
+---
+
 ## References
 
 - ADR-0014 `docs/architecture/ADR-0014-architect-proposes-test-cmd.md` — TOFU trust model and `approve-test-cmd.sh`
