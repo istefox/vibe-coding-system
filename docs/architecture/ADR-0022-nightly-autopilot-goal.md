@@ -361,6 +361,82 @@ assumed-not-verified-live.
 
 ---
 
+## `/goal` verified against official docs (2026-07-09)
+
+Source: `code.claude.com/docs/en/goal`, fetched 2026-07-09. This section promotes several D4 premises
+from assumed to **verified**, refutes a widely-circulated public claim that would invalidate the
+design, and records one new risk that the design does not currently close.
+
+### Verified — D4 holds as written
+
+- **The evaluator cannot call tools.** The docs state it "does not call tools, so it can only judge
+  what Claude has already surfaced in the conversation." D4's requirement that the publish step and
+  the guard print a machine-readable status line (`NIGHTLY-PUBLISH`, `NIGHTLY-GUARD HALT`) to the
+  transcript is therefore load-bearing and correct, not a defensive nicety.
+- **A turn clause is the documented way to bound a run.** The docs: "To bound how long a goal runs,
+  include a turn or time clause in the condition, such as `or stop after 20 turns`." D4's hard turn
+  budget uses the sanctioned mechanism.
+- **Headless `/goal` is supported.** The docs: "`/goal` works in non-interactive mode", with the
+  example `claude -p "/goal ..."` running the loop to completion in a single invocation. The entire
+  overnight path depends on this.
+- **The evaluator is the small fast model** (Haiku by default), billed on the provider configured for
+  the session, with negligible spend against main-turn tokens.
+
+### Refuted — a public claim to the contrary
+
+The `goal-loop` skill in `github.com/davidondrej/skills` (2k stars at time of writing) asserts two
+things about `/goal` that are contradicted by the official documentation:
+
+1. *"Launch the agent bare (opens the TUI). **Not** exec/headless mode — `/goal` is a TUI slash
+   command only."* If true, this ADR's overnight design would be impossible. The docs explicitly
+   support non-interactive mode.
+2. *"Subscription auth — API-key auth does **not** work."* Stated three times in that skill. The docs
+   list no auth or plan requirement; the evaluator "runs on whichever provider your session is
+   configured for."
+
+Recorded here so that a future reader who encounters that skill does not conclude the ADR's headless
+premise is unsupported. The same skill documents `/goal pause` and `/goal resume` subcommands and a
+`create_goal` tool, none of which appear in the Claude Code documentation; they most likely describe
+a different agent's `/goal` implementation. Treat that skill as a methodology reference only. The
+adapted, doc-checked version lives at `staging/plugin/skills/goal-loop/SKILL.md`.
+
+### New constraint — `/goal` is a Stop hook
+
+The docs describe `/goal` as "a wrapper around a session-scoped prompt-based Stop hook". Three
+consequences for the nightly path, none of which change D2 or D4:
+
+- `/goal` requires the workspace **trust dialog to have been accepted**, because the evaluator is part
+  of the hooks system.
+- `/goal` is **unavailable** when `disableAllHooks` is set at any settings level, or when
+  `allowManagedHooksOnly` is set in managed settings. A nightly run launched into either state fails
+  at the first turn, not silently.
+- The system already installs a `stop-gate.sh` Stop hook. Both coexist by design, but the interaction
+  between a fail-open safety Stop hook and the `/goal` evaluator's own Stop-hook wrapper has not been
+  exercised live. Add to the open-verification list below.
+
+These belong in the RUNBOOK pre-flight. Flagged here; the RUNBOOK is not modified in this pass.
+
+### New open risk — the turn budget resets on resume
+
+The docs state that when a session with an active goal is restored via `--resume` or `--continue`,
+"the condition carries over, but the turn count, timer, and token-spend baseline all reset."
+
+D4's `or stop after <N> turns` clause is therefore **not durable across a resume**. A nightly session
+that is resumed — by a human in the morning, or by any recovery path that reattaches rather than
+starting fresh — receives a fresh budget of N turns against the same condition. The evaluator judges
+the turn clause from the conversation, and the count it reads has been zeroed.
+
+This does not break the design, because the durable control is elsewhere: the guard's D7 token budget
+is enforced in-script and does not reset. But the turn clause must not be described as a hard stop.
+It is a soft cap that holds within one continuous session only.
+
+Not fixed here. Recorded as an open risk to close, in keeping with the verified-vs-assumed discipline:
+either the guard must persist a turn counter across resumes, or the RUNBOOK must state that a nightly
+run is never to be resumed — it is restarted. Deciding between the two is a design change, out of
+scope for a documentation reconcile.
+
+---
+
 ## References
 
 - `code.claude.com/docs/en/goal` — `/goal` command, CC v2.1.139+ (verified 2026-07-01)
