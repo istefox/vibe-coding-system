@@ -20,6 +20,11 @@ the guard halts and the report says what blocked it.
 Two of these cannot be automated by design invariant (a self-approving system is forbidden). After
 this one-time bootstrap, every night is fully automatic.
 
+0. **`/checkup` (optional, recommended).** From CC 2.1.205 `/doctor` is a full setup checkup that can
+   diagnose and fix issues, with `/checkup` as its alias. Run it once before the bootstrap: a broken
+   hook path or an unauthenticated `gh` surfaces here cheaply, rather than at 2 a.m. as a halted run.
+   Not a launch precondition — the pre-flight checks below stay the primary control.
+
 1. **`gh auth login`.** Once per machine (needed to push and open PRs).
 
 2. **Opt in.** Create `.claude/nightly-autopilot.yml` in the target repo. For auto-design, add the
@@ -109,6 +114,13 @@ then show unpublished in the morning report.
 
 Then open the green PRs and merge the ones you are happy with. One click each. Nothing was merged for
 you.
+
+**Cross-checking against `claude agents` (CC 2.1.205+).** The agent list is a useful second view on
+the night. Each row now carries a colored state word and a short written headline instead of raw tool
+call text, and opening a blocked session shows the exact ask. PRs opened by the run are linked there
+too, including one created by a `gh pr create` whose Bash output ran past the 30K inline limit — that
+case used to go unlinked. Treat this as convenience: `nightly-report.json` and the `NIGHTLY-PUBLISH`
+lines in the transcript are the authoritative record.
 
 ---
 

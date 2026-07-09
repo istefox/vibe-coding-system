@@ -402,6 +402,14 @@ Forked-session `effortLevel` fix (changelog 2.1.203). The release fixed backgrou
 
 Still open, not resolved by this range: the `hook_verified` blocker. No 2.1.203/2.1.204 item addresses `PreToolUse`/`PostToolUse` hook propagation inside Workflow subagents, so the smoke test gating the workflow path (and the Agent-tool fallback when `hook_verified=false`) remains required exactly as before.
 
+## CC 2.1.205 alignment (2026-07-09)
+
+The `--json-schema` fix is not the Workflow structured-output path (changelog 2.1.205). The release fixed `--json-schema` silently producing unstructured output when the schema was invalid, and schemas using the `format` keyword being rejected. This is the headless CLI flag. Workflow structured output is a different mechanism: `agent(prompt, {schema})` validates at the tool-call layer and makes the subagent retry on mismatch, and Step 5 does not consume `--json-schema` at all — it hands off through `.claude/step5-report.json` precisely so the orchestrator never depends on an in-context or CLI-serialized result. Recorded here so the two are not conflated in a later reading. No contract change. Source: `~/.claude/cache/changelog.md` (bundled 2.1.205).
+
+Fabricated in-transcript approvals (changelog 2.1.205). The release made background task notifications explicitly state that no human input has occurred, preventing fabricated in-transcript approvals from being acted on. Step-5 dispatch runs subagents that report back through the transcript, so this closes a path where a workflow or Agent-tool subagent could have read a synthesized notification as authorization. It does not touch the `hook_verified` question, which is about hook *events* firing inside a Workflow subagent, not about what a subagent believes it was told. See ADR-0020 and ADR-0022 for the unattended-path reading.
+
+Still open, not resolved by this range: the `hook_verified` blocker. No 2.1.205 item addresses `PreToolUse`/`PostToolUse` hook propagation inside Workflow subagents, so the smoke test gating the workflow path (and the Agent-tool fallback when `hook_verified=false`) remains required exactly as before. The smoke test was deliberately not re-run for this range. Note that upstream published no changelog entry, tag, or release for 2.1.206 even though the binary ships; nothing in this ADR is reconciled against it.
+
 ---
 
 ## References
