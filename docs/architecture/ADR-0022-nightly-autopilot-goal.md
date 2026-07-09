@@ -518,6 +518,33 @@ the most likely origin of the error, and it does not rescue the claim as written
 
 ---
 
+## Stop-hook coexistence with `/goal` CONFIRMED by live probe (2026-07-10)
+
+The "Open verification" list carried an item: `stop-gate.sh` is a `Stop` hook, `/goal`'s evaluator is
+itself a session-scoped prompt-based `Stop` hook, and the two had never been exercised together.
+**Closed, by measurement.** Method: `hook-probe` context C4 (`docs/RUNBOOK-hook-probe.md`).
+
+A project-level `Stop` hook fired while `/goal` was active, and the evaluator independently judged the
+condition met and cleared the goal on the first turn. Both ran. This matches `/en/hooks`: "All matching
+hooks run in parallel, and identical handlers are deduplicated automatically." The transcript reported
+five Stop hooks executing on a single turn end, and `stop-gate.sh` blocked normally on its own terms
+earlier in the same session. Nothing in the design changes; the premise it rested on is now verified
+rather than assumed.
+
+Two operational facts fell out of the same run and belong in the RUNBOOK rather than here.
+
+`stop-gate.sh` fires in any working directory, because it is registered at user level. A repo with a
+dirty tree and no `.claude/test-cmd` gets blocked at the end of every turn until the hook's anti-loop
+counter relents after three re-entries. Any scratch or sandbox directory used during a nightly
+investigation needs `.claude/test-cmd` seeded, even when it holds no code.
+
+`SubagentStop` fires spuriously. Across the probe run, 11 `SubagentStop` events corresponded to 2 real
+subagents; the rest carried a fresh `agent_id`, an empty `agent_type`, and no matching `SubagentStart`,
+one per main-loop turn. `nightly-guard` does not currently key on `SubagentStop`, and on this evidence
+it should not start. See ADR-0016's probe section for the full data.
+
+---
+
 ## References
 
 - `code.claude.com/docs/en/goal` — `/goal` command, CC v2.1.139+ (verified 2026-07-01)

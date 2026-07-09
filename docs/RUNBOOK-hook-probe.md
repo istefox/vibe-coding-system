@@ -104,11 +104,13 @@ as a "no" would flip the flag for the wrong reason, and would look exactly like 
 The Step-5 workflow path may be opened. Record the evidence in ADR-0016 and retire the manual smoke
 test.
 
-**`hooks_fire=yes`, `enforce_would_run=no`.** The most interesting result, and the one I expect.
-Hooks propagate into workflow subagents, but `pre-flight-pattern-enforce.sh` bails at its
-`agent_type == "coder"` check and enforces nothing. The guard is **inert while appearing installed**.
-Do not flip the flag. Fix ADR-0004's matcher first — match a set of accepted identifiers, or key off
-the presence of `agent_id` plus a suffix match on `:coder`. Then re-run the probe.
+**`hooks_fire=yes`, `enforce_would_run=no`.** Hooks propagate into workflow subagents, but
+`pre-flight-pattern-enforce.sh` bails at its `agent_type == "coder"` check and enforces nothing. The
+guard is **inert while appearing installed**. This is what the 2026-07-10 run saw for a *default*
+workflow subagent, which reports `workflow-subagent`. The remedy is to pass `agentType: 'coder'` in
+the `agent()` call, and optionally to widen ADR-0004's matcher as defence in depth (accept a set of
+identifiers, or `agent_id` present plus a suffix match on `:coder`, which also survives a future
+plugin-scoped `plugin:coder`). Then re-run the probe.
 
 **`hooks_fire=yes`, `enforce_would_run=yes`, `transcript_glob=miss`.** The hook runs and wants to
 enforce, but cannot find the subagent's transcript, so it fails open silently and never checks the
@@ -134,6 +136,38 @@ including the silent-bypass case and both inconclusive paths.
 **A green run here is not evidence about hook propagation.** It tests the probe, not the platform.
 Only the live sandbox run produces evidence. Keep the two straight: the harness proving itself
 correct is exactly the kind of result that invites over-reading.
+
+## Result of the first live run (2026-07-10)
+
+Recorded here so nobody re-runs this to learn what is already known. Full analysis in ADR-0016.
+
+Hooks fire inside a Workflow subagent, and the transcript resolves through the `subagents/workflows/`
+glob. The default workflow subagent reports `agent_type = "workflow-subagent"` and
+`pre-flight-pattern-enforce.sh` stands down; a workflow agent spawned with `agentType: 'coder'`
+reports `coder`, and the guard enforces on the merits. Its own audit log shows both, minutes apart:
+`bypass-noncoder agent_type=workflow-subagent` and then `allow  PATTERN found in window`.
+
+So `hook_verified: true` holds **only** for a dispatch that passes `agentType: 'coder'`.
+
+Three things the run taught that this document had wrong.
+
+The guard is not silent. It writes `bypass-noncoder` to `~/.claude/state/pattern-enforce/audit.log`
+every time it stands down. It is silent only to an operator watching the terminal, which is what the
+old smoke test asked for. When interpreting a probe result, read that audit log too: it is the
+authoritative record of what the guard decided, and the probe only records what it saw.
+
+An agent under `isolation: worktree` carries its own copy of `.claude/` and runs with a different
+`cwd`. Before the log was pinned to an absolute path, its events landed in a **second** log inside the
+worktree. Reading only the root log said "PreToolUse never fires in subagents", which is the exact
+opposite of the truth. `hook-probe-sandbox.sh` now pins `HOOK_PROBE_LOG`. If you ever register the
+probe by hand, pin it too, and before deleting a worktree check whether it holds the only copy of an
+agent's rows.
+
+A bare `SubagentStop` fires after nearly every main-loop turn, carrying an `agent_id` and an
+**empty-string** `agent_type` with no matching `SubagentStart`. Empty is not null, so it wins a naive
+`head -1`. It broke the verifier on the first live run, which then reported `agent_type=(absent)` for a
+context that plainly contained a `coder`: right verdict, wrong reason. Every selection in
+`hook-probe-verify.sh` now filters on `agent_type != ""`, and a regression test pins it.
 
 ## Afterwards
 
