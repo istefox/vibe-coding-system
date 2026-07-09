@@ -1,8 +1,9 @@
 name: Docs CI
 
-# This repo is private and docs-only (no build/test). The CI lints Markdown and checks
-# links so every PR gets a green/red check. Internal links (relative paths + anchors)
-# block the build; external links run as a warning only to avoid rate-limit false fails.
+# This repo is documentation plus a small tree of shell scripts under staging/. The CI lints
+# Markdown, checks links, and runs the offline shell harnesses so every PR gets a green/red
+# check. Internal links (relative paths + anchors) block the build; external links run as a
+# warning only to avoid rate-limit false fails.
 # Actions are pinned to commit SHAs (same discipline as the other istefox repos).
 
 on:
@@ -26,6 +27,25 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd # v23.2.0
         with:
           globs: "**/*.md"
+
+  shell-tests:
+    name: shell-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      # Offline, hermetic, no network. These harnesses pipe synthetic hook-event JSON into the
+      # scripts and assert on the output. The scripts target bash 3.2 (macOS); the runner has
+      # bash 5, which exercises the logic but not the 3.2 constraint. Keep them 3.2-clean by hand.
+      - name: Run offline shell harnesses
+        run: |
+          set -e
+          for t in phase1 prep hook-probe; do
+            printf '::group::%s\n' "$t"
+            bash "staging/plugin/scripts/tests/$t.test.sh"
+            printf '::endgroup::\n'
+          done
 
   links:
     name: links
