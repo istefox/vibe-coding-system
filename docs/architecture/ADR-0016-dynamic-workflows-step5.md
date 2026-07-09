@@ -424,6 +424,47 @@ None of this touches the `hook_verified` blocker, which remains open. Hook propa
 
 ---
 
+## `hook_verified` RESOLVED by live probe (2026-07-10)
+
+**Status: the blocker is closed.** Measured, not inferred. Method: `hook-probe` (`docs/RUNBOOK-hook-probe.md`), an observational hook run across four contexts in a throwaway sandbox, cross-checked against `pre-flight-pattern-enforce.sh`'s own audit log at `~/.claude/state/pattern-enforce/audit.log`. Evidence preserved.
+
+### What was measured
+
+Hooks **do** propagate into Workflow subagents. A workflow-spawned agent produced `SubagentStart`, `PreToolUse` and `PostToolUse` around its `Edit`, and `SubagentStop`, every row carrying `agent_id`. The subagent transcript resolved through exactly the `<proj>/<sid>/subagents/workflows/` glob that `pre-flight-pattern-enforce.sh` v1.3 already searches. Nothing in the platform is broken and nothing in the guard needs rewriting.
+
+The failure was one string. `pre-flight-pattern-enforce.sh` enforces only when `agent_type == "coder"`. Two rows from its audit log, same session, minutes apart:
+
+```
+Edit  bypass-noncoder  agent_type=workflow-subagent
+Edit  allow            PATTERN found in window
+```
+
+The first is a **default** workflow subagent: the guard saw the edit, read `agent_type`, and stood down. The second is a workflow agent spawned with `agentType: 'coder'`: the guard resolved the transcript, searched the sliding window, found the `PATTERN:` header, and allowed on the merits. That is a real enforcement decision, not a fail-open.
+
+### Consequence for Step 5 — already satisfied, verified
+
+`hook_verified: true` is justified **only for a dispatch that passes `agentType: 'coder'`**. Step 5 already does. `~/.claude/skills/concept-to-code/SKILL.md` lines 585-586 instruct the workflow script to call `agent(prompt, { agentType: "coder", model: ... })` on every task group, for the unrelated reason that a subagent given `agentType` but no `model` inherits the CLI session's model rather than the agent frontmatter's. The model-pinning fix of 2026-06-23 incidentally satisfies the enforcement precondition found today.
+
+So no patch is required and no risk window exists. Had Step 5 omitted the option, the workflow path would have run with `pre-flight-pattern-enforce` inert — strictly worse than the Agent-tool fallback, because the guard would appear installed. That is the failure this section exists to prevent, and the invariant is now explicit: **any dispatch that spawns editing agents through `agent()` must pass `agentType: 'coder'`, or the guard is off.**
+
+Defence in depth is still worth adding. ADR-0004's matcher should accept a set of identifiers, or key off `agent_id` present plus a suffix match on `:coder`, so a future plugin-scoped `stefano-vibe-coding:coder` does not silently re-open the same hole. Not done here.
+
+### Two findings that were not being looked for
+
+**`Workflow`'s `agent()` does not inherit `isolation: worktree` from the agent definition.** The `coder` agent declares it (sec. 3 of the blueprint) and the Agent tool honours it: in the probe, an Agent-tool coder was worktree-isolated without anyone asking. A coder-typed *workflow* agent, same definition, ran with `cwd` set to the primary checkout.
+
+This matters because the two Step-5 paths differ, and the SKILL only guards one. The pre-dispatch worktree check in `~/.claude/skills/concept-to-code/SKILL.md` lines 475-486 sets `isolation` explicitly, but its own text scopes it to "the `Agent` tool" — the fallback path. The Workflow dispatch prompt (lines 562-590) says nothing about isolation, so workflow coders share one checkout. Parallel coders in Step 5 therefore edit the same tree. Whether that is intended is not recorded anywhere; on the evidence below it may well be the only thing that makes the workflow path work at all.
+
+In the same run, the Agent-tool coder under worktree isolation left its edit stranded inside `.claude/worktrees/agent-*/`, and it never reached the primary checkout. The `coder` agent is defined never to commit, so there was nothing for a merge to pick up. Whether the Agent tool normally merges dirty worktree state back was **not** established here, and it bears on the whole chain rather than only on Step 5. Assumed, not verified. It needs its own probe before anyone adds `isolation: 'worktree'` to the workflow path on the grounds of symmetry.
+
+**`SubagentStop` is not a reliable "a subagent finished" signal.** Across the run: 11 `SubagentStop` events, 2 real. A bare one fires after nearly every main-loop turn with a fresh `agent_id`, an **empty-string** `agent_type`, and no matching `SubagentStart`. Any future hook keyed on `SubagentStop` must discriminate on a non-empty `agent_type` or pair against a preceding `SubagentStart`. The empty string is non-null, which is precisely the trap: it silently wins a naive `head -1`, and it did, inside the probe's own verifier on the first live run.
+
+### The old smoke test was blind, and the guard was not silent
+
+The procedure in this ADR told the operator to watch the terminal for a `PATTERN:` message. That cannot distinguish "the hook never fired" from "the hook fired and bypassed itself" — both show nothing. Meanwhile `pre-flight-pattern-enforce.sh` was writing `bypass-noncoder` to its audit log the whole time. The data existed; the procedure never looked at it. Retire the terminal-watching smoke test in favour of `hook-probe`, which reads the log.
+
+---
+
 ## References
 
 - Dynamic Workflows docs: `https://code.claude.com/docs/en/workflows`
