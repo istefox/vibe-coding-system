@@ -441,21 +441,21 @@ Edit  allow            PATTERN found in window
 
 The first is a **default** workflow subagent: the guard saw the edit, read `agent_type`, and stood down. The second is a workflow agent spawned with `agentType: 'coder'`: the guard resolved the transcript, searched the sliding window, found the `PATTERN:` header, and allowed on the merits. That is a real enforcement decision, not a fail-open.
 
-### Consequence for Step 5 — a required change
+### Consequence for Step 5 — already satisfied, verified
 
-`hook_verified: true` is henceforth justified **only for a dispatch that passes `agentType: 'coder'`**. Step 5's `agent()` calls MUST carry it:
+`hook_verified: true` is justified **only for a dispatch that passes `agentType: 'coder'`**. Step 5 already does. `~/.claude/skills/concept-to-code/SKILL.md` lines 585-586 instruct the workflow script to call `agent(prompt, { agentType: "coder", model: ... })` on every task group, for the unrelated reason that a subagent given `agentType` but no `model` inherits the CLI session's model rather than the agent frontmatter's. The model-pinning fix of 2026-06-23 incidentally satisfies the enforcement precondition found today.
 
-```js
-agent(prompt, { agentType: 'coder', schema: ... })
-```
+So no patch is required and no risk window exists. Had Step 5 omitted the option, the workflow path would have run with `pre-flight-pattern-enforce` inert — strictly worse than the Agent-tool fallback, because the guard would appear installed. That is the failure this section exists to prevent, and the invariant is now explicit: **any dispatch that spawns editing agents through `agent()` must pass `agentType: 'coder'`, or the guard is off.**
 
-Without that option the workflow path runs with `pre-flight-pattern-enforce` inert, which is strictly worse than the Agent-tool fallback, because the guard appears installed. Passing `agentType` additionally brings the coder's model pinning (Sonnet, not the inherited session model) and its tool allowlist, both of which Step 5 wants anyway.
-
-The flag is recorded `true` on the strength of the demonstrated capability, with the Step-5 dispatch patch as an immediate follow-up rather than a precondition. This was a deliberate call; the conservative alternative was to hold at `false` until the patch landed. Anyone reading this before the patch has shipped should treat the workflow path as unsafe.
+Defence in depth is still worth adding. ADR-0004's matcher should accept a set of identifiers, or key off `agent_id` present plus a suffix match on `:coder`, so a future plugin-scoped `stefano-vibe-coding:coder` does not silently re-open the same hole. Not done here.
 
 ### Two findings that were not being looked for
 
-**`Workflow`'s `agent()` does not inherit `isolation: worktree` from the agent definition.** The `coder` agent declares it (sec. 3 of the blueprint) and the Agent tool honours it; a coder-typed *workflow* agent ran with `cwd` set to the primary checkout. So this ADR's assumption that the Step-5 workflow coder path is worktree-isolated is **false**: isolation must be passed explicitly as `isolation: 'worktree'`. Do not add it reflexively. In the same run, an Agent-tool coder under worktree isolation left its edit stranded inside `.claude/worktrees/agent-*/` and it never reached the primary checkout, because the coder is defined never to commit and there was nothing for a merge to pick up. Whether the Agent tool normally merges dirty worktree state back was not established here. Assumed, not verified; it needs its own probe, and it bears on the existing chain, not only on Step 5.
+**`Workflow`'s `agent()` does not inherit `isolation: worktree` from the agent definition.** The `coder` agent declares it (sec. 3 of the blueprint) and the Agent tool honours it: in the probe, an Agent-tool coder was worktree-isolated without anyone asking. A coder-typed *workflow* agent, same definition, ran with `cwd` set to the primary checkout.
+
+This matters because the two Step-5 paths differ, and the SKILL only guards one. The pre-dispatch worktree check in `~/.claude/skills/concept-to-code/SKILL.md` lines 475-486 sets `isolation` explicitly, but its own text scopes it to "the `Agent` tool" — the fallback path. The Workflow dispatch prompt (lines 562-590) says nothing about isolation, so workflow coders share one checkout. Parallel coders in Step 5 therefore edit the same tree. Whether that is intended is not recorded anywhere; on the evidence below it may well be the only thing that makes the workflow path work at all.
+
+In the same run, the Agent-tool coder under worktree isolation left its edit stranded inside `.claude/worktrees/agent-*/`, and it never reached the primary checkout. The `coder` agent is defined never to commit, so there was nothing for a merge to pick up. Whether the Agent tool normally merges dirty worktree state back was **not** established here, and it bears on the whole chain rather than only on Step 5. Assumed, not verified. It needs its own probe before anyone adds `isolation: 'worktree'` to the workflow path on the grounds of symmetry.
 
 **`SubagentStop` is not a reliable "a subagent finished" signal.** Across the run: 11 `SubagentStop` events, 2 real. A bare one fires after nearly every main-loop turn with a fresh `agent_id`, an **empty-string** `agent_type`, and no matching `SubagentStart`. Any future hook keyed on `SubagentStop` must discriminate on a non-empty `agent_type` or pair against a preceding `SubagentStart`. The empty string is non-null, which is precisely the trap: it silently wins a naive `head -1`, and it did, inside the probe's own verifier on the first live run.
 
