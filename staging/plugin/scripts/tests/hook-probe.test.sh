@@ -128,6 +128,47 @@ OUT=$(bash "$VERIFY" "$L6" 2>&1)
 printf '%s' "$OUT" | grep -q 'HOOK_PROBE C3 hooks_fire=no'   && ok "verify: no C3 events => hooks_fire=no" || no "verify: no C3 events => hooks_fire=no"
 printf '%s' "$OUT" | grep -q 'RECOMMEND hook_verified=false' && ok "verify: hooks do not fire => recommend false" || no "verify: hooks do not fire => recommend false"
 
+# --- regression: bare SubagentStop rows must not poison the agent_type selection ----------------------
+# The live run of 2026-07-10 found this the hard way. A bare SubagentStop fires after nearly every
+# main-loop turn carrying agent_id plus an EMPTY-STRING agent_type. Empty string is non-null, so the
+# old `.agent_type != null | head -1` picked it and reported "(absent)" for a context that actually
+# contained a coder. The verdict was right by luck and the reason was wrong.
+L8="$tmp/spurious/.claude/hook-probe.jsonl"; mkdir -p "$(dirname "$L8")"; : > "$L8"
+_proj8="$tmp/spurious/proj"; mkdir -p "$_proj8/s8/subagents/workflows/wf1"
+: > "$_proj8/s8/subagents/workflows/wf1/agent-real.jsonl"
+# the spurious row lands FIRST, exactly as it does in a real session
+fire "$L8" C3 '{"hook_event_name":"SubagentStop","agent_id":"bogus","agent_type":"","session_id":"s8","transcript_path":"'$_proj8'/main.jsonl","cwd":"/x"}'
+fire "$L8" C3 '{"hook_event_name":"PreToolUse","tool_name":"Edit","agent_id":"real","agent_type":"coder","session_id":"s8","transcript_path":"'$_proj8'/main.jsonl","cwd":"/x"}'
+OUT=$(bash "$VERIFY" "$L8" 2>&1)
+printf '%s' "$OUT" | grep -q 'HOOK_PROBE C3 enforce_would_run=yes' \
+  && ok "verify: empty-string agent_type does not mask a real coder" \
+  || no "verify: empty-string agent_type does not mask a real coder"
+printf '%s' "$OUT" | grep -q 'transcript_glob=match' \
+  && ok "verify: transcript resolved from the REAL agent_id, not the bogus one" \
+  || no "verify: transcript resolved from the REAL agent_id, not the bogus one"
+printf '%s' "$OUT" | grep -q 'bare SubagentStop rows' \
+  && ok "verify: spurious SubagentStop rows are counted and disclosed" \
+  || no "verify: spurious SubagentStop rows are counted and disclosed"
+
+# both agent types present in one context: the coder must still win the enforce check
+L9="$tmp/mixed/.claude/hook-probe.jsonl"; mkdir -p "$(dirname "$L9")"; : > "$L9"
+_proj9="$tmp/mixed/proj"; mkdir -p "$_proj9/s9/subagents/workflows/wf1"
+: > "$_proj9/s9/subagents/workflows/wf1/agent-w.jsonl"
+fire "$L9" C3 '{"hook_event_name":"PreToolUse","tool_name":"Edit","agent_id":"w","agent_type":"workflow-subagent","session_id":"s9","transcript_path":"'$_proj9'/main.jsonl","cwd":"/x"}'
+fire "$L9" C3 '{"hook_event_name":"PreToolUse","tool_name":"Edit","agent_id":"w","agent_type":"coder","session_id":"s9","transcript_path":"'$_proj9'/main.jsonl","cwd":"/x"}'
+OUT=$(bash "$VERIFY" "$L9" 2>&1)
+printf '%s' "$OUT" | grep -q 'enforce_would_run=yes' && ok "verify: coder among several agent_types => enforce yes" || no "verify: coder among several agent_types => enforce yes"
+printf '%s' "$OUT" | grep -q 'agent_types=.*coder' && ok "verify: reports the full agent_type set" || no "verify: reports the full agent_type set"
+
+# default workflow subagent alone => still false, with the actionable reason
+L10="$tmp/defonly/.claude/hook-probe.jsonl"; mkdir -p "$(dirname "$L10")"; : > "$L10"
+_proj10="$tmp/defonly/proj"; mkdir -p "$_proj10/s10/subagents/workflows/wf1"
+: > "$_proj10/s10/subagents/workflows/wf1/agent-w.jsonl"
+fire "$L10" C3 '{"hook_event_name":"PreToolUse","tool_name":"Edit","agent_id":"w","agent_type":"workflow-subagent","session_id":"s10","transcript_path":"'$_proj10'/main.jsonl","cwd":"/x"}'
+OUT=$(bash "$VERIFY" "$L10" 2>&1)
+printf '%s' "$OUT" | grep -q 'RECOMMEND hook_verified=false' && ok "verify: default workflow subagent alone => false" || no "verify: default workflow subagent alone => false"
+printf '%s' "$OUT" | grep -q "agentType: 'coder'" && ok "verify: reason names the actual fix (pass agentType)" || no "verify: reason names the actual fix (pass agentType)"
+
 # --- verifier: C4 stop / subagent-stop reporting -----------------------------------------------------
 L7="$tmp/c4/.claude/hook-probe.jsonl"; mkdir -p "$(dirname "$L7")"; : > "$L7"
 fire "$L7" C4 '{"hook_event_name":"Stop","session_id":"s","cwd":"/x"}'

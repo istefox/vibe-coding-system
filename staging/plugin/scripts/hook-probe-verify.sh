@@ -58,10 +58,20 @@ if [ -z "$CONTEXTS" ]; then
 fi
 
 # --- matrix -------------------------------------------------------------------------------------
+# A bare `SubagentStop` fires after essentially every main-loop turn, with a fresh agent_id, an
+# EMPTY agent_type, and no matching SubagentStart. Observed 2026-07-10: 11 SubagentStop against 2
+# real subagents. Those rows are not subagents. Every selection below therefore filters on
+# `agent_type != ""`, not merely `!= null` — an empty string is non-null and would win a `head -1`,
+# which is exactly the bug this probe's own first run exposed.
+REAL='select(.probe=="parsed" and .agent_type != null and .agent_type != "")'
+
+SPURIOUS=$(jq -r 'select(.probe=="parsed" and .hook_event_name=="SubagentStop" and (.agent_type == null or .agent_type == "")) | .seq' "$LOG" | wc -l | tr -d ' ')
+[ "${SPURIOUS:-0}" -gt 0 ] && printf 'NOTE %s bare SubagentStop rows (no agent_type, no SubagentStart) excluded as spurious\n' "$SPURIOUS"
+
 printf '\n'
-printf '%-8s %-10s %-11s %-10s %-28s %-12s %s\n' \
-  CONTEXT PreToolUse PostToolUse agent_id agent_type transcript SubagentStop
-printf '%s\n' "--------------------------------------------------------------------------------------------------"
+printf '%-8s %-10s %-11s %-10s %-30s %-12s %s\n' \
+  CONTEXT PreToolUse PostToolUse subagent agent_types transcript SubagentStop
+printf '%s\n' "-------------------------------------------------------------------------------------------------------"
 
 # Resolve a transcript exactly the way pre-flight-pattern-enforce.sh does.
 resolve_transcript() {
@@ -87,13 +97,19 @@ for ctx in $CONTEXTS; do
   substop=$(jq -r --arg c "$ctx" 'select(.probe=="parsed" and .context==$c and .hook_event_name=="SubagentStop") | .seq' "$LOG" | wc -l | tr -d ' ')
   stop=$(jq -r --arg c "$ctx" 'select(.probe=="parsed" and .context==$c and .hook_event_name=="Stop") | .seq' "$LOG" | wc -l | tr -d ' ')
 
-  aid=$(jq -r --arg c "$ctx" 'select(.probe=="parsed" and .context==$c and .agent_id != null) | .agent_id' "$LOG" | head -1)
-  atype=$(jq -r --arg c "$ctx" 'select(.probe=="parsed" and .context==$c and .agent_type != null) | .agent_type' "$LOG" | head -1)
-  tp=$(jq -r --arg c "$ctx" 'select(.probe=="parsed" and .context==$c and .transcript_path != null) | .transcript_path' "$LOG" | head -1)
-  sid=$(jq -r --arg c "$ctx" 'select(.probe=="parsed" and .context==$c and .session_id != null) | .session_id' "$LOG" | head -1)
+  # Every field below comes from a REAL subagent row, never from a bare SubagentStop.
+  atypes=$(jq -r --arg c "$ctx" "$REAL"' | select(.context==$c) | .agent_type' "$LOG" | sort -u | paste -sd, - | sed 's/,/, /g')
+  aid=$(jq -r --arg c "$ctx" "$REAL"' | select(.context==$c and .agent_id != null) | .agent_id' "$LOG" | head -1)
+  tp=$(jq -r --arg c "$ctx" "$REAL"' | select(.context==$c and .transcript_path != null) | .transcript_path' "$LOG" | head -1)
+  sid=$(jq -r --arg c "$ctx" "$REAL"' | select(.context==$c and .session_id != null) | .session_id' "$LOG" | head -1)
 
-  [ -n "$aid" ] && aid_disp="yes" || aid_disp="no"
-  [ -n "$atype" ] || atype="(absent)"
+  # A real subagent is one that reported an agent_type. `PreToolUse` inside a subagent that ran in
+  # an isolated worktree logs to that worktree's own file, not this one, so its absence here is not
+  # evidence it did not fire. See RUNBOOK-hook-probe.md.
+  pre_sub=$(jq -r --arg c "$ctx" "$REAL"' | select(.context==$c and .hook_event_name=="PreToolUse") | .seq' "$LOG" | wc -l | tr -d ' ')
+
+  [ -n "$aid" ] && sub_disp="yes" || sub_disp="no"
+  [ -n "$atypes" ] || atypes="(none)"
 
   if [ -n "$aid" ]; then tr_state=$(resolve_transcript "$tp" "$sid" "$aid"); else tr_state="n/a"; fi
 
@@ -101,13 +117,14 @@ for ctx in $CONTEXTS; do
   [ "$post" -gt 0 ] && post_disp="yes($post)" || post_disp="no"
   [ "$substop" -gt 0 ] && ss_disp="yes($substop)" || ss_disp="no"
 
-  printf '%-8s %-10s %-11s %-10s %-28s %-12s %s\n' \
-    "$ctx" "$pre_disp" "$post_disp" "$aid_disp" "$atype" "$tr_state" "$ss_disp"
+  printf '%-8s %-10s %-11s %-10s %-30s %-12s %s\n' \
+    "$ctx" "$pre_disp" "$post_disp" "$sub_disp" "$atypes" "$tr_state" "$ss_disp"
 
   if [ "$ctx" = "C3" ]; then
-    [ "$pre" -gt 0 ] && C3_FIRE="yes"
-    C3_TYPE="$atype"
-    [ "$atype" = "coder" ] && C3_ENFORCE="yes"
+    [ "$pre_sub" -gt 0 ] && C3_FIRE="yes"
+    C3_TYPE="$atypes"
+    case ",$atypes," in *", coder,"*|",coder,"*|*",coder"*) C3_ENFORCE="yes";; esac
+    [ "$atypes" = "coder" ] && C3_ENFORCE="yes"
     C3_TRANSCRIPT="$tr_state"
   fi
   if [ "$ctx" = "C4" ]; then
@@ -120,7 +137,7 @@ printf '\n'
 
 # --- verdicts -----------------------------------------------------------------------------------
 printf 'HOOK_PROBE C3 hooks_fire=%s\n' "$C3_FIRE"
-printf 'HOOK_PROBE C3 agent_type=%s\n' "${C3_TYPE:-(absent)}"
+printf 'HOOK_PROBE C3 agent_types=%s\n' "${C3_TYPE:-(none)}"
 printf 'HOOK_PROBE C3 enforce_would_run=%s\n' "$C3_ENFORCE"
 printf 'HOOK_PROBE C3 transcript_glob=%s\n' "$(printf '%s' "$C3_TRANSCRIPT" | tr 'A-Z' 'a-z')"
 printf 'HOOK_PROBE C4 stop_hook_fired=%s\n' "$C4_STOP"
@@ -135,7 +152,7 @@ fi
 
 if [ "$C3_ENFORCE" = "no" ]; then
   printf 'RECOMMEND hook_verified=false\n'
-  printf 'reason=%s\n' "hooks DO fire in a workflow subagent, but agent_type is '${C3_TYPE}', not 'coder'. pre-flight-pattern-enforce bails at its agent_type check and enforces nothing. The guard is inert while appearing installed. Fix ADR-0004's matcher before flipping the flag."
+  printf 'reason=%s\n' "hooks DO fire in a workflow subagent, but no agent reported agent_type 'coder' (saw: ${C3_TYPE}). pre-flight-pattern-enforce bails at its agent_type check and enforces nothing: the guard is inert while appearing installed. A default workflow subagent reports 'workflow-subagent'. Pass agentType: 'coder' in the agent() call, or widen ADR-0004's matcher, then re-probe."
   exit 0
 fi
 
