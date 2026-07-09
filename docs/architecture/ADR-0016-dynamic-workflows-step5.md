@@ -410,6 +410,18 @@ Fabricated in-transcript approvals (changelog 2.1.205). The release made backgro
 
 Still open, not resolved by this range: the `hook_verified` blocker. No 2.1.205 item addresses `PreToolUse`/`PostToolUse` hook propagation inside Workflow subagents, so the smoke test gating the workflow path (and the Agent-tool fallback when `hook_verified=false`) remains required exactly as before. The smoke test was deliberately not re-run for this range. Note that upstream published no changelog entry, tag, or release for 2.1.206 even though the binary ships; nothing in this ADR is reconciled against it.
 
+## Loop-taxonomy alignment (2026-07-09)
+
+Prompted by the @ClaudeDevs article "Getting started with loops" (2026-07-06); operational claims cross-checked against `code.claude.com/docs/en/goal` and `/en/scheduled-tasks`, both fetched 2026-07-09.
+
+Dynamic workflows sit inside a proactive loop. The Claude Code team's own composition for unattended recurring work is a schedule trigger, `/goal` to define the done-condition, skills to encode verification, dynamic workflows to orchestrate the agents that do the work, and auto mode so the run does not stop for per-tool permission. That places workflow dispatch exactly where this ADR puts it: the orchestration layer inside a longer-running loop, not the loop itself. Convergent with the design; nothing to change.
+
+Pilot before a large run. The article states plainly that a dynamic workflow "can spawn hundreds of agents" and that usage should be gauged "on a smaller slice of the work first." Adopted as operational guidance for Step-5 dispatch: on a plan with a large task list, dispatch one batch and read `.claude/step5-report.json` before fanning out over the rest. This complements, and does not replace, the concurrency cap the Workflow tool already imposes. Article-sourced, so treat it as guidance rather than a documented platform limit.
+
+Inspecting a running workflow. `/workflows` surfaces each agent's token usage and allows stopping an agent mid-run; a bare `/goal` reports turns and tokens spent so far; `/usage` breaks spend down by skill, subagent, and MCP. Together these are the observability side of the inspect-and-kill path that the CC 2.1.203 `TaskStop`/`TaskOutput` note above describes from the tool side.
+
+None of this touches the `hook_verified` blocker, which remains open. Hook propagation into Workflow subagents is unrelated to loop taxonomy, and the smoke test still gates the workflow path.
+
 ---
 
 ## References

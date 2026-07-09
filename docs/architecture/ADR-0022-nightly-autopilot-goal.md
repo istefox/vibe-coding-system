@@ -437,6 +437,87 @@ scope for a documentation reconcile.
 
 ---
 
+## Routines / `/schedule` evaluated as an alternative outer loop (2026-07-09)
+
+Prompted by the @ClaudeDevs article "Getting started with loops" (2026-07-06), which says you "move
+the loop to the cloud by creating a routine with `/schedule`". Read quickly, that sounds like an
+answer to every infrastructure problem this ADR has fought: the machine must stay awake, the login
+must be fresh, the daemon must survive, the headless worker must not be idle-reaped. Verified against
+`code.claude.com/docs/en/routines` and `/en/scheduled-tasks`, both fetched 2026-07-09.
+
+**Verdict: not adopted.** Recorded as a live alternative with a real cost, not as a deferred task.
+Adopting it would require its own ADR.
+
+### What a routine would buy
+
+A routine is a saved Claude Code configuration — prompt, repositories, connectors — executing on
+Anthropic-managed cloud infrastructure, "so they keep working when your laptop is closed." Routines
+are in **research preview**. The entire CC 2.1.203–2.1.205 background-reliability cluster this ADR has
+been tracking (daemon auto-upgrade killing running sessions, stale session tokens, headless
+`SessionStart` idle-reap, login expiry mid-run, and the machine-awake problem generally) becomes moot,
+because none of it runs on this machine. A one-off schedule trigger fires at a chosen timestamp, which
+is exactly the shape of the evening launch.
+
+### What a routine would cost
+
+Each item is a quote from `/en/routines`, or a direct consequence of one:
+
+- **The safety apparatus does not exist.** A routine's session "can run shell commands, use skills
+  committed to the cloned repository, and call any connectors you include." Every skill, agent, and
+  hook this system depends on lives in `~/.claude/`. `nightly-guard`, `stop-gate.sh`,
+  `protect-files.sh`, and `db-backup-guardrail.sh` would not be present. D2's publish boundary is
+  enforced by an in-script `--check` gate **and** a `PreToolUse` hook on `git push` / `gh pr create`.
+  A routine run has neither.
+- **There is no permission model to layer against.** "Routines run autonomously as full Claude Code
+  cloud sessions: there is no permission-mode picker and no approval prompts during a run." Included
+  connectors may be used for writes "without asking for permission during a run." The layered-defense
+  posture — hook-deny overrides any permission mode — has nothing left to override.
+- **The branch convention collides.** "By default, Claude can only push to branches prefixed with
+  `claude/`." This ADR pushes `feat/<slug>`. The escape hatch is a per-repo "Allow unrestricted branch
+  pushes" toggle, which grants push to *existing* branches — strictly wider than the narrow grant D2
+  was designed to be, and in the wrong direction.
+- **Fresh clone from the default branch, every run.** State the nightly path carries across features
+  (`PROJECT.md` checkboxes, manifests, `.claude/nightly-autopilot.yml`) survives only if committed.
+  Some of it is. Not all of it.
+- **Local MCP servers are absent.** Servers added with `claude mcp add` "are stored on your machine
+  rather than your claude.ai account, so they do not appear in the connectors list." The workaround is
+  a committed `.mcp.json` or a claude.ai connector.
+- **One-hour minimum interval**, and a green run status "does not mean the task in your prompt
+  succeeded" — so `nightly-report.json` stays load-bearing either way.
+
+### Why the trade fails today
+
+The exchange on offer is: surrender the in-repo safety apparatus, receive infrastructure reliability.
+
+This ADR's amendment to the ADR-0020 autonomy boundary rests entirely on the claim that unattended
+push and PR are acceptable *because* two independent mechanisms enforce the per-repo opt-in and halt
+on trouble. Remove both and the amendment is no longer justified by its own reasoning. Infrastructure
+reliability was never the binding constraint here. The boundary was.
+
+### The path that could make it viable
+
+Routines see skills committed to the cloned repository. This repo already authors skills and hooks
+under `staging/` and syncs them into `~/.claude/`. A target repo could instead commit `.claude/skills/`
+and `.claude/hooks/`, at which point a routine would see them and the guard could run inside the cloud
+session. Whether hooks fire at all in a routine run is undocumented, and would need the same kind of
+smoke test that gates `hook_verified` in ADR-0016. That is a design change and needs its own ADR. It
+is not a follow-up task on this one.
+
+### `/schedule` auth, and a correction to the public record
+
+`/schedule` requires a claude.ai subscription login. The docs list a Console API key,
+`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `apiKeyHelper`, or a Bedrock / Vertex / Foundry provider
+as reasons the command is hidden outright. Routines additionally require a Pro, Max, Team, or
+Enterprise plan with Claude Code on the web enabled.
+
+Worth stating precisely, because the `goal-loop` skill in `github.com/davidondrej/skills` attributes
+the same subscription requirement to **`/goal`**, where the preceding section of this ADR establishes
+it is false: `/en/goal` lists no auth or plan requirement, and states the evaluator "runs on whichever
+provider your session is configured for." The requirement is real and attaches to `/schedule`. That is
+the most likely origin of the error, and it does not rescue the claim as written.
+
+---
+
 ## References
 
 - `code.claude.com/docs/en/goal` — `/goal` command, CC v2.1.139+ (verified 2026-07-01)
