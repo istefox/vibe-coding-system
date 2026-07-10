@@ -1,0 +1,289 @@
+---
+name: review-triage-fix
+description: Use this skill when you want a FULL review+fix cycle — not just findings, but also automated routing to fixing agents (debugger/refactorer/coder), verification, and a decision-grade recap before committing. One invocation = one bounded cycle: review→triage→fix→re-review→recap→STOP. Manual invocation only, from the orchestrator session. Triggers include "review-triage-fix", "review and fix", "full review cycle", "triage findings and fix", "fix cycle with review", "run review fix cycle". Do NOT use for quick findings-only requests ("review", "code review", "show me the problems") — those go to the built-in code-review skill. Supersedes built-in code-review when fixing is needed.
+---
+
+# review-triage-fix
+
+One invocation = **exactly one cycle**:
+`pre-flight → reviewer → triage → route-fix (sequential) → re-review → recap → STOP`.
+You recommend; the user decides whether to re-invoke or commit. **NO COMMIT,
+no push, no automatic iteration beyond the cycle** inside this skill.
+
+## Hard constraints (read first)
+
+- **Skill isolation — no superpowers check during the cycle.** Do not invoke
+  `writing-plans`, `brainstorming`, `EnterPlanMode`, or any other
+  `superpowers/*` skill between steps. This skill is a self-contained workflow:
+  the cycle `pre-flight → reviewer → triage → fix → re-review → recap` replaces
+  every intermediate skill-check. Explicit override of the `using-superpowers` rule.
+- **Sub-agents do not spawn sub-agents** (nesting supported since CC 2.1.172; kept flat by
+  design — see blueprint §2.2). This skill orchestrates multiple dispatches: run it **only
+  in the orchestrator session**. If invoked from inside a sub-agent, stop and say so —
+  you would not be able to dispatch.
+- **Dispatch always sequential.** Never fix in parallel: same codebase →
+  edit conflicts.
+- **STOP at end of cycle.** One invocation, one cycle, then recap and stop. No
+  commit/PR (those remain separate HITL steps).
+- The three helpers are in
+  `$HOME/.claude/skills/review-triage-fix/scripts/` and are invoked via Bash.
+  They are reporters: read the **first stdout token**, not the exit code.
+- **Required external dependency:** `jq` must be in PATH. The `triage-state commit` subcommand exits 1 if `jq` is absent; `triage-state diff` degrades gracefully. Verify with `command -v jq`.
+
+## Step 0 — Pre-flight
+
+1. Confirm you are the orchestrator session (not a sub-agent). If unsure, stop.
+2. Resolve the project root (the dir whose `.claude/` you'll use). Run the
+   **baseline** once and record it:
+   `bash $HOME/.claude/skills/review-triage-fix/scripts/verify.sh <root>`
+   - `PASS` → baseline **GREEN**.
+   - `FAIL …` → baseline **RED** (CIRCUIT BREAKER A disabled this cycle —
+     regression detection unavailable; say so in the recap).
+   - `UNVERIFIED …` → **CIRCUIT BREAKER D** active for the whole cycle.
+3. **Resolve the per-branch state file path** (`RTF_SF`). The state is
+   per-branch to prevent cross-branch contamination (false "resolved"/"oscillates"
+   when a previous cycle was on a different branch). Compute once and reuse in
+   all subsequent steps:
+   ```sh
+   _branch=$(git -C "<root>" rev-parse --abbrev-ref HEAD 2>/dev/null)
+   # fallback for non-git repos or detached HEAD
+   case "$_branch" in
+     "") _branch="_no-git" ;;
+     HEAD) _branch="_detached" ;;
+   esac
+   # sanitize: replace any char not in [a-zA-Z0-9._-] with _
+   _branch=$(printf '%s' "$_branch" | sed 's/[^a-zA-Z0-9._-]/_/g')
+   RTF_SF="<root>/.claude/.triage-fix-last-${_branch}.json"
+   ```
+   Use `$RTF_SF` (written as `<rtf-state-file>` in the templates below) in
+   every `triage-state.sh` call for this cycle.
+4. State the cycle number and previous finding count using only `jq` — no Python, no ad-hoc parsing:
+   ```sh
+   if [ -f "$RTF_SF" ]; then
+     prev=$(jq 'length' "$RTF_SF" 2>/dev/null || echo "?")
+     echo "State file EXISTS (cycle N+1, $prev previous findings)"
+   else
+     echo "State file absent (cycle 1)"
+   fi
+   ```
+   `jq 'length'` works on the state array regardless of content. Do not call `.get()` or any dict-specific method on this file.
+
+## Step 1 — Review
+
+**Agent-memory contract (ADR-0012):** before dispatching, inject prior notes — run
+`bash ~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh inject reviewer` and
+append its output (a `PRIOR AGENT NOTES` block, or `none yet`) to the END of the reviewer brief —
+stable content first, dynamic notes last preserves provider prefix-cache hits across runs.
+Require the reviewer to end its report with a terminal `DURABLE NOTES:` section. After the
+report, harvest it: pipe the report into `... agent-notes-harvest.sh harvest reviewer`. The
+encoded path is resolved by the orchestrator running this skill, never by the subagent (D2).
+
+Dispatch the `reviewer` agent over the recent changes. Edge cases:
+- Reviewer reports **no detectable changes** → stop, emit a "nothing to do"
+  recap, do not invent work.
+- **Huge diff sampled** → propagate that caveat verbatim into the recap.
+
+## Step 2 — Triage (classify every finding per the table)
+
+Read the reviewer's severity-grouped report. For each finding extract
+`sev` (BLOCKER/MAJOR/MINOR/NIT), `loc` (`path:line`), a one-line `problem`,
+and the suggested fix. Classify:
+
+| Finding class | Route to | Note |
+|---|---|---|
+| Failure: runtime error, red test, reproducible wrong behavior | `debugger` | root-cause + minimal fix + regression + verify (its contract) |
+| Structural: duplication, oversized unit, tangled responsibility | `refactorer` | requires a GREEN baseline (Step 0); if baseline red → REPORT-ONLY |
+| Localized non-failure non-structural code change: missing validation, edge-case test, naming, small hardening | `coder` | synthesize a **micro-piano** = the finding + suggested-fix as a 1-item plan so the coder's plan-driven contract is satisfied |
+| Architectural / design-level / ambiguous | **REPORT-ONLY** | flag for the user, no fix |
+| Swift concurrency: async/actor isolation changes, DispatchQueue removal, Sendable conformance additions | **REPORT-ONLY** | static analysis cannot prove thread-safety; green tests do not either (ADR-0018). No rationalization overrides this. |
+| Security finding of any class — injection, path traversal, auth bypass, hardcoded secrets, insecure deserialization, filesystem access with user-controlled input, and any other input-handling vulnerability | **REPORT-ONLY** | CIRCUIT BREAKER C. The class is non-exhaustive: when in doubt, treat as security. Never downgrade to `coder` based on locality or perceived severity. |
+| Reviewer-declared low confidence | **REPORT-ONLY** | acting on uncertain findings is risky |
+
+NITs are routed (coherent with auto-route-all) but treated as a single
+low-risk batch and shown **separately** in the recap sub-table.
+
+**Micro-piano discipline (for `coder` dispatches): strictly 2-3 lines** —
+finding + suggested-fix + (optional) file:line. NOT a multi-paragraph spec.
+The coder must do exactly that change and stop, not expand scope. Bound the
+context aggressively: a bloated micro-piano = a bloated dispatch (40k+ tokens
+for a small change is a smell, observed in the v1 pilot).
+
+**Add+Remove rule (for SUBSTITUTION fixes):** when the fix replaces a pattern
+rather than just adding (e.g. move local import to top-level, extract magic
+number to a named constant, consolidate duplicate fixtures, rename a helper),
+the micro-piano MUST list BOTH the new pattern (`Add: ...`) AND the old
+instances to delete (`Remove: <path:line> ...`). Without an explicit Remove,
+the coder typically acts conservatively and leaves the old pattern in place →
+duplication that the re-review then flags as a new finding (observed cycle 2
+2026-05-20, M-3 autouse fixture → M-1 re-review). For purely ADDITIVE fixes
+(missing input validation, new edge-case test, docstring fix), `Add:` alone
+suffices — no Remove section needed.
+
+**Toolchain completeness rule (for fixes that add a dev tool):** if the fix adds a
+linter, formatter, or type-checker to dev dependencies (e.g. `mypy`, `ruff`, `pylint`),
+the dispatch brief MUST include: *"After adding the tool to dev deps, run it against the
+full codebase and fix every error it surfaces before declaring done."* Without this, the
+coder adds the dep but never runs the tool, leaving tool-specific findings (missing stubs,
+missing `py.typed`, config errors) unresolved in the re-review baseline.
+
+Then compute cross-cycle status. Write the current findings as TSV
+(`sev<TAB>loc<TAB>problem`, one per line) and run:
+`… | bash $HOME/.claude/skills/review-triage-fix/scripts/triage-state.sh diff <rtf-state-file>`
+(`<rtf-state-file>` = `$RTF_SF` resolved in Step 0 — per-branch, never shared
+across branches). Keep its `id/state` rows, `COUNTS`, and `CONVERGENCE` line
+for the recap.
+
+## Step 3 — Route-fix (sequential, severity order)
+
+**Before the loop — snapshot pattern (universal, git AND non-git):** the
+per-fix attribution that breakers A and B need requires a pre-fix baseline.
+`git diff` alone shows cumulative uncommitted changes from ALL prior fixes,
+which mis-attributes weakening to innocent later fixes. So: snapshot the test
+tree before the loop AND refresh it after each fix.
+
+```
+cp -R <test dirs> "$TMPDIR/rtf-snap"     # before the loop, once
+# … per-fix dispatch …
+diff -ru "$TMPDIR/rtf-snap" <live test files> | weakening-scan.sh
+rm -rf "$TMPDIR/rtf-snap" && cp -R <test dirs> "$TMPDIR/rtf-snap"   # refresh
+```
+
+**Coder dispatch cap: max 4 non-NIT items per cycle.** Count items routed to `coder` before entering the loop. If the count exceeds 4, fix the top 4 by severity (BLOCKER first, then MAJOR, then MINOR), mark the remainder `DEFERRED[cap: overflow N>4]` in the recap table, and stop — do not attempt them this cycle. The next RTF invocation picks them up from the re-review baseline. This cap does not apply to the NIT batch (which is always a single dispatch regardless of count).
+
+**Stale-worktree pre-check (before EACH coder dispatch).** The coder agent runs with `isolation: worktree`, which forks from the last commit and does not see uncommitted changes already applied this cycle. Before each dispatch run:
+```sh
+git -C <root> diff HEAD --name-only 2>/dev/null
+```
+If this returns any files: **do not dispatch the coder agent**. Apply the fix directly as orchestrator (Read → Edit/Write). Record the substitution in the recap `Routing` column as `coder (inline — stale worktree)`. This is not a fallback — it is the correct path when uncommitted changes are present. Only dispatch the coder agent when the output is empty (working tree is clean).
+
+For each **routable** finding (skip REPORT-ONLY and DEFERRED), in order
+BLOCKER → MAJOR → MINOR → NIT, dispatch the chosen agent with a curated input:
+the finding, `loc`, the reviewer's suggested fix, (for `coder`) the micro-piano,
+and the project's test-cmd so the agent self-verifies.
+**Model override:** use `model: "opus"` for all fix dispatches (`coder`, `refactorer`, `debugger`). Fix agents make judgment calls without a structured plan — Opus reduces the risk of introducing new issues (e.g. using unavailable APIs, wrong deployment target assumptions).
+
+**Agent-memory contract (ADR-0012) — ONLY when the chosen agent is `debugger`:** append a
+`PRIOR AGENT NOTES` block (`agent-notes-harvest.sh inject debugger`) to the END of its dispatch —
+stable content first, dynamic notes last preserves provider prefix-cache hits across runs.
+Require a terminal `DURABLE NOTES:` section in its report, and after the report harvest it
+(`agent-notes-harvest.sh harvest debugger`). `coder` and `refactorer` are NOT subject to this
+contract — never add the `PRIOR AGENT NOTES`/`DURABLE NOTES:` block to their dispatches.
+
+**NIT batching is mandatory.** All routable NITs go to `coder` as a **SINGLE
+dispatch with a list** (one line per NIT: sev, loc, problem, suggested-fix) —
+not N separate dispatches. The micro-piano for the batch IS the list, with
+"apply all of these, each as the smallest possible change" as the instruction.
+Verify + weakening-scan once after the batch, not after each NIT inside it.
+This alone removed the dominant cost in the v1 pilot (multiple NIT/MINOR
+dispatches at 1-2 min each).
+
+After **each** fix dispatch (or after the NIT batch):
+
+**No-op detection (before verify.sh).** Check whether the dispatch actually modified anything:
+```sh
+git -C <root> diff HEAD --name-only 2>/dev/null
+```
+If this returns empty: the agent made no changes. Record `coder [NO-OP]` (or `debugger [NO-OP]` etc.) in the recap `Routing` column, mark the finding `UNRESOLVED — agent no-op` in Status, **skip** `verify.sh` and `weakening-scan.sh` for this iteration (suite is unchanged), and continue to the next finding without breaking the loop. A no-op does NOT fire breaker A (no regression introduced), but the finding remains open and will resurface in Step 4's re-review.
+
+Then re-run verification yourself (do not trust the agent's self-report for the breakers):
+
+- `bash $HOME/.claude/skills/review-triage-fix/scripts/verify.sh <root>`
+- `diff -ru "$TMPDIR/rtf-snap" <live test files>` piped into
+  `bash $HOME/.claude/skills/review-triage-fix/scripts/weakening-scan.sh`
+- then refresh the snapshot for the next iteration.
+
+Apply the circuit breakers:
+
+- **CIRCUIT BREAKER A — abort on regression.** Only if baseline was GREEN. If
+  `verify.sh` flips PASS→FAIL and stays FAIL after the responsible agent ran:
+  **stop fixing**, do not pile on, record the culprit finding, jump to Step 4
+  with flag `ABORT: regression at <finding>`. If baseline was RED: detection
+  off; recap notes "baseline RED — regression detection unavailable".
+- **CIRCUIT BREAKER B — hard-fail anti-test-weakening.** If `weakening-scan.sh`
+  prints any `WEAKENED` line for this fix: mark that finding
+  `UNRESOLVED — test weakened`, raise a BLOCKER flag in the recap,
+  regardless of suite colour. **NO auto-revert** — leave the change in
+  place, flag it loud (destructive action stays with the human gate).
+- **CIRCUIT BREAKER C — security finding report-only.** Never enters this loop
+  (classified REPORT-ONLY in Step 2 regardless of class or locality); counted in the recap under "Security (deferred to human)". If a finding was mis-routed to `coder` despite being security class, reclassify it REPORT-ONLY here before dispatch.
+- **CIRCUIT BREAKER D — unverified cycle.** If Step 0 returned UNVERIFIED:
+  fixes still happen but every recap row carries `UNVERIFIED`, breaker A is
+  inert, and the recap header is `⚠ UNVERIFIED CYCLE`.
+
+## Step 4 — Re-review
+
+**Wording-preservation for cross-cycle hash stability.** When dispatching the re-reviewer, include the previous cycle's findings table (problem column verbatim). Instruct the reviewer: *for any finding that is unchanged, reuse the exact one-line problem wording from the previous cycle's recap — paraphrasing changes the finding hash and generates false RESOLVED+NEW pairs in convergence tracking.* New or genuinely changed findings may use new wording.
+
+Dispatch `reviewer` again over the new state. Recompute the cross-cycle diff:
+write the post-fix findings as TSV (`sev<TAB>loc<TAB>problem`) and run — using
+the **same** `<rtf-state-file>` path resolved in Step 0 (never a fresh file,
+or convergence tracking breaks):
+`… | bash $HOME/.claude/skills/review-triage-fix/scripts/triage-state.sh diff <rtf-state-file>`
+to get resolved / still-open / new / regressed.
+
+## Step 5 — Recap (decision-grade) then STOP
+
+**Header:** project root; cycle N; verification mode
+(`VERIFIED: test-cmd=<cmd>` or `⚠ UNVERIFIED CYCLE`); baseline colour →
+post-cycle colour; a prominent flag banner if any
+(`ABORT regression`, BLOCKER anti-weakening, deferred security-BLOCKER count).
+
+**Per-finding table** — columns:
+`ID (sev+loc+hash) | Sev | Problem (1 line) | Routing | Change (file:line or "—") |
+Verification (PASS/FAIL/UNVERIFIED/N-A) | Status vs prev cycle
+(NEW/RESOLVED/STILL-OPEN/REGRESSED/WEAKENED)`.
+
+Routing cell values (use these exactly — no free-text in this column):
+- `debugger` / `refactorer` / `coder` — dispatched normally
+- `coder (inline — stale worktree)` — applied directly by orchestrator because uncommitted changes were present
+- `REPORT-ONLY[architectural]` / `REPORT-ONLY[security]` / `REPORT-ONLY[async/actor ADR-0018]` / `REPORT-ONLY[low-confidence]` — routing table match; reason required
+- `coder → DEFERRED[cap: overflow N>4]` — was coder-routable but bumped by the 4-dispatch cap
+
+The `[reason]` suffix is mandatory for REPORT-ONLY and DEFERRED rows. Without it the recap reader cannot distinguish a cap overflow from a concurrency guard from a security block, and the next cycle's triage re-argues the same finding from scratch.
+
+`triage-state.sh diff` emits only NEW/RESOLVED/STILL-OPEN/REGRESSED. `WEAKENED`
+is not produced by any helper: if **CIRCUIT BREAKER B** fired for a finding, you
+override that finding's "Status vs prev cycle" to `WEAKENED` yourself.
+
+**NIT:** a separate compressed sub-table beneath the main one.
+
+**Cycle diff:** explicit counts from `triage-state.sh`
+(Resolved / Open / New / Regressed) + the `CONVERGENCE` reading.
+
+**Verdict** (you recommend, the user decides):
+- `SAFE: 0 open, suite green → consider commit`
+- `RE-RUN recommended: N open, converging`
+- `STOP & INSPECT: abort/weakening/not converging`
+- `UNVERIFIED: manual verification required before commit`
+
+The finding ID is a hash of `sev|loc|problem`: to keep cross-cycle tracking
+stable, reuse the **exact** problem wording from the previous cycle's recap
+table when a finding is unchanged — paraphrasing it makes the next cycle
+mis-report it as RESOLVED+NEW (false "oscillates") instead of STILL-OPEN.
+
+Then persist state for the next cycle: write the final findings as TSV
+(`sev<TAB>loc<TAB>problem<TAB>status`, status `open`|`resolved`) into
+`… | bash $HOME/.claude/skills/review-triage-fix/scripts/triage-state.sh commit <rtf-state-file>`
+(`<rtf-state-file>` = `$RTF_SF` from Step 0; this also gitignores the
+state file when the project is a git repo).
+
+**STOP.** Do not commit, do not re-invoke yourself. Hand the verdict to the user.
+
+## Future work — parallel batch mode (v2, NOT enabled in v1.1)
+
+A parallel-dispatch optimization for independent fixes is plausible. The two
+original blockers are now cleared:
+- `~/.claude/agents/coder.md` line 8 has `isolation: worktree` (was missing in v1).
+- CC 2.1.161 fixed the bug where workflow agents with `isolation: worktree` were
+  blocked from modifying their own files.
+
+The remaining reason parallel mode is **not yet enabled** is the trade-off:
+parallel attribution for circuit breaker A becomes batch-level (regression ↔ culprit
+identification requires binary search back-out). The sequential default avoids this.
+Parallel mode remains a deliberate architectural choice, not a technical blocker.
+
+To add a parallel mode, gate it on:
+all candidates routed to `coder`, non-BLOCKER, disjoint `loc` paths.
+Trade-off: lose per-fix attribution for breaker A (regression becomes
+batch-level; binary-search-back-out to find culprit). Keep sequential as the
+default; parallel as opt-in for time-pressure batches.

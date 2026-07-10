@@ -239,3 +239,18 @@ Key architectural decisions:
   `<root>/SPEC.md` in `project-conductor nightly` before each feature's chain.
 
 Detail: `docs/architecture/ADR-0023-nightly-auto-design.md`.
+
+## Decisions from the vendor-deployed-only chain (ADR-0024)
+
+Vendoring of the deployed-only executable surface (16 skills, 12 hooks + tests) from
+`~/.claude` into `staging/`, extending `sync-to-claude.sh` PAIRS so repo-side fixes can
+reach deployment (issue #28, enabler for the 2026-07-10 audit-fix roadmap).
+
+Key architectural decisions:
+- **Vendor scope:** full skill directories to `staging/plugin/skills/<name>/`, hooks to `staging/plugin/scripts/`; skip binary assets, `*.bak-*`, website-auditor (foreign symlink), backup-before-deploy.sh (retired by #38).
+- **No second source of truth:** `concept-to-code/scripts/hook-verify-workflow.sh` (already vendored flat under ADR-0016) and runtime state (`memory/agent-notes/`) are excluded from the copy.
+- **PAIRS stays one-entry-per-file, additive-only:** directory-level sync would need its own ADR.
+- **Legacy `$HOME`-coupled hook tests:** vendored byte-identical but kept OUT of the `*.test.sh` glob and CI (they test the deployed tree and would fail on Actions); documented as a known CI-dark gap.
+- **`pairs-completeness.test.sh`:** structural check only (every PAIRS src exists in staging), never byte-identity against live `~/.claude` — staging is expected to move ahead of deployed during the roadmap.
+
+Detail: `docs/architecture/ADR-0024-28-vendor-deployed-only-skills-and-hooks.md`.
