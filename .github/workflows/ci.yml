@@ -1,0 +1,26 @@
+# CI for nightly-autopilot PRs (ADR-0022 D8). Instantiated from
+# staging/project-templates/ci/ci.yml with __TEST_CMD__ substituted by the
+# TOFU-trusted command in .claude/test-cmd. The job name `ci` is the required
+# status check on main; docs-ci.yml (markdownlint, links, shell-tests) keeps
+# running alongside.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Run tests
+        run: for t in staging/plugin/scripts/tests/*.test.sh; do bash "$t" || exit 1; done

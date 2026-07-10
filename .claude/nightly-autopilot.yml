@@ -1,0 +1,8 @@
+# Opt-in marker for nightly-autopilot (ADR-0022) with Phase P prep (ADR-0023).
+# publish: true authorizes unattended `git push` to feat/* branches and PR creation
+# against main for THIS repo only. Merge stays human. Removing this file (or setting
+# publish: false) returns the repo to local-commit-only autopilot.
+publish: true
+prep:
+  source: issues
+  issues_label: prep
