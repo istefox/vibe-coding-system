@@ -29,6 +29,8 @@ plugin/scripts/detect-test-cmd.sh|hooks/detect-test-cmd.sh
 plugin/scripts/roadmap-from-issues.sh|hooks/roadmap-from-issues.sh
 plugin/scripts/spec-issue-gate.sh|hooks/spec-issue-gate.sh
 plugin/scripts/tests/prep.test.sh|hooks/tests/prep.test.sh
+plugin/scripts/hook-verify-workflow.sh|skills/concept-to-code/scripts/hook-verify-workflow.sh
+plugin/scripts/tests/hook-verify-workflow.test.sh|hooks/tests/hook-verify-workflow.test.sh
 plugin/skills/spec-from-issue/SKILL.md|skills/spec-from-issue/SKILL.md
 "
 

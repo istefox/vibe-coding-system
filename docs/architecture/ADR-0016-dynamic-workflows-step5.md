@@ -465,6 +465,48 @@ The procedure in this ADR told the operator to watch the terminal for a `PATTERN
 
 ---
 
+## Smoke test replaced by `hook-verify-workflow` (2026-07-10)
+
+The `hook_verified` gate in `~/.claude/skills/concept-to-code/SKILL.md` no longer asks a human to watch a terminal. It brackets a one-agent smoke workflow with a timestamp and then reads `pre-flight-pattern-enforce.sh`'s own audit log, at `${PATTERN_ENFORCE_DIR:-~/.claude/state/pattern-enforce}/audit.log`.
+
+Source: `staging/plugin/scripts/hook-verify-workflow.sh`, tested offline by `tests/hook-verify-workflow.test.sh` (26 assertions) against fixture logs under an overridden `PATTERN_ENFORCE_DIR`.
+
+### Why the audit log is the right evidence
+
+The guard records one tab-separated row per `Edit`/`Write`/`MultiEdit` it sees: `ts, session_id, tool, decision, detail`. Across 4,639 real rows the decisions are exactly three:
+
+| decision | detail | meaning |
+|---|---|---|
+| `allow` | `PATTERN found in window` | the guard resolved the transcript and permitted the edit |
+| `block` | `PATTERN missing in window=20` | the guard resolved the transcript and refused the edit |
+| `bypass-noncoder` | `agent_type=<value>` | the guard stood down without looking |
+
+**`agent_type` is recorded only on a bypass.** No `allow` or `block` row carries it. The first draft of the checker matched `agent_type=coder` on allow rows and would have matched nothing, ever; the fixtures agreed with the code because both encoded the same wrong belief. Only running the checker against the real log exposed it. The invariant that actually holds is stronger: the guard returns early unless `agent_type == "coder"` (`pre-flight-pattern-enforce.sh` lines 91-94), so **reaching `allow` or `block` is itself proof that a coder was ruled on**. A `block` proves enforcement exactly as an `allow` does.
+
+### The contract
+
+```
+MARK=$(hook-verify-workflow.sh --mark)          # ISO-8601 UTC; lexical order == chronological
+… dispatch one workflow agent with agentType: 'coder' that Edits a scratch file …
+hook-verify-workflow.sh --check "$MARK"
+```
+
+Exit `0` VERIFIED, record `hook_verified=true`. Exit `1` REFUTED, record `false`, and the reason names which of the two failures occurred: no decision at all after the marker (hooks disabled, or the workflow never dispatched), or every workflow agent reported `workflow-subagent` (the dispatch omitted `agentType`, which is a workflow-script bug and not a platform limitation).
+
+Exit **`3` INCONCLUSIVE** when the audit log is missing or unreadable. **Record nothing.** A missing log means the guard is not installed; it does not mean hooks fail to fire. Collapsing exit 3 into exit 1 would repeat, in the opposite direction, the exact error the terminal-watching procedure made.
+
+### What did not change, and why
+
+`manifest-init.sh` still defaults `hook_verified: false`. ADR-0020 records a regression in which the deployed default silently drifted to `true` and disabled the gate. The checker raises the flag on evidence; it never lowers the bar.
+
+The autopilot branch is unchanged: an unattended run still skips the smoke test and takes the Agent-tool fallback unless `hook_verified` is already `true`. The check is now scriptable, so an autopilot run *could* verify rather than defaulting to the fallback, but that is a change to ADR-0020's unattended contract and needs its own decision. Not taken here.
+
+### Known limit
+
+The audit log cannot distinguish a *workflow* coder from an Agent-tool coder, since neither records `agent_type` on an allow. The marker bounds the window to the smoke dispatch, so in practice the only coder running is the workflow's. Do not run the check while another coder agent is working in the same session.
+
+---
+
 ## References
 
 - Dynamic Workflows docs: `https://code.claude.com/docs/en/workflows`
