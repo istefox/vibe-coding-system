@@ -15,6 +15,9 @@
 #
 # v1.1 (2026-07-01, review finding #1/#4): the guard now parses the command to block merge /
 # auto-merge / force / push-to-main directly, and fails closed when jq is absent.
+# v1.2 (2026-07-11, audit findings 1.3/2.11/2.12/3.22): +<ref> force-refspecs and --no-verify
+# are forbidden; force flags match only inside the push segment (no false positive on an
+# unrelated `rm -f`); malformed JSON with jq present now fails closed like the jq-less path.
 #
 # Bash 3.2 clean: no assoc array, no mapfile, no ${v^^}, no process substitution.
 
@@ -41,13 +44,22 @@ is_forbidden_publish() {
   case "$c" in
     *"gh pr "*"--auto"*) return 0 ;;
   esac
+  # --no-verify on any git command skips repo hooks: never allowed unattended (ADR-0022 D2).
+  case "$c" in
+    *"git "*"--no-verify"*) return 0 ;;
+  esac
   case "$c" in
     *"git push"*)
       case "$c" in
-        *"--force"*|*"-f "*|*"+HEAD"*|*":refs/heads/main"*|*":refs/heads/master"*) return 0 ;;
+        *"+HEAD"*|*":refs/heads/main"*|*":refs/heads/master"*) return 0 ;;
       esac
-      # Destination main/master (space-, slash- or colon-delimited ref).
-      printf '%s' "$c" | grep -Eq '(^|[ :/])(main|master)([ ]|$)' && return 0
+      # Force flags scoped to the push segment: an unrelated `rm -f x && git push ...`
+      # must not match, but any -f/--force* after `git push` must.
+      printf '%s' "$c" | grep -Eq 'git push[^|;&]*[[:space:]](-f([[:space:]]|$)|--force)' && return 0
+      # Any +<ref> force-refspec after `git push` (+main, +master, +refs/heads/x).
+      printf '%s' "$c" | grep -Eq 'git push[^|;&]*[[:space:]]\+[^[:space:]]' && return 0
+      # Destination main/master (space-, slash-, colon- or plus-delimited ref).
+      printf '%s' "$c" | grep -Eq '(^|[ :/+])(main|master)([ ]|$)' && return 0
       ;;
   esac
   return 1
@@ -123,6 +135,16 @@ CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 [ -z "$CWD" ] && CWD="$PWD"
 
+# Malformed JSON with jq present: CMD is empty but the event is not parseable, so cwd/active
+# state cannot be resolved. Mirror the jq-less branch: fail closed on any forbidden publish
+# keyword in the raw event; allow everything else (audit finding 2.11).
+if [ -z "$CMD" ] && ! printf '%s' "$INPUT" | jq -e . >/dev/null 2>&1; then
+  if is_forbidden_publish "$INPUT"; then
+    print_halt "guard cannot parse the event (malformed JSON) — failing safe on a forbidden publish"
+  fi
+  exit 0
+fi
+
 # Not a publish at all: this guard does not care. Allow.
 if ! is_allowed_publish "$CMD" && ! is_forbidden_publish "$CMD"; then
   exit 0
@@ -133,7 +155,7 @@ fi
 
 # Active nightly run. A forbidden publish is blocked unconditionally.
 if is_forbidden_publish "$CMD"; then
-  print_halt "forbidden publish during a nightly run (merge/auto-merge/force/push-to-main)"
+  print_halt "forbidden publish during a nightly run (merge/auto-merge/force/no-verify/push-to-main)"
 fi
 
 # Allowed publish: run the halt checks (fail-safe blocks on any halt).

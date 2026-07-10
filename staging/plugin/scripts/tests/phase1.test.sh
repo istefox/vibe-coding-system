@@ -81,6 +81,39 @@ if command -v jq >/dev/null 2>&1; then
   # A feature-branch push must still be allowed (no false positive on 'main' inside a slug).
   echo "{\"tool_input\":{\"command\":\"git push -u origin feat/domain-model\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
   [ $? -eq 0 ] && ok "guard hook: allows feat/ push containing 'main' substring" || no "guard hook: allows feat/ push containing 'main' substring"
+
+  # v1.2 (audit 1.3): +<ref> force-refspecs are force-pushes and must be blocked.
+  echo "{\"tool_input\":{\"command\":\"git push origin +main\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
+  [ $? -eq 2 ] && ok "guard hook: blocks push origin +main" || no "guard hook: blocks push origin +main"
+
+  echo "{\"tool_input\":{\"command\":\"git push origin +master\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
+  [ $? -eq 2 ] && ok "guard hook: blocks push origin +master" || no "guard hook: blocks push origin +master"
+
+  echo "{\"tool_input\":{\"command\":\"git push origin +refs/heads/feat/x\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
+  [ $? -eq 2 ] && ok "guard hook: blocks +refs/heads force refspec" || no "guard hook: blocks +refs/heads force refspec"
+
+  # v1.2 (audit 2.12): --no-verify is never allowed unattended.
+  echo "{\"tool_input\":{\"command\":\"git push --no-verify -u origin feat/x\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
+  [ $? -eq 2 ] && ok "guard hook: blocks push --no-verify" || no "guard hook: blocks push --no-verify"
+
+  # v1.2: --force-with-lease is still a force-push.
+  echo "{\"tool_input\":{\"command\":\"git push --force-with-lease origin feat/x\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
+  [ $? -eq 2 ] && ok "guard hook: blocks --force-with-lease" || no "guard hook: blocks --force-with-lease"
+
+  # v1.2 (audit 3.22): an unrelated -f in a composite must not block a clean publish.
+  echo "{\"tool_input\":{\"command\":\"rm -f build.log && git push -u origin feat/x\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
+  [ $? -eq 0 ] && ok "guard hook: allows composite with unrelated rm -f" || no "guard hook: allows composite with unrelated rm -f"
+
+  # v1.2: a +token before the push segment (date +%s) must not read as a force refspec.
+  echo "{\"tool_input\":{\"command\":\"date +%s && git push -u origin feat/x\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
+  [ $? -eq 0 ] && ok "guard hook: allows composite with date +%s" || no "guard hook: allows composite with date +%s"
+
+  # v1.2 (audit 2.11): malformed JSON fails closed on a forbidden publish, open otherwise.
+  printf '{"tool_input":{"command":"git push --force origin main"' | "$GUARD" >/dev/null 2>&1
+  [ $? -eq 2 ] && ok "guard hook: malformed JSON + forbidden publish blocks" || no "guard hook: malformed JSON + forbidden publish blocks"
+
+  printf '{"tool_input":{"command":"ls -la"' | "$GUARD" >/dev/null 2>&1
+  [ $? -eq 0 ] && ok "guard hook: malformed JSON + harmless command allows" || no "guard hook: malformed JSON + harmless command allows"
 else
   printf 'skip guard hook tests (no jq)\n'
 fi
