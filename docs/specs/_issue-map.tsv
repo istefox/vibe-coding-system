@@ -1,0 +1,13 @@
+28-vendor-deployed-only-skills-and-hooks-in	28	Vendor deployed-only skills and hooks into staging
+29-refresh-stale-staging-copies-from-the-de	29	Refresh stale staging copies from the deployed tree
+30-clean-public-repo-keep-private-history-o	30	clean-public-repo: keep private history out of the public branch
+31-concept-to-code-bsd-safe-slug-stamp-and	31	concept-to-code: BSD-safe slug stamp and autopilot gate fixes
+32-manifest-helpers-count-guards-exit-codes	32	Manifest helpers: count guards, exit codes, YAML escaping
+33-hook-verify-workflow-filter-the-audit-wi	33	hook-verify-workflow: filter the audit window by session
+34-scope-guards-autopilot-cwd-check-conduct	34	Scope guards: autopilot CWD check, conductor glob, nightly check 6
+35-refactor-snapshot-filter-append-and-deep	35	refactor-snapshot filter append and deep-refactor scope glob
+36-claude-md-slim-whole-line-content-union	36	claude-md-slim: whole-line content union check
+37-vibe-status-recursion-guard-and-active-c	37	vibe-status: recursion guard and active-chains wiring
+38-hook-hardening-enum-value-lock-ownership	38	Hook hardening: enum value, lock ownership, trust hash
+39-skill-text-corrections-across-five-stand	39	Skill text corrections across five standalone skills
+40-agent-tool-scoping-per-blueprint-section	40	Agent tool scoping per blueprint section 3
