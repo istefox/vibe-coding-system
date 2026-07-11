@@ -1,14 +1,14 @@
 manifest_schema_version: "1.3"
-topic: "31-concept-to-code-bsd-safe-slug-stamp"
-topic_full_title: "concept-to-code: BSD-safe slug stamp and autopilot gate fixes"
+topic: "32-manifest-helpers-count-guards"
+topic_full_title: "Manifest helpers: count guards, exit codes, YAML escaping"
 project_root: "/Users/stefer/Developer/vibe-coding-system"
 mode: "brownfield"
 anonymize: false
 chain_path: "standard"
-created_at: "2026-07-11T01:19:44+00:00"
-last_updated_at: "2026-07-11T02:21:15+00:00"
-current_step: "completed"
-status: "completed"
+created_at: "2026-07-11T02:21:40+00:00"
+last_updated_at: "2026-07-11T03:14:33+00:00"
+current_step: "step_7_commit"
+status: "in_progress"
 
 # Gate 0 routing result (ADR-0017)
 gate0:
@@ -45,9 +45,9 @@ artifacts:
   spec: "/Users/stefer/Developer/vibe-coding-system/SPEC.md"
   brainstorm: null
   ux_blueprint: null
-  adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0027-31-c2c-bsd-slug-autopilot-gates.md"
+  adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0028-32-manifest-helpers-guards.md"
   arch: null
-  plan: "/Users/stefer/Developer/vibe-coding-system/docs/superpowers/plans/2026-07-11-31-c2c-bsd-slug-autopilot-gates.md"
+  plan: "/Users/stefer/Developer/vibe-coding-system/docs/superpowers/plans/2026-07-11-32-manifest-helpers-guards.md"
   project_claude_md: "/Users/stefer/Developer/vibe-coding-system/CLAUDE.md"
 
 # HITL gates audit trail
@@ -87,4 +87,4 @@ failure:
   partial_artifacts: []
 
 # Hint for next action (UX)
-next_action: "Run /skill concept-to-code 31-concept-to-code-bsd-safe-slug-stamp to start Step 1 interview"
+next_action: "Run /skill concept-to-code 32-manifest-helpers-count-guards to start Step 1 interview"

@@ -53,12 +53,17 @@ fi
 # ISO 8601 UTC timestamp
 now="$(date -u +%Y-%m-%dT%H:%M:%S+00:00)"
 
+# Escape YAML-breaking characters (backslash first, then double-quote -- order matters: a
+# quote-escape's inserted backslash must not itself be re-escaped) before embedding the title
+# inside a double-quoted YAML scalar (ADR-0028 Finding 3).
+title_esc="$(printf '%s' "$title" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+
 # Atomic write via mktemp + mv
 T="$(mktemp)"
 
 echo "manifest_schema_version: \"1.3\"" > "$T"
 echo "topic: \"$slug\"" >> "$T"
-echo "topic_full_title: \"$title\"" >> "$T"
+echo "topic_full_title: \"$title_esc\"" >> "$T"
 echo "project_root: \"$root\"" >> "$T"
 echo "mode: \"$mode\"" >> "$T"
 echo "anonymize: false" >> "$T"

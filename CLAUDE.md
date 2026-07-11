@@ -297,3 +297,18 @@ Key architectural decisions:
 - **Invariant 7 conditional on chain_path** in manifest-validate.sh; Gate E3 Abort records `aborted`, not completed.
 
 Detail: `docs/architecture/ADR-0027-31-c2c-bsd-slug-autopilot-gates.md`.
+
+## Decisions from the manifest-helpers chain (ADR-0028)
+
+Five audit fixes to the concept-to-code manifest helpers (issue #32): invariant-9 count
+guard, exit-4 write-failure contract for set-artifact/set-gate, YAML title escaping in
+manifest-init, five SKILL.md PATH-RULE call sites, transition-pair count reconciliation.
+
+Key architectural decisions:
+- **Exit-4 contract mirrored verbatim from manifest-set-flag.sh** (mktemp + trap + exit 4), no new error-handling idiom; `set -e` rejected.
+- **Pair count independently recounted: 48** (two extraction methods); SKILL.md 213/229 and the manifest-transition.sh comment reconciled, hybrid enumeration completed (two gate_h1c pairs), plus the stale "21" and missing Express bullet in the same self-contradictory paragraph.
+- **PATH-RULE fix strictly at the 5 named sites;** a 6th bare mention (SKILL.md:569) disclosed but deferred.
+- **New sibling test file** (concept-to-code-manifest-helpers-guards.test.sh, 21 assertions) — one-file-per-issue hermetic pattern; #31's harness untouched.
+- **CI-user caveat:** chmod-555 write-failure simulation may be inert if Actions runs as root; Task-3 checkpoint halts on unexpected all-green instead of papering over.
+
+Detail: `docs/architecture/ADR-0028-32-manifest-helpers-guards.md`.

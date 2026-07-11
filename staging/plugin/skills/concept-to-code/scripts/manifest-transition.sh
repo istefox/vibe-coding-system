@@ -47,7 +47,7 @@ fi
 if [ "$new_step" = "failed" ] || [ "$new_step" = "aborted" ]; then
   : # always legal
 else
-  # Build legal transition pairs into temp file (spec §3.3, 16 transitions)
+  # Build legal transition pairs into temp file (spec §3.3, 48 transitions)
   PAIRS="$(mktemp)"
   echo "step_0_init,step_1_interview" > "$PAIRS"
   echo "step_0_init,gate_0d_scaffolding" >> "$PAIRS"

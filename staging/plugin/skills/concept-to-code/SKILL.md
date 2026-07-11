@@ -117,7 +117,7 @@ Behavior:
 8. **Gate 0b (anonymize — conditional):** run `~/.claude/skills/clean-public-repo/scripts/detect-public-remote.sh <project-root>` (the script lives in the `clean-public-repo` skill, NOT in `concept-to-code/scripts/`).
    - output `silent` → Gate 0b **silent no-op**: UX unchanged, `anonymize` stays `false`. Proceed to step 8b.
    - output `public` → show Gate 0b box and wait for input:
-     - `[y]` → set `manifest.anonymize = true` in the manifest (via `scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed to step 8b.
+     - `[y]` → set `manifest.anonymize = true` in the manifest (via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed to step 8b.
      - `[n]` → `anonymize` stays `false`; proceed to step 8b.
      - `[a]` → abort chain.
    **Decision is exclusively the user's: never auto-applied.**
@@ -218,10 +218,10 @@ Terminal states: `completed`, `failed`, `aborted`. Any state can transition to `
 
 Gates 0, 0b–0d are NOT states: they are checks run inside `step_0_init` before the first transition.
 
-Legal transition pairs (44 total — 26 standard + 6 express + 12 hybrid, including Gate 0d routing and direct-close shortcuts):
-- Standard (preserved): all 21 existing pairs unchanged
-- Express (new): `step_0_init→step_e1_plan`, `step_e1_plan→step_e2_execute`, `step_e2_execute→gate_e3_verify`, `gate_e3_verify→step_e4_commit`, `step_e4_commit→completed`
-- Hybrid (new): `step_0_init→step_h1_interview`, `step_h1_interview→gate_h1_spec_review`, `gate_h1_spec_review→step_h2_plan`, `gate_h1_spec_review→gate_h1b_brainstorm`, `gate_h1_spec_review→step_h1_interview`, `gate_h1b_brainstorm→step_h2_plan`, `step_h2_plan→step_h3_execute`, `step_h3_execute→gate_h3_verify`, `gate_h3_verify→step_h4_review`, `gate_h3_verify→step_h5_commit`, `step_h4_review→step_h5_commit`, `step_h5_commit→completed`
+Legal transition pairs (48 total — 28 standard + 6 express + 14 hybrid, including Gate 0d routing and direct-close shortcuts):
+- Standard (preserved): all 28 existing pairs unchanged
+- Express (new): `step_0_init→step_e1_plan`, `step_e1_plan→step_e2_execute`, `step_e2_execute→gate_e3_verify`, `gate_e3_verify→step_e4_commit`, `step_e4_commit→completed`, `gate_e3_verify→completed`
+- Hybrid (new): `step_0_init→step_h1_interview`, `step_h1_interview→gate_h1_spec_review`, `gate_h1_spec_review→step_h2_plan`, `gate_h1_spec_review→gate_h1b_brainstorm`, `gate_h1_spec_review→step_h1_interview`, `gate_h1b_brainstorm→step_h2_plan`, `gate_h1b_brainstorm→gate_h1c_macos_ux`, `gate_h1c_macos_ux→step_h2_plan`, `step_h2_plan→step_h3_execute`, `step_h3_execute→gate_h3_verify`, `gate_h3_verify→step_h4_review`, `gate_h3_verify→step_h5_commit`, `step_h4_review→step_h5_commit`, `step_h5_commit→completed`
 
 **Resume semantics:** Express and Hybrid paths do NOT cross session boundaries. Form B resume is valid only for `chain_path=standard` or `chain_path=null` (legacy). Attempting to resume an express or hybrid manifest emits an error and aborts.
 
@@ -234,7 +234,7 @@ Helper scripts:
 - `~/.claude/skills/concept-to-code/scripts/manifest-init.sh` — creates manifest at `step_0_init` (schema 1.3, adds `chain_path`, `gate0.chain_path`, `gate0.auto_detect_reason`)
 - `~/.claude/skills/concept-to-code/scripts/manifest-validate.sh` — validates schema 1.0|1.1|1.2|1.3 + state invariants + optional fields
 - `~/.claude/skills/clean-public-repo/scripts/detect-public-remote.sh` — auto-detect public GitHub remote (D1 ADR-0011); output `public|silent`; fail-safe to `silent`. **NB: belongs to the `clean-public-repo` skill, not to `concept-to-code` — use the absolute path.**
-- `~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest> <new-step> [<new-status>]` — performs legal state transitions atomically (51 pairs).
+- `~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest> <new-step> [<new-status>]` — performs legal state transitions atomically (48 pairs).
   **Calling convention — 2-arg form (use for all in-chain transitions):**
   ```bash
   bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh manifest.yml gate_1_spec_review
@@ -544,9 +544,9 @@ bash ~/.claude/skills/concept-to-code/scripts/hook-verify-workflow.sh --check "$
 ```
 
 Record by exit code:
-- **exit 0 (VERIFIED)** → `bash manifest-set-flag.sh <manifest> hook_verified true`
+- **exit 0 (VERIFIED)** → `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> hook_verified true`
   (the helper supports any top-level unquoted boolean key). Proceed to the Workflow dispatch path.
-- **exit 1 (REFUTED)** → `bash manifest-set-flag.sh <manifest> hook_verified false`.
+- **exit 1 (REFUTED)** → `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> hook_verified false`.
   Proceed to Fallback (Agent-tool batch dispatch). The printed reason names which failure occurred:
   no decision recorded after the marker (hooks disabled, or the workflow never dispatched), or every
   workflow agent reported `workflow-subagent` (the dispatch omitted `agentType: 'coder'` — a
@@ -1172,7 +1172,7 @@ HITL Gate 0b: anonymize_decision
 > _
 ```
 
-`[y]` → set `manifest.anonymize = true` (via `scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed.
+`[y]` → set `manifest.anonymize = true` (via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed.
 `[n]` → `manifest.anonymize = false` (default); proceed.
 `[a]` → abort chain.
 
@@ -1349,7 +1349,7 @@ options:
     description: "manifest.anonymize stays false"
 ```
 
-`[yes]` → `scripts/manifest-set-flag.sh <manifest> anonymize true`; proceed.
+`[yes]` → `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`; proceed.
 `[no]` → proceed.
 
 Transition: set `current_step` to `gate_0d_scaffolding` via `scripts/manifest-transition.sh`, then immediately transition based on `chain_path`:
