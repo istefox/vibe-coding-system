@@ -1,14 +1,14 @@
 manifest_schema_version: "1.3"
-topic: "34-scope-guards-autopilot-conductor"
-topic_full_title: "Scope guards: autopilot CWD check, conductor glob, nightly check 6"
+topic: "35-refactor-snapshot-deep-refactor"
+topic_full_title: "refactor-snapshot filter append and deep-refactor scope glob"
 project_root: "/Users/stefer/Developer/vibe-coding-system"
 mode: "brownfield"
 anonymize: false
 chain_path: "standard"
-created_at: "2026-07-11T03:59:12+00:00"
-last_updated_at: "2026-07-11T04:52:56+00:00"
-current_step: "completed"
-status: "completed"
+created_at: "2026-07-11T04:53:19+00:00"
+last_updated_at: "2026-07-11T05:41:28+00:00"
+current_step: "step_7_commit"
+status: "in_progress"
 
 # Gate 0 routing result (ADR-0017)
 gate0:
@@ -45,9 +45,9 @@ artifacts:
   spec: "/Users/stefer/Developer/vibe-coding-system/SPEC.md"
   brainstorm: null
   ux_blueprint: null
-  adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0030-34-scope-guards.md"
+  adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0031-35-refactor-snapshot-deep-refactor.md"
   arch: null
-  plan: "/Users/stefer/Developer/vibe-coding-system/docs/superpowers/plans/2026-07-11-34-scope-guards.md"
+  plan: "/Users/stefer/Developer/vibe-coding-system/docs/superpowers/plans/2026-07-11-35-refactor-snapshot-deep-refactor.md"
   project_claude_md: "/Users/stefer/Developer/vibe-coding-system/CLAUDE.md"
 
 # HITL gates audit trail
@@ -87,4 +87,4 @@ failure:
   partial_artifacts: []
 
 # Hint for next action (UX)
-next_action: "Run /skill concept-to-code 34-scope-guards-autopilot-conductor to start Step 1 interview"
+next_action: "Run /skill concept-to-code 35-refactor-snapshot-deep-refactor to start Step 1 interview"

@@ -2,7 +2,13 @@
 # enumerate-sources.sh — list source files for deep-refactor audit
 # Usage: enumerate-sources.sh <root> [<path-override>]
 #   <root>           path to the root of a git repository
-#   <path-override>  optional glob/dir prefix; restricts output to matching files
+#   <path-override>  optional scope restriction, two supported forms:
+#                       - directory/path literal (no *, ?, [ characters): restricts to that
+#                         exact path or anything nested below it, e.g. "Sources" or "Sources/Foo"
+#                       - shell glob (contains *, ?, or [): matched against the full relative
+#                         path via bash case-pattern matching, e.g. "*.swift", "Sources/*.swift"
+#                         (matches across "/" -- case matching operates on the literal string,
+#                         not filesystem pathname expansion)
 #
 # Excludes: *.xcarchive, DerivedData/, Pods/, .build/, *.generated.swift
 # Output: one path per line (relative to <root>); empty output if no files match
@@ -40,18 +46,39 @@ grep -v -E \
   '(^|/)DerivedData/|^DerivedData$|(^|/)Pods/|^Pods$|(^|/)\.build/|^\.build$|\.xcarchive(/|$)|\.generated\.swift$' \
   "$TMP_LIST" > "$TMP_FILTERED"
 
-# Apply optional path-override if provided
+# Apply optional path-override if provided. Two supported forms, both matched via bash's
+# native `case` pattern engine (no external regex dialect, no ERE-injection surface):
+#   1. Directory/path-literal prefix (no glob metacharacters, e.g. "Sources", "Sources/Foo"):
+#      restricts to that exact path or anything nested below it.
+#   2. Shell glob (contains *, ?, or [ -- e.g. "*.swift", "Sources/*.swift"): matched against
+#      the full relative path. `case` pattern matching operates on a literal string (it does
+#      not do filesystem pathname expansion), so `*` matches across `/` boundaries -- verified
+#      directly against this repository's own bash: `case "Sources/App/x.swift" in *.swift)`
+#      matches.
 if [ -n "$PATH_OVERRIDE" ]; then
   TMP_SCOPED="$(mktemp)"
-  # Match files that start with the path-override prefix or match it as a glob prefix
-  # Strip trailing slash from path-override for consistent matching
+  # Strip a single trailing slash so "Sources/" and "Sources" behave identically.
   CLEAN_OVERRIDE="$(printf '%s' "$PATH_OVERRIDE" | sed 's|/$||')"
-  grep -E "^${CLEAN_OVERRIDE}(/|$)" "$TMP_FILTERED" > "$TMP_SCOPED" 2>/dev/null || true
-  # Also try exact prefix match for glob-style (e.g. "Sources/Foo")
-  # If scoped file is empty, try an anchored prefix fallback (no suffix anchor)
-  if [ ! -s "$TMP_SCOPED" ]; then
-    grep -E "^${CLEAN_OVERRIDE}" "$TMP_FILTERED" > "$TMP_SCOPED" 2>/dev/null || true
-  fi
+  case "$CLEAN_OVERRIDE" in
+    *[\*\?\[]*)
+      # Glob form: match every candidate path against the override pattern as-is.
+      GLOB_PAT="$CLEAN_OVERRIDE"
+      while IFS= read -r _f; do
+        case "$_f" in
+          $GLOB_PAT) printf '%s\n' "$_f" >> "$TMP_SCOPED" ;;
+        esac
+      done < "$TMP_FILTERED"
+      ;;
+    *)
+      # Directory/path-literal form: match the override itself, or anything nested under it.
+      DIR_PAT="$CLEAN_OVERRIDE"
+      while IFS= read -r _f; do
+        case "$_f" in
+          "$DIR_PAT"|"$DIR_PAT"/*) printf '%s\n' "$_f" >> "$TMP_SCOPED" ;;
+        esac
+      done < "$TMP_FILTERED"
+      ;;
+  esac
   cat "$TMP_SCOPED"
   rm -f "$TMP_SCOPED"
 else
