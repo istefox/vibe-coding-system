@@ -144,7 +144,10 @@ if [ "$status_val" = "failed" ]; then
 fi
 
 # Invariant 9: hitl_gates minimum count — conditional on chain_path (ADR-0017)
-gate_count="$(grep -c '^  - gate:' "$MANIFEST" 2>/dev/null || echo 0)"
+gate_count="$(grep -c '^  - gate:' "$MANIFEST" 2>/dev/null)"
+if [ -z "$gate_count" ]; then
+  gate_count=0
+fi
 chain_path_val="$(grep '^chain_path:' "$MANIFEST" | sed 's/^chain_path: *//;s/"//g' | head -1)"
 min_gates=4
 case "$chain_path_val" in

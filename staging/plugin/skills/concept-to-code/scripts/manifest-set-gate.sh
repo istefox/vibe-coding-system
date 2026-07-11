@@ -4,7 +4,7 @@
 # "file modified since read" error from mixing bash writes + Edit-tool writes.
 # Usage: manifest-set-gate.sh <manifest-path> <gate-num> <status> [<notes>]
 #   status e.g. approved | rejected | ran_review ; notes optional (empty -> null)
-# Exit: 0 ok | 1 usage | 2 not found | 3 gate not present
+# Exit: 0 ok | 1 usage | 2 not found | 3 gate not present | 4 write failed
 set -u
 
 if [ "$#" -lt "3" ] || [ "$#" -gt "4" ]; then
@@ -28,6 +28,9 @@ if ! grep -q "^  - gate: ${GATE}$" "$MANIFEST"; then
 fi
 
 NOW="$(date -u +%Y-%m-%dT%H:%M:%S+00:00)"
+TMP=""
+TMP2=""
+trap 'rm -f "${TMP:-}" "${TMP2:-}"' EXIT
 TMP="$(mktemp)"
 
 # Walk the hitl_gates list. While inside the target gate block, rewrite its
@@ -43,13 +46,15 @@ awk -v g="$GATE" -v st="$STATUS" -v ts="$NOW" -v notes="$NOTES" '
     next
   }
   { print }
-' "$MANIFEST" > "$TMP" && mv "$TMP" "$MANIFEST"
+' "$MANIFEST" > "$TMP" && mv "$TMP" "$MANIFEST" \
+  || { echo "manifest-set-gate: write failed for $MANIFEST" >&2; exit 4; }
 
 # Bump last_updated_at
 TMP2="$(mktemp)"
 awk -v ts="$NOW" '
   /^last_updated_at: / { print "last_updated_at: \"" ts "\""; next }
   { print }
-' "$MANIFEST" > "$TMP2" && mv "$TMP2" "$MANIFEST"
+' "$MANIFEST" > "$TMP2" && mv "$TMP2" "$MANIFEST" \
+  || { echo "manifest-set-gate: write failed for $MANIFEST" >&2; exit 4; }
 
 exit 0
