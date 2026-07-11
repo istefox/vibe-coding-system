@@ -100,8 +100,29 @@ Any failure writes an `aborted` report and stops. No dispatch, no push. Emit one
    file, but trust is still human: if untrusted, abort with the exact one-liner,
    "test-cmd not trusted — review `.claude/test-cmd` then run once:
    `bash ~/.claude/hooks/approve-test-cmd.sh \"$PWD\"`".
-6. **hook_verified known:** the roadmap's manifests carry `hook_verified` true or false, not null
-   (drives Workflow vs Agent-tool dispatch downstream).
+6. **hook_verified known (roadmap-wide, pre-flight):**
+   ```bash
+   _manifests=$(ls "$PWD"/docs/manifests/*.manifest.yml 2>/dev/null)
+   if [ -z "$_manifests" ]; then
+     echo "note: no manifests exist yet (Phase P has not created any feature manifest). Each"
+     echo "feature's manifest defaults hook_verified: false (safe Agent-tool fallback dispatch,"
+     echo "ADR-0016) at manifest-init.sh creation time, so there is nothing to validate yet and"
+     echo "this is not an abort condition. No global cross-run smoke-test record exists"
+     echo "(ADR-0029 Section 1, 'Gap flagged for issue #34') -- hook-verify-workflow.sh is"
+     echo "deliberately read-only and stateless; this check does not depend on one existing."
+   else
+     _bad=0
+     for _m in $_manifests; do
+       _hv=$(python3 -c "import yaml; m=yaml.safe_load(open('$_m')); print(m.get('hook_verified'))" 2>/dev/null)
+       if [ "$_hv" != "True" ] && [ "$_hv" != "False" ]; then
+         echo "✗ hook_verified: $_m has hook_verified=$_hv (must be true/false). Manifest is corrupted or was hand-edited; fix or re-init."
+         _bad=1
+       fi
+     done
+     [ "$_bad" -eq 0 ] || exit 1
+   fi
+   ```
+   (drives Workflow vs Agent-tool dispatch downstream, per manifest, exactly as before.)
 7. **`gh` authenticated:** `gh auth status` succeeds (needed to push and open PRs).
 8. **CI + branch protection:** if `.github/workflows/ci.yml` is absent, drop the template
    (`~/.claude/templates/ci.yml` at runtime; source `staging/project-templates/ci/ci.yml`),

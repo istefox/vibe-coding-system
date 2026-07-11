@@ -56,9 +56,19 @@ fi
 1. Read the file.
 2. **Reconcile completed manifests:** for every `- [ ] <feature>` line, derive its `topic-slug` (lowercase kebab, max 40 chars) and check:
    ```bash
-   ls -t "$_root"/docs/manifests/*<topic-slug>*.manifest.yml 2>/dev/null | head -1
+   # Anchor to the manifest naming convention (YYYY-MM-DD-<topic-slug>.manifest.yml) instead of a bare
+   # substring glob, then verify the winning candidate's own topic: field equals the derived slug
+   # exactly -- anchoring alone still lets one slug bind to a different slug sharing a hyphen-joined
+   # prefix (e.g. "export" vs "export-csv"; SPEC.md finding 3.10).
+   _slug="<topic-slug>"
+   _cand=$(ls -t "$_root"/docs/manifests/????-??-??-"$_slug".manifest.yml 2>/dev/null | head -1)
+   _manifest=""
+   if [ -n "$_cand" ]; then
+     _cand_topic=$(grep '^topic:' "$_cand" | sed 's/topic: *"//' | sed 's/".*//' | sed "s/topic: *//")
+     [ "$_cand_topic" = "$_slug" ] && _manifest="$_cand"
+   fi
    ```
-   Read `current_step` from the manifest. If `current_step = completed` → the chain ran but PROJECT.md was not updated (user skipped the Step 7 prompt). Auto-update: replace `- [ ] <feature>` with `- [x] <feature>  (completed: <YYYY-MM-DD>)` via bash sed. Emit: `"Auto-reconciled: <feature> ✓"`
+   Read `current_step` from `$_manifest` (skip this feature's reconciliation if `$_manifest` is empty — no verified manifest exists for it yet). If `current_step = completed` → the chain ran but PROJECT.md was not updated (user skipped the Step 7 prompt). Auto-update: replace `- [ ] <feature>` with `- [x] <feature>  (completed: <YYYY-MM-DD>)` via bash sed. Emit: `"Auto-reconciled: <feature> ✓"`
 3. After reconciliation: go to Step 2 (status).
 
 ---
@@ -161,9 +171,19 @@ in `nightly` mode; see the amended invariant below.
 
 Derive `topic-slug` from `<next-feature>`. Look for:
 ```bash
-ls -t "$_root"/docs/manifests/*<topic-slug>*.manifest.yml 2>/dev/null | head -1
+# Anchor to the manifest naming convention (YYYY-MM-DD-<topic-slug>.manifest.yml) instead of a bare
+# substring glob, then verify the winning candidate's own topic: field equals the derived slug
+# exactly -- anchoring alone still lets one slug bind to a different slug sharing a hyphen-joined
+# prefix (e.g. "export" vs "export-csv"; SPEC.md finding 3.10).
+_slug="<topic-slug>"
+_cand=$(ls -t "$_root"/docs/manifests/????-??-??-"$_slug".manifest.yml 2>/dev/null | head -1)
+_manifest=""
+if [ -n "$_cand" ]; then
+  _cand_topic=$(grep '^topic:' "$_cand" | sed 's/topic: *"//' | sed 's/".*//' | sed "s/topic: *//")
+  [ "$_cand_topic" = "$_slug" ] && _manifest="$_cand"
+fi
 ```
-Read `current_step`:
+Read `current_step` from `$_manifest` (empty means no verified in-progress manifest — fall through to the standard gate below, exactly as the existing 'no manifest' path already does):
 
 - If `current_step = step_4_session_boundary`: the planning phase already ran. Offer to resume:
   ```
@@ -244,9 +264,19 @@ If `_autopilot=false`:
 
 Find the manifest:
 ```bash
-ls -t "$_root"/docs/manifests/*<topic-slug>*.manifest.yml 2>/dev/null | head -1
+# Anchor to the manifest naming convention (YYYY-MM-DD-<topic-slug>.manifest.yml) instead of a bare
+# substring glob, then verify the winning candidate's own topic: field equals the derived slug
+# exactly -- anchoring alone still lets one slug bind to a different slug sharing a hyphen-joined
+# prefix (e.g. "export" vs "export-csv"; SPEC.md finding 3.10).
+_slug="<topic-slug>"
+_cand=$(ls -t "$_root"/docs/manifests/????-??-??-"$_slug".manifest.yml 2>/dev/null | head -1)
+_manifest=""
+if [ -n "$_cand" ]; then
+  _cand_topic=$(grep '^topic:' "$_cand" | sed 's/topic: *"//' | sed 's/".*//' | sed "s/topic: *//")
+  [ "$_cand_topic" = "$_slug" ] && _manifest="$_cand"
+fi
 ```
-Read `current_step`.
+Read `current_step` from `$_manifest` (empty falls into branch C below, exactly as today's 'manifest not found' case already does).
 
 **A — `current_step = completed`:**
 - Update PROJECT.md: `- [ ] <next-feature>` → `- [x] <next-feature>  (completed: <YYYY-MM-DD>)` via bash sed.
