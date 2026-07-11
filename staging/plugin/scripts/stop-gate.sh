@@ -62,8 +62,10 @@ done
 if [ -z "$ROOT" ]; then
   emit_block "Code modified without verification. Run the project tests, or declare the command in .claude/test-cmd (or 'NONE' to opt-out)."
 fi
-# v3: normalize ROOT for case-invariant trust lookup on Darwin.
-ROOT=$(norm_path "$ROOT")
+# v4: read/hash test-cmd on the pre-normalization (case-preserving) path — same fix as
+# approve-test-cmd.sh (issue #38). ROOT is normalized afterward, into a SEPARATE
+# variable, for the case-invariant trust LOOKUP only: run_with_timeout below still
+# needs to cd into the real path, so ROOT itself is never overwritten in this script.
 TCF="$ROOT/.claude/test-cmd"
 CMD=$(awk '{ l=$0; sub(/^[ \t]+/,"",l); sub(/[ \t]+$/,"",l); if(l=="" || substr(l,1,1)=="#") next; print l; exit }' "$TCF" 2>/dev/null)
 
@@ -76,7 +78,8 @@ sha256_of() {
 }
 H=$(sha256_of "$TCF") || { echo "stop-gate: no sha256 tool — fail-open" >&2; exit 0; }
 [ -z "$H" ] && exit 0
-LINE=$(printf '%s\t%s' "$H" "$ROOT")
+ROOT_NORM=$(norm_path "$ROOT")
+LINE=$(printf '%s\t%s' "$H" "$ROOT_NORM")
 TRUSTED=0
 [ -f "$TRUST" ] && grep -F -x -q -- "$LINE" "$TRUST" 2>/dev/null && TRUSTED=1
 

@@ -158,6 +158,13 @@ Add this PreToolUse entry to ~/.claude/settings.json (alongside the Edit|Write p
 
 The staged reference version is staging/user/settings.json. Review the live file first — it may have
 diverged. nightly-guard is inert outside a nightly run, so wiring it globally is safe.
+
+--- MANUAL STEP: retired hook cleanup (not auto-applied) ---
+backup-before-deploy.sh is retired (issue #38, ADR-0034): never vendored into staging/, so this
+sync script has no PAIRS entry and no way to remove it from a deployed tree. If a deployed
+~/.claude/hooks/backup-before-deploy.sh still exists, review it (it is wired to no hook event in
+settings.json and its body is a hardcoded one-shot backup dated 2026-05-19) and delete it by hand
+after confirming you no longer need that specific historical backup snapshot.
 NOTE
 
 [ "$APPLY" -eq 0 ] && printf '\n(dry-run — no files written. Re-run with --apply after reviewing.)\n'

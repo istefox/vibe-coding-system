@@ -35,6 +35,13 @@
 #   never saw them, so every Write was blocked even with a correct header.
 #   Fix: extract BOTH .text and .thinking content from assistant turns so the grep
 #   finds the header regardless of which block type the model used.
+#
+# v1.5 fix (2026-07-11, issue #38):
+# - permissionDecision was "block", outside the verified enum (allow/deny/ask/defer,
+#   ADR-0009). Changed to "deny" in both the jq template and the printf fallback.
+#   A future Claude Code update that starts strictly validating this enum would
+#   otherwise silently fail-open on every coder Edit/Write/MultiEdit — the exact
+#   opposite of what this guardrail exists to do.
 
 DIR="${PATTERN_ENFORCE_DIR:-$HOME/.claude/state/pattern-enforce}"
 LOG="$DIR/audit.log"
@@ -149,6 +156,6 @@ fi
 # Block: PATTERN missing
 log_audit "$SID" "$TOOL" "block" "PATTERN missing in window=$WINDOW"
 jq -nc --arg r "pre-flight-pattern-enforce: PATTERN: header missing in sliding window. ADR-0001 requires emitting \`PATTERN: <CATEGORY> | <payload>\` before every Edit/Write/MultiEdit. Example: \`PATTERN: MODIFY | path/file.py:42 rename var\`. Emit the header and retry. If the block persists, STOP and report to the orchestrator — do NOT attempt to bypass or disable this guardrail." \
-  '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"block",permissionDecisionReason:$r}}' 2>/dev/null \
-  || printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"block","permissionDecisionReason":"missing PATTERN header (see ADR-0001)"}}\n'
+  '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}' 2>/dev/null \
+  || printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"missing PATTERN header (see ADR-0001)"}}\n'
 exit 0

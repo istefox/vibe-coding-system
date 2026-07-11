@@ -145,7 +145,17 @@ POINTER="- $SLUG — step=$CUR_STEP, status=$CUR_STATUS, next: $NEXT_SHORT → c
 LOCK="$MEM_DIR/.chain-memory.lock"
 i=0
 while ! mkdir "$LOCK" 2>/dev/null; do
-  i=$((i+1)); [ "$i" -ge 40 ] && break; sleep 0.05 2>/dev/null || break
+  i=$((i+1))
+  if [ "$i" -ge 40 ]; then
+    # Timeout: a foreign lock is still held by another invocation. Do NOT proceed
+    # unlocked (would race the concurrent writer) and do NOT fall through to the
+    # trap below (would rmdir a lock this process never acquired — issue #38
+    # finding 2). Skip this MEMORY.md upsert event; the per-slug chain-history
+    # file above (section 7) is unaffected — it is not lock-protected because it
+    # is not shared across invocations the way MEMORY.md is.
+    exit 0
+  fi
+  sleep 0.05 2>/dev/null || exit 0
 done
 trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
 

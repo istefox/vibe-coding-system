@@ -22,12 +22,17 @@ while [ -n "$d" ] && [ "$i" -lt 40 ]; do
   d=$(dirname "$d"); i=$((i + 1))
 done
 [ -z "$ROOT" ] && { echo "approve-test-cmd: no .claude/test-cmd found ascending from $start" >&2; exit 1; }
-# v3: normalize ROOT for case-invariant trust storage on Darwin.
-ROOT=$(norm_path "$ROOT")
+# v4: hash the pre-normalization (case-preserving) path — this is the path that
+# actually resolves on disk. Normalizing ROOT first (issue #38) could silently
+# point shasum at a nonexistent lowercased path on a case-sensitive volume,
+# yielding an empty digest without aborting.
 TCF="$ROOT/.claude/test-cmd"
-if command -v shasum >/dev/null 2>&1; then H=$(shasum -a 256 "$TCF" | awk '{print $1}')
-elif command -v sha256sum >/dev/null 2>&1; then H=$(sha256sum "$TCF" | awk '{print $1}')
+if command -v shasum >/dev/null 2>&1; then H=$(shasum -a 256 "$TCF" 2>/dev/null | awk '{print $1}')
+elif command -v sha256sum >/dev/null 2>&1; then H=$(sha256sum "$TCF" 2>/dev/null | awk '{print $1}')
 else echo "approve-test-cmd: no sha256 tool available" >&2; exit 1; fi
+[ -z "$H" ] && { echo "approve-test-cmd: hash computation failed for $TCF (empty digest) — aborting, not writing an invalid trust line" >&2; exit 1; }
+# v4: normalize ROOT for case-invariant trust STORAGE only, after hashing.
+ROOT=$(norm_path "$ROOT")
 mkdir -p "$(dirname "$TRUST")" 2>/dev/null || true
 LINE=$(printf '%s\t%s' "$H" "$ROOT")
 if [ -f "$TRUST" ] && grep -F -x -q -- "$LINE" "$TRUST" 2>/dev/null; then
