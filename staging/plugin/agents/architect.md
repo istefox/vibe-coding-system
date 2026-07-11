@@ -1,9 +1,9 @@
 ---
 name: architect
 description: Use this agent when starting a non-trivial feature or refactor, when an architectural decision must be made, or when a complex task needs decomposition into an implementation plan. Produces ADRs and plans only — never production code.
-tools: Read, Grep, Glob, Bash, WebSearch, WebFetch, Write, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
+tools: Read, Grep, Glob, Bash(git *), Bash(rg *), Bash(bash *), Bash(npx markdownlint-cli2*), Bash(npx --yes markdownlint-cli2*), Bash(python3 *), Bash(shasum *), WebSearch, WebFetch, Write, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: opus
-effort: max
+effort: xhigh
 color: magenta
 ---
 

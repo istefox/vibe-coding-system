@@ -408,3 +408,17 @@ Key architectural decisions:
 - **find-skills body prose broader than the narrowed frontmatter** — deliberately left (SPEC cites line 3 only), disclosed for a future issue.
 
 Detail: `docs/architecture/ADR-0035-39-skill-text-corrections.md`.
+
+## Decisions from the agent-scoping chain (ADR-0036)
+
+Reconciles staging/plugin/agents/ frontmatter with blueprint section 3 (issue #40, last
+of the audit-fix roadmap).
+
+Key architectural decisions:
+- **permissionMode: plan NOT restored on architect** (deliberate divergence): plan mode blocks every Write regardless of allow rules (docs-verified), and the architect's sole deliverable is writing ADR+plan unattended.
+- **Bash restored-plus-widened asymmetrically:** blueprint git-scoping as the floor plus independently-evidenced verification tools (architect: bash/npx/python3/shasum; reviewer: bash/awk/python3 — narrower, untrusted-diff threat model). No add/commit/push for reviewer.
+- **effort pin → xhigh** (effort: max is session-only, inert in file frontmatter — docs-verified).
+- **researcher.md untouched; blueprint 3.8 syntax corrected** (mcpServers is a YAML list with type: stdio now) — inline-server deployment deferred pending a live smoke test, per ADR-0016/0029 precedent.
+- **Unscoped Write on architect has no frontmatter-level fix** (path patterns documented for Read/Grep/Edit only) — disclosed; closing it needs a dedicated hook (future issue).
+
+Detail: `docs/architecture/ADR-0036-40-agent-tool-scoping.md`.
