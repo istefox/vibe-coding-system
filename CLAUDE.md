@@ -353,3 +353,17 @@ Key architectural decisions:
 - **Two always-PASS assertions (B4/B6) labeled in the plan** so checkpoints aren't mistaken for fix evidence.
 
 Detail: `docs/architecture/ADR-0031-35-refactor-snapshot-deep-refactor.md`.
+
+## Decisions from the union-check chain (ADR-0032)
+
+Whole-line semantics for claude-md-slim's sole ADR-0019 content-preservation gate
+(issue #36): `## Git` no longer counts as preserved when only `## GitHub Actions` survives.
+
+Key architectural decisions:
+- **One constructed union temp file + `grep -qxF`** (concatenated, trailing-trimmed outputs) — no regex escaping surface, single pass.
+- **Trailing-whitespace tolerance made explicit:** the old substring bug provided it by accident; a naive `-x` fix would have regressed it (proven live with a strawman).
+- **Multiplicity is a documented exemption, not enforced:** ADR-0019 D6 is set-based, and the pipeline's own merge-dedup legitimately reduces occurrence counts; enforcing multiplicity would fail correct behavior. Documented in the SKILL text per the SPEC's fallback clause.
+- **New hermetic CI test file** (the skill's own run-tests.sh is $HOME-coupled and CI-dark — the third such skill found); the three pre-existing fixtures gain CI coverage for the first time.
+- **Orthogonal gap disclosed, not bundled:** --global DUPLICATE-removed sections never feed the union check — candidate follow-up issue.
+
+Detail: `docs/architecture/ADR-0032-36-claude-md-slim-union-check.md`.
