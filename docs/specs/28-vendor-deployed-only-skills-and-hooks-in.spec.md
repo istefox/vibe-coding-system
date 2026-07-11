@@ -45,7 +45,7 @@ None.
 - Vendored SKILL.md files may violate markdownlint: either they pass or the config gains a scoped ignore for `staging/plugin/skills/`.
 
 ## Success criteria
-- [x] Every listed file exists under `staging/` byte-identical to its deployed copy at vendoring time
-- [x] `sync-to-claude.sh` PAIRS extended with one entry per vendored file; a dry run right after vendoring must report zero diffs
-- [x] No file under `~/.claude` is created, modified, or deleted
-- [x] Existing docs-ci harnesses stay green; markdownlint passes on vendored SKILL.md files or the linter config gains a scoped ignore for `staging/plugin/skills/`
+- [ ] Every listed file exists under `staging/` byte-identical to its deployed copy at vendoring time
+- [ ] `sync-to-claude.sh` PAIRS extended with one entry per vendored file; a dry run right after vendoring must report zero diffs
+- [ ] No file under `~/.claude` is created, modified, or deleted
+- [ ] Existing docs-ci harnesses stay green; markdownlint passes on vendored SKILL.md files or the linter config gains a scoped ignore for `staging/plugin/skills/`
