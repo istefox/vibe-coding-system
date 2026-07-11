@@ -97,34 +97,42 @@ Behavior:
     ```
     The snapshot label `chain-<topic-slug>` is used at the end (Step 7) to compute the cost of this chain run.
 6c. **Planning placeholder `.claude/test-cmd` (ADR-0014 ext):** if `<project-root>/.claude/test-cmd` does **NOT** exist, write it with the single line `NONE`. Reason: during planning only SPEC/manifest/ADR/plan are produced (no code), but any Write marks the session "dirty" — without test-cmd the stop gate would block on planning artifacts. `NONE` is the documented opt-out for the gate. **NEVER overwrite an existing test-cmd** (a brownfield project may have a real approved one). Set `test_cmd_placeholder: true` in the manifest. Will be replaced at Gate 2 by the real command proposed by the architect (Step 2).
-7. **Gate 0 — Chain routing (ADR-0017):**
+7. **Gate 0 — Chain routing (ADR-0017):** sets `chain_path` only. No branch here performs a
+   `manifest-transition.sh` call — the chain's single routing transition out of `step_0_init`
+   happens later, at Gate 0d (step 8c below).
 
-   **Fast path (`forced_path` set from step 1):** emit `"→ chain_path: <forced_path> (explicit — Gate 0 skipped)"`, set `chain_path = forced_path` in manifest, set `gate0.auto_detect_reason = "explicit:<forced_path>"`, then jump directly:
-   - `express` → transition `step_0_init → step_e1_plan`; go to Express path (§4 Express).
-   - `hybrid` → transition `step_0_init → step_h1_interview`; go to Hybrid path (§4 Hybrid).
-   - `standard` → proceed to step 8 below (standard path).
+   **Fast path (`forced_path` set from step 1):** emit `"→ chain_path: <forced_path> (explicit — Gate 0 skipped)"`, set `chain_path = forced_path` in manifest, set `gate0.auto_detect_reason = "explicit:<forced_path>"`. Proceed to step 8 below, for all three values of `forced_path` (`express`/`hybrid`/`standard`) alike.
 
    **Normal path (`forced_path = null`):** compute auto-detect recommendation:
    - If `spec_adr_exist=true` → force recommend **standard** (brownfield always goes full chain).
    - Otherwise majority vote: `file_vote` + `keyword_vote` + (tie-break: if file_vote=express and keyword_vote=express → express; else hybrid). Record as `auto_detect_reason` string, e.g. `"file_estimate=7,file_vote=express,keyword_vote=hybrid,spec_adr=false → hybrid"`.
 
    Show Gate 0 via `AskUserQuestion` (see §5 Gate 0 for full display) and wait for click.
-   - `[e]` → set `chain_path: express`; transition `step_0_init → step_e1_plan`; go to Express path (§4 Express).
-   - `[h]` → set `chain_path: hybrid`; transition `step_0_init → step_h1_interview`; go to Hybrid path (§4 Hybrid).
-   - `[s]` → set `chain_path: standard`; proceed to step 8 below (standard path).
+   - `[e]` → set `chain_path: express`; proceed to step 8 below.
+   - `[h]` → set `chain_path: hybrid`; proceed to step 8 below.
+   - `[s]` → set `chain_path: standard`; proceed to step 8 below.
    - `[a]` → abort chain.
 
    Write `gate0.chain_path` and `gate0.auto_detect_reason` in the manifest via inline sed (no helper script for nested YAML yet — see §3 helper scripts note).
 8. **Gate 0b (anonymize — conditional):** run `~/.claude/skills/clean-public-repo/scripts/detect-public-remote.sh <project-root>` (the script lives in the `clean-public-repo` skill, NOT in `concept-to-code/scripts/`).
-   - output `silent` → Gate 0b **silent no-op**: UX unchanged, `anonymize` stays `false`.
+   - output `silent` → Gate 0b **silent no-op**: UX unchanged, `anonymize` stays `false`. Proceed to step 8b.
    - output `public` → show Gate 0b box and wait for input:
-     - `[y]` → set `manifest.anonymize = true` in the manifest (via `scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed.
-     - `[n]` → `anonymize` stays `false`; proceed.
+     - `[y]` → set `manifest.anonymize = true` in the manifest (via `scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed to step 8b.
+     - `[n]` → `anonymize` stays `false`; proceed to step 8b.
      - `[a]` → abort chain.
    **Decision is exclusively the user's: never auto-applied.**
+8b. **Gate 0c (humanize):** see §5 Gate 0c for the full trigger logic and display; proceed to
+   step 8c once it resolves (silently or via click).
+8c. **Gate 0d (scaffolding):** see §5 Gate 0d for the full git-auto-detect / license / Xcode /
+   commit survey. Gate 0d performs the chain's **single** `current_step` transition out of
+   `step_0_init`: `step_0_init → gate_0d_scaffolding`, then immediately `gate_0d_scaffolding →
+   step_1_interview` (`chain_path=standard`/null) or `→ step_e1_plan` (express) or `→
+   step_h1_interview` (hybrid) — see `SKILL.md:1355-1358` for the exact transition block,
+   unmodified by this task.
 
-9. Transition `step_0_init → step_1_interview`. If `mode=brownfield` → Step 1 is a no-op
-   (see §4 Step 1). Otherwise → invoke `interview-driver` skill.
+For `chain_path=standard` with `mode=brownfield`, Step 1 is a no-op (§4 Step 1 already handles
+this); otherwise execution continues in the matching path's own Step 1 definition (§4 Step 1 /
+Step E1 / Step H1), reached via the routing transition in step 8c above.
 
 **Form B — Resume from manifest (use in fresh session after Step 4):**
 ```
@@ -269,9 +277,17 @@ Any text output here is a chain-stop bug. Proceed by running tools in sequence:
 1. Run `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-artifact.sh <manifest-path> spec <project-root>/SPEC.md`
 2. **Stamp slug marker (idempotent):** run:
    ```bash
-   grep -q '\*\*Topic slug:\*\*' "<project-root>/SPEC.md" || \
-     sed -i.bak '/^# /a\\n**Topic slug:** <topic-slug>' "<project-root>/SPEC.md"
+   grep -q '\*\*Topic slug:\*\*' "<project-root>/SPEC.md" || {
+     cp "<project-root>/SPEC.md" "<project-root>/SPEC.md.bak" &&
+     awk -v slug="<topic-slug>" '
+       { print }
+       !done && /^# / { print ""; print "**Topic slug:** " slug; done=1 }
+     ' "<project-root>/SPEC.md" > "<project-root>/SPEC.md.tmp" &&
+     mv "<project-root>/SPEC.md.tmp" "<project-root>/SPEC.md"
+   }
    ```
+   `awk`'s basic pattern-match/`print` semantics used here are POSIX and behave identically
+   across BSD awk (macOS) and GNU/`mawk` (Ubuntu) — no OS branch needed.
 3. Run `bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest-path> gate_1_spec_review`
 4. Present Gate 1 (AskUserQuestion — see §5 Gate 1).
 
@@ -816,9 +832,15 @@ Context hint: "<topic-full-title> (ADR: <manifest.artifacts.adr>)"
 
 The skill manages the HITL gate (AskUserQuestion), Conventional Commits message generation, and the PR option internally. The orchestrator does nothing after invocation: the skill closes the cycle on its own.
 
-**Post-commit push (conditional on manifest.initial_commit_push = "push"):**
+**Post-commit push (conditional on `manifest.initial_commit_push = "push" AND manifest.autopilot != true`):**
 
-After the commit skill completes successfully, if `manifest.initial_commit_push = "push"`:
+This block is skipped unconditionally when `autopilot = true` — `concept-to-code`'s own autopilot
+mode never pushes unattended (ADR-0020 D2). No separately-orchestrated automated publish flow is
+threaded through here: any such flow runs entirely outside this block, through
+`project-conductor`'s `publish-feature.sh`, strictly after this chain hands back a local commit
+(ADR-0022 D5/D6) — this file stays agnostic to that outer orchestration by design.
+
+After the commit skill completes successfully, if `manifest.initial_commit_push = "push" AND manifest.autopilot != true`:
 
 1. Resolve remote URL from `manifest.git_remote_url`. If null, prompt user:
    ```
@@ -884,7 +906,7 @@ No sub-agents. No fresh session. No SPEC, ARCH, or ADR. The orchestrator execute
 
 #### Step E1 — Plan (EnterPlanMode + superpowers allowed)
 
-Immediately after Gate 0 selects express:
+Immediately after Gate 0d routes to `step_e1_plan`:
 
 1. Run the `using-superpowers` check. If a superpowers skill applies (`writing-plans`, `brainstorming`, etc.), invoke it now before entering plan mode.
 2. Emit: "Express path active — entering plan mode..."
@@ -940,11 +962,18 @@ bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest-p
 ```
 Then proceed to Step E4.
 
-`Commit later` / `Abort`:
+`Commit later`:
 ```bash
 bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest-path> completed completed
 ```
-No commit skill invoked.
+No commit skill invoked. Implementation is complete; the user will commit manually later.
+
+`Abort`:
+```bash
+bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest-path> aborted aborted
+```
+No commit skill invoked. Matches the option's own description ("Stop here. Changes remain in the
+working tree.") — an abandonment, not a completion.
 
 #### Step E4 — Commit
 
@@ -1114,8 +1143,8 @@ After click:
   open('$manifest', 'w').write(txt)
   "
   ```
-- `[e]` → transition `step_0_init → step_e1_plan`. Go to Express path (§4 Express).
-- `[h]` → transition `step_0_init → step_h1_interview`. Go to Hybrid path (§4 Hybrid).
+- `[e]` → set `chain_path: express`. Proceed to step 8 (Gate 0b) in §2 Form A — the path begins after Gate 0d routes to `step_e1_plan` (§4 Express).
+- `[h]` → set `chain_path: hybrid`. Proceed to step 8 (Gate 0b) in §2 Form A — the path begins after Gate 0d routes to `step_h1_interview` (§4 Hybrid).
 - `[s]` → proceed to step 8 (Gate 0b) in §2 Form A. Standard path continues unchanged.
 - `[auto]` → set `chain_path: standard` and `manifest.autopilot: true` via bash sed. **Pre-flight check:** verify `<project-root>/SPEC.md` exists. If absent: emit error `"Autopilot requires an existing SPEC.md (brownfield). Run /skill concept-to-code without autopilot to generate the SPEC first."` and abort chain. If present: emit `"Autopilot mode ON — all HITL gates will be auto-approved."` then proceed to step 8 (Gate 0b) in §2 Form A. Standard path continues with autopilot=true active.
 
@@ -1184,7 +1213,7 @@ options:
 
 Trigger: post Gate 0c, same `step_0_init`. Always fires (unconditional: every new chain needs scaffolding decisions recorded).
 
-**[Autopilot default: skip AskUserQuestion entirely. Auto-set: `license: "None"`, `xcode_project: false`. For git: use auto-detect results (Outcome A/B/C) same as manual path. For commit: if `_git_remote` non-empty → `initial_commit_push: "push"` (remote already configured); else → `initial_commit_push: "commit"`. Emit: "Gate 0d: autopilot — scaffolding auto-configured ✓". Skip all secondary prompts (remote URL, anonymize re-confirm).]**
+**[Autopilot default: skip AskUserQuestion entirely. Auto-set: `license: "None"`, `xcode_project: false`. For git: use auto-detect results (Outcome A/B/C) same as manual path. For commit: always `initial_commit_push: "commit"`, regardless of remote state (autopilot never pushes unattended; any separately-orchestrated automated publish flow runs after a local commit, never through this field — ADR-0020 D2). Emit: "Gate 0d: autopilot — scaffolding auto-configured ✓". Skip all secondary prompts (remote URL, anonymize re-confirm).]**
 
 **Step 0 — Git auto-detect (runs before AskUserQuestion):**
 
@@ -1498,7 +1527,23 @@ After "Edit" / "Other" with correct command provided by user:
 After "Skip": `manifest.test_cmd_placeholder = true`. Transition to `step_3_project_memory`. Proceed to Step 3.
 After "Abort": terminate the chain.
 
-**[Autopilot default: "Approve" → run `approve-test-cmd.sh` and proceed. Emit: "Gate 2b: autopilot — test-cmd auto-approved ✓"]**
+**[Autopilot default: never call `approve-test-cmd.sh` unconditionally (ADR-0014, ADR-0020 D4 —
+TOFU trust must pre-exist, never auto-granted in autopilot). Probe pre-existing trust read-only,
+the exact same mechanism as the Form-B resume-path guard (`SKILL.md:152-158`, unmodified):
+```bash
+TCF="<project-root>/.claude/test-cmd"
+H=$(shasum -a 256 "$TCF" | awk '{print $1}')
+ROOT_N=$(cd "<project-root>" && pwd -P | tr '[:upper:]' '[:lower:]')
+grep -qxF "${H}	${ROOT_N}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null \
+  && echo "TRUSTED" || echo "NOT_TRUSTED"
+```
+- `TRUSTED` → the SHA-pinned `(hash, normalized-root)` pair already exists from a prior
+  interactive approval; **reading** existing trust is not **granting** it. Proceed silently to
+  `step_3_project_memory`. Emit: "Gate 2b: autopilot — pre-existing trust found, proceeding ✓".
+- `NOT_TRUSTED → autopilot must never establish trust unattended` — do exactly what the
+  interactive "Skip" branch above does: `manifest.test_cmd_placeholder = true`; transition to
+  `step_3_project_memory`. Emit: "Gate 2b: autopilot — test-cmd not yet trusted, deferring to a
+  human session (test_cmd_placeholder=true) ✓". Never call `approve-test-cmd.sh` on this branch.]**
 
 ---
 

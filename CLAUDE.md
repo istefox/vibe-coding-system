@@ -282,3 +282,18 @@ Key architectural decisions:
 - **Staging-only until human sync:** the deployed copy keeps the P1 leak until `sync-to-claude.sh --apply` — flagged with elevated urgency in the report.
 
 Detail: `docs/architecture/ADR-0026-30-clean-public-repo-private-history.md`.
+
+## Decisions from the c2c gate-fixes chain (ADR-0027)
+
+Five audit fixes to the vendored concept-to-code skill (issue #31): BSD-safe slug stamp,
+Gate 2b TOFU probe instead of unattended approval, Gate 0d autopilot commit-only, one
+canonical Gate 0b/0c/0d order, and chain_path-conditional manifest invariant 7.
+
+Key architectural decisions:
+- **Slug stamp via awk + temp file + mv** (GNU-only `sed a\` removed); verified live on Darwin BSD sed/awk, idempotent.
+- **Gate order fix needs zero manifest-transition.sh changes:** all needed pairs already exist; Gates 0c/0d were written but structurally unreachable. Behavior-visible consequence: Express/Hybrid now get Gates 0b/0c/0d too.
+- **Gate 2b autopilot:** read-only TOFU-trust probe (reuses the Form-B resume mechanism); never calls approve-test-cmd.sh unattended.
+- **Step 7 push:** double-guarded — Gate 0d autopilot always records `initial_commit_push: "commit"` AND Step 7 checks `autopilot != true`; nightly publish lives in publish-feature.sh, not c2c.
+- **Invariant 7 conditional on chain_path** in manifest-validate.sh; Gate E3 Abort records `aborted`, not completed.
+
+Detail: `docs/architecture/ADR-0027-31-c2c-bsd-slug-autopilot-gates.md`.

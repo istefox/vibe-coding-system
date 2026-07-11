@@ -106,16 +106,33 @@ case "$status_val" in
 esac
 
 # Invariant 7: if status=completed, artifacts spec/adr/plan must be non-null (absolute paths)
+# -- conditional on chain_path (ADR-0017/ADR-0027): Express produces none of the three (no
+# sub-agents, no SPEC/ARCH/ADR); Hybrid produces spec only (plan mode replaces the architect
+# step, no ADR/plan); Standard/legacy (chain_path=standard, null, or absent) keeps the
+# original unconditional three-way check, byte-identical wording.
+chain_path_val="$(grep '^chain_path:' "$MANIFEST" | sed 's/^chain_path: *//;s/"//g' | head -1)"
 if [ "$status_val" = "completed" ]; then
-  if ! grep -Eq '^  spec: "/[^"]+"$' "$MANIFEST"; then
-    fail "status=completed but artifacts.spec is null or not a quoted absolute path"
-  fi
-  if ! grep -Eq '^  adr: "/[^"]+"$' "$MANIFEST"; then
-    fail "status=completed but artifacts.adr is null or not a quoted absolute path"
-  fi
-  if ! grep -Eq '^  plan: "/[^"]+"$' "$MANIFEST"; then
-    fail "status=completed but artifacts.plan is null or not a quoted absolute path"
-  fi
+  case "$chain_path_val" in
+    express)
+      : # no artifact files expected for the express path; invariant 7 does not apply
+      ;;
+    hybrid)
+      if ! grep -Eq '^  spec: "/[^"]+"$' "$MANIFEST"; then
+        fail "status=completed (chain_path=hybrid) but artifacts.spec is null or not a quoted absolute path"
+      fi
+      ;;
+    *)
+      if ! grep -Eq '^  spec: "/[^"]+"$' "$MANIFEST"; then
+        fail "status=completed but artifacts.spec is null or not a quoted absolute path"
+      fi
+      if ! grep -Eq '^  adr: "/[^"]+"$' "$MANIFEST"; then
+        fail "status=completed but artifacts.adr is null or not a quoted absolute path"
+      fi
+      if ! grep -Eq '^  plan: "/[^"]+"$' "$MANIFEST"; then
+        fail "status=completed but artifacts.plan is null or not a quoted absolute path"
+      fi
+      ;;
+  esac
 fi
 
 # Invariant 8: if status=failed, failure.failed_step must be non-null
