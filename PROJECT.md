@@ -18,4 +18,4 @@ Auto-generated roadmap from issues labeled `prep` (ADR-0023).
 - [x] vibe-status: recursion guard and active-chains wiring  (issue #37)  (completed: 2026-07-11)
 - [x] Hook hardening: enum value, lock ownership, trust hash  (issue #38)  (completed: 2026-07-11)
 - [x] Skill text corrections across five standalone skills  (issue #39)  (completed: 2026-07-11)
-- [ ] Agent tool scoping per blueprint section 3  (issue #40)
+- [x] Agent tool scoping per blueprint section 3  (issue #40)  (completed: 2026-07-11)
