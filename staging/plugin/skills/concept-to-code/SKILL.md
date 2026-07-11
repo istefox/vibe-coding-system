@@ -548,12 +548,17 @@ Record by exit code:
   (the helper supports any top-level unquoted boolean key). Proceed to the Workflow dispatch path.
 - **exit 1 (REFUTED)** → `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> hook_verified false`.
   Proceed to Fallback (Agent-tool batch dispatch). The printed reason names which failure occurred:
-  no decision recorded after the marker (hooks disabled, or the workflow never dispatched), or every
+  no decision recorded after the marker (hooks disabled, or the workflow never dispatched), every
   workflow agent reported `workflow-subagent` (the dispatch omitted `agentType: 'coder'` — a
-  workflow-script bug, not a platform limitation).
-- **exit 3 (INCONCLUSIVE)** → record NOTHING, do not call `manifest-set-flag.sh`. The audit log is
-  missing, so `pre-flight-pattern-enforce.sh` is not installed. Fix the install, then re-run.
-  **Never record `false` on exit 3.** A missing log is not evidence that hooks fail to fire.
+  workflow-script bug, not a platform limitation), or every decision after the marker belongs to a different, concurrent Claude Code session
+  (`CLAUDE_CODE_SESSION_ID` was set and filtered them out — issue #33).
+- **exit 3 (INCONCLUSIVE)** → record NOTHING, do not call `manifest-set-flag.sh`. Either the audit log
+  is missing (`pre-flight-pattern-enforce.sh` is not installed — fix the install, then re-run), or
+  `CLAUDE_CODE_SESSION_ID` was unavailable and the post-marker window mixed rows from more than one
+  concurrent Claude Code session, so the check cannot tell which one is this session's (re-run when no
+  other session is active, or on a CLI version that sets `CLAUDE_CODE_SESSION_ID` — issue #33). The
+  printed `reason=` line names which of the two applies. **Never record `false` on exit 3.** Neither
+  cause is evidence that hooks fail to fire.
 
 Do not run the check while another coder agent is working in this session: the audit log does not
 distinguish a workflow coder from an Agent-tool coder.
