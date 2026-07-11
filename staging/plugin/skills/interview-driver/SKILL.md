@@ -1,13 +1,12 @@
 ---
 name: interview-driver
-description: This skill should be used when starting a new project or non-trivial feature and a SPEC.md must be produced by interviewing the user in depth with the AskUserQuestion tool. Triggers include "intervistami", "facciamo lo SPEC", "nuovo progetto da zero".
-disable-model-invocation: true
+description: This skill should be used when starting a new project or non-trivial feature and a SPEC.md must be produced by interviewing the user in depth with the AskUserQuestion tool. Triggers include "interview me", "let's spec it", "new project from scratch", and invocation from the concept-to-code chain orchestrator (Step 1).
 ---
 
-L'utente vuole costruire: $ARGUMENTS
+The user wants to build: $ARGUMENTS
 
-Intervistalo in profondità con il tool AskUserQuestion. Copri: implementazione tecnica, UI/UX (se applicabile), edge case, trade-off, vincoli operativi, Definition of Done.
+Interview them in depth with the AskUserQuestion tool. Cover: technical implementation, UI/UX (if applicable), edge cases, trade-offs, operational constraints, Definition of Done.
 
-Non fare domande ovvie: scava sui punti difficili. Una domanda alla volta, max 3-4 opzioni per domanda. Continua finché non hai coperto tutto.
+Do not ask obvious questions: dig into the hard points. One question at a time, max 3-4 options per question. Continue until everything is covered.
 
-Poi scrivi `SPEC.md` nella cartella corrente con: obiettivi, scope, stack, architettura, modello dati, API, flussi UI, edge case, success criteria. Niente codice in questa fase.
+Then write `SPEC.md` in the current directory with: objectives, scope, stack, architecture, data model, API, UI flows, edge cases, success criteria. No code at this stage.

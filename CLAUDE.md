@@ -254,3 +254,17 @@ Key architectural decisions:
 - **`pairs-completeness.test.sh`:** structural check only (every PAIRS src exists in staging), never byte-identity against live `~/.claude` — staging is expected to move ahead of deployed during the roadmap.
 
 Detail: `docs/architecture/ADR-0024-28-vendor-deployed-only-skills-and-hooks.md`.
+
+## Decisions from the staging-refresh chain (ADR-0025)
+
+Refresh of every stale `staging/` file that has a deployed counterpart (issue #29): 8 agents,
+7 repo-native SKILL.md, protect-files/auto-format hooks, user CLAUDE.md/rules, settings.json;
+removes retired `project-bootstrap`; PAIRS gains `goal-loop` and `research-prompt`.
+
+Key architectural decisions:
+- **Full byte-identical mirror (`cp -p`), no selective patching:** undocumented drift (architect effort `max` vs blueprint `xhigh`, reviewer extra tools) is mirrored as-is — reconciling toward blueprint intent is issue #40's job.
+- **PAIRS grows by exactly two entries** (goal-loop, research-prompt): `docs/RUNBOOK.md` bulk copy already reaches every refreshed file; PAIRS stays the lightweight single-file path.
+- **settings.json via deterministic `jq del()`** of machine-local keys (model, theme, tui, editorMode, statusLine, cleanupPeriodDays); stays outside PAIRS.
+- **Safety gap flagged, not fixed:** deployed `interview-driver`/`fastapi-react-vibe` lost `disable-model-invocation: true` (contradicts blueprint /loop safety design); mirrored per SPEC, unowned by #28-#40, needs a dedicated issue.
+
+Detail: `docs/architecture/ADR-0025-29-refresh-stale-staging-copies.md`.

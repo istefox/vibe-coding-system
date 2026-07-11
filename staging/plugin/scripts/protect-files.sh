@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -u
 INPUT=$(cat)
-FILE_PATH=$(printf '%s\n' "$INPUT" | jq -r '.tool_input.file_path // empty')
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
 [ -z "$FILE_PATH" ] && exit 0
 PROTECTED=(".env" ".env." "secrets" ".pem" ".key" "credentials" "/.git/" "package-lock.json")
 for p in "${PROTECTED[@]}"; do
   if [[ "$FILE_PATH" == *"$p"* ]]; then
-    printf 'Blocked: %s matches protected pattern '\''%s'\''. Ask Stefano explicitly.\n' "$FILE_PATH" "$p" >&2
+    echo "Blocked: $FILE_PATH matches protected pattern '$p'. Ask Stefano explicitly." >&2
     exit 2
   fi
 done

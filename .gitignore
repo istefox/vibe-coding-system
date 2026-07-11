@@ -13,6 +13,7 @@
 .claude/scheduled_tasks.lock
 .claude/agent-memory-local/
 .claude/worktrees/
+.claude/nightly-state/
 *.bak
 *.bak-*
 
@@ -26,3 +27,4 @@
 .remember/remember.md
 .claude/.triage-fix-last-main.json
 .claude/.triage-fix-last-feat_28-vendor-deployed-only-skills-and-hooks.json
+.claude/.triage-fix-last-feat_29-refresh-stale-staging-copies.json

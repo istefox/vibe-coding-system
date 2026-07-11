@@ -1,16 +1,16 @@
 ---
 name: claude-md-generator
-description: This skill should be used when SPEC.md and ARCH.md exist and a lean Anthropic-compliant project CLAUDE.md must be generated. Triggers include "genera il CLAUDE.md di progetto", "crea il claude.md di root".
+description: This skill should be used when SPEC.md and ARCH.md exist and a lean Anthropic-compliant project CLAUDE.md must be generated.
 ---
 
-Leggi `SPEC.md` e `ARCH.md` della cartella corrente.
+Read `SPEC.md` and `ARCH.md` from the current directory.
 
-Scegli il template appropriato fra i project-template del sistema (zona project-templates):
-- stack SwiftUI/iOS → `ios-swiftui`
-- web app FastAPI+React → `app-fastapi-react`
-- sito web semplice/WordPress/vanilla → `web-vanilla-wordpress`
+Choose the appropriate template from the system project-templates (project-templates zone):
+- SwiftUI/iOS stack → `ios-swiftui`
+- FastAPI+React web app → `app-fastapi-react`
+- Simple website/WordPress/vanilla → `web-vanilla-wordpress`
 
-Genera `CLAUDE.md` di root **lean e Anthropic-compliant**:
-- Eredita il `~/.claude/CLAUDE.md` globale: NON duplicare lingua, HITL, git, sicurezza, convenzioni di stile (sono nelle rules path-scoped).
-- Includi solo ciò che Claude non può inferire dal codice: comandi build/test reali, decisioni architetturali del progetto, struttura cartelle scelta, gotcha.
-- Target < 100 righe. Niente stack-specific che appartiene alle rules.
+Generate a root `CLAUDE.md` that is **lean and Anthropic-compliant**:
+- Inherits `~/.claude/CLAUDE.md` globally: do NOT duplicate language, HITL, git, security, or style conventions (those live in path-scoped rules).
+- Include only what Claude cannot infer from the code: real build/test commands, project architectural decisions, chosen folder structure, gotchas.
+- Target < 100 lines. No stack-specific content that belongs in rules.

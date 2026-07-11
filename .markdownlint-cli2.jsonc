@@ -20,7 +20,8 @@
     "MD056": true
   },
   "globs": ["**/*.md"],
-  // staging/plugin/skills: vendored verbatim from ~/.claude (ADR-0024) — content fidelity to the
-  // deployed copy takes precedence over lint compliance for this subtree.
-  "ignores": ["node_modules", "docs/superpowers", "staging/plugin/skills"]
+  // staging/plugin/skills and staging/plugin/agents: mirrored verbatim from ~/.claude
+  // (ADR-0024, ADR-0025) — content fidelity to the deployed copy takes precedence over
+  // lint compliance for these subtrees.
+  "ignores": ["node_modules", "docs/superpowers", "staging/plugin/skills", "staging/plugin/agents"]
 }

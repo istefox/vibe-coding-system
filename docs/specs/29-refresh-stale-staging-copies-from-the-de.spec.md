@@ -42,8 +42,8 @@ None.
 - Deployed fail-open jq handling in protect-files.sh/auto-format.sh is deliberate; do not "fix" it during refresh.
 
 ## Success criteria
-- [x] Zero diff between each refreshed staged file and its deployed counterpart (minus the documented settings.json exclusions)
-- [x] `grep -c PATTERN staging/plugin/agents/coder.md` returns nonzero; `grep docs/agent-notes staging/plugin/agents/*.md` returns nothing
-- [x] staged commit SKILL.md contains `--autopilot`; staged interview-driver has no `disable-model-invocation`
-- [x] project-bootstrap gone from staging and from the two blueprint lines; PAIRS covers goal-loop and research-prompt
-- [x] No file under `~/.claude` modified
+- [ ] Zero diff between each refreshed staged file and its deployed counterpart (minus the documented settings.json exclusions)
+- [ ] `grep -c PATTERN staging/plugin/agents/coder.md` returns nonzero; `grep docs/agent-notes staging/plugin/agents/*.md` returns nothing
+- [ ] staged commit SKILL.md contains `--autopilot`; staged interview-driver has no `disable-model-invocation`
+- [ ] project-bootstrap gone from staging and from the two blueprint lines; PAIRS covers goal-loop and research-prompt
+- [ ] No file under `~/.claude` modified

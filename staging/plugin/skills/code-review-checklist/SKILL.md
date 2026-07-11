@@ -1,17 +1,17 @@
 ---
 name: code-review-checklist
-description: This skill should be used when a structured code review of recent changes is needed, producing findings grouped by severity. Triggers include "review strutturata", "checklist di review", and use by the reviewer agent.
+description: This skill should be used when a structured code review of recent changes is needed, producing findings grouped by severity. Used by the reviewer agent.
 ---
 
-Esegui `git diff` e analizza le modifiche recenti.
+Run `git diff` and analyze recent changes.
 
-Output per severità:
+Output by severity:
 
-## BLOCKER (fix prima del merge)
+## BLOCKER (fix before merge)
 ## MAJOR (should fix)
 ## MINOR (consider fixing)
-## NIT (style/preferenza)
+## NIT (style/preference)
 
-Per ogni issue: `file:line` + descrizione + suggested fix.
+For each issue: `file:line` + description + suggested fix.
 
-Categorie obbligatorie: Sicurezza (input validation, secret, auth), Correttezza (logica, edge case, error handling), Performance (N+1, blocking call), Consistenza (pattern, ADR), Test coverage.
+Mandatory categories: Security (input validation, secrets, auth), Correctness (logic, edge cases, error handling), Performance (N+1, blocking calls), Consistency (patterns, ADRs), Test coverage.
