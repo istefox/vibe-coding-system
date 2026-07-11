@@ -194,8 +194,10 @@ if [ "$USE_GIT" = "1" ]; then
 
   CURRENT_SHA=""
   while read -r LOG_LINE; do
-    # Lines starting with short SHA (7 hex chars + space) mark new commits
-    MAYBE_SHA=$(echo "$LOG_LINE" | grep -Eo '^[0-9a-f]{7} ')
+    # Lines starting with a short SHA (7-40 hex chars + space) mark new commits. git's %h
+    # honors core.abbrev (auto by default, can exceed 7 well before a repo is large), so
+    # the boundary must not require an exact 7-char match.
+    MAYBE_SHA=$(echo "$LOG_LINE" | grep -Eo '^[0-9a-f]{7,40} ')
     if [ -n "$MAYBE_SHA" ]; then
       CURRENT_SHA=$(echo "$MAYBE_SHA" | tr -d ' ')
     fi

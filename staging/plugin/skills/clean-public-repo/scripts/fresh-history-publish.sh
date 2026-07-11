@@ -11,6 +11,7 @@
 # Exit codes:
 #   0 — success (dry-run printed plan, or prepare completed local setup)
 #   2 — not a git repository or precondition error
+#   5 — safety abort: a .git-backup-*.tar.gz path was staged (would leak private history)
 #
 # Bash 3.2-clean: no assoc arrays, no mapfile, no ${v^^}, no <(), no <<<
 set -u
@@ -36,6 +37,15 @@ if [ $? -ne 0 ]; then
 fi
 
 # -----------------------------------------------------------------------
+# Resolve the true repository top-level (ROOT may be any subdirectory of it)
+# -----------------------------------------------------------------------
+GIT_TOPLEVEL=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$GIT_TOPLEVEL" ]; then
+  err "Could not resolve the repository top-level directory for: $ROOT"
+  exit 2
+fi
+
+# -----------------------------------------------------------------------
 # Warn if working tree is dirty
 # -----------------------------------------------------------------------
 DIRTY=$(git -C "$ROOT" status --porcelain 2>/dev/null)
@@ -49,7 +59,9 @@ fi
 # -----------------------------------------------------------------------
 TS=$(date +%Y%m%d-%H%M%S)
 BACKUP_NAME=".git-backup-${TS}.tar.gz"
-BACKUP_PATH="${ROOT}/${BACKUP_NAME}"
+# Written outside the work tree (the true top-level's parent), never inside ROOT: this is
+# what keeps the private-history backup from ever being swept up by `git add -A` below.
+BACKUP_PATH="$(dirname "$GIT_TOPLEVEL")/${BACKUP_NAME}"
 
 # -----------------------------------------------------------------------
 # MODE: dry-run — print the plan, mutate NOTHING
@@ -58,12 +70,15 @@ if [ "$MODE" = "dry-run" ]; then
   info "=== FRESH-HISTORY PUBLISH — DRY-RUN PLAN ==="
   info ""
   info "Step 1 — Backup (would create):"
-  info "  tar -czf \"${BACKUP_PATH}\" -C \"${ROOT}\" .git"
+  info "  tar -czf \"${BACKUP_PATH}\" -C \"${GIT_TOPLEVEL}\" .git"
   info "  This preserves the full original history locally."
   info ""
   info "Step 2 — Orphan branch (would create):"
   info "  git -C \"${ROOT}\" checkout --orphan public-clean"
   info "  git -C \"${ROOT}\" add -A"
+  info "  (prepare mode also runs a safety check here: hard-fails, exit 5, if any"
+  info "   .git-backup-*.tar.gz path is found staged, so the private-history backup"
+  info "   can never ship inside the public commit)"
   info "  The branch 'public-clean' starts with NO prior history."
   info ""
   info "Step 3 — Single curated commit (would create):"
@@ -101,8 +116,10 @@ if [ "$MODE" = "prepare" ]; then
   info ""
 
   # Step 1: backup tar (non-destructive — adds a file, does not alter .git)
+  # -C uses GIT_TOPLEVEL (not the raw ROOT argument): .git only exists literally at the
+  # true top-level, so this also makes prepare work when ROOT is a subdirectory of the repo.
   info "Step 1 — Creating backup of .git ..."
-  tar -czf "$BACKUP_PATH" -C "$ROOT" .git 2>/dev/null
+  tar -czf "$BACKUP_PATH" -C "$GIT_TOPLEVEL" .git 2>/dev/null
   if [ $? -ne 0 ]; then
     err "Backup failed. Aborting."
     exit 2
@@ -136,6 +153,20 @@ if [ "$MODE" = "prepare" ]; then
     exit 2
   fi
   info "  All files staged."
+  info ""
+
+  # Independent hard-fail guard: catches a staged .git-backup-*.tar.gz path regardless of
+  # mechanism (relocation above closes the specific cause; this closes the pattern), e.g.
+  # a stray backup left inside ROOT by an interrupted prior run.
+  STAGED_BACKUP=$(git -C "$ROOT" ls-files 2>/dev/null | grep -E '(^|/)\.git-backup-.*\.tar\.gz$')
+  if [ -n "$STAGED_BACKUP" ]; then
+    err "SAFETY ABORT: the following .git-backup-*.tar.gz path(s) are staged for commit:"
+    printf '%s\n' "$STAGED_BACKUP" | while read -r p; do err "  $p"; done
+    err "Committing this would ship the full private git history inside the public release."
+    err "Unstage it and investigate, e.g.: git -C \"$ROOT\" reset -- <path>"
+    exit 5
+  fi
+  info "  Safety check passed: no .git-backup-*.tar.gz path is staged."
   info ""
 
   # STOP — HITL required before commit and push

@@ -80,6 +80,15 @@ if [ $? -ne 0 ]; then
 fi
 
 # -----------------------------------------------------------------------
+# Resolve the true repository top-level (ROOT may be any subdirectory of it)
+# -----------------------------------------------------------------------
+GIT_TOPLEVEL=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$GIT_TOPLEVEL" ]; then
+  err "Could not resolve the repository top-level directory for: $ROOT"
+  exit 2
+fi
+
+# -----------------------------------------------------------------------
 # Precondition: fresh-clone check
 # git-filter-repo refuses non-fresh-clone by default (safety feature).
 # We respect this; never pass --force to bypass it.
@@ -118,7 +127,10 @@ fi
 # -----------------------------------------------------------------------
 TS=$(date +%Y%m%d-%H%M%S)
 BACKUP_NAME=".git-backup-${TS}.tar.gz"
-BACKUP_PATH="${ROOT}/${BACKUP_NAME}"
+# Written outside the work tree (the true top-level's parent), same rationale as
+# fresh-history-publish.sh: a stray backup left inside ROOT is a hygiene/consistency
+# risk this script never itself stages, but should still not sit inside the clean clone.
+BACKUP_PATH="$(dirname "$GIT_TOPLEVEL")/${BACKUP_NAME}"
 
 # -----------------------------------------------------------------------
 # MODE: dry-run — show what would change, mutate NOTHING in history
@@ -164,8 +176,10 @@ if [ "$MODE" = "apply" ]; then
   info ""
 
   # Step 1: mandatory backup of .git before any destructive operation
+  # -C uses GIT_TOPLEVEL (not the raw ROOT argument): .git only exists literally at the
+  # true top-level.
   info "Step 1 — Creating mandatory backup of .git ..."
-  tar -czf "$BACKUP_PATH" -C "$ROOT" .git 2>/dev/null
+  tar -czf "$BACKUP_PATH" -C "$GIT_TOPLEVEL" .git 2>/dev/null
   if [ $? -ne 0 ]; then
     err "Backup failed. Aborting — no history has been modified."
     exit 2
@@ -182,6 +196,9 @@ if [ "$MODE" = "apply" ]; then
   if [ "$CURRENT_BRANCH" = "HEAD" ]; then
     CURRENT_BRANCH="your current branch (detached HEAD — resolve before pushing)"
   fi
+  # Captured now, before Step 3's filter-repo run unconditionally removes the origin
+  # remote (git-filter-repo's own documented, deliberate behavior on a non---partial run).
+  ORIGIN_URL=$(git -C "$ROOT" remote get-url origin 2>/dev/null)
   git -C "$ROOT" branch "$BACKUP_BRANCH" 2>/dev/null
   if [ $? -ne 0 ]; then
     warn "  Could not create backup branch (detached HEAD or other issue)."
@@ -202,7 +219,7 @@ if [ "$MODE" = "apply" ]; then
     err "Rewrite may be partial. Inspect the output above."
     err "Your backup is at: ${BACKUP_PATH}"
     err "Your backup branch is: ${BACKUP_BRANCH}"
-    err "To restore: rm -rf .git && tar -xzf ${BACKUP_PATH} -C ${ROOT}"
+    err "To restore: rm -rf .git && tar -xzf ${BACKUP_PATH} -C ${GIT_TOPLEVEL}"
     exit 2
   fi
 
@@ -216,18 +233,37 @@ if [ "$MODE" = "apply" ]; then
   info ""
   info "  VERIFY the result before pushing:"
   info "    git -C \"${ROOT}\" log --oneline | head -20"
-  info "    git -C \"${ROOT}\" diff ${BACKUP_BRANCH} --stat"
+  info "  NOTE: git-filter-repo rewrites ALL refs, including the backup branch"
+  info "  '${BACKUP_BRANCH}' created in Step 2 — a diff against it is NEVER meaningful"
+  info "  (both sides show the identical post-rewrite state)."
+  info "  For a real before/after record, inspect filter-repo's own commit-map instead:"
+  info "    cat \"${ROOT}/.git/filter-repo/commit-map\""
+  info "  (one 'old-SHA new-SHA' pair per rewritten commit; an all-zero new-SHA means"
+  info "  that commit was dropped.)"
+  info ""
+  info "  The tar backup at ${BACKUP_PATH} is the SOLE rollback for this rewrite."
   info ""
   info "  FORCE-PUSH requires EXPLICIT USER CONFIRMATION — NEVER automatic."
   info "  Force-push is a destructive remote operation that breaks existing clones/forks."
   info "  It must ONLY be done after the user explicitly approves it."
+  info ""
+  if [ -n "$ORIGIN_URL" ]; then
+    info "  git-filter-repo removes the 'origin' remote as part of the rewrite (deliberate,"
+    info "  upstream-documented behavior). Re-add it before pushing:"
+    info "    git -C \"${ROOT}\" remote add origin ${ORIGIN_URL}"
+  else
+    info "  git-filter-repo removes the 'origin' remote as part of the rewrite (deliberate,"
+    info "  upstream-documented behavior), and its URL could not be captured before the"
+    info "  rewrite ran. Re-add it manually before pushing:"
+    info "    git -C \"${ROOT}\" remote add origin <original-remote-url>"
+  fi
   info ""
   info "  When confirmed by the user, push with:"
   info "    git -C \"${ROOT}\" push --force-with-lease origin ${CURRENT_BRANCH}"
   info "  (--force-with-lease is safer than --force: fails if remote has diverged unexpectedly)"
   info ""
   info "  Restore from backup if needed:"
-  info "    rm -rf \"${ROOT}/.git\" && tar -xzf \"${BACKUP_PATH}\" -C \"${ROOT}\""
+  info "    rm -rf \"${GIT_TOPLEVEL}/.git\" && tar -xzf \"${BACKUP_PATH}\" -C \"${GIT_TOPLEVEL}\""
   info ""
   info "  Orchestrator: present this HITL to the user before executing any push."
   exit 0
