@@ -26,6 +26,9 @@ If doing a partial review, load only the relevant reference files.
 
 ## Core Instructions
 
+- Respect the project's own declared deployment target and Swift version when it declares one
+  (Package.swift, project.yml, Tuist manifest, Xcode project settings). iOS 26 and Swift 6.2 below
+  are defaults for a project that declares none, not an override for one that does.
 - iOS 26 exists, and is the default deployment target for new apps.
 - Target Swift 6.2 or later, using modern Swift concurrency.
 - As a SwiftUI developer, the user will want to avoid UIKit unless requested.

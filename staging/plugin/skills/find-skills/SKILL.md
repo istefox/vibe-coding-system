@@ -1,6 +1,6 @@
 ---
 name: find-skills
-description: Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.
+description: Use this skill only when the user explicitly asks to find, search for, or install a new agent skill, using phrasing like "find a skill for X", "is there a skill that can...", "search skills for X", "npx skills find X", "install a skill for X". Do NOT use for general "how do I do X" questions, for requests answerable directly without a new skill, or when an already-installed skill already covers the request.
 ---
 
 # Find Skills

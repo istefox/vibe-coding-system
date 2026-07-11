@@ -45,17 +45,18 @@ Sintesi delle fasi:
 
 ## Fase 5 - Esecuzione
 
-Ordine fisso, nessuna domanda aggiuntiva:
+Ordine fisso, con un solo gate di conferma (nuovo step 6) prima del primo commit:
 
 1. `mkdir` nella posizione canonica (vedi "Posizione del progetto") e `git init -b main`
 2. Genera i file dello scaffolding scelto. Per .gitignore usa i template ufficiali GitHub (`gh repo gitignore view <Template>` o https://github.com/github/gitignore). Per la licenza usa il testo ufficiale (gh o choosealicense.com) con anno corrente e nome utente.
 3. **Se stack = Swift**: esegui il setup Tuist/Xcode da `references/swift-xcode-setup.md` (manifesti, sorgenti skeleton, `tuist generate`, build + test verde). Per gli altri stack genera la struttura sorgenti standard.
 4. Genera `CLAUDE.md` e `PROJECT_BRIEF.md` dai template in `assets/`, compilati con TUTTE le risposte del wizard. Non lasciare placeholder vuoti. Per Swift usa il blocco Commands e il working agreement indicati in `references/swift-xcode-setup.md`.
 5. **Se visibilita = public e l'utente ha accettato l'audit**: invoca la skill `clean-public-repo` ORA, prima del primo commit/push.
-6. Primo commit, sempre conventional: `chore: initial project scaffolding`
-7. Se gh disponibile: `gh repo create <nome> --<visibilita> --source . --push --description "<descrizione>"`
-8. Se richiesta branch protection: applicala via `gh api` dopo il push.
-9. Verifica: `git log --oneline` e (se remoto) `gh repo view --web` NO - non aprire il browser; stampa solo l'URL della repo.
+6. **Gate di conferma (HITL)**: prima di procedere, mostra un riepilogo (percorso locale, visibilita, elenco file generati, remote che verra creato se applicabile) e usa AskUserQuestion con due opzioni: "Approva (Recommended)" per procedere con commit e push, "Interrompi" per fermarti qui senza commit ne push. Assegna "(Recommended)" ad "Approva" solo se lo scaffolding e pulito (nessun avviso residuo dall'audit `clean-public-repo`, nessuna directory preesistente sovrascritta); in caso contrario raccomanda "Interrompi" e spiega perche in una riga. Su interruzione: la repo locale resta cosi com'e, nessun commit, nessun push.
+7. Primo commit, sempre conventional: `chore: initial project scaffolding`
+8. Se gh disponibile: `gh repo create <nome> --<visibilita> --source . --push --description "<descrizione>"`
+9. Se richiesta branch protection: applicala via `gh api` dopo il push.
+10. Verifica: `git log --oneline` e, se remoto, stampa l'URL della repo con `gh repo view --json url -q .url` (mai `--web`, mai aprire il browser).
 
 ## Fase 6 - Report finale
 
