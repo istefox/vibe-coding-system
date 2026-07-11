@@ -14,7 +14,7 @@ Auto-generated roadmap from issues labeled `prep` (ADR-0023).
 - [x] hook-verify-workflow: filter the audit window by session  (issue #33)  (completed: 2026-07-11)
 - [x] Scope guards: autopilot CWD check, conductor glob, nightly check 6  (issue #34)  (completed: 2026-07-11)
 - [x] refactor-snapshot filter append and deep-refactor scope glob  (issue #35)  (completed: 2026-07-11)
-- [ ] claude-md-slim: whole-line content union check  (issue #36)
+- [x] claude-md-slim: whole-line content union check  (issue #36)  (completed: 2026-07-11)
 - [ ] vibe-status: recursion guard and active-chains wiring  (issue #37)
 - [ ] Hook hardening: enum value, lock ownership, trust hash  (issue #38)
 - [ ] Skill text corrections across five standalone skills  (issue #39)

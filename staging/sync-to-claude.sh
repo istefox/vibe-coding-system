@@ -119,6 +119,7 @@ plugin/skills/prompt-builder/references/vibrofer.md|skills/prompt-builder/refere
 plugin/skills/vibe-status/SKILL.md|skills/vibe-status/SKILL.md
 plugin/skills/vibe-status/scripts/aggregate.sh|skills/vibe-status/scripts/aggregate.sh
 plugin/skills/vibe-status/scripts/harness-runner.sh|skills/vibe-status/scripts/harness-runner.sh
+plugin/skills/vibe-status/scripts/chain-memory-section.sh|skills/vibe-status/scripts/chain-memory-section.sh
 plugin/skills/vibe-status/tests/run-tests.sh|skills/vibe-status/tests/run-tests.sh
 plugin/skills/swiftui-pro/SKILL.md|skills/swiftui-pro/SKILL.md
 plugin/skills/find-skills/SKILL.md|skills/find-skills/SKILL.md

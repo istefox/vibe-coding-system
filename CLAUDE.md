@@ -367,3 +367,16 @@ Key architectural decisions:
 - **Orthogonal gap disclosed, not bundled:** --global DUPLICATE-removed sections never feed the union check — candidate follow-up issue.
 
 Detail: `docs/architecture/ADR-0032-36-claude-md-slim-union-check.md`.
+
+## Decisions from the vibe-status chain (ADR-0033)
+
+Recursion guard, orphan-process fix, Memory count guard, and the ADR-0021 Active-chains
+wiring for vibe-status (issue #37).
+
+Key architectural decisions:
+- **Recursion guard in aggregate.sh itself** (name-scoped `VIBE_STATUS_RECURSING` sentinel), not just the test — any real unwrapped invocation recursed, not only test 10; the SPEC's TMP_AGG_HOME alternative kept only as dead-code cleanup.
+- **harness-runner.sh's three-way timeout branches collapse to one bash job-control path** (`set -m` + negative-PID group kill) — nested timeouts escape into fresh process groups (reproduced live: PPID=1 orphan), and the rewrite removes the external-binary dependency.
+- **INTEGRATION.md executed verbatim** (chain-memory-section.sh wiring + one PAIRS entry); JSON output untouched, no deploy.
+- **Guard is a hardcoded path-suffix match** — stops protecting on rename/relocation (disclosed, not solved).
+
+Detail: `docs/architecture/ADR-0033-37-vibe-status-recursion-chains.md`.
