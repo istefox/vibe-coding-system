@@ -67,6 +67,11 @@ no push, no automatic iteration beyond the cycle** inside this skill.
    fi
    ```
    `jq 'length'` works on the state array regardless of content. Do not call `.get()` or any dict-specific method on this file.
+5. **Fix-dispatch model variant (cost pilot, see `~/.claude/plans/bubbly-imagining-teapot.md` — not yet a committed decision, ADR to follow only if a variant wins clearly).** Declare which variant this cycle uses, default `opus` (today's behavior, unchanged unless the user names a different variant for this invocation):
+   - `opus` — default. Every fix dispatch (`coder`/`refactorer`/`debugger`) runs at `model: "opus"` for the whole call, as in Step 3's Model override.
+   - `sonnet-xhigh` — zero-mechanism alternative. Every fix dispatch runs at `model: "sonnet", effort: "xhigh"` instead of opus. No advisor call.
+   - `advisor` — two-call pattern per routable finding (see Step 3 for the mechanics).
+   Non-blocking — never fail the cycle if the script is unavailable. Use the **same** label for both calls, built from data already resolved in this step (`RTF_LABEL="rtf-<variant>-${_branch}"`, reusing `$_branch` from item 3), since `usage-snapshot.py --diff <label>` both locates the snapshot AND becomes the logged chain name — a mismatched pair silently breaks the lookup, and there is no separate "log label" flag. Before the cycle: `python3 ~/.claude/scripts/usage-snapshot.py --save "$RTF_LABEL" >/dev/null 2>&1 || true`. After Step 5 (see the reminder there): `python3 ~/.claude/scripts/usage-snapshot.py --diff "$RTF_LABEL" --log-to ~/.claude/chain-eval.md >/dev/null 2>&1 || true`.
 
 ## Step 1 — Review
 
@@ -160,7 +165,15 @@ For each **routable** finding (skip REPORT-ONLY and DEFERRED), in order
 BLOCKER → MAJOR → MINOR → NIT, dispatch the chosen agent with a curated input:
 the finding, `loc`, the reviewer's suggested fix, (for `coder`) the micro-piano,
 and the project's test-cmd so the agent self-verifies.
-**Model override:** use `model: "opus"` for all fix dispatches (`coder`, `refactorer`, `debugger`). Fix agents make judgment calls without a structured plan — Opus reduces the risk of introducing new issues (e.g. using unavailable APIs, wrong deployment target assumptions).
+**Model override — branches on the variant declared in Step 0, item 5:**
+
+- **`opus` (default):** use `model: "opus"` for all fix dispatches (`coder`, `refactorer`, `debugger`). Fix agents make judgment calls without a structured plan — Opus reduces the risk of introducing new issues (e.g. using unavailable APIs, wrong deployment target assumptions).
+- **`sonnet-xhigh`:** use `model: "sonnet", effort: "xhigh"` for all fix dispatches instead. No other change to this step.
+- **`advisor`:** for each routable finding, two `Agent`-tool calls instead of one:
+  1. **Advisor call** — dispatch `subagent_type: "reviewer"` (read-only, no `Edit`/`Write` in its tool grant, so it structurally cannot make changes even if asked to) at `model: "opus"`. Brief: the finding, `loc`, the reviewer's suggested fix, and the instruction *"Diagnose only, do not propose an edit as a diff — return root cause, fix approach, and exactly which files/functions to touch. Keep the answer under 150 words."* This call is the entire advisor cost — bounded by the word cap, not a full plan. This `reviewer` dispatch is exempt from the ADR-0012 agent-memory contract (no `PRIOR AGENT NOTES`/`DURABLE NOTES:`) — it is a bounded diagnosis, not a review pass.
+  2. **Executor call** — dispatch the normal fix agent (`coder`/`refactorer`/`debugger`) at `model: "sonnet"` (no effort override), with the advisor's diagnosis prepended to the existing dispatch brief under a `FIX GUIDANCE (already diagnosed — apply, do not re-diagnose):` header. Everything else about the dispatch (micro-piano, test-cmd, isolation, circuit breakers) is unchanged.
+  If the advisor call errors, times out, or returns empty: skip it and fall back to `opus` behavior for that one finding only — never block the cycle on an advisor failure.
+  NIT batching stays a single dispatch either way; run the advisor call once for the whole batch (one diagnosis covering the list), not once per NIT.
 
 **Agent-memory contract (ADR-0012) — ONLY when the chosen agent is `debugger`:** append a
 `PRIOR AGENT NOTES` block (`agent-notes-harvest.sh inject debugger`) to the END of its dispatch —
@@ -266,6 +279,14 @@ Then persist state for the next cycle: write the final findings as TSV
 `… | bash $HOME/.claude/skills/review-triage-fix/scripts/triage-state.sh commit <rtf-state-file>`
 (`<rtf-state-file>` = `$RTF_SF` from Step 0; this also gitignores the
 state file when the project is a git repo).
+
+**Cost-pilot logging (Step 0 item 5):** every cycle, regardless of variant — run the post-cycle
+snapshot log now, before stopping, matching Step 0 item 5's unconditional `--save`:
+`python3 ~/.claude/scripts/usage-snapshot.py --diff "$RTF_LABEL" --log-to ~/.claude/chain-eval.md
+>/dev/null 2>&1 || true` (non-blocking; `$RTF_LABEL` resolved in Step 0 item 5). Logging every
+cycle, including `opus` (default), is what lets `chain-eval.md` accumulate a baseline to compare
+the pilot variants against — gating this call the way the `--save` call isn't gated would leave
+`opus` cycles' snapshots written but never diffed or cleaned up.
 
 **STOP.** Do not commit, do not re-invoke yourself. Hand the verdict to the user.
 
