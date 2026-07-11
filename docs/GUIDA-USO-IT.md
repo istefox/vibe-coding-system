@@ -260,7 +260,8 @@ La skill termina sempre con un commit locale su `type/<slug>`. Push e PR restano
 Qualsiasi fallimento scrive un report `aborted` e si ferma. Nessuna modifica ai file.
 
 1. **Scope guard** (primo, prima di leggere il manifest): `project_root` nel manifest deve
-   corrispondere alla CWD della sessione. Se non coincide: abort con SCOPE ERROR.
+   coincidere con la CWD della sessione, oppure esserne una sottodirectory. In ogni altro caso:
+   abort con SCOPE ERROR.
 2. **Stato manifest**: `manifest-validate.sh` OK e `current_step == ready_for_implementation`.
 3. **Gate 1-3 approvati**: ogni gate deve avere `status: approved` nel manifest.
 4. **Artefatti su disco**: `test -f` su SPEC.md, ADR, plan.
@@ -799,7 +800,7 @@ permanenti c'è sempre un gate di approvazione esplicito. L'unica eccezione è `
 
 **Session scope:** ogni sessione Claude Code opera su un solo progetto. Una skill o chain non
 può mai leggere, scrivere o dispatchare agenti fuori dalla CWD della sessione corrente. Se il
-`project_root` nel manifest non coincide con la CWD, la chain abortisce con SCOPE ERROR. Questo
+`project_root` nel manifest non coincide con la CWD né ne è una sottodirectory, la chain abortisce con SCOPE ERROR. Questo
 vale anche per i sub-agent di workflow.
 
 **TOFU (Trust On First Use) per test-cmd:** il comando di test deve essere approvato

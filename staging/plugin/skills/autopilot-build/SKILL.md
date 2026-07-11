@@ -57,8 +57,18 @@ cwd=$(pwd -P)
 # Normalize: strip trailing slash
 project_root_n="${project_root%/}"
 cwd_n="${cwd%/}"
-if [ "$cwd_n" != "$project_root_n" ] && [ "${cwd_n##$project_root_n}" = "$cwd_n" ]; then
-  echo "SCOPE ERROR: manifest project_root ($project_root) is outside this session's CWD ($cwd). Open a new session inside $project_root and run autopilot-build from there."
+# PASS iff cwd == project_root, or project_root is strictly under cwd (slash-anchored, quoted
+# pattern side). ADR-0020 D3 #1: "Session CWD equals manifest.project_root or is a parent of it."
+in_scope=false
+if [ "$cwd_n" = "$project_root_n" ]; then
+  in_scope=true
+else
+  case "$project_root_n" in
+    "$cwd_n"/*) in_scope=true ;;
+  esac
+fi
+if [ "$in_scope" = false ]; then
+  echo "SCOPE ERROR: manifest project_root ($project_root) is not this session's CWD ($cwd) and is not a subdirectory of it. Open a new session inside a directory at or above $project_root and run autopilot-build from there."
   exit 1
 fi
 ```

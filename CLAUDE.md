@@ -327,3 +327,16 @@ Key architectural decisions:
 - **Issue #34 gap disclosed:** no global smoke-test record exists (only per-manifest flags); #34 must design it, not assume it.
 
 Detail: `docs/architecture/ADR-0029-33-hook-verify-session-filter.md`.
+
+## Decisions from the scope-guards chain (ADR-0030)
+
+Three scope/pre-flight fixes (issue #34): autopilot-build check-1 CWD guard, conductor
+manifest-glob anchoring, nightly-autopilot pre-flight check 6.
+
+Key architectural decisions:
+- **Check 1 via `case "$project_root_n" in "$cwd_n"/*)`** — quoted, slash-anchored; matches ADR-0020's prose contract (parent passes, child aborts, sibling aborts).
+- **Conductor lookup two-layer at all 3 sites:** date-anchored glob (`????-??-??-"$_slug".manifest.yml`) AND `topic:` field equality (the field IS the kebab slug) — anchoring alone still suffix-collides.
+- **Check 6 zero-manifest branch: documented non-blocking pass, no invented record.** The SPEC's "global smoke-test record" does not exist (ADR-0029 confirmed); manifest-init's unconditional `hook_verified: false` default already guarantees the safe agent-batch fallback, so a lenient default is sound. Reviewers must not expect a record to appear.
+- **Fenced SKILL.md bash blocks don't share state** — multi-call-site logic duplicated verbatim per site by design.
+
+Detail: `docs/architecture/ADR-0030-34-scope-guards.md`.
