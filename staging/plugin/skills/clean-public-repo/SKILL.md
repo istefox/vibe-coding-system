@@ -246,11 +246,15 @@ bash ~/.claude/skills/clean-public-repo/scripts/fresh-history-publish.sh <root> 
 
 ### Flow (orchestrator guides the user)
 
-1. **Mandatory backup** of `.git/`:
+1. **Mandatory backup** of `.git/`, written **outside the work tree** (the repo's parent
+   directory), so it can never be swept up by `git add -A` and shipped inside the public
+   commit:
    ```bash
-   tar -czf .git-backup-$(date +%Y%m%d-%H%M%S).tar.gz .git
+   tar -czf ../.git-backup-$(date +%Y%m%d-%H%M%S).tar.gz -C . .git
    ```
-   NEVER proceed without backup.
+   NEVER proceed without backup. `prepare` mode also independently hard-fails (exit 5,
+   `SAFETY ABORT`) if a `.git-backup-*.tar.gz` path is ever found staged before the commit
+   step — a second, independent layer regardless of why one might be present.
 
 2. **Working tree cleanup** on confirmed `auto-removable` findings (see
    §Hybrid action) → clean commit on the current branch (not yet published).
@@ -280,6 +284,9 @@ bash ~/.claude/skills/clean-public-repo/scripts/fresh-history-publish.sh <root> 
 - Force-push (only to a NEW dedicated remote) requires **explicit user HITL
   confirmation** before any destructive push.
 - The dry-run MUST be run before prepare (and shown to the user).
+- The backup tarball is written outside the work tree and `prepare` hard-fails (exit 5)
+  if a `.git-backup-*.tar.gz` path is ever found staged — two independent layers
+  guaranteeing the private-history backup is never shipped inside the public commit.
 
 ---
 
@@ -352,8 +359,11 @@ If `git-filter-repo` is not installed:
 **Minimal path** (custom grep + fresh-history via core git) works with `git` only.
 Optional dependencies improve coverage, they do not enable it.
 
-**Verified environment (2026-05-23):** `git-filter-repo` PRESENT
-(`/opt/homebrew/bin`), `gitleaks` ABSENT, `git` PRESENT.
+**Dependency presence is machine-specific and drifts over time — do not treat any
+point-in-time "verified present" note here as durable.** `surgical-rewrite.sh`'s own live
+check (`git filter-repo --version`, exit 3 with install instructions when absent) is the
+authoritative, self-updating source of truth for whether `git-filter-repo` is available on
+the machine actually running it.
 
 ---
 

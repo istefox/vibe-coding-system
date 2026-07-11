@@ -268,3 +268,17 @@ Key architectural decisions:
 - **Safety gap flagged, not fixed:** deployed `interview-driver`/`fastapi-react-vibe` lost `disable-model-invocation: true` (contradicts blueprint /loop safety design); mirrored per SPEC, unowned by #28-#40, needs a dedicated issue.
 
 Detail: `docs/architecture/ADR-0025-29-refresh-stale-staging-copies.md`.
+
+## Decisions from the clean-public-repo history-safety chain (ADR-0026)
+
+Fixes three audit findings in the vendored clean-public-repo skill (issue #30): the P1
+private-history leak (backup tarball staged into the public branch), the surgical-rewrite
+false rollback story, and detect-tool-traces SHA matching with abbreviated hashes 8+.
+
+Key architectural decisions:
+- **Backup relocation resolves the true git top-level** (`git -C "$ROOT" rev-parse --show-toplevel`, then parent), never `dirname "$ROOT"` — a subdirectory ROOT would silently reproduce the leak.
+- **Defense-in-depth hard-fail (exit 5):** prepare mode greps `git ls-files` for any staged `.git-backup-*.tar.gz` before printing HITL instructions, independent of the relocation.
+- **Asymmetric tests:** findings 1/3 get live fixture-repo tests; finding 2 gets static source-anchor tests (git-filter-repo's unconditional version gate blocks live execution in every environment that matters).
+- **Staging-only until human sync:** the deployed copy keeps the P1 leak until `sync-to-claude.sh --apply` — flagged with elevated urgency in the report.
+
+Detail: `docs/architecture/ADR-0026-30-clean-public-repo-private-history.md`.

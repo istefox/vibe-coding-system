@@ -39,7 +39,7 @@ None (HITL instructions printed by prepare mode are updated to match the new tar
 - Missing origin remote after filter-repo: push instructions must re-add it.
 
 ## Success criteria
-- [x] A harness test builds a fixture repo, runs prepare mode, and asserts no `.git-backup-*` path is staged and the tarball lives outside the work tree
-- [x] A harness test with `core.abbrev=8` asserts findings carry the correct SHA
-- [x] Scripts stay bash 3.2 clean and BSD safe
-- [x] No file under `~/.claude` modified; edits land in staging only
+- [ ] A harness test builds a fixture repo, runs prepare mode, and asserts no `.git-backup-*` path is staged and the tarball lives outside the work tree
+- [ ] A harness test with `core.abbrev=8` asserts findings carry the correct SHA
+- [ ] Scripts stay bash 3.2 clean and BSD safe
+- [ ] No file under `~/.claude` modified; edits land in staging only
