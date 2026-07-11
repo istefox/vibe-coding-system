@@ -33,3 +33,6 @@
 .claude/.triage-fix-last-feat_32-manifest-helpers-guards.json
 .claude/.triage-fix-last-feat_33-hook-verify-session-filter.json
 .claude/.triage-fix-last-feat_34-scope-guards.json
+.claude/.triage-fix-last-feat_35-refactor-snapshot-deep-refactor.json
+.claude/.triage-fix-last-feat_36-claude-md-slim-union-check.json
+.claude/.triage-fix-last-feat_37-vibe-status-recursion-chains.json
