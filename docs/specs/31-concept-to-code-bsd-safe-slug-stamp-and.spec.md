@@ -41,15 +41,8 @@ Form A (interactive Gate 0 flow): one canonical order — Gate 0 choice, 0b, 0c,
 - Express fixture manifest, status completed, null adr/plan: must pass validation; a standard-path manifest with null artifacts must still fail.
 
 ## Success criteria
-- [x] The slug-stamp command exits 0 and writes the marker on BSD sed (add a harness test that runs the exact command against a fixture SPEC.md)
-- [x] No code path in autopilot mode invokes approve-test-cmd.sh or `git push` (grep-level assertion in a harness test)
-- [x] An express fixture manifest with status completed and null adr/plan passes manifest-validate.sh; a standard one with null artifacts still fails
-- [ ] Transition-pair count in the SKILL section 3 text matches the script exactly — **deferred, not this ADR's scope** (ADR-0027 §3.5): the "44 total" summary line at `SKILL.md:213` is confirmed already numerically wrong today independent of this issue (actual count: 28 standard + 6 express + 14 hybrid = 48 pairs, not 44/26/12), and reconciling that text is explicitly assigned to the concurrently-worked issue #32 to avoid a same-file collision. This issue's own Finding-4 fix needed zero `manifest-transition.sh` changes (mechanically verified — Section D, 4/4 green) and does not touch the count line.
-- [x] No file under `~/.claude` modified
-
-## Verification notes (added post-implementation, Tasks 1–10)
-- Criterion 1: `concept-to-code-bsd-autopilot-gates.test.sh` Section A (A1–A3), 3/3 green.
-- Criterion 2: Section B (B1–B4), 4/4 green — Gate 2b no longer auto-grants TOFU trust, Gate 0d/Step 7 never push unattended.
-- Criterion 3: Section C (C1–C4), 4/4 green — express/hybrid completions with the artifacts they never produce now validate; standard/legacy with null artifacts still correctly fails.
-- Criterion 5: `git status` confirmed throughout Tasks 1–10 — writes stayed confined to the Pre-flight "writes are confined to" list; zero files under `~/.claude` touched.
-- Full harness: `PASS=17 FAIL=0` (Sections A=3, B=4, C=6, D=4).
+- [ ] The slug-stamp command exits 0 and writes the marker on BSD sed (add a harness test that runs the exact command against a fixture SPEC.md)
+- [ ] No code path in autopilot mode invokes approve-test-cmd.sh or `git push` (grep-level assertion in a harness test)
+- [ ] An express fixture manifest with status completed and null adr/plan passes manifest-validate.sh; a standard one with null artifacts still fails
+- [ ] Transition-pair count in the SKILL section 3 text matches the script exactly
+- [ ] No file under `~/.claude` modified
