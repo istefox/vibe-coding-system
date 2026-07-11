@@ -394,3 +394,17 @@ Key architectural decisions:
 - **ADR-0005/blueprint §7.6 NOT edited in place** (historical illustrations); correction recorded forward via changelog entry + sync-checklist NOTE heredoc for the deployed-side deletion.
 
 Detail: `docs/architecture/ADR-0034-38-hook-hardening.md`.
+
+## Decisions from the skill-text chain (ADR-0035)
+
+Six instruction-layer fixes across five standalone skills (issue #39): caller-path
+contract for claude-md-generator, ghost-skill removal, git-repo-init HITL gate + URL-only,
+swiftui-pro scoping line, find-skills trigger narrowing.
+
+Key architectural decisions:
+- **claude-md-generator gains the explicit caller-provided-output-path contract in its own text** (the chain's dispatch override was papering over the bug) and its first PAIRS entry (109) — the gap ADR-0025 flagged by name.
+- **git-repo-init's two Fase-5 defects land in one rewrite** (gate after the clean-public-repo audit, before first commit; recommended-option convention honestly conditioned).
+- **One combined RED task + five per-file GREEN tasks** (departure from interleaved precedent — all assertions are static prose anchors, no runtime bash to extract).
+- **find-skills body prose broader than the narrowed frontmatter** — deliberately left (SPEC cites line 3 only), disclosed for a future issue.
+
+Detail: `docs/architecture/ADR-0035-39-skill-text-corrections.md`.
