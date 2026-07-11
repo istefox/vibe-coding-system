@@ -438,6 +438,28 @@ issue (staleness tracked since ADR-0022's `staging/` bridge; ADR-0024 covered th
   comments (Steps 4, 7, 8) and the global-CLAUDE.md template at sec. 4 (~line 970), which is illustrative
   content, not this system's live configuration.
 
+### Correction 2026-07-11 (backup-before-deploy.sh retired from staging)
+
+`docs/specs/38-hook-hardening-enum-value-lock-ownership.spec.md` (issue #38, ADR-0034) confirms
+`backup-before-deploy.sh` was never vendored into `staging/plugin/scripts/` by ADR-0024's vendoring
+pass: its body is a hardcoded one-shot backup dated 2026-05-19, and it is wired to no hook event in the
+deployed `settings.json`. It is retired; `docs/RUNBOOK.md` and `staging/sync-to-claude.sh`'s PAIRS table
+name no further deploy path for it, and `staging/sync-to-claude.sh` now carries a MANUAL STEP note for a
+human to review and delete the deployed-side copy (`~/.claude/hooks/backup-before-deploy.sh`) — this
+repo does not write under `~/.claude`.
+
+Deliberately **not** touched, and stated here so it is not later mistaken for an omission: sec. 7.6's
+`AS-BUILT 2026-05-19` hook filesystem tree (`~line 1437`) and
+`docs/architecture/ADR-0005-vibe-status-skill.md`'s own Q5 example report (`~line 201`) both name
+`backup-before-deploy.sh`; both are dated, point-in-time illustrations, not live-status claims (the same
+category the correction immediately above already applied to sec. 8.3's design catalog). ADR-0034 is
+the amendment of record for this staleness, consistent with the precedent ADR-0033 already set for
+`ADR-0005` itself (amended by reference, never edited in place). A repo-wide grep for
+`backup-before-deploy` confirms these are its only two mentions anywhere in this document or in
+`ADR-0005`; sec. 15's installation checklist and sec. 8.6's "Deployed custom skills" table — the two
+locations this document's own convention treats as live-status claims — never named a hook at all, so
+there is nothing to correct there.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow

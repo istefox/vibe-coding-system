@@ -25,7 +25,13 @@ MATCH=$(echo "$PROMPT" | grep -iE \
 
 [ -z "$MATCH" ] && exit 0
 
-# Emit additionalContext — compact reminder (~80 tokens, no file link to avoid cache invalidation)
+# Emit BOTH the top-level additionalContext key (legacy shape this script has always
+# used) and the documented hookSpecificOutput envelope (issue #38 finding 5 — verified
+# during planning against code.claude.com/docs, "Add context for Claude" section: the
+# nested hookSpecificOutput.additionalContext form is the only documented valid shape
+# for a UserPromptSubmit context injection; a bare top-level key is not documented
+# anywhere). Emitting both is a zero-cost safety net — no live probe confirms which
+# shape the currently-installed Claude Code version actually reads (ADR-0034 §D4/§3.4).
 python3 -c "
 import json
 ctx = (
@@ -39,7 +45,13 @@ ctx = (
     'no chatbot closers, specific details over vague claims. '
     'After drafting run /skill humanize-en for a final pass.'
 )
-print(json.dumps({'additionalContext': ctx}))
+print(json.dumps({
+    'additionalContext': ctx,
+    'hookSpecificOutput': {
+        'hookEventName': 'UserPromptSubmit',
+        'additionalContext': ctx
+    }
+}))
 " 2>/dev/null || true
 
 exit 0

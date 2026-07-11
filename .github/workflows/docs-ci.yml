@@ -41,7 +41,7 @@ jobs:
       - name: Run offline shell harnesses
         run: |
           set -e
-          for t in phase1 prep hook-probe hook-verify-workflow pairs-completeness clean-public-repo-history-safety concept-to-code-bsd-autopilot-gates concept-to-code-manifest-helpers-guards scope-guards refactor-snapshot-deep-refactor claude-md-slim-content-union-whole-line; do
+          for t in phase1 prep hook-probe hook-verify-workflow pairs-completeness clean-public-repo-history-safety concept-to-code-bsd-autopilot-gates concept-to-code-manifest-helpers-guards scope-guards refactor-snapshot-deep-refactor claude-md-slim-content-union-whole-line hook-hardening; do
             printf '::group::%s\n' "$t"
             bash "staging/plugin/scripts/tests/$t.test.sh"
             printf '::endgroup::\n'

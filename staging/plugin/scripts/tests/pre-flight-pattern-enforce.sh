@@ -78,10 +78,10 @@ SID2="t2"; AID2="agent002"
 mk_subagent_jsonl "$SID2" "$AID2" "no pattern here"
 mk_coder_payload "$SID2" "Write" "$AID2" \
   | run_hook >"$TMP/o2" 2>&1
-if grep -q '"permissionDecision":"block"' "$TMP/o2"; then
-  ok "2: block PATTERN missing coder"
+if grep -q '"permissionDecision":"deny"' "$TMP/o2"; then
+  ok "2: deny PATTERN missing coder"
 else
-  bad "2: block PATTERN missing coder (out=$(cat "$TMP/o2"))"
+  bad "2: deny PATTERN missing coder (out=$(cat "$TMP/o2"))"
 fi
 
 # -----------------------------------------------------------------------
@@ -163,10 +163,10 @@ SID9="t9"; AID9="agent009"
 mk_subagent_jsonl "$SID9" "$AID9" "pattern: add | lowercase"
 mk_coder_payload "$SID9" "Edit" "$AID9" \
   | run_hook >"$TMP/o9" 2>&1
-if grep -q '"permissionDecision":"block"' "$TMP/o9"; then
-  ok "9: block lowercase pattern (regex strict)"
+if grep -q '"permissionDecision":"deny"' "$TMP/o9"; then
+  ok "9: deny lowercase pattern (regex strict)"
 else
-  bad "9: block lowercase pattern (out=$(cat "$TMP/o9"))"
+  bad "9: deny lowercase pattern (out=$(cat "$TMP/o9"))"
 fi
 
 # -----------------------------------------------------------------------

@@ -380,3 +380,17 @@ Key architectural decisions:
 - **Guard is a hardcoded path-suffix match** — stops protecting on rename/relocation (disclosed, not solved).
 
 Detail: `docs/architecture/ADR-0033-37-vibe-status-recursion-chains.md`.
+
+## Decisions from the hook-hardening chain (ADR-0034)
+
+Five hook fixes (issue #38): permissionDecision enum, lock ownership, trust hash,
+backup-before-deploy retirement, prose-detect dual-form JSON.
+
+Key architectural decisions:
+- **block → deny** in pre-flight-pattern-enforce.sh (ADR-0009 verified enum); the two greps in the LEGACY pattern-enforce test updated — that test reads RED (11/2) against the unsynced deployment until human sync, by design.
+- **Scope extended to stop-gate.sh (disclosed):** it shares approve-test-cmd.sh's exact hash-after-normalize bug from the common 2026-05-20 template; fixing only one would leave the SPEC's own symptom (silently inert stop-gate) open. stop-gate needs a separate ROOT_NORM variable — it reuses ROOT to cd.
+- **Hash the pre-normalization path; store the normalized form** — trust-line format unchanged, existing entries preserved; abort on empty hash.
+- **Lock ownership:** trap set only after mkdir succeeds; on timeout skip the event (never proceed unlocked, never release a foreign lock).
+- **ADR-0005/blueprint §7.6 NOT edited in place** (historical illustrations); correction recorded forward via changelog entry + sync-checklist NOTE heredoc for the deployed-side deletion.
+
+Detail: `docs/architecture/ADR-0034-38-hook-hardening.md`.

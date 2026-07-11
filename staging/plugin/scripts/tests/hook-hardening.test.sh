@@ -1,0 +1,194 @@
+#!/bin/bash
+# hook-hardening.test.sh — offline, hermetic, no network, no $HOME dependency. Bash 3.2 clean.
+# Covers issue #38 / ADR-0034's five findings, targeting staging/plugin/scripts/ directly (not
+# the deployed $HOME/.claude/hooks/ copy the legacy pre-flight-pattern-enforce.sh test targets).
+# Run: bash hook-hardening.test.sh
+set -u
+
+# Hermeticity: a live Claude Code session exports CLAUDE_CODE_SESSION_ID (issue #33 convention).
+# None of the five scripts under test reads it (confirmed during planning); unset defensively.
+unset CLAUDE_CODE_SESSION_ID
+
+SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+PASS=0; FAIL=0
+ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
+bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
+
+# =====================================================================================
+# Test 1 (finding 1 / D1): pre-flight-pattern-enforce.sh emits the verified "deny" enum
+# member, not the legacy "block", when PATTERN: is missing from a coder subagent window.
+FIXTURE_CWD="/test/hookhardening"
+FIXTURE_ENC="-test-hookhardening"
+SID1="hh1"; AID1="agent001"
+PROJ_DIR1="$TMP/.claude/projects/$FIXTURE_ENC"
+mkdir -p "$PROJ_DIR1/$SID1/subagents"
+JSONL1="$PROJ_DIR1/$SID1/subagents/agent-$AID1.jsonl"
+printf '{"type":"assistant","message":{"content":[{"text":"no pattern header here"}]}}\n' > "$JSONL1"
+TP1="$PROJ_DIR1/$SID1.jsonl"
+touch "$TP1"
+PAYLOAD1=$(printf '{"session_id":"%s","tool_name":"Write","cwd":"%s","agent_type":"coder","agent_id":"%s","transcript_path":"%s"}' \
+  "$SID1" "$FIXTURE_CWD" "$AID1" "$TP1")
+OUT1=$(printf '%s' "$PAYLOAD1" | HOME="$TMP" PATTERN_ENFORCE_DIR="$TMP/state1" bash "$SCRIPTS/pre-flight-pattern-enforce.sh" 2>&1)
+if printf '%s' "$OUT1" | grep -q '"permissionDecision":"deny"'; then
+  ok "1: pre-flight-pattern-enforce.sh emits verified 'deny' (not legacy 'block')"
+else
+  bad "1: expected permissionDecision:deny, got: $OUT1"
+fi
+
+# =====================================================================================
+# Test 2 (finding 2 / D2): chain-memory-capture.sh does not delete a lock directory it
+# never acquired, and skips the MEMORY.md upsert event on lock-acquisition timeout.
+# Single-process, deterministic: pre-creates the lock dir to simulate a foreign holder —
+# no real concurrency needed. Bounded: the unfixed code's own retry loop takes ~2s
+# (40 * 0.05s) to exhaust before either behavior (old or new) is observable.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "SKIP 2: jq not available on this host (informational, not a failure)"
+else
+  CMCWD="$TMP/cm2cwd"; CMHOME="$TMP/cm2home"
+  mkdir -p "$CMCWD"
+  ENC2=$(printf '%s' "$CMCWD" | tr '/' '-')
+  MEMDIR2="$CMHOME/.claude/projects/$ENC2/memory"
+  mkdir -p "$MEMDIR2"
+  FORLOCK2="$MEMDIR2/.chain-memory.lock"
+  mkdir -p "$FORLOCK2"   # simulate a foreign process already holding the lock
+  MANIFEST2="$TMP/2026-07-11-hh2.manifest.yml"
+  cat > "$MANIFEST2" <<EOF
+current_step: step_e2_execute
+status: in_progress
+chain_path: standard
+next_action: run tests
+EOF
+  TP2="$CMHOME/.claude/projects/$ENC2/sess2.jsonl"
+  touch "$TP2"
+  PAYLOAD2=$(printf '{"transcript_path":"%s","tool_input":{"command":"bash manifest-transition.sh %s step_e2_execute"},"tool_response":{"exit_code":0}}' \
+    "$TP2" "$MANIFEST2")
+  printf '%s' "$PAYLOAD2" | bash "$SCRIPTS/chain-memory-capture.sh" >"$TMP/o2cm" 2>&1
+  rc2=$?
+  if [ "$rc2" -eq 0 ] && [ -d "$FORLOCK2" ] && [ -f "$MEMDIR2/chain-history/hh2.md" ] && [ ! -f "$MEMDIR2/MEMORY.md" ]; then
+    ok "2: foreign lock preserved, per-slug history written, MEMORY.md upsert skipped on timeout"
+  else
+    bad "2: lock ownership (rc=$rc2 lock=$([ -d "$FORLOCK2" ] && echo present || echo gone) hist=$([ -f "$MEMDIR2/chain-history/hh2.md" ] && echo yes || echo no) memory=$([ -f "$MEMDIR2/MEMORY.md" ] && echo written || echo absent))"
+  fi
+fi
+
+# =====================================================================================
+# Test 3a (finding 3 / D3): approve-test-cmd.sh aborts (nonzero exit) instead of writing
+# a hash-less trust line when hash computation yields empty output. Portable: stubs
+# shasum/sha256sum on PATH to simulate the failure deterministically — no filesystem
+# case-sensitivity dependency, runs identically on every host.
+STUBDIR="$TMP/stubbin3"; mkdir -p "$STUBDIR"
+printf '#!/bin/bash\nexit 0\n' > "$STUBDIR/shasum"
+printf '#!/bin/bash\nexit 0\n' > "$STUBDIR/sha256sum"
+chmod +x "$STUBDIR/shasum" "$STUBDIR/sha256sum"
+
+PROJ3A="$TMP/proj3a"; mkdir -p "$PROJ3A/.claude"
+echo "echo hi" > "$PROJ3A/.claude/test-cmd"
+TRUST3A="$TMP/trust3a"
+PATH="$STUBDIR:$PATH" STOP_GATE_TRUST_FILE="$TRUST3A" bash "$SCRIPTS/approve-test-cmd.sh" "$PROJ3A" >"$TMP/o3a" 2>&1
+rc3a=$?
+if [ "$rc3a" -ne 0 ] && [ ! -s "$TRUST3A" ]; then
+  ok "3a: approve-test-cmd.sh aborts on empty hash, no trust line written"
+else
+  bad "3a: approve-test-cmd.sh empty-hash guard (rc=$rc3a trust_has_content=$([ -s "$TRUST3A" ] && echo yes || echo no))"
+fi
+
+# Test 3a-ii: REGRESSION PIN, not a RED assertion (already green before Task 6 too) —
+# stop-gate.sh's own, separate, pre-existing fail-open-on-internal-error contract
+# (spec §7) must stay exactly as-is: exit 0, silent, no block, when hash computation
+# fails. This fix does not and must not change stop-gate.sh's error-handling philosophy.
+PROJ3AII="$TMP/proj3aii"; mkdir -p "$PROJ3AII/.claude"
+echo "echo hi" > "$PROJ3AII/.claude/test-cmd"
+SID3AII="stopgate3aii"
+STATE3AII="$TMP/state3aii"; mkdir -p "$STATE3AII"
+touch "$STATE3AII/$SID3AII.dirty"
+PAYLOAD3AII=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID3AII" "$PROJ3AII")
+OUT3AII=$(printf '%s' "$PAYLOAD3AII" | PATH="$STUBDIR:$PATH" STOP_GATE_STATE_DIR="$STATE3AII" bash "$SCRIPTS/stop-gate.sh" 2>&1)
+rc3aii=$?
+if [ "$rc3aii" -eq 0 ] && [ -z "$OUT3AII" ]; then
+  ok "3a-ii: stop-gate.sh stays fail-open (silent allow) when hash computation fails [regression pin]"
+else
+  bad "3a-ii: stop-gate.sh fail-open regression (rc=$rc3aii out='$OUT3AII')"
+fi
+
+# Test 3b (findings 3 + 3b together): on a case-sensitive filesystem, approve-test-cmd.sh
+# computes the correct hash for a mixed-case project root, and stop-gate.sh subsequently
+# recognizes it as trusted AND successfully cd's into the real (case-preserving) root to
+# run the test command. rc alone cannot distinguish old vs. new code here — both fail
+# open silently either way (that silence is the bug). The decisive signals are: (a) the
+# trust line matches an independently-computed reference hash, and (b) the .dirty marker
+# is actually cleared, which only happens after stop-gate.sh's run_with_timeout genuinely
+# executes the command with rc=0 — proof the cd into the real path succeeded.
+# Portable self-probe: SKIP (counted, not a false PASS/FAIL) on a case-insensitive host.
+CASEDIR="$TMP/casecheck3b"; mkdir -p "$CASEDIR/MixedCase"
+if [ -d "$CASEDIR/mixedcase" ]; then
+  echo "SKIP 3b: host filesystem is case-insensitive, cannot exercise this path (informational)"
+else
+  PROJ3B="$TMP/CaseSensitiveProj3B"; mkdir -p "$PROJ3B/.claude"
+  echo "echo marker3b" > "$PROJ3B/.claude/test-cmd"
+  TRUST3B="$TMP/trust3b"
+  STOP_GATE_TRUST_FILE="$TRUST3B" STOP_GATE_UNAME=Darwin bash "$SCRIPTS/approve-test-cmd.sh" "$PROJ3B" >"$TMP/o3b-approve" 2>&1
+  rc3b_approve=$?
+  EXPECT_HASH=$(shasum -a 256 "$PROJ3B/.claude/test-cmd" | awk '{print $1}')
+  LOWER3B=$(printf '%s' "$PROJ3B" | tr '[:upper:]' '[:lower:]')
+  TRUSTLINE_OK=0
+  grep -F -x -q -- "$(printf '%s\t%s' "$EXPECT_HASH" "$LOWER3B")" "$TRUST3B" 2>/dev/null && TRUSTLINE_OK=1
+
+  SID3B="stopgate3b"
+  STATE3B="$TMP/state3b"; mkdir -p "$STATE3B"
+  touch "$STATE3B/$SID3B.dirty"
+  PAYLOAD3B=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID3B" "$PROJ3B")
+  OUT3B=$(printf '%s' "$PAYLOAD3B" | STOP_GATE_STATE_DIR="$STATE3B" STOP_GATE_TRUST_FILE="$TRUST3B" STOP_GATE_UNAME=Darwin bash "$SCRIPTS/stop-gate.sh" 2>&1)
+  rc3b_stopgate=$?
+
+  if [ "$rc3b_approve" -eq 0 ] && [ "$TRUSTLINE_OK" -eq 1 ] && [ "$rc3b_stopgate" -eq 0 ] \
+     && [ -z "$OUT3B" ] && [ ! -f "$STATE3B/$SID3B.dirty" ]; then
+    ok "3b: mixed-case root — approve writes the correct hash, stop-gate trusts it and runs the command"
+  else
+    bad "3b: mixed-case root (rc_approve=$rc3b_approve trustline_ok=$TRUSTLINE_OK rc_stopgate=$rc3b_stopgate out='$OUT3B' dirty_cleared=$([ ! -f "$STATE3B/$SID3B.dirty" ] && echo yes || echo no))"
+  fi
+fi
+
+# =====================================================================================
+# Test 4 (finding 5 / D4): prompt-en-prose-detect.sh emits both the legacy top-level
+# additionalContext key and the documented hookSpecificOutput envelope (verified against
+# code.claude.com/docs during planning — ADR-0034 §1 Finding 5).
+PAYLOAD4='{"prompt":"please draft a README section for this feature"}'
+OUT4=$(printf '%s' "$PAYLOAD4" | bash "$SCRIPTS/prompt-en-prose-detect.sh" 2>&1)
+rc4=$?
+TOP4=$(printf '%s' "$OUT4" | python3 -c "import json,sys
+try:
+    d=json.load(sys.stdin); print(d.get('additionalContext',''))
+except Exception:
+    print('')" 2>/dev/null)
+ENV4=$(printf '%s' "$OUT4" | python3 -c "import json,sys
+try:
+    d=json.load(sys.stdin); print(d.get('hookSpecificOutput',{}).get('additionalContext',''))
+except Exception:
+    print('')" 2>/dev/null)
+EVT4=$(printf '%s' "$OUT4" | python3 -c "import json,sys
+try:
+    d=json.load(sys.stdin); print(d.get('hookSpecificOutput',{}).get('hookEventName',''))
+except Exception:
+    print('')" 2>/dev/null)
+if [ "$rc4" -eq 0 ] && [ -n "$TOP4" ] && [ -n "$ENV4" ] && [ "$EVT4" = "UserPromptSubmit" ]; then
+  ok "4: prompt-en-prose-detect.sh emits both top-level and hookSpecificOutput envelope forms"
+else
+  bad "4: dual-envelope (rc=$rc4 top='$TOP4' env='$ENV4' evt='$EVT4')"
+fi
+
+# Test 4b: REGRESSION PIN, not RED (already green before this task too) — a non-matching
+# prompt must stay completely silent, unchanged by this fix.
+PAYLOAD4B='{"prompt":"fix the off-by-one bug in the loop"}'
+OUT4B=$(printf '%s' "$PAYLOAD4B" | bash "$SCRIPTS/prompt-en-prose-detect.sh" 2>&1)
+rc4b=$?
+if [ "$rc4b" -eq 0 ] && [ -z "$OUT4B" ]; then
+  ok "4b: non-matching prompt stays silent (no tokens spent) [regression pin]"
+else
+  bad "4b: non-matching prompt regression (rc=$rc4b out='$OUT4B')"
+fi
+
+echo "----"
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -gt 0 ] && exit 1 || exit 0
