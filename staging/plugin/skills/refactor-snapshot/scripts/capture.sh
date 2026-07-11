@@ -50,6 +50,14 @@ RFS_FULL="${RFS_FULL:-0}"
 RFS_FILTER="${RFS_FILTER:-}"
 RFS_TIMEOUT="${RFS_TIMEOUT:-120}"
 
+# Strip the single trailing newline the read loop always appends after the last accepted
+# command line (bash 3.2-safe ANSI-C quoting; verified against this exact bash build).
+# Without this, appending RFS_FILTER below lands it on a NEW line -- bash -c then runs it as
+# a second, separate command (typically "command not found"), and the LAST command's exit
+# status becomes EXIT_CODE below, masking the real, filtered suite result behind an unrelated
+# failure every time RFS_FILTER is set.
+CMD_CONTENT="${CMD_CONTENT%$'\n'}"
+
 if [ "$RFS_FULL" = "1" ] || [ -z "$RFS_FILTER" ]; then
   EXEC_CMD="$CMD_CONTENT"
 else

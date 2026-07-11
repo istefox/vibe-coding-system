@@ -340,3 +340,16 @@ Key architectural decisions:
 - **Fenced SKILL.md bash blocks don't share state** — multi-call-site logic duplicated verbatim per site by design.
 
 Detail: `docs/architecture/ADR-0030-34-scope-guards.md`.
+
+## Decisions from the snapshot-and-refactor chain (ADR-0031)
+
+Three fixes (issue #35): refactor-snapshot RFS_FILTER newline bug, deep-refactor glob
+override, deep-refactor dirty-tree circuit-breaker advice.
+
+Key architectural decisions:
+- **capture.sh: one-line strip** `"${CMD_CONTENT%$'\n'}"` before EXEC_CMD is built — the filter was landing on a second bash -c line, freezing snapshot EXIT at 127 and silently defeating the regression channel.
+- **enumerate-sources.sh: real glob semantics via a bash `case` matching engine** replacing grep -E entirely — mere ERE-escaping would leave `*.swift` inert, failing the SPEC's own criterion; case patterns match across `/`, bash 3.2-portable, no injection surface.
+- **Gate 2 dirty-tree advice conditioned on DIRTY_TREE** using the file's existing `[If <condition>:]` bracket convention; disclosure-only (no stash-tracking mechanism invented — deferred as bigger than the ask).
+- **Two always-PASS assertions (B4/B6) labeled in the plan** so checkpoints aren't mistaken for fix evidence.
+
+Detail: `docs/architecture/ADR-0031-35-refactor-snapshot-deep-refactor.md`.

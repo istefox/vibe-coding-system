@@ -582,7 +582,16 @@ AskUserQuestion:
     CIRCUIT BREAKER FIRED AT: <CIRCUIT_BREAKER_DIMENSION>
     Commits landed for: <DIMENSIONS_COMPLETED>
     Remaining dimensions: SKIPPED
-    Unstaged changes from <CIRCUIT_BREAKER_DIMENSION> are present in the working tree (run 'git diff' to inspect; 'git checkout -- .' to revert if unwanted).
+    Unstaged changes from <CIRCUIT_BREAKER_DIMENSION> are present in the working tree (run 'git diff' to inspect).
+    [If DIRTY_TREE=true:]
+    This run started with a dirty working tree (Gate 0 warning). The unstaged changes above are
+    now a MIX of your own pre-existing edits and this dimension's failed fix attempts --
+    'git checkout -- .' would discard both indiscriminately. Inspect 'git diff' file by file and
+    revert selectively ('git checkout -- <path>' per file), or run 'git stash' to set everything
+    aside non-destructively until you have reviewed it.
+    [If DIRTY_TREE=false:]
+    This run started from a clean working tree, so 'git checkout -- .' safely reverts these
+    unstaged changes if unwanted.
 
     [If BASELINE=RED or report-only mode:]
     Mode: REPORT-ONLY (no source edits were applied)
