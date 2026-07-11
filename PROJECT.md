@@ -8,7 +8,7 @@ Auto-generated roadmap from issues labeled `prep` (ADR-0023).
 ### Phase 1 — prep
 - [x] Vendor deployed-only skills and hooks into staging  (issue #28)  (completed: 2026-07-11)
 - [x] Refresh stale staging copies from the deployed tree  (issue #29)  (completed: 2026-07-11)
-- [ ] clean-public-repo: keep private history out of the public branch  (issue #30)
+- [x] clean-public-repo: keep private history out of the public branch  (issue #30)  (completed: 2026-07-11)
 - [ ] concept-to-code: BSD-safe slug stamp and autopilot gate fixes  (issue #31)
 - [ ] Manifest helpers: count guards, exit codes, YAML escaping  (issue #32)
 - [ ] hook-verify-workflow: filter the audit window by session  (issue #33)
