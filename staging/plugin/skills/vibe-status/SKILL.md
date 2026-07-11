@@ -39,6 +39,7 @@ Locale (cwd-relative, conditional on existence):
 - Manifests: `$PWD/docs/manifests/*.yaml`
 - Triage state: `$PWD/.triage-fix-last.json`
 - Memory head: `~/.claude/projects/<encoded-cwd>/memory/MEMORY.md`
+- Chain history: `~/.claude/projects/<encoded-cwd>/memory/chain-history/*.md` (active chains)
 
 ## Defaults
 
@@ -53,6 +54,8 @@ The report header is: `# Vibe-Coding System Status — <ISO-timestamp>`.
 
 See `~/.claude/skills/vibe-status/tests/run-tests.sh` for fixtures and expected output
 shape.
+The `## Active chains` section appears when the memory store has one or more non-terminal
+`concept-to-code` chains recorded (ADR-0021); it is omitted entirely when there are none.
 
 ## Reference
 

@@ -24,6 +24,16 @@ START=$(date +%s)
 TMP=$(mktemp -d)
 RUNNER="$HOME/.claude/skills/vibe-status/scripts/harness-runner.sh"
 
+# Recursion guard (issue #37): vibe-status's own harness (tests/run-tests.sh) calls this same
+# script as part of testing itself (SKILL.md Discovery). Without a guard, every real invocation
+# discovers and re-invokes its own skill's harness, which reaches aggregate.sh again, unbounded —
+# empirically reproduced, not hypothetical (ADR-0033 §1). NESTED records whether this process was
+# already inside an aggregate.sh sweep when it started (inherited via env export); a nested
+# aggregate.sh skips re-discovering the vibe-status entry specifically, capping self-testing to
+# exactly one level regardless of recursion depth elsewhere.
+NESTED="${VIBE_STATUS_RECURSING:-0}"
+export VIBE_STATUS_RECURSING=1
+
 # --- Section 1: Harness discovery + parallel exec ---
 HARNESS_OK=0
 HARNESS_FAIL=0
@@ -36,6 +46,9 @@ if [ "$SKIP_HARNESS" -eq 0 ]; then
   for h in "$HOME"/.claude/skills/*/tests/run-tests.sh; do
     [ -f "$h" ] || continue
     [ -x "$h" ] || continue
+    case "$h" in
+      */skills/vibe-status/tests/run-tests.sh) [ "$NESTED" = "1" ] && continue ;;
+    esac
     HARNESS_TOTAL=$((HARNESS_TOTAL + 1))
     name=$(basename "$(dirname "$(dirname "$h")")")
     ( bash "$RUNNER" "$h" "$TMO" >"$TMP/$name.out" 2>&1 ) &
@@ -175,16 +188,20 @@ fi
 # --- Section 7: Memory head ---
 MEM_LINE="(no memory file)"
 ENC=$(printf '%s' "$PWD" | tr '/' '-')
-MEM_FILE="$HOME/.claude/projects/$ENC/memory/MEMORY.md"
+MEM_DIR="$HOME/.claude/projects/$ENC/memory"
+MEM_FILE="$MEM_DIR/MEMORY.md"
 if [ -f "$MEM_FILE" ]; then
-  pcount=$(grep -c '^\- \[' "$MEM_FILE" 2>/dev/null || echo 0)
+  pcount=$(grep -c '^\- \[' "$MEM_FILE" 2>/dev/null)
+  if [ -z "$pcount" ]; then
+    pcount=0
+  fi
   MEM_LINE="$pcount entries indexed in MEMORY.md"
 fi
 
 # --- Section 7b: Agent notes (ADR-0012, read-only, non-blocking) ---
 AN_COUNT=0
 AN_LINE="(no agent-notes)"
-AN_DIR="$HOME/.claude/projects/$ENC/memory/agent-notes"
+AN_DIR="$MEM_DIR/agent-notes"
 if [ -d "$AN_DIR" ]; then
   AN_COUNT=$(ls -1 "$AN_DIR"/*.md 2>/dev/null | grep -v 'README.md' | wc -l | tr -d ' ')
   if [ "$AN_COUNT" -gt 0 ]; then
@@ -291,6 +308,8 @@ else
   printf '## Hooks (settings.json)\n%s\n\n' "$HOOK_LINES"
 
   printf '## Memory\n%s\n\n' "$MEM_LINE"
+
+  bash "$HOME/.claude/skills/vibe-status/scripts/chain-memory-section.sh" "$MEM_DIR" || true
 
   printf '## Agent notes (ADR-0012)\n%s\n\n' "$AN_LINE"
 
