@@ -171,6 +171,19 @@ Write the planned trimmed CLAUDE.md and each planned rules file to temp files fo
    Re-run after reviewing the classification output above.
    ```
 
+   **Content-preservation exemptions (deliberate, not a gap — ADR-0032 D1-D3):**
+   - **Matching is whole-line, not substring**, and tolerates trailing-whitespace differences
+     (both sides trimmed before comparison). A heading like `## Git` must appear as a complete
+     line in some output file; being a text prefix of `## GitHub Actions` does not count.
+   - **Per-line occurrence counts (multiplicity) are NOT compared.** The invariant is a SET
+     union (`union(output) >= union(input)`, per ADR-0019 D6) — it checks that every distinct
+     line survives at least once, not that it survives the same number of times. A line
+     duplicated in the original CLAUDE.md and collapsed to a single copy in the output is not
+     content loss: the pipeline's own merge step (Step 7.4, dedup by exact-line match against a
+     pre-existing target rules file) and the `--global` duplicate-removal step (Step 3/4)
+     legitimately reduce occurrence counts by design. Enforcing multiplicity would make the
+     invariant fail on the skill's own intended behavior. See ADR-0032 D2.
+
 3. **Reduction metric.** Compute
    `R = (N_before - N_after) * 100 / N_before`.
    If `R < 30`, emit a warning: `< 30% line reduction achievable (actual: R%)`. Do not abort
