@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -u
 INPUT=$(cat)
-FILE_PATH=$(printf '%s\n' "$INPUT" | jq -r '.tool_input.file_path // empty')
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
 [ -z "$FILE_PATH" ] && exit 0
 case "$FILE_PATH" in
   *.py)

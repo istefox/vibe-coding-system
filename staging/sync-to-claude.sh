@@ -122,6 +122,8 @@ plugin/skills/vibe-status/scripts/harness-runner.sh|skills/vibe-status/scripts/h
 plugin/skills/vibe-status/tests/run-tests.sh|skills/vibe-status/tests/run-tests.sh
 plugin/skills/swiftui-pro/SKILL.md|skills/swiftui-pro/SKILL.md
 plugin/skills/find-skills/SKILL.md|skills/find-skills/SKILL.md
+plugin/skills/goal-loop/SKILL.md|skills/goal-loop/SKILL.md
+plugin/skills/research-prompt/SKILL.md|skills/research-prompt/SKILL.md
 "
 
 printf '%s\n' "$PAIRS" | while IFS='|' read -r src dst; do

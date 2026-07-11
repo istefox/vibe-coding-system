@@ -420,6 +420,24 @@ Token discipline (sec. 3.10, ADR-0016): the article's operational rules are cons
 
 Out of scope (no blueprint impact): the cron expression reference and vixie-cron day-of-week semantics, scheduler jitter (recurring tasks fire up to 30 minutes late, one-shots up to 90 seconds early, offset derived from the task ID), one-time natural-language reminders, the `CronCreate`/`CronList`/`CronDelete` tool triple, routine API triggers and their `experimental-cc-routine-2026-04-01` beta header, routine GitHub triggers and their PR filter fields, cloud-environment network allowlists, and the Bedrock/Vertex/Foundry `/loop` fallbacks. Sources: `code.claude.com/docs/en/scheduled-tasks` and `/en/routines` (both fetched 2026-07-09), plus the @ClaudeDevs article of 2026-07-06 as the prompt for this audit.
 
+### Correction 2026-07-11 (project-bootstrap retired from staging)
+
+`docs/specs/29-refresh-stale-staging-copies-from-the-de.spec.md` (issue #29, ADR-0025) confirms
+`project-bootstrap` is no longer present in the deployed skill tree (`~/.claude/skills/`) and removes the
+retired skill from `staging/plugin/skills/`. Two prose references are corrected here; `staging/plugin/agents/`,
+the seven repo-native `SKILL.md` files, and `staging/user/` are refreshed from the deployed tree in the same
+issue (staleness tracked since ADR-0022's `staging/` bridge; ADR-0024 covered the first, larger vendoring pass).
+
+- Sec. 14 packaging note (~line 2282) now lists the 6 remaining field-tested skills from sec. 8.3
+  (`interview-driver`, `adr-writer`, `claude-md-generator`, `swift-vibe`, `fastapi-react-vibe`,
+  `code-review-checklist`); `project-bootstrap` dropped from both the count and the list.
+- Sec. 15 installation checklist (~line 2297) drops `project-bootstrap` from the custom-skills list.
+- Sec. 8.3's per-skill design catalog (~line 1650) and sec. 8.6's deployed-skills table are left untouched by
+  design: 8.3 documents what was designed (historically accurate, not a live-status claim) and 8.6 already
+  omits `project-bootstrap`. Also out of scope for this correction: `docs/RUNBOOK.md`'s own stale count
+  comments (Steps 4, 7, 8) and the global-CLAUDE.md template at sec. 4 (~line 970), which is illustrative
+  content, not this system's live configuration.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -2279,7 +2297,7 @@ claude --plugin-dir ./my-plugin
 claude --plugin-url https://example.com/plugin.zip
 ```
 
-**When Stefano has field-tested the 7 custom skills from sec. 8.3** (interview-driver, adr-writer, claude-md-generator, swift-vibe, fastapi-react-vibe, code-review-checklist, project-bootstrap), he can package them into a `stefano-vibe-coding` plugin (skills + agents) and share it via a private GitHub repo. Advantage: versioned, updatable, reusable.
+**When Stefano has field-tested the 6 custom skills from sec. 8.3** (interview-driver, adr-writer, claude-md-generator, swift-vibe, fastapi-react-vibe, code-review-checklist), he can package them into a `stefano-vibe-coding` plugin (skills + agents) and share it via a private GitHub repo. Advantage: versioned, updatable, reusable.
 
 ---
 
@@ -2294,7 +2312,7 @@ claude --plugin-url https://example.com/plugin.zip
 - [ ] Create global hooks in `~/.claude/settings.json` + scripts in `~/.claude/hooks/` (sec. 7)
 - [ ] Configure default permission mode `acceptEdits` + allowlist (sec. 10)
 - [ ] Install core MCP via `claude mcp add --scope user` (sec. 9.1): sequential-thinking (stdio), github (HTTP), sqlite. XcodeBuildMCP already present.
-- [ ] Create custom skills in `~/.claude/skills/` (`interview-driver`, `adr-writer`, `claude-md-generator`, `swift-vibe`, `fastapi-react-vibe`, `code-review-checklist`, `project-bootstrap`) using `skill-creator`
+- [ ] Create custom skills in `~/.claude/skills/` (`interview-driver`, `adr-writer`, `claude-md-generator`, `swift-vibe`, `fastapi-react-vibe`, `code-review-checklist`) using `skill-creator`
 - [ ] Evaluate plugin installation: `superpowers`, `spec-kit`, code intelligence for Python/TS/Swift
 - [ ] Sync custom skills and agent files via private Git repo across development machines. Never inside iCloud Drive.
 

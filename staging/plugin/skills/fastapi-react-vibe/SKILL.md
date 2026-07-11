@@ -1,23 +1,22 @@
 ---
 name: fastapi-react-vibe
-description: This skill should be used when adding a CRUD resource to a FastAPI+React project and a full backend+frontend scaffold is needed. Triggers include "scaffolda la risorsa X", "nuovo endpoint CRUD FastAPI+React".
-disable-model-invocation: true
+description: This skill should be used when adding a CRUD resource to a FastAPI+React project and a full backend+frontend scaffold is needed.
 ---
 
-Genera lo scaffold per la risorsa "$ARGUMENTS".
+Generate the scaffold for the "$ARGUMENTS" resource.
 
 Backend (`backend/src/<pkg>/`):
-- `models/<arguments>.py`: SQLAlchemy 2.x model con `Mapped[]`
+- `models/<arguments>.py`: SQLAlchemy 2.x model with `Mapped[]`
 - `schemas/<arguments>.py`: Pydantic v2 (Create/Update/Read)
 - `services/<arguments>.py`: business logic
-- `api/<arguments>.py`: router FastAPI con CRUD
-- `tests/<arguments>_test.py`: pytest, 4 test base
+- `api/<arguments>.py`: FastAPI router with CRUD
+- `tests/<arguments>_test.py`: pytest, 4 basic tests
 
 Frontend (`frontend/src/`):
 - `features/<arguments>/api.ts`: fetch wrapper
 - `features/<arguments>/hooks.ts`: useQuery/useMutation
-- `features/<arguments>/<Arguments>List.tsx`: tabella shadcn/ui
-- `features/<arguments>/<Arguments>Form.tsx`: form react-hook-form + zod
-- aggiungi la route alla config di routing
+- `features/<arguments>/<Arguments>List.tsx`: shadcn/ui table
+- `features/<arguments>/<Arguments>Form.tsx`: react-hook-form + zod form
+- add the route to the routing config
 
-Package manager: `npm`. Segui gli ADR esistenti e lo stile del codice presente.
+Package manager: `npm`. Follow existing ADRs and the current code style.

@@ -1,14 +1,14 @@
 ---
 name: swift-vibe
-description: This skill should be used when working on SwiftUI/iOS code and ready-to-use modern patterns are helpful (Observable+Bindable iOS 17+, SwiftData @Query, URLSession async/await). Triggers include "pattern SwiftUI", "snippet SwiftData", "come faccio questa view".
+description: This skill should be used when working on SwiftUI/iOS code and ready-to-use modern patterns are helpful (Observable+Bindable iOS 17+, SwiftData @Query, URLSession async/await).
 ---
 
-Best practice SwiftUI con snippet pronti.
+SwiftUI best practices with ready-to-use snippets.
 
-Pattern principali:
-- `@Observable` + `@Bindable` (iOS 17+) per lo stato.
-- SwiftData con `@Query` per il fetch dichiarativo.
-- `URLSession` con async/await per il networking.
-- View piccole e composte; side-effect in `.task`/`.onAppear`/`.onChange`.
+Main patterns:
+- `@Observable` + `@Bindable` (iOS 17+) for state.
+- SwiftData with `@Query` for declarative fetch.
+- `URLSession` with async/await for networking.
+- Small, composable views; side-effects in `.task`/`.onAppear`/`.onChange`.
 
-Rispetta la rule `swift.md`. Espandi questa skill con altri pattern man mano che li incontri.
+Follow the `swift.md` rule. Extend this skill with additional patterns as you encounter them.

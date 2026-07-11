@@ -1,14 +1,14 @@
 ---
 name: adr-writer
-description: This skill should be used when an architectural decision has been taken (or the architect agent is producing a design) and a standardized Architecture Decision Record must be written under docs/architecture/. Triggers include "scrivi un ADR", "documenta questa decisione architetturale".
+description: This skill should be used when an architectural decision has been taken (or the architect agent is producing a design) and a standardized Architecture Decision Record must be written under docs/architecture/.
 ---
 
-Crea `docs/architecture/ADR-NNN-$ARGUMENTS.md` (NNN incrementale, allineato all'output dell'agente architect).
+Create `docs/architecture/ADR-NNN-$ARGUMENTS.md` (NNN incremental, aligned with the architect agent output).
 
-Struttura obbligatoria, ogni sezione concreta, niente fluff:
+Mandatory structure, each section concrete, no fluff:
 1. Status (Proposed / Accepted / Deprecated / Superseded)
-2. Context (problema, vincoli, requisiti)
-3. Decision (la scelta presa, in modo netto)
-4. Alternatives considered (almeno 2, con motivo del rifiuto)
-5. Consequences (positive, negative, neutre)
-6. References (ADR correlati, doc, issue)
+2. Context (problem, constraints, requirements)
+3. Decision (the choice made, stated clearly)
+4. Alternatives considered (at least 2, with reason for rejection)
+5. Consequences (positive, negative, neutral)
+6. References (related ADRs, docs, issues)

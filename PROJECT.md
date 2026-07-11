@@ -6,7 +6,7 @@ Auto-generated roadmap from issues labeled `prep` (ADR-0023).
 ## Phases
 
 ### Phase 1 — prep
-- [ ] Vendor deployed-only skills and hooks into staging  (issue #28)
+- [x] Vendor deployed-only skills and hooks into staging  (issue #28)  (completed: 2026-07-11)
 - [ ] Refresh stale staging copies from the deployed tree  (issue #29)
 - [ ] clean-public-repo: keep private history out of the public branch  (issue #30)
 - [ ] concept-to-code: BSD-safe slug stamp and autopilot gate fixes  (issue #31)
