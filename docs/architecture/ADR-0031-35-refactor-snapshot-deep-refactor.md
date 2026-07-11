@@ -67,7 +67,7 @@ directly (`od -c`): `EXEC_CMD` for `CMD_CONTENT="pytest -q\n"`, `RFS_FILTER="-k 
 All three timeout branches (lines 66-88) execute this same `EXEC_CMD` via `bash -c "$EXEC_CMD"`.
 `bash -c` with a multi-line string runs **every** line as a separate, sequential statement and
 reports `$?` for the **last** one executed. So the real flow is: line 1 (`pytest -q`) runs and
-produces the real result — but it is not final; line 2 (` -k foo`, a bare filter fragment with a
+produces the real result — but it is not final; line 2 (`-k foo`, a bare filter fragment with a
 leading space) is then executed as an attempt to run a command literally named `-k` (or whatever
 the filter's first token is), which fails with "command not found," conventionally exit 127. The
 snapshot's `EXIT=` field records this final, bogus 127 — **unconditionally**, regardless of
