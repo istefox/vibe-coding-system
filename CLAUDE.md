@@ -312,3 +312,18 @@ Key architectural decisions:
 - **CI-user caveat:** chmod-555 write-failure simulation may be inert if Actions runs as root; Task-3 checkpoint halts on unexpected all-green instead of papering over.
 
 Detail: `docs/architecture/ADR-0028-32-manifest-helpers-guards.md`.
+
+## Decisions from the hook-verify session-filter chain (ADR-0029)
+
+Session-scopes hook-verify-workflow.sh's AFTER window (issue #33) so a concurrent
+session's coder rows can no longer produce a false VERIFIED — the exact ADR-0016
+hard-blocker false-positive.
+
+Key architectural decisions:
+- **Env var corrected with citation:** Claude Code sets `CLAUDE_CODE_SESSION_ID`, not the issue's literal `CLAUDE_SESSION_ID` (code.claude.com/docs/en/env-vars); implementing the literal name would have left the primary path silently dead while passing every offline test.
+- **Same-session subagents share the parent session_id**, so the filter keeps legitimate workflow-coder rows.
+- **No session id + multiple session ids after the marker → INCONCLUSIVE exit 3;** residual blind spot disclosed (single foreign session, no id: still a false VERIFIED, pinned by test S5, closing it would need statefulness — rejected).
+- **Existing test file extended (26 → 39 assertions, 8 named cases)** per SPEC, overriding the one-file-per-issue pattern; no CI change needed.
+- **Issue #34 gap disclosed:** no global smoke-test record exists (only per-manifest flags); #34 must design it, not assume it.
+
+Detail: `docs/architecture/ADR-0029-33-hook-verify-session-filter.md`.
