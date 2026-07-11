@@ -460,6 +460,42 @@ the amendment of record for this staleness, consistent with the precedent ADR-00
 locations this document's own convention treats as live-status claims — never named a hook at all, so
 there is nothing to correct there.
 
+### Correction 2026-07-11 (issue #40, agent tool scoping reconciliation)
+
+`docs/specs/40-agent-tool-scoping-per-blueprint-section.spec.md` (issue #40, ADR-0036) reconciles four
+places where `staging/plugin/agents/{architect,reviewer,researcher}.md` (byte-identical to the deployed
+`~/.claude/agents/` copies -- confirmed by diff before this correction) had drifted from sec. 3 with no
+recorded reason:
+
+- **architect Bash scope** (sec. 3.1): was fully unrestricted `Bash`; now `Bash(git *), Bash(rg *)`
+  (restored, matching the example above verbatim) plus `Bash(bash *), Bash(npx markdownlint-cli2*), Bash(npx --yes markdownlint-cli2*), Bash(python3 *),
+  Bash(shasum *)` (a deliberate widening beyond the example, for the verification-by-execution this
+  roadmap's own architect dispatches routinely use) -- see the deployment note under sec. 3.1.
+- **architect `permissionMode: plan`** (sec. 3.1): was already absent from the deployed file; confirmed
+  **not** restorable without breaking every unattended architect dispatch -- verified live against
+  `code.claude.com/docs/en/agent-sdk/permissions` (fetched 2026-07-11), plan mode blocks all file
+  writes pending manual approval regardless of allow rules, and architect's sole deliverable is writing
+  the ADR and the plan. Deliberate divergence, recorded rather than silently left unexplained.
+- **architect `effort`** (sec. 3.10): was `max`; restored to `xhigh` -- `max` does not persist in
+  file-based agent configuration (`code.claude.com/docs/en/model-config`, fetched 2026-07-11), so the
+  deployed value was very likely inert.
+- **reviewer Bash scope** (sec. 3.3): was fully unrestricted `Bash`; now `Bash(git diff*), Bash(git
+  log*)` (restored verbatim, still no `git add`/`git commit`) plus `Bash(bash *), Bash(awk *),
+  Bash(python3 *)` for the same verify-by-execution need, narrower than architect's set since reviewer
+  processes untrusted diff content -- see the deployment note under sec. 3.3.
+- **researcher `mcpServers`** (sec. 3.8, sec. 3.9): the inline example was already syntactically stale
+  -- current docs (`code.claude.com/docs/en/sub-agents`, fetched 2026-07-11) show a YAML **list**
+  syntax with an explicit `type: stdio` field, not the map-keyed form both sections showed. Corrected
+  in place in both sections. The corrected block is **not** deployed to the live `researcher.md` in
+  this pass -- no live smoke test is available to confirm the resulting tool-name prefix reaches the
+  agent's `tools` allowlist before trusting it unattended (same smoke-test-before-deploy posture as
+  ADR-0016/ADR-0029) -- the sec. 3.8 note beneath the corrected example records this and what the
+  deployed file relies on instead (the global `context7` plugin, unaffected, already working).
+
+`staging/plugin/agents/` is **not** refreshed by this correction -- the reverse of ADR-0025's usual
+direction: this time the fix lands in `staging/` first and reaches `~/.claude/` only at the next human
+sync, same disclosed convention as ADR-0024 through ADR-0035.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -669,6 +705,8 @@ Use sequential-thinking MCP when the design space is complex.
 Update your memory with patterns and decisions you discover.
 ```
 
+> **Deployment note (2026-07-11, ADR-0036):** the deployed/staging `architect.md` widens `tools` beyond the two entries above -- `Bash(git *), Bash(rg *)` stay unchanged, plus `Bash(bash *), Bash(npx markdownlint-cli2*), Bash(npx --yes markdownlint-cli2*), Bash(python3 *), Bash(shasum *)` for the verification-by-execution this roadmap's architect dispatches routinely use (test harness, `npx markdownlint-cli2`, frontmatter/YAML checks, content hashing) -- still far short of unrestricted Bash for direct invocations (the interpreter-class entries `bash`/`python3` remain a disclosed wrapped-command residual — ADR-0036 Consequences). `permissionMode: plan` is deliberately **not** restored: verified against `code.claude.com/docs/en/agent-sdk/permissions` (2026-07-11), plan mode blocks every file write pending manual approval "regardless of existing allow rules," and architect's only deliverable is writing the ADR and the plan -- every unattended dispatch (`autopilot-build`, `nightly-autopilot`) would stall on that gate. `effort: xhigh`, not `max` (`max` does not persist in file-based agent config -- `code.claude.com/docs/en/model-config`, 2026-07-11). `memory: project` (shown above) stays absent, superseded by ADR-0012/ADR-0013; not reintroduced. `Write` itself carries no path-scoped rule -- `code.claude.com/docs/en/tools-reference` (2026-07-11) documents path pattern matching for `Read`/`Grep`/`Edit` only, not `Write` -- the write-scope guard stays prompt-level plus the global `protect-files.sh` denylist, a disclosed residual gap. Full reasoning: ADR-0036.
+
 ### 3.2 coder
 
 File: `~/.claude/agents/coder.md`
@@ -734,6 +772,8 @@ Workflow:
 
 Output is markdown, not a code diff. The orchestrator decides what to apply.
 ```
+
+> **Deployment note (2026-07-11, ADR-0036):** the deployed/staging `reviewer.md` keeps the read-only git scope above exactly (`Bash(git diff*), Bash(git log*)` -- no `git add`/`git commit`, preserving the agent's own "never run mutating git or shell commands" invariant) and widens `tools` beyond it with `Bash(bash *), Bash(awk *), Bash(python3 *)` for the verify-by-execution capability this roadmap's reviewer dispatches and the `review-triage-fix` skill rely on -- narrower than architect's set (no `npx`, no `shasum`, no bare `git *`) since reviewer processes untrusted diff content. This direct-invocation framing is qualified, not absolute -- the `bash`/`awk`/`python3` interpreter-class grants can wrap a mutating git command; the exclusion is an accidental-misuse guard, and the explicit risk-acceptance decision plus the hook-level follow-up are recorded in ADR-0036 Consequences. Full reasoning: ADR-0036.
 
 ### 3.4 tester
 
@@ -872,11 +912,12 @@ tools: Read, Grep, Glob, WebSearch, WebFetch
 model: haiku
 effort: low
 mcpServers:
-  context7:
-    command: npx
-    args:
-      - -y
-      - "@upstash/context7-mcp"
+  - context7:
+      type: stdio
+      command: npx
+      args:
+        - -y
+        - "@upstash/context7-mcp"
 ---
 
 You are a technical researcher.
@@ -898,6 +939,8 @@ Return a concise brief, not an essay. The orchestrator decides what to act on.
 
 > **Deployment note (2026-05-29):** `mcpServers: context7` added inline. This makes researcher self-contained — no dependency on the global context7 plugin being installed. If both global and inline are present, they resolve to the same server; no conflict.
 
+> **Correction (2026-07-11, ADR-0036):** the note above does not match deployed or staging reality -- no inline `mcpServers` block exists in either `~/.claude/agents/researcher.md` or `staging/plugin/agents/researcher.md` (confirmed by reading both). The syntax shown above is also stale: current `code.claude.com/docs/en/sub-agents` (2026-07-11) documents `mcpServers` as a YAML **list**, each inline entry keyed by server name with an explicit `type: stdio` field, corrected above. Not deployed to `researcher.md` in this pass -- no live smoke test is available to confirm the resulting tool-name prefix reaches the agent's `tools` allowlist before trusting it unattended (same posture as ADR-0016/ADR-0029). `researcher` currently relies entirely, and successfully, on the global `context7` plugin already installed -- unaffected by this correction.
+
 ### 3.9 Agent frontmatter — available fields (v2.1.154+)
 
 | Field | Values | Purpose |
@@ -910,7 +953,7 @@ Return a concise brief, not an essay. The orchestrator decides what to act on.
 | `color` | color name | UI label color; cosmetic only |
 | `isolation` | `worktree` | Run in an isolated git worktree (coder only) |
 | `memory` | `local` / `project` / `user` | Persistent memory scope for this agent |
-| `mcpServers` | YAML map | Inline MCP server definitions scoped to this agent |
+| `mcpServers` | YAML list | Inline MCP server definitions scoped to this agent |
 
 **`memory: local`** scopes memory to `.claude/agent-memory-local/<name>/` — git-ignored, NOT the curated orchestrator auto-memory. The agent gets a dedicated Memory tool. All Edit/Write operations still go through the normal tool gate (pattern-enforce hook for coder). Use Memory tool only for memory writes, never Edit/Write on `.claude/` paths.
 
@@ -919,11 +962,12 @@ Return a concise brief, not an essay. The orchestrator decides what to act on.
 ```yaml
 # Example: researcher with inline context7 (self-contained, no plugin dependency)
 mcpServers:
-  context7:
-    command: npx
-    args:
-      - -y
-      - "@upstash/context7-mcp"
+  - context7:
+      type: stdio
+      command: npx
+      args:
+        - -y
+        - "@upstash/context7-mcp"
 ```
 
 ### 3.10 Cost model

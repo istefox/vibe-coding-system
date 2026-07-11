@@ -1,12 +1,12 @@
 manifest_schema_version: "1.3"
-topic: "39-skill-text-corrections"
-topic_full_title: "Skill text corrections across five standalone skills"
+topic: "40-agent-tool-scoping"
+topic_full_title: "Agent tool scoping per blueprint section 3"
 project_root: "/Users/stefer/Developer/vibe-coding-system"
 mode: "brownfield"
 anonymize: false
 chain_path: "standard"
-created_at: "2026-07-11T08:24:22+00:00"
-last_updated_at: "2026-07-11T09:07:36+00:00"
+created_at: "2026-07-11T09:08:02+00:00"
+last_updated_at: "2026-07-11T09:59:31+00:00"
 current_step: "completed"
 status: "completed"
 
@@ -45,9 +45,9 @@ artifacts:
   spec: "/Users/stefer/Developer/vibe-coding-system/SPEC.md"
   brainstorm: null
   ux_blueprint: null
-  adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0035-39-skill-text-corrections.md"
+  adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0036-40-agent-tool-scoping.md"
   arch: null
-  plan: "/Users/stefer/Developer/vibe-coding-system/docs/superpowers/plans/2026-07-11-39-skill-text-corrections.md"
+  plan: "/Users/stefer/Developer/vibe-coding-system/docs/superpowers/plans/2026-07-11-40-agent-tool-scoping.md"
   project_claude_md: "/Users/stefer/Developer/vibe-coding-system/CLAUDE.md"
 
 # HITL gates audit trail
@@ -87,4 +87,4 @@ failure:
   partial_artifacts: []
 
 # Hint for next action (UX)
-next_action: "Run /skill concept-to-code 39-skill-text-corrections to start Step 1 interview"
+next_action: "Run /skill concept-to-code 40-agent-tool-scoping to start Step 1 interview"
