@@ -99,6 +99,12 @@ unattended run alive on its own. Confirm your login is current right before you 
 interactive `claude` session is enough. An expired login mid-run halts the remaining features, which
 then show unpublished in the morning report.
 
+**Destructive-command stalls (CC 2.1.208+).** Even in bypass mode, a catastrophic removal wrapped
+in `$(…)`, backticks, or `<(…)` now raises a permission prompt instead of executing. Overnight
+nothing answers it, so the run stalls there, which is the safe direction. The `/goal` turn budget
+is the backstop, the affected feature shows unpublished in the morning report, and a
+`claude agents` peek shows the exact pending ask. No pre-flight change needed.
+
 ---
 
 ## Reading the morning report
