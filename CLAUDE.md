@@ -422,3 +422,25 @@ Key architectural decisions:
 - **Unscoped Write on architect has no frontmatter-level fix** (path patterns documented for Read/Grep/Edit only) — disclosed; closing it needs a dedicated hook (future issue).
 
 Detail: `docs/architecture/ADR-0036-40-agent-tool-scoping.md`.
+
+## Decisions from the native-build tool-resolution fix (ADR-0038)
+
+Root-cause classification and fix for issue #63 (found by the 2026-07-14 post-upgrade smoke test):
+on native macOS/Linux builds CC serves Grep/Glob through Bash as embedded `ugrep`/`bfs` (v2.1.117)
+and silently ignores dedicated Grep/Glob frontmatter entries on Bash-equipped agents; LSP and
+coder's `memory: local` Memory tool do not register in subagents on this build either.
+
+Key architectural decisions:
+- **Intentional platform behavior since v2.1.117, not a regression** (changelog-cited, live-verified
+  on 2.1.209 with an 8-agent smoke plus forced-call probe); invisible to 2.1.208's tools-list
+  validation, which fires only on a fully-empty resolution.
+- **Frontmatter entries stay** (Grep/Glob/LSP are honored on npm/Windows builds, inert on native);
+  agent files remain build-portable.
+- **reviewer widened with `Bash(rg *), Bash(grep *)`**: its ADR-0036 scope allowed no direct
+  search on native builds; read-only grants, same asymmetric-widening rationale, mutation
+  exclusions unchanged. Its LSP first pass is now conditional on tool availability.
+- **coder/debugger LSP references and the coder Memory pilot (P1) disclosed as inert, not fixed**:
+  each needs its own decision; upstream docs gap (Bash+Grep example without caveat) optionally
+  reportable via /feedback.
+
+Detail: `docs/architecture/ADR-0038-63-native-build-agent-tool-resolution.md`.

@@ -518,6 +518,25 @@ Still open, not resolved by this range: the ADR-0016 `hook_verified` blocker. No
 
 Out of scope (no blueprint impact): screen-reader mode (`--ax-screen-reader`), `vimInsertModeRemaps`, `CLAUDE_CODE_PROCESS_WRAPPER` corporate launchers, mouse-click support for multi-select menus, the Bedrock/Vertex/Foundry items (auto-mode default-on for those providers, Opus 4.8 default, SSO and credential fixes, the Windows credential-stall guard), `/usage-credits` input validation, the `/upgrade` login-flow fix, `/cd` path suggestions, the `/doctor` CLAUDE.md-trim check and Homebrew-channel fix, `/commit-push-pr` push-remote auto-allow (this system's own `/commit` skill supersedes that command), gateway `/login` endpoints, the `EnterWorktree` out-of-tree confirmation, the `/model` picker and agents-view rendering fixes, the `/release-notes` context-injection fix, and the markdown-table rendering cap. Source: `~/.claude/cache/changelog.md` (bundled CC 2.1.209), cross-checked against upstream `CHANGELOG.md` (fetched 2026-07-14).
 
+### Correction 2026-07-14 (issue #63, native-build agent tool resolution)
+
+The post-upgrade smoke test recommended by the audit above ran the same day and found that every
+Bash-equipped agent (architect, coder, reviewer, tester, debugger, refactorer) launches without the
+dedicated Grep/Glob tools its frontmatter declares, while the two Bash-less agents (doc-writer,
+researcher) receive them. A forced-call probe on debugger confirmed the tools are genuinely not
+registered. Root cause: CC v2.1.117 replaced Grep/Glob on native macOS/Linux builds with embedded
+`bfs`/`ugrep` served **through the Bash tool**; v2.1.119 restored the dedicated tools when Bash is
+absent; v2.1.162 made an explicit listing effective for the CLI `--tools` flag only. Agent
+frontmatter remains silently ignored on native builds when Bash is present: intentional platform
+behavior since v2.1.117, not a regression, and invisible to CC 2.1.208's tools-list validation,
+which fires only when the whole list resolves to nothing. LSP does not register in subagents on
+this build either, and coder's `memory: local` Memory tool (pilot P1) is observed inert.
+Consequence for this document: sec. 3's frontmatter examples that list Grep/Glob next to Bash are
+build-dependent, honored on npm/Windows installs and inert on the native macOS build this system
+runs on. The one real defect was reviewer, whose ADR-0036 Bash scope allowed no direct `grep`/`rg`:
+fixed by widening its scope with `Bash(rg *), Bash(grep *)` and making its LSP first pass
+conditional. Decision record: ADR-0038.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -796,6 +815,8 @@ Output is markdown, not a code diff. The orchestrator decides what to apply.
 ```
 
 > **Deployment note (2026-07-11, ADR-0036):** the deployed/staging `reviewer.md` keeps the read-only git scope above exactly (`Bash(git diff*), Bash(git log*)` -- no `git add`/`git commit`, preserving the agent's own "never run mutating git or shell commands" invariant) and widens `tools` beyond it with `Bash(bash *), Bash(awk *), Bash(python3 *)` for the verify-by-execution capability this roadmap's reviewer dispatches and the `review-triage-fix` skill rely on -- narrower than architect's set (no `npx`, no `shasum`, no bare `git *`) since reviewer processes untrusted diff content. This direct-invocation framing is qualified, not absolute -- the `bash`/`awk`/`python3` interpreter-class grants can wrap a mutating git command; the exclusion is an accidental-misuse guard, and the explicit risk-acceptance decision plus the hook-level follow-up are recorded in ADR-0036 Consequences. Full reasoning: ADR-0036.
+>
+> **Amended 2026-07-14 (ADR-0038):** the deployed/staging set also carries `Bash(rg *), Bash(grep *)`. On native macOS/Linux builds CC serves Grep/Glob through Bash as embedded `ugrep`/`bfs` (v2.1.117) and silently ignores the frontmatter's dedicated Grep/Glob entries, which had left this agent with no direct search path; the two grants are read-only and stay inside the same verify-by-execution category as the 2026-07-11 widening.
 
 ### 3.4 tester
 
