@@ -361,6 +361,39 @@ assumed-not-verified-live.
 
 ---
 
+## CC 2.1.206–2.1.209 alignment (2026-07-14): destructive-command stalls + overnight runtime hardening
+
+This section resolves the version note above: Anthropic has published the 2.1.206 changelog
+entries, and they are reconciled here together with 2.1.207–2.1.209. Source:
+`~/.claude/cache/changelog.md` (bundled 2.1.209), cross-checked against upstream `CHANGELOG.md`
+(fetched 2026-07-14).
+
+CC 2.1.208 extends the catastrophic-removal guard (e.g. `rm -rf ~`) to commands wrapped in
+`$(…)`, backticks, or `<(…)`, and makes it prompt even in auto mode and
+`--dangerously-skip-permissions`, the two non-blocking modes the RUNBOOK names for the evening
+launch. This adds a new failure shape to the overnight run: a substitution-wrapped destructive
+command now **stalls on a permission prompt instead of executing silently**. The direction is
+safe, the run halts rather than destroys, and the existing controls already surface it: the
+`/goal` turn budget bounds a stalled run, the affected feature shows unpublished in the morning
+report, and a `claude agents` peek shows the exact pending ask (CC 2.1.205 behavior). Nothing
+answers the prompt overnight, by design. The D2 boundary is unchanged; `nightly-guard` and the
+hook-deny rules stay the authoritative controls, and the native guard is a second, independent
+barrier under them, the same layering the 2.1.205 section describes for notification provenance.
+
+The runtime hardening in this range lands directly on the overnight path. The background daemon
+no longer fails permanently after an update replaces the binary a running `claude agents` process
+was launched from (2.1.208), and background agents now upgrade in the background right after a
+CLI update (2.1.206). Together these close most of the mid-run auto-update hazard for a run that
+spans an update window. Completed background agents stay listed in `/tasks` until cleanup,
+transcripts shrink up to 79x in edit-heavy sessions with checkpoint disk usage bounded, several
+long-session memory leaks are gone, and the false "100% context used" indicator after an
+auto-update is fixed (all 2.1.208). No contract change: the `NIGHTLY-PUBLISH` line and
+`nightly-report.json` remain the authoritative morning record.
+
+All items above are assumed-not-verified-live.
+
+---
+
 ## `/goal` verified against official docs (2026-07-09)
 
 Source: `code.claude.com/docs/en/goal`, fetched 2026-07-09. This section promotes several D4 premises
