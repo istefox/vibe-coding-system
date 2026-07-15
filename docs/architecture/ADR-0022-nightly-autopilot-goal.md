@@ -392,6 +392,20 @@ auto-update is fixed (all 2.1.208). No contract change: the `NIGHTLY-PUBLISH` li
 
 All items above are assumed-not-verified-live.
 
+## CC 2.1.210 note (2026-07-15): hook-timeout misreport fixed
+
+CC 2.1.210 fixes a hook callback timeout being misreported to the model as a user rejection, which
+previously made an unattended session stop and wait for input that would never arrive. This is the
+silent-hang failure mode this ADR's D2 boundary and the `nightly-guard` design assume can happen
+and must not leave a run stuck with no morning signal. The fix removes one concrete way it could:
+a slow hook (for instance `pre-flight-pattern-enforce.sh` or `db-backup-guardrail.sh` under load)
+no longer reads as a human "no" partway through a feature. No contract change: `nightly-guard`,
+the `/goal` turn budget, and the morning report stay the authoritative controls regardless of this
+fix; it removes one path to a hang they would otherwise have to catch after the fact.
+
+Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-15). Assumed, not yet
+verified live on an overnight run.
+
 ---
 
 ## `/goal` verified against official docs (2026-07-09)

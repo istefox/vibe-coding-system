@@ -537,6 +537,56 @@ runs on. The one real defect was reviewer, whose ADR-0036 Bash scope allowed no 
 fixed by widening its scope with `Bash(rg *), Bash(grep *)` and making its LSP first pass
 conditional. Decision record: ADR-0038.
 
+### Audit 2026-07-15 (CC 2.1.210)
+
+Source: `CHANGELOG.md` in the `anthropics/claude-code` GitHub repository, fetched byte-exact via
+the GitHub API (`gh api repos/anthropics/claude-code/contents/CHANGELOG.md`) to rule out
+summarization drift from a prompt-based fetch. `code.claude.com/docs/en/changelog.md` still lags
+at 2.1.209 as of this writing, the same publish-order gap the 2026-07-09 and 2026-07-14 audits hit
+with 2.1.206; GitHub's file is treated as the primary source per that precedent. The installed CLI
+already reports 2.1.210, so this range is fully current, not a future release. Every relevant item
+is a platform-internal fix; **no skill, hook, chain, or settings file needs a code change for this
+range** (verified: no `Write(path)`/`Glob(path)` permission rules in `staging/user/settings.json`
+that would trip the new startup warning, and no genuine `$1`/`$2` slash-command placeholders in any
+staged skill).
+
+- **Worktree-isolation git-mutation bug fixed** (sec. 3.2, sec. 12): CC 2.1.210 fixes
+  `isolation: 'worktree'` subagents being able to run git-mutating commands against the main repo
+  checkout instead of their own isolated worktree. `coder` runs with `isolation: worktree`
+  (`staging/plugin/agents/coder.md`), so this closes a real gap between the isolation boundary the
+  blueprint documents and what the platform actually enforced before this fix. Pure benefit; no
+  action needed.
+- **`ultracode` keyword no longer fires from non-human-originated input** (ADR-0016, ADR-0023
+  Phase P): CC 2.1.210 fixes the `ultracode` Dynamic Workflows trigger firing on webhook payloads
+  and relayed PR comments. `spec-from-issue` reads GitHub issue bodies verbatim, and
+  `nightly-autopilot` processes PR activity, so a labeled issue or a bot-relayed comment
+  containing the word could previously have misfired workflow orchestration unattended. Closes a
+  narrow but real injection surface on both paths.
+- **Hook-callback timeout no longer misreported as a user rejection** (ADR-0020, ADR-0022): CC
+  2.1.210 fixes a hook callback timeout being read by the model as a user rejection, which made
+  unattended sessions stop and wait for input that would never come. This is exactly the
+  silent-hang failure mode those ADRs are written to guard against; see the ADR-0022 addendum
+  below for what it means for the overnight path specifically.
+- **Plan-mode approval-without-edits bug fixed** (sec. 4, sec. 11): CC 2.1.210 fixes a plan
+  approved with no edits being mislabeled "(edited by user)" and overwriting the plan file with a
+  stale snapshot. Relevant to every Standard-chain and Express/Hybrid plan-mode step in this
+  system; no corresponding gap on our side, just a platform bug now closed.
+- **Fable temporarily unavailable as an advisor** (sec. 16): CC 2.1.210 notes Fable is shown as
+  unavailable in the `/advisor` picker while a server-side issue causing Fable advisor failures is
+  fixed. Caveats the 2026-07-14 advisor-tool evaluation: the Fable+Fable pairing listed there as
+  the highest-capability option is not currently usable. Temporary, tracked here only so a future
+  audit knows when it resolved.
+
+Out of scope (no blueprint impact): the elapsed-time counter on collapsed tool summaries, screen
+reader mode announcing permission-mode changes, the dataviz skill's perceptual color-difference
+recalibration, Grep pagination false negatives, MCP server re-sync and SDK MCP connection-timing
+fixes, the background-worker crash-loop and `git worktree lock` cleanup fixes (continuing the
+2.1.193→2.1.208 background-agent hardening thread, no contract change), the `claude attach`
+session-transition fix, the auto-mode permission classifier defaulting to Sonnet 5 for external
+sessions, and the Agent-tool indirect-prompt-injection hardening (pure benefit, no blueprint
+surface it touches directly). Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched
+2026-07-15).
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
