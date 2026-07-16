@@ -587,6 +587,82 @@ sessions, and the Agent-tool indirect-prompt-injection hardening (pure benefit, 
 surface it touches directly). Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched
 2026-07-15).
 
+### Audit 2026-07-17 (CC 2.1.211)
+
+Source: `CHANGELOG.md` in the `anthropics/claude-code` GitHub repository, fetched byte-exact via
+the GitHub API (`gh api repos/anthropics/claude-code/contents/CHANGELOG.md`), continuing the
+2026-07-15 precedent over a prompt-based fetch. The installed range advances from 2.1.210 to
+2.1.211. Every relevant item is a platform-internal fix; **no skill, hook, chain, or settings
+file needs a code change for this range** (verified: `db-backup-guardrail.sh` is the only hook in
+`staging/plugin/scripts/` that emits an `ask` decision, and it already relies on that decision
+being honored rather than working around it; the `coder` agent's model pin in
+`staging/plugin/agents/coder.md` is unaffected since the bug this range fixes was in session-resume
+behavior, not frontmatter parsing).
+
+- **Background agents no longer respawn stale prompts after a user kill, and background-agent
+  status reporting no longer fabricates results** (sec. 3.10, ADR-0016, ADR-0022): CC 2.1.211
+  fixes two related bugs — a user-killed background agent auto-respawning and a revived agent
+  re-running a prompt from an old session, and Claude Code's own reporting of a still-running
+  background agent now waits for real completion instead of synthesizing a result. Both continue
+  the background-agent hardening thread since 2.1.193 (sec. "Background/overnight reliability
+  cluster" above) and extend the `claude stop`-is-honored fix from 2.1.199 (sec. above, "retry
+  watchdog widened"). Relevant to the nightly-autopilot morning report and to any Step-5 Workflow
+  dispatch that inspects a background coder's status; no contract change, `nightly-report.json`
+  and `step5-report.json` stay the authoritative record. See the ADR-0022 addendum below for the
+  overnight-specific read.
+- **"Always allow" permission approvals now save at the repository root instead of the worktree**
+  (sec. 3.2, sec. 10, sec. 12, ADR-0020, ADR-0022): CC 2.1.211 changes where an always-allow rule
+  is persisted, so an approval granted inside a git worktree now survives across sessions and
+  worktrees instead of being scoped to that one worktree. Directly affects the `coder` agent's
+  `isolation: worktree` path (sec. 3.2) and TOFU-trust approvals for `.claude/test-cmd`: before
+  this fix, a nightly-autopilot run touching several feature-branch worktrees overnight could have
+  re-prompted for the same approval in each new worktree, one more path to the stall
+  `nightly-guard` is designed to catch. See the ADR-0022 addendum below.
+- **Auto mode no longer overrides a `PreToolUse` hook's `ask` decision for unsandboxed Bash**
+  (sec. 7, sec. 10): CC 2.1.211 fixes auto mode silently proceeding past a hook that returned
+  `ask`, instead flooring the decision at a prompt. `db-backup-guardrail.sh:232` is the one hook
+  in this system that emits `ask` (a detected DB-backup-relevant command with no backup evidence,
+  top-level session context). Before this fix, a session running in auto mode could have bypassed
+  that gate entirely; this closes a real gap between the hook's intent and what auto mode
+  enforced. No hook change needed, the `ask` decision was always correct, only the platform's
+  handling of it was wrong.
+- **Subagents with an explicit model override no longer revert to the parent session's model on
+  resume or follow-up** (sec. 3, sec. 3.10): CC 2.1.211 fixes a subagent's pinned model (e.g.
+  `architect` → Opus, `coder`/`debugger` → Sonnet) silently reverting to whatever model the parent
+  session is running whenever that subagent is resumed or sent a follow-up message. This is the
+  same failure shape the 2026-06-23 workflow-model-pinning update (below) fixed for unpinned
+  Workflow `agent()` calls, but on the resume path instead of dispatch. Relevant wherever a
+  sub-agent session is resumed rather than freshly dispatched: `SendMessage`-continued agents, and
+  any multi-turn chain step that sends a follow-up to an already-running sub-agent. No frontmatter
+  change needed, the model pins were already correct; the platform now honors them correctly
+  across resume.
+
+Out of scope (no blueprint impact): the `--forward-subagent-text` opt-in flag (no current user of
+subagent thinking/text passthrough in this system), the permission-preview bidirectional-override
+and look-alike-character neutralization (native hardening against a spoofed approval message, pure
+benefit, no hook surface here relies on visual review of tool-input previews), the
+shared-credential simultaneous-logout and plugin-MCP idle-reconnect fixes (single-user,
+single-session workstation here), the Vertex/Bedrock default-model startup notice (explicit model
+configured, N/A), nested `.claude/rules/*.md` files loading even when settings sources exclude
+project settings (sec. 5; this repo never excludes project settings, so the bug's precondition
+never triggers here), the DOS-device-suffix file-upload and multiple-hard-link fixes, Chrome
+file-upload path validation and `save_to_disk` fix, the `?`-input edit-swallow fix, the
+Chrome-extension-not-running startup hang, the 300ms async-content reveal delay, the
+reopened-background-session blank-conversation fix, `/loop` hiding its session from `/resume`
+after one use, the screen-reader terminal-bell fix, the LLM-gateway auth daemon-respawn "Not
+logged in" fix (no `ANTHROPIC_AUTH_TOKEN` gateway in use here), the undeletable-`claude
+agents`-job-on-missing-worktree fix (now shows the refusal reason instead of silently
+reappearing, minor observability win with no contract change), the `/clear` cost-counter reset,
+Windows-only fixes (Chrome setup pages, headless print-mode stdin crash), the background
+session-title refusal-text display fix, Routines reporting a next-run time in the year 1 (sec.
+"loop taxonomy" above; this system does not currently rely on unscheduled Routines), synced
+skill/plugin directory naming on Windows, terminal layout/rendering performance, the memory-index
+over-limit warning's frontmatter/HTML-comment exclusion, scientific-notation and digit-separator
+support for integer env vars, updated documentation links, `/usage-credits` confirmation, Vim-mode
+`s`/`S` in NORMAL mode, the `[VSCode]` Remote Control banner copy, and the Bedrock/Vertex/Mantle/
+Foundry prompt-caching billing regression (no non-Anthropic-API backend in use here). Source:
+`anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-17).
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
