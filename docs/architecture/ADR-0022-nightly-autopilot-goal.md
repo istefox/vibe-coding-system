@@ -406,6 +406,30 @@ fix; it removes one path to a hang they would otherwise have to catch after the 
 Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-15). Assumed, not yet
 verified live on an overnight run.
 
+## CC 2.1.211 note (2026-07-17): background-agent respawn/fabrication fix + worktree-approval persistence
+
+CC 2.1.211 closes two more gaps in the background-agent path this ADR's D2 boundary and
+`nightly-guard` design assume can fail. First, a background agent killed by the user no longer
+auto-respawns, and a revived agent no longer re-runs a stale prompt from an old session — this
+extends the `claude stop`-is-honored fix from 2.1.199 (sec. "retry watchdog widened" in the main
+doc) to the revive path specifically. Second, Claude Code's own status reporting for a
+still-running background agent now waits for real completion instead of fabricating a result,
+directly hardening the "don't race" discipline this ADR's morning-report design relies on:
+`nightly-report.json` and the classifier-written headline (2.1.205) are the authoritative record,
+but before this fix a premature or synthesized status could in principle have been surfaced to an
+operator peeking mid-run.
+
+Separately, "always allow" permission approvals now persist at the repository root instead of the
+worktree they were granted in. A nightly run that walks several roadmap features overnight, each
+through its own `feat/*` branch and (for Step-5 coder dispatch) its own isolated worktree, could
+previously have re-prompted for the same TOFU-trust or tool-approval decision in each new
+worktree — one more path to the exact stall `nightly-guard` exists to catch. No contract change:
+`nightly-guard`, the `/goal` turn budget, and the morning report stay authoritative regardless of
+this fix.
+
+Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-17). Assumed, not yet
+verified live on an overnight run.
+
 ---
 
 ## `/goal` verified against official docs (2026-07-09)
