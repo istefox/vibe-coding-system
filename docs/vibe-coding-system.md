@@ -80,6 +80,154 @@ Sec. 7.4/7.5 (admonitions updated to the as-built reference) and 7.6 (filesystem
 layout updated to the deployed state) reflect this. Tier validation on the
 pilot project = single open item (see sec. 17).
 
+### Audit 2026-07-19 (CC 2.1.125–2.1.146, retroactive gap)
+
+Source: `CHANGELOG.md` in the `anthropics/claude-code` GitHub repository, fetched byte-exact via
+the GitHub API (`gh api repos/anthropics/claude-code/contents/CHANGELOG.md`), same method as every
+audit since 2026-07-15. This range was never audited: the existing "Update 2026-05-25" note below
+covers 2.1.147–149 and "Review 2026-06-20" above covers 2.1.170–183, leaving 2.1.125–146 as a real
+gap. Backfilled on user request alongside the 2.1.150–169 gap and the 2.1.212–215 range.
+
+- **Fixed a permission-prompt bypass on Bash env-var assignments** (sec. 10): CC 2.1.145 fixed bare
+  variable assignments to non-allowlisted environment variables in Bash commands being auto-approved
+  without a prompt. Closes a real gap in the Bash permission layer that `pre-flight-pattern-enforce.sh`
+  and `db-backup-guardrail.sh` sit on top of; no hook change needed, the platform now enforces what
+  those hooks always assumed.
+- **Fixed the Stop-hook infinite-block loop, and `/goal` misfiring while subagents are still running**
+  (ADR-0022, sec. 7): CC 2.1.143 caps a Stop hook that blocks repeatedly at 8 consecutive blocks
+  (`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`), ending the turn with a warning instead of looping forever. This
+  is a second, independent layer on top of `stop-gate.sh`'s own anti-loop guardrail (a per-session
+  counter that self-unblocks after N entries, see sec. 7.5) — belt and suspenders, no code change
+  needed. The same release fixed `/goal` firing its completion evaluator while background shells or
+  delegated subagents were still running, a direct false-positive risk for `nightly-autopilot`'s outer
+  loop (ADR-0022). Also in 2.1.143: worktree cleanup no longer falls back to `rm -rf` when
+  `git worktree remove` fails, preventing loss of gitignored or in-progress files — relevant to
+  `coder`'s `isolation: worktree` (sec. 3.2) and `refactor-snapshot`'s worktree use (ADR-0031).
+- **Fixed `/goal` hanging under `disableAllHooks`, and `/loop` scheduling redundant polling wakeups**
+  (ADR-0022): CC 2.1.140 fixed `/goal` silently hanging with no resolution indicator when
+  `disableAllHooks` or `allowManagedHooksOnly` is set. This system keeps safety hooks (`stop-gate.sh`,
+  `nightly-guard.sh`, etc.) always active per ADR-0022's design, so the precondition never triggers
+  here, but it is the exact failure class ADR-0022's hang-detection thread exists to catch. The same
+  release fixed `/loop` scheduling redundant wakeups to poll for background tasks that already notify
+  on completion — this is the platform-side origin of the "don't poll, you'll be notified" guidance
+  this session's own `ScheduleWakeup` tool description now carries.
+- **`/goal` and `claude agents` (agent view) introduced** (ADR-0022, sec. 3.10): CC 2.1.139 shipped
+  the `/goal` command and the agent view — the two platform primitives ADR-0022's nightly-autopilot
+  outer loop is built on. Noted here for the record since the existing ADR-0022 addenda start at
+  2.1.198. Same release: hooks now run without terminal access (fixed a hook-writing-to-terminal bug
+  that could corrupt an on-screen interactive prompt) and `Skill(name *)` wildcard permission rules
+  were fixed to prefix-match like `Bash(ls *)`.
+- **Fixed plan mode not blocking writes when a matching `Edit(...)` allow rule exists** (sec. 4, sec.
+  11): CC 2.1.136 closes a gap where an `Edit(...)` allow rule could let plan mode write files despite
+  the mode's read-only contract. Direct precursor to the 2.1.212 fix (see the 2.1.212–215 audit below)
+  for plan mode auto-running file-modifying Bash; both erode the same invariant this system's CLAUDE.md
+  states unconditionally ("Plan mode required for any task modifying >1 file"). Same release fixed
+  `CronList` output missing qualifiers and the scheduled prompt — relevant to `nightly-autopilot`'s
+  deferred `CronCreate` wrap-up (sec. "Cron scheduling... wrap once the Phase 4 smoke test passes").
+- **Fixed subagents unable to discover skills via the Skill tool** (sec. 3): CC 2.1.133 fixed
+  project/user/plugin skills not being discoverable by subagents through the Skill tool at all. Same
+  release: hooks now receive the active effort level via `effort.level` in their JSON input and
+  `$CLAUDE_EFFORT` in the environment, usable by any hook wanting effort-aware logic (none currently do).
+- **`CLAUDE_CODE_SESSION_ID` added to the Bash subprocess environment, matching hooks** (ADR-0029):
+  CC 2.1.132 is where Bash tool subprocesses first received `CLAUDE_CODE_SESSION_ID`, the same variable
+  hooks already got. This is the platform mechanism ADR-0029's session-scoped filter in
+  `hook-verify-workflow.sh` depends on — dates and confirms the primitive that fix relies on. Same
+  release fixed `--permission-mode` being ignored when resuming a plan-mode session with
+  `-p --continue`/`--resume`, and plan mode not being re-applied after `ExitPlanMode` in the same
+  session — relevant to `autopilot-build`'s headless resume path.
+- **Sub-agent progress summaries: prompt-cache fix and idle-cost cap** (sec. 3.10): CC 2.1.128 fixed
+  sub-agent progress summaries missing the prompt cache (~3× reduction in `cache_creation` cost) and
+  capped summaries re-firing repeatedly while a sub-agent's transcript is static. Pure cost benefit for
+  any heavy subagent fan-out (Dynamic Workflows, `nightly-autopilot` roadmap runs).
+- **`--dangerously-skip-permissions` widened to bypass `.claude/`/`.git/` writes** (sec. 10): CC 2.1.126
+  changed `--dangerously-skip-permissions` to also bypass prompts for writes to `.claude/`, `.git/`,
+  `.vscode/`, and shell config files (catastrophic removal commands still prompt). This system's
+  `defaultMode` is `"auto"` (verified: `staging/user/settings.json:87`), not bypass mode, so the change
+  doesn't affect normal operation; noted because `protect-files.sh` (`PreToolUse` on `Edit|Write`) is a
+  hook, and hooks run independently of the permission-mode layer — so even under bypass mode, that
+  guard would still fire per the blueprint's layered-defense design (sec. 10).
+
+Out of scope (no blueprint impact): the `/plugin` Discover/Browse component previews, terminal
+rendering/scrolling/IME fixes, Windows-only fixes (PowerShell tool defaults, background-daemon
+launcher issues), `claude agents` UI/UX polish (columns, badges, footer hints), the `worktree.baseRef`
+setting default-branch change (this system doesn't rely on `EnterWorktree`'s implicit base), MCP
+pagination/timeout/OAuth fixes (no custom MCP servers with those configs here), and the various
+Bedrock/Vertex/Foundry-specific fixes (no third-party provider in use). Source: `anthropics/claude-code`
+`CHANGELOG.md` (GitHub, fetched 2026-07-19).
+
+### Audit 2026-07-19 (CC 2.1.150–2.1.169, retroactive gap)
+
+Source: `CHANGELOG.md` in the `anthropics/claude-code` GitHub repository, fetched byte-exact via
+the GitHub API, same method as the 2.1.125–146 audit above. This range sits between the existing
+"Update 2026-05-25" note (2.1.147–149) and "Review 2026-06-20" (2.1.170–183) and was never audited.
+
+- **Hardened cross-session `SendMessage`: relayed messages no longer carry user authority** (sec. 3.10):
+  CC 2.1.166 changed messages relayed via `SendMessage` from another Claude session to no longer carry
+  the sending user's authority — receivers now refuse relayed permission requests, and auto mode blocks
+  them outright. Directly relevant to this system's heavy `SendMessage`/`Agent` usage under `defaultMode:
+  "auto"`: before this fix, a compromised or misbehaving subagent could in principle use `SendMessage`
+  to push a permission request that looked user-authorized to another session. Pure hardening, no
+  action needed.
+- **Fixed Workflow agents with `isolation: "worktree"` blocked from editing their own worktree in
+  background sessions** (sec. 3.2, ADR-0016): CC 2.1.161 fixed a bug where a Workflow `agent()` call
+  dispatched with `isolation: "worktree"` from a background session was refused Edit access inside its
+  own isolated worktree — the exact combination `coder` uses when dispatched through a Step 5 Dynamic
+  Workflow. Before this fix, that specific pairing could have silently blocked implementation work.
+- **Fixed subagents in background sessions bypassing the worktree-isolation guard entirely** (sec. 3.2,
+  sec. 12): CC 2.1.154 is the more severe sibling of the 2.1.161 fix above — before it, a subagent
+  running in a background session could write directly to the shared checkout instead of its isolated
+  worktree, defeating the guarantee sec. 3.2 documents for `coder`. Same release fixed
+  `worktree.baseRef: "head"` resolving to the main checkout's HEAD instead of the current worktree's
+  HEAD when spawning subagents or calling `EnterWorktree` from inside a linked worktree — a correctness
+  bug in the same subsystem.
+- **`acceptEdits` mode gains a code-execution-config write prompt; workflow trigger rename confirmed**
+  (sec. 10, ADR-0016): CC 2.1.160 made `acceptEdits` mode prompt before writing build-tool config files
+  that grant code execution (`.npmrc`, `.pre-commit-config.yaml`, `.devcontainer/`, etc.). This system's
+  actual `defaultMode` is `"auto"`, not `acceptEdits` (verified: `staging/user/settings.json:87`), so
+  the new prompt doesn't apply directly — auto mode's own destructive-action classifier is the operative
+  guard here (already documented at the 2.1.183 alignment above). Same release: the dynamic-workflow
+  trigger keyword rename from `workflow` to `ultracode` — this is the exact platform change ADR-0016
+  already cites ("renamed from 'workflow' in CC v2.1.160"); confirmed consistent, no drift.
+- **`Stop`/`SubagentStop` hooks can return feedback instead of being labeled an error; `claude -p`
+  no longer hangs forever on an orphaned backgrounded command** (sec. 7): CC 2.1.163 let `Stop` and
+  `SubagentStop` hooks return `hookSpecificOutput.additionalContext` to give Claude feedback and keep
+  the turn going, instead of every non-empty return being treated as a hook error. `stop-gate.sh`
+  currently uses the older `{"decision":"block","reason":...}` contract exclusively (verified:
+  `staging/plugin/scripts/stop-gate.sh`) — this is a genuine, currently-unused enhancement opportunity,
+  not a bug fix that changes existing behavior. Same release fixed `claude -p` hanging forever after
+  its final result when a backgrounded command never exits, relevant to `autopilot-build` and
+  `nightly-autopilot`'s headless/print-mode runs.
+- **Fixed subagent frontmatter MCP servers ignoring `--strict-mcp-config` and managed-MCP policy; fixed
+  `subagent_type: 'claude'` silently discarding gitignored outputs** (sec. 3.8, ADR-0036): CC 2.1.153
+  fixed inline `mcpServers` in agent frontmatter ignoring `--strict-mcp-config`, `--bare`, and
+  enterprise-managed MCP allow/deny policy. `researcher.md` has no inline `mcpServers` deployed yet
+  (ADR-0036 Finding 4, deployment deferred) — this fix removes one more risk factor for that eventual
+  rollout. Same release fixed the `Agent` tool with `subagent_type: 'claude'` running in an undocumented
+  temporary worktree that could silently discard outputs written to gitignored paths — worth knowing
+  for any ad hoc catch-all `claude` agent dispatch that writes to a gitignored location.
+- **Plugin/skill loading and worktree hygiene** (sec. 8, sec. 12): CC 2.1.157 made plugins in
+  `.claude/skills/` auto-load without a marketplace entry, matching how this system's skills are
+  deployed via `sync-to-claude.sh`. Same release: Claude-managed worktrees are now left unlocked when
+  an agent finishes so `git worktree remove`/`prune` can clean them up, and a bug where background-agent
+  worktrees under `.claude/worktrees/` were orphaned past the 30-day retention sweep was fixed — both
+  reduce orphaned-worktree buildup from `coder`/`refactor-snapshot` worktree use.
+- **`--safe-mode` troubleshooting flag; "CLAUDE.md too long" threshold now scales with context window**
+  (ADR-0019): CC 2.1.169 added `--safe-mode`/`CLAUDE_CODE_SAFE_MODE` to start with all customizations
+  disabled for troubleshooting, and `disableBundledSkills` to hide built-ins from the model. The same
+  release scaled the "CLAUDE.md is too long" warning threshold to the model's context window instead of
+  a fixed line count — `claude-md-slim`'s ≥30% reduction target (ADR-0019) stays a fixed, model-agnostic
+  goal regardless, no change needed.
+
+Out of scope (no blueprint impact): the LSP `workspaceSymbol` query-param fix and the `--tools`
+CLI-flag Grep/Glob fix (2.1.162, a different mechanism from the agent-frontmatter `tools:` field
+ADR-0038 covers — no overlap), WebFetch preapproved-domain precedence, MCP timeout-flooring and
+pagination fixes (no custom MCP timeout config here), the hook `if: "Bash(...)"` subshell-matching fix
+(2.1.163 — verified: no hook in `staging/user/settings.json` uses the native `if:` field, all Bash-scoped
+hooks use `matcher` plus their own internal regex), `~`-path deny-rule/`$HOME` fix (no home-directory
+deny rules configured), `fallbackModel` (2.1.166, not currently configured), the various terminal
+rendering, Windows-only, and background-agent-UI fixes across this range. Source:
+`anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-19).
+
 ### Review 2026-06-20 (CC 2.1.170–2.1.183 cross-skill pass)
 
 Audit of the full 2.1.170–2.1.183 changelog range against 26 skills, 8 agents, and 15 hooks. One item required a documentation update; the rest are no-ops or already covered.
@@ -662,6 +810,73 @@ support for integer env vars, updated documentation links, `/usage-credits` conf
 `s`/`S` in NORMAL mode, the `[VSCode]` Remote Control banner copy, and the Bedrock/Vertex/Mantle/
 Foundry prompt-caching billing regression (no non-Anthropic-API backend in use here). Source:
 `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-17).
+
+### Audit 2026-07-19 (CC 2.1.212–2.1.215)
+
+Source: `CHANGELOG.md` in the `anthropics/claude-code` GitHub repository, fetched byte-exact via
+the GitHub API, continuing the established precedent over a prompt-based fetch. The installed range
+advances from 2.1.211 to 2.1.215 (2.1.213 does not exist in the published changelog — versions are not
+guaranteed contiguous). Every relevant item is a platform-internal fix or a new opt-in limit; **no
+skill, hook, chain, or settings file needs a code change for this range**.
+
+- **Fixed plan mode auto-running file-modifying Bash commands without a permission prompt** (sec. 4,
+  sec. 11, ADR-0022): CC 2.1.212 fixes plan mode letting `touch`/`rm`-class Bash commands run
+  unprompted, bypassing both the interactive permission dialog and the SDK `canUseTool` callback. Same
+  bug class as the 2.1.136 `Edit(...)` allow-rule gap documented in the 2.1.125–146 audit above — this
+  is the third and most direct hit on the invariant CLAUDE.md states unconditionally ("Plan mode
+  required for any task modifying >1 file"). Pure fix, no gap on our side, just one more platform bug
+  closed on a behavior this system depends on being true.
+- **Fixed worktree creation following a repo-committed symlink at `.claude/worktrees`** (sec. 3.2, sec.
+  12): CC 2.1.212 fixes a symlink committed at `.claude/worktrees` being followed during worktree
+  creation, which could create files outside the repository. Direct relevance to `coder`'s
+  `isolation: worktree` and `refactor-snapshot`'s worktree harness — a malicious or accidental symlink
+  at that path could previously have escaped the isolation boundary those systems assume.
+- **Fixed a `continue:false` hook's halt being dropped, and hook infrastructure errors being
+  misreported as user rejections** (ADR-0022, sec. 7): CC 2.1.212 fixes two related bugs — a
+  `continue:false` hook halt getting silently dropped when the tool fails or completes mid-stream, and
+  hook infrastructure errors (crashes, timeouts) being read by the model as a user rejection rather than
+  a platform fault. This directly extends the 2.1.210 hook-timeout-misreport fix already logged in this
+  system's ADR-0022 addenda — same failure shape (a hook problem disguised as a human "no"), a second
+  instance closed. See the ADR-0022 addendum below.
+- **New session-wide caps on subagent spawns and WebSearch calls** (sec. 3.10, ADR-0016): CC 2.1.212
+  adds a default 200-subagent-per-session cap (`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`) and a default
+  200-WebSearch-per-session cap (`CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION`), both to stop runaway
+  delegation/search loops; `/clear` resets both budgets. This is a session-wide ceiling, separate from
+  Dynamic Workflows' own 1000-agent lifetime cap (ADR-0016) — a large `nightly-autopilot`/
+  `project-conductor` roadmap run (the 2026-07-07 13-feature roadmap spawned 49 agents total, per
+  session memory) sits comfortably under 200 today, but this is a ceiling worth watching as roadmaps
+  grow, not an immediate gap.
+- **Fixed single-segment `dir/**` allow rules and hook `if:` conditions matching nested directories at
+  any depth instead of only `<cwd>/dir`** (sec. 5, sec. 7): CC 2.1.214 tightens both `Edit(src/**)`-style
+  permission rules and hook `if:` conditions to match only the top-level `<cwd>/dir` on a single-segment
+  pattern; `**/dir/**` is now required for any-depth matching (deny/ask rules are unaffected, they keep
+  matching any depth). Verified: no `Edit(...)`/`Write(...)`-scoped allow rule in
+  `staging/user/settings.json` uses a single-segment `dir/**` pattern (the allow list scopes `Edit`/
+  `Write` unconditionally), and no hook in this system's config uses the native `if:` field at all (see
+  the 2.1.150–169 audit above) — this fix has no bearing here, confirmed by inspection rather than
+  assumed.
+- **Fixed scheduled tasks refusing their own configured prompt as untrusted input** (ADR-0022): CC
+  2.1.214 fixes a `Cron`-scheduled task's fired prompt being treated as untrusted input instead of being
+  delivered as the session's assigned task. `CronCreate` is explicitly deferred in both
+  `nightly-autopilot` and `autopilot-build` ("wrap once the Phase 4 smoke test passes") — this fix
+  removes a real blocker for that eventual wrap-up, since a self-injection false-positive on the
+  scheduler's own prompt would have made unattended Cron dispatch unreliable regardless of the smoke
+  test's outcome.
+- **`/verify` and `/code-review` no longer auto-run on their own** (sec. 16): CC 2.1.215 stops Claude
+  proactively invoking the built-in `/verify` and `/code-review` skills; they now require an explicit
+  invocation. Verified: no skill or hook in this system relies on either auto-firing — `review-triage-fix`
+  and `code-review-checklist` are invoked explicitly, and mentions of "`/verify`" elsewhere in this repo
+  refer to the ADR-0014 test-cmd verification concept, not the built-in skill. No impact.
+
+Out of scope (no blueprint impact): `/fork` becoming a background-session copy with `/subtask` as its
+in-session replacement (no current `/fork` usage), MCP tool auto-backgrounding past 2 minutes, the
+Task tool `mode` parameter deprecation (subagents already inherit the parent's permission mode by
+default in this system — verified: no agent frontmatter sets `permissionMode`), Windows-only PowerShell
+fixes, the `EndConversation` tool (already available this session, no action), the periodic
+long-tool-call heartbeat, OpenTelemetry attribute additions (no OTel pipeline configured), the
+`/ultrareview` UX fixes, and the various background-daemon/agent-view reliability fixes not specific to
+worktree isolation or hooks. Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched
+2026-07-19).
 
 ### Update 2026-06-23 (workflow model pinning)
 
