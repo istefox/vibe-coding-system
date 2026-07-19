@@ -274,6 +274,32 @@ These promote the runtime behavior from assumed to verified, same discipline as 
 
 ---
 
+## CC 2.1.143 note (2026-07-19 retroactive): `/goal` false-completion-vs-subagents fixed, Stop-hook infinite block capped
+
+Backfilled during the 2026-07-19 gap audit of CC 2.1.125–146 (never previously audited; see the main
+document's "Audit 2026-07-19 (CC 2.1.125–2.1.146, retroactive gap)" section). CC 2.1.143 fixed `/goal`
+firing its completion evaluator while background shells or delegated subagents were still running —
+this is precisely the "Open verification" item above ("`/goal` evaluator vs in-flight subagents:
+confirm the evaluator does not fire a false completion while a dispatch is still running"). The
+platform-level bug that could have caused exactly that false positive is fixed as of 2.1.143, which
+predates this ADR's Accepted status; the open-verification item stays open as a live smoke-test
+obligation (this fix removes one known cause of failure, it doesn't substitute for the end-to-end
+confirmation), but the highest-suspicion cause is now closed.
+
+The same release capped a Stop hook that blocks repeatedly at 8 consecutive blocks
+(`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`), ending the turn with a warning instead of looping forever. This is
+independent of, and layered on top of, `stop-gate.sh`'s own per-session anti-loop counter — if the
+hook-level guardrail were ever bypassed or misconfigured, the platform cap is now a second backstop.
+Separately, CC 2.1.140 fixed `/goal` silently hanging with no resolution indicator when
+`disableAllHooks`/`allowManagedHooksOnly` is set; this system keeps safety hooks always active per this
+ADR's design, so the precondition doesn't occur here, but it is the same hang-shape the 2.1.210 and
+2.1.211 notes below track.
+
+Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-19). Assumed, not yet verified
+live on an overnight run — the "Open verification" smoke test above still stands.
+
+---
+
 ## CC 2.1.198 alignment (2026-07-02): `claude agents` auto-push guardrail
 
 CC 2.1.198 changed the `claude agents` background launcher: an agent that finishes code work in a
@@ -428,6 +454,27 @@ worktree — one more path to the exact stall `nightly-guard` exists to catch. N
 this fix.
 
 Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-17). Assumed, not yet
+verified live on an overnight run.
+
+## CC 2.1.212–2.1.215 note (2026-07-19): hook-halt-drop fix continues the 2.1.210/2.1.211 thread, scheduled-task false-positive removed
+
+CC 2.1.212 fixes a `continue:false` hook's halt being silently dropped when the tool it's attached to
+fails or completes mid-stream, and fixes hook infrastructure errors (crashes, timeouts) being
+misreported to the model as a user rejection rather than a platform fault. This is the third fix in
+the same thread as the 2.1.210 and 2.1.211 notes above: a hook problem disguised as a human "no",
+which is exactly the silent-hang failure mode this ADR's D2 boundary and `nightly-guard` design exist
+to catch after the fact. No contract change: `nightly-guard`, the `/goal` turn budget, and the morning
+report stay the authoritative controls regardless; this closes one more concrete path to the hang they
+would otherwise have to catch.
+
+Separately, CC 2.1.214 fixes a `Cron`-scheduled task's own fired prompt being treated as untrusted
+input instead of being delivered as the session's assigned task. `CronCreate` scheduling is explicitly
+deferred in both `nightly-autopilot` and `autopilot-build` ("wrap once the Phase 4 smoke test passes");
+this fix removes a concrete blocker for that future wrap-up, since a self-injection false positive on
+the scheduler's own prompt would have made unattended Cron dispatch unreliable independent of the smoke
+test's own result.
+
+Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-19). Assumed, not yet
 verified live on an overnight run.
 
 ---
