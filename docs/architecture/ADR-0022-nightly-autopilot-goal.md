@@ -477,6 +477,28 @@ test's own result.
 Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-19). Assumed, not yet
 verified live on an overnight run.
 
+## CC 2.1.216 note (2026-07-22): hook-halt-misreport thread's fourth fix + background-agent resume no longer drops the agent's identity
+
+CC 2.1.216 fixes telemetry misreporting failed permission-prompt requests and user interrupts as
+rejections — user interrupts are now reported as user aborts, and a failed permission-prompt request
+no longer counts as a rejection. This is the fourth fix in the same thread as the 2.1.210, 2.1.211, and
+2.1.212 notes above: a platform-side event being misclassified as a deliberate human "no". No contract
+change: `nightly-guard`, the `/goal` turn budget, and the morning report stay authoritative regardless;
+this is one more concrete misclassification removed from the set they exist to catch after the fact.
+
+Separately, CC 2.1.216 fixes resumed background agent sessions reverting to the default agent instead
+of restoring the original agent's prompt and tool restrictions. This bears directly on this ADR's D2
+boundary: a `nightly-autopilot`/`project-conductor` background session resumed mid-roadmap (after an
+interruption, an auto-update, or a `claude agents` reattach) could previously have continued under the
+unrestricted default agent rather than the scoped one it started as — for example losing `reviewer`'s
+narrow read-only Bash grant (ADR-0036/ADR-0038) silently rather than failing loud. No contract change:
+`nightly-guard` and the morning report do not currently key on agent identity, so this was a silent gap
+rather than one either control would have caught; the fix removes the gap rather than adding a new
+check.
+
+Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-22). Assumed, not yet
+verified live on an overnight run.
+
 ---
 
 ## `/goal` verified against official docs (2026-07-09)
