@@ -878,6 +878,103 @@ long-tool-call heartbeat, OpenTelemetry attribute additions (no OTel pipeline co
 worktree isolation or hooks. Source: `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched
 2026-07-19).
 
+### Audit 2026-07-22 (CC 2.1.216–2.1.217)
+
+Source: `CHANGELOG.md` in the `anthropics/claude-code` GitHub repository, fetched byte-exact via the
+GitHub API, continuing the established precedent over a prompt-based fetch. The installed range
+advances from 2.1.215 to 2.1.217. Most items are platform-internal fixes or new opt-in limits; a
+handful land directly on invariants this system depends on, and one confirms an existing hardening
+already verified in this repo.
+
+- **Worktree-isolated subagents can no longer redirect git into the shared checkout via `git -C`,
+  `--git-dir`, or `GIT_DIR`/`GIT_WORK_TREE`** (sec. 3.2, sec. 12, ADR-0016): CC 2.1.216 closes this
+  escape route. This is the fifth fix in the worktree-isolation-bypass thread already tracked in this
+  document — the 2.1.198 edit-block fix, the 2.1.200 plugin/skill-load fix, the 2.1.203 parent-checkout
+  shell-command fix, and the 2.1.212 `.claude/worktrees` symlink fix all precede it. `coder`'s
+  `isolation: worktree` and the Step-5 Workflow coder path are the direct beneficiaries; verified no
+  script in this system asks a worktree-isolated agent to run `git -C`/`--git-dir` against the parent
+  tree (the `git -C` calls found in `staging/plugin/scripts/tests/` target throwaway fixture repos, not
+  the shared checkout).
+- **Workflow saves and scheduled-task writes no longer follow a symlink at `.claude`** (sec. 7,
+  ADR-0016): CC 2.1.216 fixes writes redirecting outside the project through a symlinked `.claude`
+  directory. Directly relevant to the Step-5 Workflow file handoff (`.claude/step5-report.json`,
+  ADR-0016) and to the eventual `CronCreate` wrap-up in `nightly-autopilot`/`autopilot-build` — both
+  assume a write to `.claude/...` lands inside the project, an assumption this fix now backs.
+- **Telemetry no longer misreports failed permission-prompt requests or user interrupts as
+  rejections** (ADR-0022): CC 2.1.216 is the fourth fix in the hook-halt-misreport thread this
+  document and ADR-0022 already track (2.1.210 hook-timeout, 2.1.211 status fabrication, 2.1.212
+  `continue:false` drop). See the ADR-0022 addendum below.
+- **Resumed background agent sessions no longer revert to the default agent** (sec. 3, sec. 3.10,
+  ADR-0022): CC 2.1.216 restores the agent's prompt and tool restrictions on resume instead of falling
+  back to the default. Before this fix, a `nightly-autopilot`/`project-conductor` background session
+  resumed after an interruption could have lost an agent's scoped tool grants (for example `reviewer`'s
+  narrow read-only Bash set, ADR-0036/ADR-0038) and continued with the unrestricted default agent
+  instead. No contract change to `nightly-guard` or the morning report; this closes one more concrete
+  path to a silently-widened tool surface on the overnight path.
+- **`AskUserQuestion` free-text answers asking Claude to wait or explain no longer get told to
+  continue anyway** (sec. 11): CC 2.1.216 fixes the wording sent back for a free-text answer so it no
+  longer nudges Claude past a user's explicit "wait" or "explain first". Every HITL gate in this system
+  (commit/push/PR, Gate 0b/0c/0d, Gate 2b TOFU probe, the destructive-ops confirmations) is built on
+  `AskUserQuestion`; this closes a real, if narrow, HITL-bypass-adjacent gap on the free-text answer
+  path specifically (button-option answers were unaffected).
+- **Bash permission checking now covers compound statements with redirects inside `&&` lists or
+  negations** (sec. 10, ADR-0034/ADR-0038): CC 2.1.216 fixes a gap in how Bash commands are matched
+  against allow/deny/ask rules when redirects sit inside a `&&` chain or a negated command. This is the
+  same bug class as the permission-pattern-matching fixes already logged under ADR-0034
+  (`permissionDecision` enum, hash-after-normalize) — a scoped grant like `architect`'s `Bash(git *)` or
+  `reviewer`'s `Bash(rg *)`/`Bash(grep *)` (ADR-0036/ADR-0038) relies on this matching being exact; a
+  crafted compound command was one concrete way to slip past a narrow Bash scope undetected.
+- **A `CLAUDE.md` or `SKILL.md` `paths:` frontmatter value with many brace groups no longer OOM-kills
+  or stalls the CLI at startup** (sec. 5): CC 2.1.217 budget-bounds brace expansion. Verified: three
+  path-scoped rules files in this system's own rules set use brace-group globs —
+  `staging/user/rules/shell.md` (`**/*.{sh,bash}`), `staging/user/rules/typescript-react.md`
+  (`**/*.{ts,tsx}`), and `staging/user/rules/web-vanilla.md` (`**/*.{html,css,scss}`) — each with 2-3
+  groups, far below whatever count triggers the stall. No incident on record, but this hardens a
+  pattern this system actively ships rather than one it merely could hit.
+- **Subagents no longer spawn nested subagents by default** (sec. 2.2, sec. 3.10): CC 2.1.217 makes
+  the flat model the platform default (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` opts back into deeper
+  nesting). This is a stronger version of the 2.1.203 "less likely to re-delegate" note already in
+  this document at sec. 3.10 — the "no sub-agent spawns sub-agent" invariant in the four dispatching
+  skills is now the platform's own default, not just a design choice this system happens to hold.
+- **New cap on concurrently-running subagents** (sec. 3.10, ADR-0016): CC 2.1.217 adds a default
+  20-concurrent-subagent limit (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`), separate from the
+  2.1.212 200-per-session cap already logged above and from Dynamic Workflows' own `min(16, cpu
+  cores - 2)` concurrency cap (ADR-0016). This system's own cap already sits under the new platform
+  default; no conflict, no change needed.
+- **`--max-budget-usd` now stops background subagents once the cap is reached** (sec. 3.10): CC
+  2.1.217 denies new spawns and halts running background agents when the budget cap is hit, rather
+  than only blocking new spawns. Relevant to any future cost-ceiling flag on a `nightly-autopilot` or
+  `project-conductor` roadmap run; no current usage of `--max-budget-usd` in this system, noted for
+  when it is adopted.
+
+Out of scope (no blueprint impact): emoji shortcode autocomplete, transcript-write failure warnings,
+the MCP tool-output memory leak, Windows auto-update and `claude.exe` recovery, background-session
+symlink-canonicalization for workspace escape (a different code path from the `.claude`-symlink and
+worktree-`git -C` fixes above — no current use of background sessions outside the sandboxed worktree
+model), Bedrock/Opus-4.8 auto-compact, corporate mTLS/proxy settings in Claude Desktop, screen-reader
+and thinking-row rendering, `OTEL_EXPORTER_OTLP_ENDPOINT` scope precedence (no OTel pipeline
+configured), `--resume`/`--continue` TypeError on malformed attachments, Remote Control pending-prompt
+visibility, background-shell stop reliability, transcript-preview layout, footer PR-badge hyperlinks,
+the login-expiry warning window change, the frontend-design plugin tip impression cap, `sandbox.
+filesystem.disabled`, the quadratic message-normalization slowdown fix, auto mode's HTTP 401
+classifier fix, Claude Code on the web re-asking a dropped question, `@`-mention/vim-dot-repeat/
+statusline/resume-picker fixes, worktree sessions landing in another project's leftover worktree,
+undeletable worktree-less background sessions, `claude daemon stop --any` lockfile safety, Esc-Esc
+rewind-picker reliability, Ctrl+X session deletion, background-subagent cancellation on a high-priority
+message during startup, GUI-editor mouse/focus artifacts, Claude-in-Chrome 403-loop on reconnect, MCP
+re-authenticate credential revocation ordering, Windows-only network-path and PowerShell fixes,
+Bash non-ASCII word-boundary parsing (general hardening, no specific gap identified here), dialog and
+`/config`/transcript-mode UI clipping, the Prometheus `# UNIT` fix (no Prometheus exporter configured),
+skills/commands now hot-reloading mid-session without a restart (a workflow convenience for this
+system's own skill development, no code change), plugin-prefixed skill names in autocomplete,
+the `/fork` confirmation message, `git`/`gh` argument validation in the PowerShell tool, the
+`/ultrareview` and `/code-review ultra` error-message improvements, the spend-limit adjustment prompt,
+`/context`'s over-limit warning, `/rewind`'s symlink/hard-link hardening (consistent with the
+`.claude`-symlink and worktree fixes above, no direct reliance on `/rewind` in this system's safety
+design), background-session `/mcp`/`/install-github-app` needs-input parking, the bundled dataviz
+skill update, `[VSCode]` RTL rendering, and cloud-session container-restart resume. Source:
+`anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-22).
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
