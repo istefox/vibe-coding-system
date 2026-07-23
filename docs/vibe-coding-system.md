@@ -975,6 +975,91 @@ design), background-session `/mcp`/`/install-github-app` needs-input parking, th
 skill update, `[VSCode]` RTL rendering, and cloud-session container-restart resume. Source:
 `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-22).
 
+### Audit 2026-07-23 (CC 2.1.218)
+
+Source: `CHANGELOG.md` in the `anthropics/claude-code` GitHub repository, fetched byte-exact via the
+GitHub API, continuing the established precedent. The installed range advances from 2.1.217 to 2.1.218.
+Most items are platform-internal reliability and accessibility fixes; a handful touch documented
+behavior (`/code-review ultra`, `/ultrareview`) or harden a pattern this system does not currently use.
+
+- **`/code-review` now runs as a background subagent** (sec. 16): CC 2.1.218 stops `/code-review` from
+  filling the conversation with review output and keeps stacked slash commands as its review target
+  (e.g. `/skill-a /code-review`). `review-triage-fix` and the `code-review-checklist` reference drive
+  the `reviewer` agent and the `code-review` skill directly rather than the bare `/code-review` command,
+  so no chain contract changes; this is a pure UX improvement for any manual `/code-review` invocation
+  outside those skills.
+- **`/ultrareview` no longer fails on descriptive arguments** (sec. 16): CC 2.1.218 fixes
+  `/ultrareview "review my auth changes"`-style invocations, which previously failed outright; the
+  descriptive text is now applied as a note on a current-branch review instead. Directly relevant to
+  this session's own guidance text describing `/ultrareview` as a deprecated alias for
+  `/code-review ultra` — the alias is now more robust to how a user actually phrases the request, no
+  documentation change needed since the alias relationship itself is unchanged.
+- **`/code-review ultra` no longer silently runs a local review in non-interactive sessions** (sec. 16):
+  CC 2.1.218 fixes a correctness bug, not just wording — a non-interactive session invoking
+  `/code-review ultra` was previously getting the cheap local path with no indication the cloud review
+  never launched. `nightly-autopilot` and `autopilot-build` run unattended but neither currently invokes
+  `/code-review ultra` (they drive `review-triage-fix` and the `reviewer` agent directly), so no chain
+  is retroactively affected; this closes a latent trap for any future unattended use of the ultra path.
+- **Agent frontmatter hooks now require the agent file's own folder to have accepted workspace trust**
+  (sec. 3, ADR-0036, ADR-0038): CC 2.1.218 fixes agent-defined `hooks:` running from untrusted folders.
+  Verified: none of this system's 8 custom agents (`architect`, `coder`, `reviewer`, `tester`,
+  `debugger`, `refactorer`, `doc-writer`, `researcher`) define a `hooks:` frontmatter field — this
+  system's hook stack lives entirely in `settings.json` (ADR-0001, ADR-0009, ADR-0034), not in agent
+  files. Hardens a pattern this system does not currently exercise; no impact today, noted for if an
+  agent-level hook is ever adopted.
+- **Skills with `context: fork` now run in the background by default** (sec. 8.5): CC 2.1.218 makes
+  fork-context skills background by default, opt-out per skill via `background: false`. Verified:
+  `grep -rl "context:\s*fork" staging/plugin/skills/*/SKILL.md` returns nothing — none of the 16
+  deployed skills use `context: fork` (sec. 8.5's `deep-research` example is illustrative only, not a
+  shipped skill in this system). No impact today; if a future skill adopts `context: fork`, its default
+  behavior changes from foreground to background and may need an explicit `background: false` if the
+  chain expects to block on it.
+- **Auto mode's dangerous-rm, background-`&`, and suspicious-Windows-path checks no longer open
+  permission dialogs; the auto-mode classifier judges them instead** (sec. 10): relevant because Auto
+  Mode is this session's active permission mode. This system's own destructive-ops protection does not
+  depend on the permission dialog for these three checks — `protect-files.sh`, `db-backup-guardrail.sh`,
+  and the explicit HITL gates before commit/push/deploy/schema-change/deletion (sec. 4, this file's
+  invariants) are separate hook-level and skill-level gates that fire regardless of permission mode. No
+  contract change; documented here because the removed dialog is a real behavior change a user of Auto
+  Mode would otherwise notice without an explanation on record.
+- **Plan mode with auto no longer prompts for Bash commands the static analyzer can't prove read-only;
+  the auto-mode classifier judges instead** (sec. 4, sec. 11): same class of change as the item above,
+  applied to plan mode specifically. Plan mode's read-only contract (sec. 4's "Plan mode required for
+  any task modifying >1 file" invariant) is unaffected in substance — the classifier is a platform-side
+  judgment call on ambiguous Bash commands, not a relaxation of what plan mode blocks outright (Write,
+  Edit, and known-mutating commands stay blocked).
+- **Fixed a context-overflow retry loop re-sending doomed requests with a large thinking budget; `Ctrl+B`
+  backgrounding now applies the same background-shell caps as other paths** (sec. 3.9, ADR-0036): this
+  system pins `effort: xhigh` on several agents (`architect`, `reviewer` per ADR-0036) and workflow
+  stages can run at `effort: max`. A large thinking budget hitting context overflow previously could
+  retry-loop instead of failing fast; this closes that failure mode. No configuration change needed.
+- **Fixed spurious "[Request interrupted by user]" messages after interrupted tool calls, and an
+  unpaired `tool_use` block left in the transcript when a tool aborted mid-response**: adjacent to but
+  distinct from the hook-halt-misreport thread tracked in the ADR-0022 addendum (2.1.210/2.1.211/2.1.212/
+  2.1.216) — that thread is hook/telemetry infrastructure misreporting a platform fault as a human "no";
+  this fix is a transcript-integrity bug after an interrupted tool call (e.g. `Esc` or `Ctrl+C` mid-tool)
+  producing a misleading message and a dangling `tool_use` block. Not added to the ADR-0022 addendum:
+  no hook or `nightly-guard` decision point is misled by this specific bug, it is a display/transcript
+  artifact. Noted here for completeness, not as a sixth entry in that thread.
+
+Out of scope (no blueprint impact): screen-reader announcements for word/line deletions, Windows
+`\u`-prefixed path corruption to CJK characters, left-arrow-key conversation-discard confirmation, HTTP
+status/error text in `claude mcp list`/`/mcp`, MCP config hidden-whitespace warning, multi-line paste
+collapsing on Ctrl+J-encoding terminals, `/context` stale post-compact token usage, gateway spend
+metering for Bedrock application-inference-profile ARNs, mojibake on truncated IDE selection mid-emoji,
+silently-dropped tool executor errors, engine teardown phantom-turn race, VoiceOver trailing-space echo,
+plugin/settings-panel cursor following for screen readers, max-call-stack crashes on deeply nested
+watched-directory or UI-tree operations, PR events lost on immediate session exit, Bedrock setup wizard
+assume-role verification in partitioned regions, turn-duration monotonic-clock fix, MCP-authentication
+notice over-counting disconnected claude.ai connectors, prompt-history entries dropped or duplicated on
+racing writes, fork-session lineage lost after compaction in headless/SDK sessions, resumed-session
+crash on malformed delta attachment, `/ultrareview` error-feedback wording, fast-mode-change
+announcement on model switch, server-managed settings no longer triggering approval for benign toggles,
+agent markdown files rejecting `:` in names (none of this system's agent names contain `:`), skill/plugin
+frontmatter booleans accepting `yes`/`no`/`on`/`off`/`1`/`0`, and remote sessions' heartbeat-after-worker-
+replacement fix (no long-lived desktop/IDE remote-session usage in this system). Source:
+`anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-23).
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
