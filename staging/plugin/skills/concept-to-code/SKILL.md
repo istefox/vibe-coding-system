@@ -611,13 +611,31 @@ regardless of which model the orchestrator session runs, ALWAYS pass an explicit
 - `manifest.coder_model = "opus"` (or legacy `"fable"`) → `agent(prompt, { agentType: "coder", model: "opus", ... })`.
 - `manifest.coder_model = "sonnet"` or null → `agent(prompt, { agentType: "coder", model: "sonnet", ... })` (still explicit — do NOT omit `model`, or the coder would inherit the CLI model).
 
+**Pin `effort` explicitly too, for the same reason.** The Workflow tool documents `opts.effort` as
+"omit to inherit the session effort", so an omitted `effort` behaves exactly like an omitted
+`model`: the subagent takes the orchestrator session's value instead of the one pinned in its own
+frontmatter. Raising the orchestrator's `effortLevel` would then silently raise every dispatched
+agent with it, which is both a cost increase nobody asked for and a loss of the per-agent
+calibration. Pass the agent's own frontmatter value on every `agent()` call:
+
+| agentType | effort |
+| --- | --- |
+| `architect` | `xhigh` |
+| `coder`, `reviewer`, `debugger` | `high` |
+| `tester`, `refactorer` | `medium` |
+| `doc-writer`, `researcher` | `low` |
+
+If an agent's frontmatter changes, this table is the second place to update — they are not
+linked, and a mismatch here silently overrides the file.
+
 [IF manifest.step5_review_mode = checkpoint — add this block to dispatch, otherwise omit entirely:]
 Checkpoint review: ON (ADR-0039 D5-D9).
 Build the script with pipeline(), one entry per task, two stages: implement, then review.
 Do NOT use parallel() as a barrier between the stages — task B must keep implementing while
 task A is under review. Wall-clock is the slowest single-task chain, not sum-of-slowest-per-stage.
-Stage 2 dispatches agentType "reviewer" scoped to the files stage 1 reported for that task, with
-an explicit model (same rule as the coder above). It REVIEWS ONLY and fixes nothing.
+Stage 2 dispatches agentType "reviewer" scoped to the files stage 1 reported for that task.
+Pass an explicit model AND an explicit effort of "high" (same rules as the coder above).
+It REVIEWS ONLY and fixes nothing.
 Pass each task's BLOCKER and MAJOR findings into the prompt of the next task's stage 1 as
 "found in task <N>, do not repeat this". MINOR and NIT are recorded and left for Step 6.
 Collect every review into the checkpoint_reviews array of step5-report.json.
