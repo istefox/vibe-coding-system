@@ -140,7 +140,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mkdir -p ~/.cleankey/beats && k=$(sed -n 's/.*\"session_id\" *: *\"\\([^\"]*\\)\".*/\\1/p' | head -1); k=${k:-$PPID}; printf '%s' \"$PPID\" > ~/.cleankey/beats/claudeCode__\"$k\"",
+            "command": "mkdir -p ~/.agentwake/beats && k=$(sed -n 's/.*\"session_id\" *: *\"\\([^\"]*\\)\".*/\\1/p' | head -1); k=${k:-$PPID}; printf '%s' \"$PPID\" > ~/.agentwake/beats/claudeCode__\"$k\"",
             "timeout": 1
           }
         ]
@@ -189,7 +189,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "k=$(sed -n 's/.*\"session_id\" *: *\"\\([^\"]*\\)\".*/\\1/p' | head -1); k=${k:-$PPID}; rm -f ~/.cleankey/beats/claudeCode__\"$k\" ~/.cleankey/stops/claudeCode__\"$k\" ~/.cleankey/heartbeat ~/.cleankey/stopped",
+            "command": "k=$(sed -n 's/.*\"session_id\" *: *\"\\([^\"]*\\)\".*/\\1/p' | head -1); k=${k:-$PPID}; rm -f ~/.agentwake/beats/claudeCode__\"$k\" ~/.agentwake/stops/claudeCode__\"$k\" ~/.agentwake/heartbeat ~/.agentwake/stopped",
             "timeout": 1
           }
         ]
@@ -260,7 +260,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mkdir -p ~/.cleankey/beats && k=$(sed -n 's/.*\"session_id\" *: *\"\\([^\"]*\\)\".*/\\1/p' | head -1); k=${k:-$PPID}; printf '%s' \"$PPID\" > ~/.cleankey/beats/claudeCode__\"$k\"",
+            "command": "mkdir -p ~/.agentwake/beats && k=$(sed -n 's/.*\"session_id\" *: *\"\\([^\"]*\\)\".*/\\1/p' | head -1); k=${k:-$PPID}; printf '%s' \"$PPID\" > ~/.agentwake/beats/claudeCode__\"$k\"",
             "timeout": 1
           }
         ]
