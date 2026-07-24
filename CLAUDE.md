@@ -445,6 +445,39 @@ Key architectural decisions:
 
 Detail: `docs/architecture/ADR-0038-63-native-build-agent-tool-resolution.md`.
 
+## Decisions from the early-coder-feedback design (ADR-0039)
+
+Answer to the community "review every coder write" pattern. Split by what a check can decide
+without context: deterministic per-write checks (D1-D4, **shipped**) and a per-task checkpoint
+review in c2c Step 5 (D5-D9, decided, **not implemented**).
+
+Key architectural decisions:
+- **`post-write-check.sh`**, PostToolUse hook on `Edit|Write`, ordered after `auto-format.sh`.
+  Advisory and never blocking: always exits 0 and never emits `decision`, because
+  mid-implementation code is legitimately incomplete. One file, never a project-wide type check.
+- **The only channel to the model is `hookSpecificOutput.additionalContext`.** Plain stdout on
+  exit 0 reaches the debug log for every event except UserPromptSubmit / UserPromptExpansion /
+  SessionStart. Exit-2-with-stderr works but presents as a hook failure, wrong for an advisory
+  check. Only the nested envelope is emitted, no dual form (that is a UserPromptSubmit-specific
+  hedge from ADR-0034 D4).
+- **Syntax checks only, no external linters at all** (`bash -n`, `py_compile` with
+  `cfile=/dev/null`, `jq empty`, `yaml.safe_load`, `swiftc -parse`). Two linters produced two
+  false positives under the ADR's "error severity only" rule: swiftlint fails `let x = 1` on
+  `identifier_name`, shellcheck fails `echo ok` on SC2148 (no shebang). A linter's severity
+  tracks its configuration, not correctness, so the rule does not hold and the linters are out
+  rather than tuned. Style belongs to auto-format and the reviewer.
+- **Determinism is the second payoff:** the verdict no longer depends on which tools are
+  installed. The shellcheck false positive was invisible on macOS (not installed) and red on the
+  CI runner (installed) — the divergence found the bug, and removing linters closes it.
+- **Checkpoint review (D5) is orchestrator-side, not a hook**, because ADR-0016's hook-propagation
+  blocker into workflow subagents is still open. It is a `pipeline()` stage, never a barrier.
+  Gate 5.5's removal by ADR-0040 does not affect it.
+- **D8 amended before implementation:** `step5_review_mode` will default to `none`, opt-in only,
+  not `checkpoint` on 3+ task plans. The ADR itself calls that threshold an unmeasured guess;
+  cost data comes from `usage-report.py` first.
+
+Detail: `docs/architecture/ADR-0039-early-coder-feedback.md`.
+
 ## Decisions from the humanize-en scope narrowing (ADR-0040)
 
 `humanize-en` had become the most-invoked skill in the system. Six wiring points pushed it onto
