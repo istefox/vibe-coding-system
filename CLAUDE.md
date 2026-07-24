@@ -460,13 +460,15 @@ Key architectural decisions:
   SessionStart. Exit-2-with-stderr works but presents as a hook failure, wrong for an advisory
   check. Only the nested envelope is emitted, no dual form (that is a UserPromptSubmit-specific
   hedge from ADR-0034 D4).
-- **Native syntax checks carry the value, not external linters** (`bash -n`, `py_compile` with
-  `cfile=/dev/null`, `jq empty`, `yaml.safe_load`, `swiftc -parse`). The ADR's original engine
-  table would have done nothing on a repo of markdown and bash. Linters stay, gated on
-  `command -v`, as an optional second layer.
-- **`swiftlint` is deliberately excluded:** it reports style rules at severity `error`, failing
-  `let x = 1` on `identifier_name`. "Error severity only" assumes severity tracks correctness;
-  for swiftlint it tracks configuration. Style belongs to auto-format and the reviewer.
+- **Syntax checks only, no external linters at all** (`bash -n`, `py_compile` with
+  `cfile=/dev/null`, `jq empty`, `yaml.safe_load`, `swiftc -parse`). Two linters produced two
+  false positives under the ADR's "error severity only" rule: swiftlint fails `let x = 1` on
+  `identifier_name`, shellcheck fails `echo ok` on SC2148 (no shebang). A linter's severity
+  tracks its configuration, not correctness, so the rule does not hold and the linters are out
+  rather than tuned. Style belongs to auto-format and the reviewer.
+- **Determinism is the second payoff:** the verdict no longer depends on which tools are
+  installed. The shellcheck false positive was invisible on macOS (not installed) and red on the
+  CI runner (installed) — the divergence found the bug, and removing linters closes it.
 - **Checkpoint review (D5) is orchestrator-side, not a hook**, because ADR-0016's hook-propagation
   blocker into workflow subagents is still open. It is a `pipeline()` stage, never a barrier.
   Gate 5.5's removal by ADR-0040 does not affect it.

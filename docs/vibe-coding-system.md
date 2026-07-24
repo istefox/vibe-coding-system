@@ -1118,14 +1118,15 @@ review (D5-D9) is decided but not implemented.
   plain stdout on exit 0 goes to the debug log for every event except `UserPromptSubmit`,
   `UserPromptExpansion` and `SessionStart`. Exit-2-with-stderr does reach the model but presents as
   a hook failure. Verified against `code.claude.com/docs/en/hooks`.
-- **Native syntax checks over external linters** (sec. 7): `bash -n`, `py_compile` with
-  `cfile=/dev/null`, `jq empty`, `yaml.safe_load`, `swiftc -parse`. Linters (`shellcheck`, `ruff`,
-  `eslint`) are an optional second layer, gated on `command -v`. The ADR's original table listed
-  only external tools and would have been inert on a repo of markdown and bash.
-- **`swiftlint` deliberately excluded** (sec. 7): it reports style rules at severity `error`, so
-  `let x = 1` fails on `identifier_name`. Severity does not track correctness there, and importing
-  it would produce exactly the noise the error-only rule exists to prevent.
-- Harness `post-write-check.test.sh`, 12 cases, added to both CI workflows.
+- **Syntax checks only, no external linters** (sec. 7): `bash -n`, `py_compile` with
+  `cfile=/dev/null`, `jq empty`, `yaml.safe_load`, `swiftc -parse`. The ADR's original table named
+  `ruff`, `eslint`, `swiftlint` and `shellcheck` under an "error severity only" rule. Two of them
+  produced false positives on correct files (swiftlint: `let x = 1` fails `identifier_name`;
+  shellcheck: `echo ok` fails SC2148 for a missing shebang), because a linter's severity tracks
+  its configuration rather than correctness. Linters are out entirely, not tuned.
+- **Determinism** (sec. 7): with no external engines the verdict is the same on every machine. The
+  shellcheck case was invisible on macOS and red on CI, which is how it was found.
+- Harness `post-write-check.test.sh`, 14 cases, added to both CI workflows.
 
 Detail: `docs/architecture/ADR-0039-early-coder-feedback.md`.
 
@@ -2103,12 +2104,13 @@ The contract, in four lines:
   `post-md-tells-hint.sh` invisible to the model for its entire life (ADR-0040).
 - **One file, never the project.** No project-wide type check: too slow per write, and mostly noise
   about symbols that do not exist yet on a half-finished tree.
-- **Native syntax checks first** (`bash -n`, `py_compile` with `cfile=/dev/null`, `jq empty`,
-  `yaml.safe_load`, `swiftc -parse`), external linters second and only when `command -v` finds them.
-  `swiftlint` is excluded on purpose: it reports style rules at severity `error`, so `let x = 1`
-  fails on `identifier_name`, and severity there tracks configuration rather than correctness.
+- **Syntax checks only** (`bash -n`, `py_compile` with `cfile=/dev/null`, `jq empty`,
+  `yaml.safe_load`, `swiftc -parse`). No external linters: under an error-only rule both swiftlint
+  and shellcheck flagged correct files (`let x = 1` on `identifier_name`, `echo ok` on SC2148),
+  because linter severity tracks configuration rather than correctness. The verdict is therefore
+  identical on every machine, independent of what is installed.
 
-Harness: `staging/plugin/scripts/tests/post-write-check.test.sh`, 12 cases, in both CI workflows.
+Harness: `staging/plugin/scripts/tests/post-write-check.test.sh`, 14 cases, in both CI workflows.
 
 ### 7.4 Advanced hook — verify green tests before Stop (prompt-based)
 

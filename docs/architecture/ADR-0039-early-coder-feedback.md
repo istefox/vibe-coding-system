@@ -168,20 +168,25 @@ never sees it. That is the bug that made `post-md-tells-hint.sh` a no-op for its
 `prompt-en-prose-detect.sh` uses — that dual form exists for `UserPromptSubmit` for a historical
 reason (ADR-0034 D4), and for `PostToolUse` the nested shape is the only documented one.
 
-**The engine table in D3 was wrong about where the value is.** It named `ruff`, `eslint`,
-`swiftlint` and `shellcheck`. On the machine this system runs on, only `swiftlint` and `npx` are
-installed, so taken literally the hook would have done nothing on a repo of markdown and bash. The
-value is in the native syntax checks, which need no installation: `bash -n`, `py_compile` with
-`cfile=/dev/null`, `jq empty`, `yaml.safe_load`, `swiftc -parse`. External linters stay, gated on
-`command -v`, as an optional second layer.
+**D3's engine table and D4's severity rule were both wrong, and they were wrong together.** The
+table named `ruff`, `eslint`, `swiftlint` and `shellcheck`. D4 said "error severity only", assuming
+that a linter's severity tracks correctness. It does not: it tracks configuration.
 
-**`swiftlint` is deliberately not an engine, and this is the sharpest lesson.** It reports style
-rules at severity `error`: on `let x = 1` it fails with `identifier_name`, because the variable name
-is under three characters. D4 says error severity only, on the assumption that severity tracks
-correctness. For swiftlint it tracks configuration instead. Taking D4 literally would have imported
-exactly the noise D4 exists to prevent. The hook uses `swiftc -parse` for Swift; style belongs to
-`auto-format.sh` and to the reviewer. The harness pins this with two cases: a style-violating but
-syntactically valid file stays silent, a genuinely broken one is reported.
+Two linters, two false positives, found one after the other.
+
+- `swiftlint` fails `let x = 1` with `identifier_name` at severity `error`, because the name is
+  under three characters. Caught by the local harness.
+- `shellcheck` fails `echo ok` with `SC2148` at severity `error`, because the fragment has no
+  shebang. Invisible locally, where shellcheck is not installed, and red on the CI runner, where it
+  is. The CI found the second instance of the same class after the first had already been fixed.
+
+So external linters are removed from the hook entirely, not tuned. Every engine now answers one
+question, does this file parse: `bash -n`, `py_compile` with `cfile=/dev/null`, `jq empty`,
+`yaml.safe_load`, `swiftc -parse`. Style belongs to `auto-format.sh` and to the reviewer.
+
+A second property falls out of this. The hook's verdict no longer depends on which tools happen to
+be installed, so it behaves identically on the author's machine and on CI. The shellcheck case is
+precisely what that divergence costs when it is not closed.
 
 Two smaller implementation notes. `py_compile` writes `__pycache__` next to the source unless
 `cfile` is redirected, so the check would have littered every tree it inspected; a test asserts

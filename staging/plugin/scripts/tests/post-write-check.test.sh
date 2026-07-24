@@ -41,6 +41,19 @@ else
 fi
 
 # =====================================================================================
+# Test 1b (D4 as revised, the CI-only regression): a .sh fragment with no shebang is valid and
+# must stay silent. shellcheck reports SC2148 on it at severity `error`. This was invisible on
+# the author's macOS, where shellcheck is not installed, and red on the CI runner, where it is.
+# The pair (this and Test 10) is why the hook runs syntax checks only and no external linters.
+printf 'echo ok\n' > "$TMP/noshebang.sh"
+run "$TMP/noshebang.sh"
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
+  ok "1b: .sh without a shebang stays silent (no linter opinions)"
+else
+  bad "1b: .sh without shebang produced output (rc=$RC out='$OUT')"
+fi
+
+# =====================================================================================
 # Test 2 (D1): a broken .sh is reported through additionalContext.
 printf 'if [ 1 ]; then\n' > "$TMP/broken.sh"
 run "$TMP/broken.sh"
@@ -103,12 +116,26 @@ fi
 # =====================================================================================
 # Test 6: malformed .yml reported.
 printf 'a: [1,\n' > "$TMP/broken.yml"
-run "$TMP/broken.yml"
-C6=$(ctx "$OUT")
-if [ "$RC" -eq 0 ] && [ -n "$C6" ]; then
-  ok "6: malformed .yml reported"
+if python3 -c "import yaml" >/dev/null 2>&1; then
+  run "$TMP/broken.yml"
+  C6=$(ctx "$OUT")
+  if [ "$RC" -eq 0 ] && [ -n "$C6" ]; then
+    ok "6: malformed .yml reported"
+  else
+    bad "6: malformed .yml not reported (rc=$RC)"
+  fi
 else
-  bad "6: malformed .yml not reported (rc=$RC)"
+  echo "SKIP 6: PyYAML not installed (informational)"
+fi
+
+# Test 6b: a valid .yml stays silent. With PyYAML absent the hook must skip the check rather
+# than report the ImportError as a file defect.
+printf 'a: 1\n' > "$TMP/good.yml"
+run "$TMP/good.yml"
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
+  ok "6b: valid .yml stays silent (and no false error when PyYAML is absent)"
+else
+  bad "6b: valid .yml produced output (rc=$RC out='$OUT')"
 fi
 
 # =====================================================================================
@@ -142,11 +169,10 @@ else
 fi
 
 # =====================================================================================
-# Test 10 (D4, style is not an error): a .swift file that is syntactically valid but violates
-# a style rule must stay silent. `let x = 1` trips swiftlint's identifier_name rule, which
-# swiftlint reports at severity `error` — that is why the hook uses `swiftc -parse` and not
-# swiftlint. This case pins that choice; it also exercises the missing-engine path on a
-# machine without swiftc.
+# Test 10 (D4 as revised): a .swift file that is syntactically valid but violates a style rule
+# must stay silent. `let x = 1` trips swiftlint's identifier_name rule at severity `error`.
+# This is one of the two false positives that removed external linters from the hook entirely
+# (the other is Test 1b). It also exercises the missing-engine path where swiftc is absent.
 printf 'let x = 1\n' > "$TMP/ok.swift"
 run "$TMP/ok.swift"
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
