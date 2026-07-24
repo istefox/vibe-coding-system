@@ -1,6 +1,6 @@
 # ADR-0039 — Early feedback on coder output: deterministic per-write checks plus per-task checkpoint review
 
-**Status:** Partially implemented (D1-D4 shipped; D5-D9 decided, not implemented)
+**Status:** Implemented (D1-D4 and D5-D9 shipped; D5/D7/D8/D9 amended during implementation)
 **Date:** 2026-07-24
 **Author:** istefox
 **Supersedes:** none
@@ -193,6 +193,49 @@ Two smaller implementation notes. `py_compile` writes `__pycache__` next to the 
 nothing is left behind. And the eslint branch resolves `package.json` upward from the edited file
 rather than reading `$PWD`, because the hook's working directory is the session's and need not be
 the edited file's project.
+
+## 4c. Addendum 2026-07-25 — what implementing D5-D9 changed
+
+D5-D9 shipped as a `step5_review_mode` manifest field plus a conditional block in both Step 5
+dispatch paths, with a 13-case harness. Four decisions were amended before writing any of it.
+
+**D5 is review-only. The checkpoint does not fix.** The original text had the checkpoint review,
+triage and fix before the next task began, reusing `review-triage-fix`. That turned out not to be
+buildable as written: RTF reviews "over the recent changes" with no per-task scope, and its state
+file is per-branch. Invoking it at each checkpoint on a shared tree means the second checkpoint
+re-reviews the first task's diff. It was never designed to run N times inside one Step 5.
+
+The alternatives were reimplementing RTF's triage-and-fix core inside `concept-to-code`, leaving
+two fix paths to drift apart, or changing RTF itself, which is its own ADR. Neither is worth it
+for the benefit at stake. So the checkpoint reviews and stops there: BLOCKER and MAJOR findings go
+into the next task's coder brief as "found in task N, do not repeat this", MINOR and NIT wait for
+Step 6, where RTF runs the full cycle exactly as it does today.
+
+This still delivers what section 1 asked for. The complaint was that "nothing between tasks says
+this was wrong". Now something does.
+
+**D7 used a severity scale that does not exist on this path.** P1/P2/P3 comes from `deep-refactor`
+(ADR-0018). The `reviewer` agent emits BLOCKER/MAJOR/MINOR/NIT and RTF's triage table consumes
+those. BLOCKER and MAJOR are the actionable pair at the checkpoint; MINOR and NIT defer.
+
+**D8 defaults to `none`.** Not `checkpoint` on plans with three or more tasks. D8 itself calls that
+threshold an unmeasured guess, and turning on a per-task reviewer dispatch by default is a token
+cost nobody has measured yet. It is opt-in with no new gate in the chain,
+flipped by a `sed` substitution on the additive field — the same mechanism `step5_mode` already
+uses, and for the same reason: `manifest-set-flag.sh` accepts only `true|false`, and widening a
+shared helper to take arbitrary values would drop the guard that protects every boolean flag it
+sets. The generated manifest carries the exact command as a comment; with no gate, that comment is
+the only place a human finds it. `usage-report.py` supplies the data before the default is revisited.
+
+**D9 collapses.** "Fix-or-halt on unattended paths" presupposed a fix cycle. With review-only there
+is nothing that can remain unresolved, so nothing can halt; findings land in the report. And since
+`autopilot-build` and `nightly-autopilot` reuse Step 5 by reference rather than duplicating it,
+a `none` default means neither skill needed a single edit.
+
+One implementation note worth keeping. Both dispatch paths gate on the same field and state the
+review-only contract independently, and a test asserts both sites exist. If only one carried it, a
+chain would behave differently depending on whether `hook_verified` had flipped the Workflow path
+on — a difference nobody would think to look for.
 
 ## 5. References
 

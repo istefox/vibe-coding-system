@@ -1104,6 +1104,32 @@ Fable model-row cache label fix, and the claude-api skill's own default-model mi
 Anthropic tooling, not this system's `researcher`/`architect` MCP usage). Source: `anthropics/claude-code`
 `CHANGELOG.md` (GitHub, fetched 2026-07-24).
 
+### Addition 2026-07-25 (Step 5 checkpoint review, ADR-0039 D5-D9)
+
+Second and last half of ADR-0039. A per-task checkpoint review inside `concept-to-code` Step 5,
+opt-in via the new `step5_review_mode` manifest field. Four of the ADR's decisions were amended
+before implementation.
+
+- **Review-only, no fix** (sec. 11): the checkpoint dispatches `reviewer` scoped to the task that
+  just finished and stops there. `review-triage-fix` could not be reused per task — it reviews
+  "recent changes" with no per-task scope and keeps per-branch state, so at the second checkpoint
+  it would re-review the first task. BLOCKER and MAJOR findings feed the next task's coder brief;
+  MINOR and NIT wait for Step 6, where RTF runs its full cycle unchanged.
+- **`pipeline()`, never a barrier** (sec. 11): task B keeps implementing while task A is under
+  review. A barrier would serialize exactly what Step 5 exists to parallelize.
+- **Opt-in, default `none`** (sec. 11): not `checkpoint` on 3+ task plans as the ADR proposed —
+  that threshold is an unmeasured guess and a per-task reviewer dispatch is an unmeasured cost.
+  No new gate; flipped by `sed` on the additive field as `step5_mode` already is, since
+  `manifest-set-flag.sh` takes only `true|false`. The generated manifest carries the command.
+- **Severity is BLOCKER/MAJOR/MINOR/NIT** (sec. 11): the ADR's P1/P2/P3 belongs to `deep-refactor`
+  (ADR-0018) and does not exist on this path.
+- Invariant 14 in `manifest-validate.sh` is conditional on the field being present, so every
+  manifest written before this change stays valid without migration. `autopilot-build` and
+  `nightly-autopilot` needed no edit: they reuse Step 5 by reference and the default is `none`.
+- Harness `step5-checkpoint-review.test.sh`, 13 cases, in both CI workflows.
+
+Detail: `docs/architecture/ADR-0039-early-coder-feedback.md`.
+
 ### Addition 2026-07-24 (post-write-check hook, ADR-0039 D1-D4)
 
 New deterministic PostToolUse hook on `Edit|Write`, `post-write-check.sh`, ordered after

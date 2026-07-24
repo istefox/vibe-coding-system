@@ -611,6 +611,18 @@ regardless of which model the orchestrator session runs, ALWAYS pass an explicit
 - `manifest.coder_model = "opus"` (or legacy `"fable"`) → `agent(prompt, { agentType: "coder", model: "opus", ... })`.
 - `manifest.coder_model = "sonnet"` or null → `agent(prompt, { agentType: "coder", model: "sonnet", ... })` (still explicit — do NOT omit `model`, or the coder would inherit the CLI model).
 
+[IF manifest.step5_review_mode = checkpoint — add this block to dispatch, otherwise omit entirely:]
+Checkpoint review: ON (ADR-0039 D5-D9).
+Build the script with pipeline(), one entry per task, two stages: implement, then review.
+Do NOT use parallel() as a barrier between the stages — task B must keep implementing while
+task A is under review. Wall-clock is the slowest single-task chain, not sum-of-slowest-per-stage.
+Stage 2 dispatches agentType "reviewer" scoped to the files stage 1 reported for that task, with
+an explicit model (same rule as the coder above). It REVIEWS ONLY and fixes nothing.
+Pass each task's BLOCKER and MAJOR findings into the prompt of the next task's stage 1 as
+"found in task <N>, do not repeat this". MINOR and NIT are recorded and left for Step 6.
+Collect every review into the checkpoint_reviews array of step5-report.json.
+[END IF]
+
 After all tasks complete, the final subagent MUST write
 <project_root>/.claude/step5-report.json with the schema defined in the
 step5-report.json contract section (schema: see ~/.claude/skills/concept-to-code/SKILL.md §4 Step 5 contract).
@@ -654,9 +666,17 @@ Schema (JSON):
   "test_result": "green | red | n/a",
   "test_output_tail": "<last 20 lines of test output or empty string>",
   "harness_deltas": "PASS=N FAIL=0 (delta from baseline, or n/a)",
+  "checkpoint_reviews": [
+    { "task": 1,
+      "severity_counts": { "BLOCKER": 0, "MAJOR": 1, "MINOR": 2, "NIT": 0 },
+      "blocking_findings": ["<one line per BLOCKER/MAJOR, passed to the next task>"] }
+  ],
   "errors": []
 }
 ```
+
+`checkpoint_reviews` is an empty array when `step5_review_mode` is `none` (the default), which
+is also what every manifest written before ADR-0039 means by omitting the field.
 
 **Orchestrator read contract:**
 - Stale detection: check file modification time via `stat -f %m <file>` against
@@ -668,6 +688,10 @@ Schema (JSON):
 - `step5-report.json` absent → git diff + test run directly (not a blocking error).
 - Schema validation: check that `step5_mode` and `tasks_completed` are present.
   If either is missing, treat the file as malformed → git diff fallback.
+- `checkpoint_reviews` is **never** a failure signal. Its findings were already fed forward to
+  the next task during Step 5; they do not block the transition to `step_6_review`, where the
+  full RTF cycle sees them anyway. A missing `checkpoint_reviews` key is not malformed — it is
+  what a `step5_review_mode: none` run produces.
 
 #### Fallback — Agent-tool batch dispatch (hook_verified = false or workflow unavailable)
 
@@ -680,6 +704,15 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
 2. Checkpoint between batches: run `verify.sh <root>` and check `git status` yourself
    as the orchestrator — do NOT trust the coder's report to decide whether to continue
    (it may be truncated or incomplete).
+
+   **[IF `manifest.step5_review_mode = checkpoint` (ADR-0039 D5-D9) — otherwise skip:]**
+   At this same checkpoint, dispatch the `reviewer` agent scoped to the diff of the batch that
+   just closed. It reviews only and fixes nothing: this is where the Workflow path would run its
+   pipeline review stage, and the two paths must reach the same place. Carry the BLOCKER and
+   MAJOR findings into the brief of the next batch as "found in batch <N>, do not repeat this".
+   MINOR and NIT are recorded and left for Step 6, where RTF runs the full cycle over the whole
+   diff. Record each review in `checkpoint_reviews` in `step5-report.json`.
+   A finding here never halts the chain — it is feedback for the next batch, not a gate.
    If a dispatch returns without output or hangs unexpectedly, run:
    `claude agents --json | jq '.[] | select(.waitingFor != null) | {id, waitingFor}'`
    A non-null `waitingFor` means the coder is blocked on a permission prompt —

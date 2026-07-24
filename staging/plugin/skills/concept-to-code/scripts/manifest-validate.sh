@@ -194,6 +194,15 @@ if grep -q '^chain_path:' "$MANIFEST"; then
   esac
 fi
 
+# Invariant 14 (conditional, ADR-0039 D8): if step5_review_mode present, must be none or checkpoint
+# Absent = valid. Every manifest written before ADR-0039 lacks the field, and none of them needs
+# a migration: absent and 'none' mean the same thing.
+if grep -q '^step5_review_mode:' "$MANIFEST"; then
+  if ! grep -Eq '^step5_review_mode: (none|checkpoint)$' "$MANIFEST"; then
+    fail "step5_review_mode present but value is not 'none' or 'checkpoint'"
+  fi
+fi
+
 if [ "$ERRORS" != "0" ]; then
   exit 1
 fi
