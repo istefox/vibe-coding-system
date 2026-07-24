@@ -471,10 +471,24 @@ Key architectural decisions:
   CI runner (installed) — the divergence found the bug, and removing linters closes it.
 - **Checkpoint review (D5) is orchestrator-side, not a hook**, because ADR-0016's hook-propagation
   blocker into workflow subagents is still open. It is a `pipeline()` stage, never a barrier.
-  Gate 5.5's removal by ADR-0040 does not affect it.
-- **D8 amended before implementation:** `step5_review_mode` will default to `none`, opt-in only,
-  not `checkpoint` on 3+ task plans. The ADR itself calls that threshold an unmeasured guess;
-  cost data comes from `usage-report.py` first.
+- **The checkpoint reviews and does not fix** (D5 amended): RTF has no per-task scope and keeps
+  per-branch state, so invoking it at each checkpoint would re-review earlier tasks. BLOCKER and
+  MAJOR findings feed the next task's coder brief ("found in task N, do not repeat this"); MINOR
+  and NIT wait for Step 6, where RTF runs the full cycle unchanged. Reimplementing RTF's fix core
+  inside c2c was rejected: two fix paths would drift.
+- **Severity vocabulary is BLOCKER/MAJOR/MINOR/NIT** (D7 amended). The ADR's P1/P2/P3 comes from
+  deep-refactor (ADR-0018) and does not exist on this path.
+- **`step5_review_mode` defaults to `none`** (D8 amended), opt-in with no new gate, flipped by
+  `sed` on the additive field exactly as `step5_mode` is. `manifest-set-flag.sh` cannot do it: it
+  accepts only `true|false`, and widening it would drop the guard protecting every boolean flag.
+  The generated manifest carries the exact command as a comment, the only place a human finds it. Invariant 14 in `manifest-validate.sh` is conditional,
+  so pre-ADR-0039 manifests stay valid with no migration.
+- **D9 collapsed:** "fix-or-halt on unattended paths" presupposed a fix cycle. Review-only means
+  nothing can remain unresolved, so nothing halts. `autopilot-build` and `nightly-autopilot` reuse
+  Step 5 by reference, so the `none` default left both untouched.
+- **Both dispatch paths gate on the same field** and state the review-only contract independently,
+  pinned by a test. Otherwise a chain would behave differently depending on whether `hook_verified`
+  had flipped the Workflow path on.
 
 Detail: `docs/architecture/ADR-0039-early-coder-feedback.md`.
 
