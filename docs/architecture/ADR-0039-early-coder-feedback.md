@@ -1,6 +1,6 @@
 # ADR-0039 — Early feedback on coder output: deterministic per-write checks plus per-task checkpoint review
 
-**Status:** Proposed
+**Status:** Partially implemented (D1-D4 shipped; D5-D9 decided, not implemented)
 **Date:** 2026-07-24
 **Author:** istefox
 **Supersedes:** none
@@ -148,11 +148,46 @@ if `step5_review_mode` is `none`, the chain behaves exactly as it does today.
 
 **Open, to be resolved during implementation.**
 
-- The exact PostToolUse feedback channel needs a live check on the installed CLI before the hook is
-  written. Both exit-code-2-with-stderr and structured `additionalContext` are plausible; the
-  choice must be verified, not assumed.
+- ~~The exact PostToolUse feedback channel needs a live check.~~ **Resolved, see the addendum.**
 - Whether P2 should block the next task or defer alongside P3 is a judgment call that wants data
   from the first few runs.
+
+## 4b. Addendum 2026-07-24 — what implementing D1-D4 changed
+
+D1-D4 shipped as `staging/plugin/scripts/post-write-check.sh` with a 12-case harness. Three things
+the decision section got wrong or left open are corrected here. D5-D9 are not implemented yet and
+ship separately.
+
+**The feedback channel is `hookSpecificOutput.additionalContext`, and only that.** Verified against
+`code.claude.com/docs/en/hooks`. Exit-2-with-stderr does reach the model, but the tool has already
+run, so it presents as a hook failure — the wrong signal for a check that is deliberately
+non-blocking under D2. Plain stdout on exit 0 was never a candidate: for every event except
+`UserPromptSubmit`, `UserPromptExpansion` and `SessionStart` it goes to the debug log and the model
+never sees it. That is the bug that made `post-md-tells-hint.sh` a no-op for its entire life
+(ADR-0040). The hook emits only the nested envelope, not the dual form
+`prompt-en-prose-detect.sh` uses — that dual form exists for `UserPromptSubmit` for a historical
+reason (ADR-0034 D4), and for `PostToolUse` the nested shape is the only documented one.
+
+**The engine table in D3 was wrong about where the value is.** It named `ruff`, `eslint`,
+`swiftlint` and `shellcheck`. On the machine this system runs on, only `swiftlint` and `npx` are
+installed, so taken literally the hook would have done nothing on a repo of markdown and bash. The
+value is in the native syntax checks, which need no installation: `bash -n`, `py_compile` with
+`cfile=/dev/null`, `jq empty`, `yaml.safe_load`, `swiftc -parse`. External linters stay, gated on
+`command -v`, as an optional second layer.
+
+**`swiftlint` is deliberately not an engine, and this is the sharpest lesson.** It reports style
+rules at severity `error`: on `let x = 1` it fails with `identifier_name`, because the variable name
+is under three characters. D4 says error severity only, on the assumption that severity tracks
+correctness. For swiftlint it tracks configuration instead. Taking D4 literally would have imported
+exactly the noise D4 exists to prevent. The hook uses `swiftc -parse` for Swift; style belongs to
+`auto-format.sh` and to the reviewer. The harness pins this with two cases: a style-violating but
+syntactically valid file stays silent, a genuinely broken one is reported.
+
+Two smaller implementation notes. `py_compile` writes `__pycache__` next to the source unless
+`cfile` is redirected, so the check would have littered every tree it inspected; a test asserts
+nothing is left behind. And the eslint branch resolves `package.json` upward from the edited file
+rather than reading `$PWD`, because the hook's working directory is the session's and need not be
+the edited file's project.
 
 ## 5. References
 

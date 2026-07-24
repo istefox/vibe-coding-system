@@ -1104,6 +1104,31 @@ Fable model-row cache label fix, and the claude-api skill's own default-model mi
 Anthropic tooling, not this system's `researcher`/`architect` MCP usage). Source: `anthropics/claude-code`
 `CHANGELOG.md` (GitHub, fetched 2026-07-24).
 
+### Addition 2026-07-24 (post-write-check hook, ADR-0039 D1-D4)
+
+New deterministic PostToolUse hook on `Edit|Write`, `post-write-check.sh`, ordered after
+`auto-format.sh`. It runs a file-scoped correctness check on what was just written and reports
+errors to the model at zero LLM cost. This is the first half of ADR-0039; the per-task checkpoint
+review (D5-D9) is decided but not implemented.
+
+- **Advisory, never blocking** (sec. 7): always exits 0, never emits `decision`. Mid-implementation
+  code is legitimately incomplete, and a check that stalls a coder on code it was about to finish
+  is worse than no check.
+- **`hookSpecificOutput.additionalContext` is the only channel that reaches the model** (sec. 7):
+  plain stdout on exit 0 goes to the debug log for every event except `UserPromptSubmit`,
+  `UserPromptExpansion` and `SessionStart`. Exit-2-with-stderr does reach the model but presents as
+  a hook failure. Verified against `code.claude.com/docs/en/hooks`.
+- **Native syntax checks over external linters** (sec. 7): `bash -n`, `py_compile` with
+  `cfile=/dev/null`, `jq empty`, `yaml.safe_load`, `swiftc -parse`. Linters (`shellcheck`, `ruff`,
+  `eslint`) are an optional second layer, gated on `command -v`. The ADR's original table listed
+  only external tools and would have been inert on a repo of markdown and bash.
+- **`swiftlint` deliberately excluded** (sec. 7): it reports style rules at severity `error`, so
+  `let x = 1` fails on `identifier_name`. Severity does not track correctness there, and importing
+  it would produce exactly the noise the error-only rule exists to prevent.
+- Harness `post-write-check.test.sh`, 12 cases, added to both CI workflows.
+
+Detail: `docs/architecture/ADR-0039-early-coder-feedback.md`.
+
 ### Correction 2026-07-24 (humanize-en scope, ADR-0040)
 
 `humanize-en` had become the most-invoked skill in the system. The cause was its wiring, not the
@@ -2060,6 +2085,30 @@ esac
 
 exit 0
 ```
+
+### 7.3b Hook `post-write-check.sh` (deterministic correctness check after edit, ADR-0039)
+
+`~/.claude/hooks/post-write-check.sh`, wired on `PostToolUse` `Edit|Write` **after**
+`auto-format.sh` so formatting noise is already gone. Sibling of 7.3 in shape, opposite in intent:
+7.3 fixes the file, this one only reports on it.
+
+The contract, in four lines:
+
+- **Always exits 0 and never emits `decision`.** Advisory by construction. Mid-implementation code
+  is legitimately incomplete, and a blocking check would stall a coder on code it was about to
+  finish.
+- **The model is reached only through `hookSpecificOutput.additionalContext`.** For `PostToolUse`,
+  plain stdout on exit 0 goes to the debug log — only `UserPromptSubmit`, `UserPromptExpansion` and
+  `SessionStart` add stdout to context. Getting this wrong is what made the retired
+  `post-md-tells-hint.sh` invisible to the model for its entire life (ADR-0040).
+- **One file, never the project.** No project-wide type check: too slow per write, and mostly noise
+  about symbols that do not exist yet on a half-finished tree.
+- **Native syntax checks first** (`bash -n`, `py_compile` with `cfile=/dev/null`, `jq empty`,
+  `yaml.safe_load`, `swiftc -parse`), external linters second and only when `command -v` finds them.
+  `swiftlint` is excluded on purpose: it reports style rules at severity `error`, so `let x = 1`
+  fails on `identifier_name`, and severity there tracks configuration rather than correctness.
+
+Harness: `staging/plugin/scripts/tests/post-write-check.test.sh`, 12 cases, in both CI workflows.
 
 ### 7.4 Advanced hook — verify green tests before Stop (prompt-based)
 

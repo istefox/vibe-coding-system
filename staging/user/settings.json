@@ -113,6 +113,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/post-write-check.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
             "command": "\"$HOME\"/.claude/hooks/mark-dirty.sh"
           }
         ]
