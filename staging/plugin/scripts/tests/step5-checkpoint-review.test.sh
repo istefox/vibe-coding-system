@@ -122,6 +122,24 @@ else
   bad "C5: severity vocabulary wrong or the P1/P2 phrasing leaked into SKILL.md"
 fi
 
+# C6: effort must be pinned explicitly on every agent() call, for the same reason model is.
+# The Workflow tool inherits the session effort when opts.effort is omitted, so raising the
+# orchestrator's effortLevel would silently raise every dispatched agent and discard the
+# per-agent calibration in their frontmatter.
+if grep -q 'Pin `effort` explicitly too' "$CC_SKILL" \
+   && grep -q 'omit to inherit the session effort' "$CC_SKILL"; then
+  ok "C6: Workflow path pins effort explicitly, with the inheritance reason stated"
+else
+  bad "C6: effort pin instruction missing"
+fi
+
+# C7: the checkpoint reviewer carries an explicit effort too, not just an explicit model.
+if grep -q 'Pass an explicit model AND an explicit effort of "high"' "$CC_SKILL"; then
+  ok "C7: checkpoint reviewer dispatch pins both model and effort"
+else
+  bad "C7: checkpoint reviewer does not pin effort"
+fi
+
 # =====================================================================================
 # D. step5-report.json schema and the orchestrator read contract.
 if grep -q '"checkpoint_reviews"' "$CC_SKILL"; then

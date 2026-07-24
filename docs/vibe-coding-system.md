@@ -1104,6 +1104,20 @@ Fable model-row cache label fix, and the claude-api skill's own default-model mi
 Anthropic tooling, not this system's `researcher`/`architect` MCP usage). Source: `anthropics/claude-code`
 `CHANGELOG.md` (GitHub, fetched 2026-07-24).
 
+### Change 2026-07-25 (orchestrator effort high, explicit effort pin in Step 5)
+
+The orchestrator session's `effortLevel` moves from `low` to `high`.
+
+- **Step 5 now pins `effort` on every `agent()` call** (sec. 11): the Workflow tool inherits the
+  session effort when `opts.effort` is omitted, the same way it inherits the session model when
+  `model` is omitted (the ADR-0016 finding). Raising the orchestrator without this pin would have
+  silently raised every dispatched subagent too, discarding the per-agent calibration in their
+  frontmatter and increasing cost invisibly. The dispatch instruction carries the values
+  explicitly: architect `xhigh`; coder, reviewer, debugger `high`; tester, refactorer `medium`;
+  doc-writer, researcher `low`.
+- **The table is not linked to the agent files** (sec. 3): a change to an agent's frontmatter
+  `effort` must be mirrored in SKILL.md, or the dispatch value silently wins.
+
 ### Addition 2026-07-25 (Step 5 checkpoint review, ADR-0039 D5-D9)
 
 Second and last half of ADR-0039. A per-task checkpoint review inside `concept-to-code` Step 5,

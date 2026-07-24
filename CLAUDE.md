@@ -116,6 +116,15 @@ Key constraints:
   (`workflow|agent_fallback|null`) added to `manifest-init.sh` as additive fields.
   No schema version bump required.
 
+**Addendum 2026-07-25 (orchestrator effort).** The session `effortLevel` moves to `high`. Since
+the Workflow tool inherits the session effort whenever `opts.effort` is omitted, exactly as it
+inherits the session model when `model` is omitted, Step 5 now pins `effort` explicitly on every
+`agent()` call from each agent's frontmatter (architect `xhigh`; coder/reviewer/debugger `high`;
+tester/refactorer `medium`; doc-writer/researcher `low`). Without that pin, raising the
+orchestrator would have silently raised every dispatched agent and discarded the per-agent
+calibration. The table in SKILL.md is not linked to the frontmatter files: changing one means
+changing both.
+
 Detail: `docs/architecture/ADR-0016-dynamic-workflows-step5.md`.
 
 ## Decisions from chain deep-refactor-skill (ADR-0018)

@@ -296,7 +296,7 @@
     }
   },
   "spinnerTipsEnabled": false,
-  "effortLevel": "low",
+  "effortLevel": "high",
   "awaySummaryEnabled": false,
   "skipWorkflowUsageWarning": true,
   "autoCompactEnabled": true,
