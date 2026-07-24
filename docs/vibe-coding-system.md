@@ -1060,6 +1060,50 @@ frontmatter booleans accepting `yes`/`no`/`on`/`off`/`1`/`0`, and remote session
 replacement fix (no long-lived desktop/IDE remote-session usage in this system). Source:
 `anthropics/claude-code` `CHANGELOG.md` (GitHub, fetched 2026-07-23).
 
+### Audit 2026-07-24 (CC 2.1.219)
+
+Source: `CHANGELOG.md` in the `anthropics/claude-code` GitHub repository, fetched byte-exact via the
+GitHub API, continuing the established precedent. The installed range advances from 2.1.218 to 2.1.219,
+the current published latest. Headline item is the Claude Opus 5 release; the rest is platform-internal
+reliability work plus one advisory Dynamic Workflows default and one subagent-nesting default reversal.
+
+- **Claude Opus 5 released, now the default Opus model** (sec. 3.10): see the new sec. 3.10 paragraph for
+  the full analysis. Summary: `architect`'s bare `opus` tier alias would normally pick up Opus 5 with no
+  frontmatter change, but the live `env.ANTHROPIC_DEFAULT_OPUS_MODEL` override (`claude-opus-4-8[1m]`,
+  set before Opus 5 existed) takes precedence and pins `architect` to Opus 4.8 regardless of the platform
+  default. This is the one concrete action item from this release: `staging/user/settings.json` is updated
+  in this same audit to `claude-opus-5`, pending the mandatory-diff human sync to the live
+  `~/.claude/settings.json` per `docs/RUNBOOK.md` Step 3.
+- **Subagent nested-spawn default reversed again, depth 1 → depth 3** (sec. 2.2, sec. 3.10): CC 2.1.219
+  raises the default `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` from 1 (set by 2.1.217, logged in the prior
+  audit) back up to 3. No impact: this system's "no sub-agent spawns sub-agent" invariant (sec. 2.2) has
+  always been enforced by convention in the four dispatching skills, never by relying on the platform
+  default — confirmed no `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` override exists in either
+  `staging/user/settings.json` or the live `~/.claude/settings.json`. The 2.1.217 entry's framing ("the
+  flat model the platform default") held for about two releases and is superseded by this reversal; the
+  invariant's real backstop is the design convention, not the platform default, which is exactly why the
+  2.1.217 audit treated the prior alignment as a bonus rather than the mechanism.
+- **Dynamic workflows default to a "medium" size guideline, aim for fewer than 15 agents** (sec. 3.10,
+  ADR-0016): CC 2.1.219 adds a `workflowSizeGuideline` settings key alongside the existing `/config`
+  control (2.1.202, already documented as advisory-only in sec. 3.10 and ADR-0016) and changes the
+  out-of-the-box default to medium. Still explicitly advisory, not an enforced cap, so ADR-0016's hard
+  limits (16 concurrent, 1000 total per run) are unchanged. No action needed: the 2026-07-07 13-feature
+  roadmap spawned 49 agents total across 13 separate per-feature chain invocations (per session memory),
+  averaging well under 15 agents per invocation already, so the new default guideline does not conflict
+  with this system's actual usage pattern.
+
+Out of scope (no blueprint impact): `sandbox.network.strictAllowlist` setting (no sandboxed-command
+network egress configuration in this system), `DirectoryAdded` hook (no multi-root `/add-dir` usage),
+`mcp_server_errors` in the headless stream-json init event, nested-subagent forwarding in stream-json
+for depth-2+ (downstream of the depth-3 default above, observability-only), managed MCP allowlist/
+denylist `${VAR}` resolution source change, self-hosted-runner permission/SIGTERM/failure-category
+fixes (no self-hosted runners; GH Actions jobs are hosted per ADR history), `/model` picker UI fixes,
+screen-reader input echoing, Vim-mode `←` behavior, GNU-screen copy-on-select, Remote Control fast-mode
+staleness, `claude --teleport` repo-mismatch messaging, `claude -p` mid-stream error text recovery,
+Fable model-row cache label fix, and the claude-api skill's own default-model migration (internal
+Anthropic tooling, not this system's `researcher`/`architect` MCP usage). Source: `anthropics/claude-code`
+`CHANGELOG.md` (GitHub, fetched 2026-07-24).
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -1542,12 +1586,14 @@ Models and effort levels chosen to reduce token spend while maintaining quality:
 
 | Agent | Model | Effort | Rationale |
 |--------|---------|--------|-----------|
-| architect | opus (→ 4.8) | **xhigh** | Native default for Opus; ADR/design = most impactful step in the chain. Opus 4.8 still leads Sonnet 5 on agentic coding, so this stays on Opus. Automatic fallback to `high` if dispatched with `model: sonnet` override |
+| architect | opus (→ 5) | **xhigh** | Native default for Opus; ADR/design = most impactful step in the chain. Automatic fallback to `high` if dispatched with `model: sonnet` override |
 | reviewer, debugger | sonnet (→ 5) | **high** | Pre-commit gate and root-cause: requires reasoning, not just execution |
 | coder, refactorer, tester | sonnet (→ 5) | **medium** | Execute a pre-defined plan; downstream reviewer and snapshot harness cover errors |
 | doc-writer, researcher | haiku (→ 4.5) | **low** | Bottleneck is I/O (reading code/searching), not reasoning |
 
 **CC 2.1.197 default-model shift:** Sonnet 5 is now the Claude Code default. Every agent pins a bare tier alias (`opus`/`sonnet`/`haiku`), so the five Sonnet agents pick up Sonnet 5 with no config change and the table holds as written. Sonnet 5 closes much of the gap to Opus 4.8 at a lower price (promo $2/$10 per Mtok through Aug 31, then $3/$15, versus Opus 4.8 at $5/$25). Where accuracy matters most on a Sonnet agent (reviewer, debugger, or a complex coder task), prefer raising effort toward `xhigh` over escalating the model: Sonnet 5 approaches Opus 4.8 mid-effort quality at its top reasoning tier while staying at Sonnet pricing. This is a per-invocation recommendation, not a frontmatter change.
+
+**CC 2.1.219 Opus 5 release — one pinned override needs a manual fix:** Claude Opus 5 (`claude-opus-5`) is now the default Opus model, shipping with 1M context as a first-class feature (no separate opt-in variant confirmed) and fast-mode pricing of $10/$50 per Mtok; base (non-fast-mode) pricing is not stated in the source changelog entry, so it is not asserted here. `architect` pins the bare tier alias `opus`, which would normally pick up Opus 5 automatically with no frontmatter change, matching the 2.1.183 precedent (sec. 3.9) that all 8 agents are insulated from specific version IDs by design. **However**, the live `~/.claude/settings.json` (mirrored at `staging/user/settings.json`) sets `env.ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-4-8[1m]"` — an explicit override installed to pin the 1M-context variant of Opus 4.8 before Opus 5 existed (flagged, not stripped, by ADR-0025 §3.3 Alternative C as a "future issue"). This override takes precedence over the bare-alias resolution and would keep `architect` on Opus 4.8 indefinitely even after the platform default moves to Opus 5. Recommended fix (staged in this audit, pending the mandatory-diff sync described in `docs/RUNBOOK.md` Step 3): update the value to `"claude-opus-5"`, dropping the `[1m]` suffix since 1M context is native to the new model per the changelog wording, rather than an opt-in variant as it was for 4.8. Confidence: medium — the exact model-identifier string is corroborated by two independent sources (the changelog entry and this session's system-provided model-ID list), but whether a `[1m]`-suffixed variant exists or is required for Opus 5 is not confirmed by either source. Also noted: CC 2.1.219 removes Opus 4.7 from fast mode (`/fast` now covers Opus 5 and Opus 4.8 only) — no impact, this system does not document `/fast` usage on the architect dispatch path.
 
 **Fable 5 promo experiment (2026-07-01 to 07-07), empirical recalibration:** the Fable 5 promo (a temporary quota running 07-01 to 07-07) prompted a narrow off-blueprint allocation. `architect` moved down-tier opus→fable-5, while `reviewer` and `debugger` moved up-tier sonnet→fable-5. One day of real use settled the question. On 2026-07-02 a full concept-to-code build (a six-tier app) drove roughly 2.68M Fable output tokens across 7 agent sessions, about 80% of the promo quota. The token snapshots put the bulk on the reviewer/debugger up-tier: Opus-class tokens spent on review and debug work that Sonnet handled well enough. On 07-03 the recalibration split the two. `reviewer` and `debugger` went back to sonnet; `architect` stayed on fable-5 through 07-07 (Opus-quality planning at promo price, one call per tier, the promo's real value), after which a scripted revert restores the blueprint tiers. The lesson holds: Fable has no permanent seat in the haiku/sonnet/opus tiering. Down-tiering opus→fable on the low-volume planning agent pays off under a promo; up-tiering sonnet→fable on per-tier review and debug agents burns the quota for a marginal quality gain. Verified against the token snapshots in `~/.claude/snapshots/`; the absolute quota percentage is the user's dashboard reading, not independently measured.
 
@@ -1569,6 +1615,7 @@ Sonnet. See `concept-to-code` SKILL.md §4 Step 5/6.
 **Available effort levels by model:**
 - Opus 4.8 / Sonnet 5: `low`, `medium`, `high`, `xhigh`, `max` (Sonnet 5 exposes the `xhigh` "Extra High" tier the prior Sonnet generation lacked)
 - Opus 4.6 / Sonnet 4.6: `low`, `medium`, `high`, `max` (`xhigh` → fallback to `high`)
+- Opus 5: effort-tier support not stated in the CC 2.1.219 changelog entry; insufficient data to list here, assume parity with Opus 4.8 (`low`/`medium`/`high`/`xhigh`/`max`) pending live confirmation
 - `max` is session-level only (not persistable in settings.json)
 
 Sonnet 5 gaining `xhigh` is what makes the effort-over-model recommendation in sec. 3.10 viable: a Sonnet agent can now run at the same top reasoning tier as Opus. (The `xhigh` support on Sonnet 5 is drawn from launch coverage, not yet confirmed live here.)
