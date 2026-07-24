@@ -16,7 +16,12 @@ APPLY=0
 [ "${1:-}" = "--apply" ] && APPLY=1
 
 # src|dst pairs (dst relative to ~/.claude). Scripts land in hooks/ (this deployment's convention).
+# Exception: usage-report.py deploys to scripts/, not hooks/ (it's a plain script invoked
+# by usage-daily-hint.sh, not a hook entry point itself).
+# Exception: user/CLAUDE.md is the only non-plugin/ entry. user/settings.json stays out on
+# purpose (ADR-0025: machine-local keys need a jq del() pass, not a straight copy).
 PAIRS="
+user/CLAUDE.md|CLAUDE.md
 plugin/scripts/nightly-guard.sh|hooks/nightly-guard.sh
 plugin/scripts/publish-feature.sh|hooks/publish-feature.sh
 plugin/scripts/set-branch-protection.sh|hooks/set-branch-protection.sh
@@ -43,6 +48,7 @@ plugin/scripts/post-md-tells-hint.sh|hooks/post-md-tells-hint.sh
 plugin/scripts/prompt-en-prose-detect.sh|hooks/prompt-en-prose-detect.sh
 plugin/scripts/reset-gate-counter.sh|hooks/reset-gate-counter.sh
 plugin/scripts/usage-daily-hint.sh|hooks/usage-daily-hint.sh
+plugin/scripts/usage-report.py|scripts/usage-report.py
 plugin/scripts/migrate-trust-paths.sh|hooks/migrate-trust-paths.sh
 plugin/scripts/tests/db-backup-guardrail.sh|hooks/tests/db-backup-guardrail.sh
 plugin/scripts/tests/pre-flight-pattern-enforce.sh|hooks/tests/pre-flight-pattern-enforce.sh
