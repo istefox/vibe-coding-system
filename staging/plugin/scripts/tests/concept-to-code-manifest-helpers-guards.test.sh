@@ -186,7 +186,9 @@ fi
 
 # D1 (static, genuine RED now): SKILL.md:120 site, absolute-prefixed. Expected now (RED): no
 # match (bare `scripts/manifest-set-flag.sh` still present).
-if grep -qF 'in the manifest (via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed to step 8b.' "$SKILL_MD"; then
+# Tail updated from "step 8b" to "step 8c" when Gate 0c was removed (ADR-0040). The assertion
+# is unchanged: it still checks the absolute PATH RULE prefix at this call site.
+if grep -qF 'in the manifest (via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed to step 8c.' "$SKILL_MD"; then
   ok "D1: SKILL.md:120 site uses the absolute PATH RULE prefix"
 else
   bad "D1: SKILL.md:120 site still uses a bare/relative manifest-set-flag.sh path"

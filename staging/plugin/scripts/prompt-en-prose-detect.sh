@@ -18,12 +18,23 @@ except Exception:
 
 [ -z "$PROMPT" ] && exit 0
 
-# Keyword detection: EN prose writing contexts
-MATCH=$(echo "$PROMPT" | grep -iE \
-  '(README|pull request|PR description|issue (body|comment|text)|reddit|hacker news|hn post|forum (post|thread)|blog post|changelog|release notes|draft.*(publish|post)|write.*(post|article)|substack|dev\.to|newsletter|announcement|product hunt)' \
+# Keyword detection: EN prose written for an outside audience.
+# Two conditions in AND — a writing verb AND a publication target. Matching the target alone
+# fires on any message that merely mentions Reddit or a forum, which is what this hook used to
+# do. Internal targets (README, PR, issue, changelog, release notes) are deliberately absent:
+# those are written plainly, no humanize pass (see ~/.claude/CLAUDE.md, ADR-0040).
+# "post" is NOT a verb here — it is far more often the noun in "a reddit post".
+VERB=$(echo "$PROMPT" | grep -iE \
+  '(write|draft|compose|rewrite|publish|announce|humanize|polish)' \
   2>/dev/null || true)
 
-[ -z "$MATCH" ] && exit 0
+[ -z "$VERB" ] && exit 0
+
+TARGET=$(echo "$PROMPT" | grep -iE \
+  '(reddit|hacker news|hn post|forum (post|thread)|blog post|substack|dev\.to|newsletter|announcement|product hunt|social (post|media))' \
+  2>/dev/null || true)
+
+[ -z "$TARGET" ] && exit 0
 
 # Emit BOTH the top-level additionalContext key (legacy shape this script has always
 # used) and the documented hookSpecificOutput envelope (issue #38 finding 5 — verified

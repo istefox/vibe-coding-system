@@ -1,6 +1,6 @@
 ---
 name: humanize-en
-description: Rewrites English prose to remove AI tells — no em-dash, no delve/tapestry/leverage/foster/showcase/pivotal/seamless, no paragraph openers Additionally/Moreover/Furthermore, active voice, varied sentence length, specific details over vague claims. Use for README, PR descriptions, issue comments, blog posts, changelogs, release notes, Reddit/HN posts, forum threads, newsletters, announcements. Triggers include "humanize this", "de-AI this", "sounds like AI", "remove AI tells", "make this sound human", "humanize-en", "/skill humanize-en". Also invoked from concept-to-code Gate 5.5 (post-review, pre-commit on public repos) and commit skill Step 3.5 (commit message on public repos).
+description: Rewrites English prose to remove AI tells — no em-dash, no delve/tapestry/leverage/foster/showcase/pivotal/seamless, no paragraph openers Additionally/Moreover/Furthermore, active voice, varied sentence length, specific details over vague claims. Use ONLY for text an outside audience reads: Reddit/HN posts, forum threads, blog posts, newsletters, announcements, marketing copy, email to third parties. Triggers include "humanize this", "de-AI this", "sounds like AI", "remove AI tells", "make this sound human", "humanize-en", "/skill humanize-en". NEGATIVE: do NOT use for programming or internal artifacts — source code, config, commit messages, PR and issue text, ADRs, specs, plans, README and other repo docs, changelogs, release notes, or anything gitignored. Those are written plainly, with no humanize pass.
 ---
 
 # `humanize-en` — English Prose Humanizer
@@ -22,8 +22,7 @@ Rewrites English text to remove AI tells. Style only — no facts are invented, 
 
 - `target` (optional): file path OR inline text.
 - If omitted: ask user to paste text or provide a file path.
-- From concept-to-code Gate 5.5: target is a file path, write directly after showing diff.
-- From commit skill Step 3.5: target is inline commit message text, return humanized text only (no write confirmation needed).
+- Manual invocation only. No skill and no chain step invokes this one automatically.
 
 ---
 
@@ -82,10 +81,6 @@ Write only after explicit "Write file" click.
 
 **Inline text input:**
 Output the rewritten text in a code block. No write prompt.
-
-**Commit message input (from commit skill Step 3.5):**
-Return only the humanized subject line and body as plain text (no code block wrapper, no preamble).
-The commit skill will present it in its own Gate.
 
 ### Step 6 — Optional double-pass (texts > 500 words)
 

@@ -465,10 +465,11 @@ grep -q 'Abort chain' "$CC" 2>/dev/null \
   && ok "ADR-0018: Gate 5.1 Abort chain option present" \
   || bad "ADR-0018: Gate 5.1 Abort chain option missing"
 
-# Anchor: Gate 5.1 continuation to Gate 5.5 documented
-grep -qE 'Gate 5\.1.*Gate 5\.5|proceed to Gate 5\.5' "$CC" 2>/dev/null \
-  && ok "ADR-0018: Gate 5.1 continuation to Gate 5.5 documented" \
-  || bad "ADR-0018: Gate 5.1 → Gate 5.5 link missing"
+# Anchor: Gate 5.1 continuation documented. Target renamed 5.5 -> 5.6 by ADR-0040 (Gate 5.5
+# was the humanize gate; only its state transition survives, as the action-free Gate 5.6).
+grep -qE 'Gate 5\.1.*Gate 5\.6|proceed to Gate 5\.6' "$CC" 2>/dev/null \
+  && ok "ADR-0018: Gate 5.1 continuation to Gate 5.6 documented" \
+  || bad "ADR-0018: Gate 5.1 → Gate 5.6 link missing"
 
 # === Change 1 (Bug 1) — gate0-detect SPEC.md topic-slug match ===
 

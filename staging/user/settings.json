@@ -118,15 +118,6 @@
         ]
       },
       {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME\"/.claude/hooks/post-md-tells-hint.sh"
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -296,7 +287,7 @@
     }
   },
   "spinnerTipsEnabled": false,
-  "effortLevel": "high",
+  "effortLevel": "low",
   "awaySummaryEnabled": false,
   "skipWorkflowUsageWarning": true,
   "autoCompactEnabled": true,

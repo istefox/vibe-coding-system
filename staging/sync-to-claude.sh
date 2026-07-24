@@ -44,7 +44,6 @@ plugin/scripts/approve-test-cmd.sh|hooks/approve-test-cmd.sh
 plugin/scripts/session-context-inject.sh|hooks/session-context-inject.sh
 plugin/scripts/ensure-state-dir.sh|hooks/ensure-state-dir.sh
 plugin/scripts/mark-dirty.sh|hooks/mark-dirty.sh
-plugin/scripts/post-md-tells-hint.sh|hooks/post-md-tells-hint.sh
 plugin/scripts/prompt-en-prose-detect.sh|hooks/prompt-en-prose-detect.sh
 plugin/scripts/reset-gate-counter.sh|hooks/reset-gate-counter.sh
 plugin/scripts/usage-daily-hint.sh|hooks/usage-daily-hint.sh
@@ -61,7 +60,6 @@ plugin/skills/concept-to-code/scripts/manifest-init.sh|skills/concept-to-code/sc
 plugin/skills/concept-to-code/scripts/manifest-set-artifact.sh|skills/concept-to-code/scripts/manifest-set-artifact.sh
 plugin/skills/concept-to-code/scripts/manifest-set-flag.sh|skills/concept-to-code/scripts/manifest-set-flag.sh
 plugin/skills/concept-to-code/scripts/manifest-set-gate.sh|skills/concept-to-code/scripts/manifest-set-gate.sh
-plugin/skills/concept-to-code/scripts/manifest-set-humanize.sh|skills/concept-to-code/scripts/manifest-set-humanize.sh
 plugin/skills/concept-to-code/scripts/manifest-transition.sh|skills/concept-to-code/scripts/manifest-transition.sh
 plugin/skills/concept-to-code/scripts/manifest-validate.sh|skills/concept-to-code/scripts/manifest-validate.sh
 plugin/skills/concept-to-code/tests/agent-notes-roundtrip.sh|skills/concept-to-code/tests/agent-notes-roundtrip.sh

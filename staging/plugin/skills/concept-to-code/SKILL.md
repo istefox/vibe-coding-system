@@ -22,7 +22,7 @@ with YAML manifest persistence, explicit HITL gates, and dispatch to existing ag
   **Exception (ADR-0017):** Express path step E1 and Hybrid path step H2 use `EnterPlanMode` as their HITL planning gate. This exception is scoped exclusively to those two steps; the prohibition applies everywhere else in all three paths.
 - **Do NOT run** the `using-superpowers` check between steps
   **Exception (ADR-0017):** Express path step E1 allows the `using-superpowers` check inside plan mode. If the scope warrants `writing-plans`, `brainstorming`, or any other superpowers skill during planning, invoke it. The suppression applies to all other paths and steps.
-- The **only** skills invokable inside this chain: `interview-driver`, `design-brainstorm` (gate 1b only), `macos-ux` (gate 1c only, conditional on macOS/SwiftUI SPEC detection), `claude-md-generator`, `review-triage-fix` (step 6 / H4 only, optional), `ui-layout-audit` (gate 5.05 only, conditional on UI files present), `humanize-en` (gate 5.5 / H5 only, conditional on `humanize=true`), `deep-refactor` (gate 5.1 only, conditional on user choice), `commit` (step 7 / E4 / H5, always), superpowers skills (Express step E1 only, inside plan mode); `reviewer` agent with specialized inline prompts (gate 5.06 only, conditional on user choice: silent-failure-hunter scope + type-design-analyzer scope)
+- The **only** skills invokable inside this chain: `interview-driver`, `design-brainstorm` (gate 1b only), `macos-ux` (gate 1c only, conditional on macOS/SwiftUI SPEC detection), `claude-md-generator`, `review-triage-fix` (step 6 / H4 only, optional), `ui-layout-audit` (gate 5.05 only, conditional on UI files present), `deep-refactor` (gate 5.1 only, conditional on user choice), `commit` (step 7 / E4 / H5, always), superpowers skills (Express step E1 only, inside plan mode); `reviewer` agent with specialized inline prompts (gate 5.06 only, conditional on user choice: silent-failure-hunter scope + type-design-analyzer scope)
 
 This section **overrides** the using-superpowers rule ("even 1% → invoke"). The chain's HITL gates manage the workflow. All intermediate skill-checks are suppressed.
 
@@ -115,14 +115,13 @@ Behavior:
 
    Write `gate0.chain_path` and `gate0.auto_detect_reason` in the manifest via inline sed (no helper script for nested YAML yet — see §3 helper scripts note).
 8. **Gate 0b (anonymize — conditional):** run `~/.claude/skills/clean-public-repo/scripts/detect-public-remote.sh <project-root>` (the script lives in the `clean-public-repo` skill, NOT in `concept-to-code/scripts/`).
-   - output `silent` → Gate 0b **silent no-op**: UX unchanged, `anonymize` stays `false`. Proceed to step 8b.
+   - output `silent` → Gate 0b **silent no-op**: UX unchanged, `anonymize` stays `false`. Proceed to step 8c.
    - output `public` → show Gate 0b box and wait for input:
-     - `[y]` → set `manifest.anonymize = true` in the manifest (via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed to step 8b.
-     - `[n]` → `anonymize` stays `false`; proceed to step 8b.
+     - `[y]` → set `manifest.anonymize = true` in the manifest (via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed to step 8c.
+     - `[n]` → `anonymize` stays `false`; proceed to step 8c.
      - `[a]` → abort chain.
    **Decision is exclusively the user's: never auto-applied.**
-8b. **Gate 0c (humanize):** see §5 Gate 0c for the full trigger logic and display; proceed to
-   step 8c once it resolves (silently or via click).
+   (Step 8b was Gate 0c, humanize — removed per ADR-0040. Gate 0b leads straight to step 8c.)
 8c. **Gate 0d (scaffolding):** see §5 Gate 0d for the full git-auto-detect / license / Xcode /
    commit survey. Gate 0d performs the chain's **single** `current_step` transition out of
    `step_0_init`: `step_0_init → gate_0d_scaffolding`, then immediately `gate_0d_scaffolding →
@@ -1089,7 +1088,6 @@ Invoke `review-triage-fix` skill (Skill tool). After it completes, transition `s
 
 #### Step H5 — Commit
 
-If `manifest.humanize=true`: run Gate 5.5 (humanize, see §5 Gate 5.5) before commit.
 Invoke `commit` skill (Skill tool). Transition `step_h5_commit → completed`.
 
 ---
@@ -1185,38 +1183,16 @@ When `anonymize=false` (default), all dispatch templates remain **identical to t
 
 ---
 
-**Gate 0c — Humanize (conditional)**
-
-Trigger: post Gate 0b, same `step_0_init`.
-
-Logic:
-- If `manifest.anonymize = true`: automatically set `humanize = true` (via `scripts/manifest-set-humanize.sh <manifest> true`) without showing anything to the user — consistent behavior (anonymization implies humanize). Gate 0c silent.
-- If `manifest.anonymize = false` AND `detect-public-remote.sh` returned `public` in Gate 0b: show Gate 0c box via `AskUserQuestion` and wait for input.
-- Otherwise (private repo or non-GitHub): set `humanize = false`, Gate 0c silent.
-
-Display (only if public remote and anonymize=false):
-
-```
-question: "Gate 0c — Humanize deliverables? (Human approval required)\n\nPublic remote detected. Enable humanize mode?\nRewrites the EN style of deliverables (README, docs, commits, PR) to remove AI tells,\nwithout altering facts or data. Adds ~30s to the post-review cycle (Gate 5.5).\nOnly you can decide whether this applies to your project."
-header: "Gate 0c · Humanize"
-options:
-  - label: "Yes — enable humanize"
-    description: "manifest.humanize = true; Gate 5.5 activates post-review"
-  - label: "No — standard behavior"
-    description: "manifest.humanize = false; zero added overhead"
-  - label: "Abort chain"
-    description: "Terminate the chain"
-```
-
-`[y]` → `scripts/manifest-set-humanize.sh <manifest> true`; proceed.
-`[n]` → `scripts/manifest-set-humanize.sh <manifest> false`; proceed.
-`[a]` → abort chain.
+> **Gate 0c (humanize) was removed** — see ADR-0040. Every artifact this chain produces (SPEC,
+> ADR, plan, CLAUDE.md, code, commit) is internal, so the gate had nothing to act on. Gate 0b
+> now leads straight to Gate 0d. The letter `0c` is not reused: gates are referenced by letter
+> across this file and in `manifest-transition.sh` comments.
 
 ---
 
 **Gate 0d — Scaffolding setup (conditional)**
 
-Trigger: post Gate 0c, same `step_0_init`. Always fires (unconditional: every new chain needs scaffolding decisions recorded).
+Trigger: post Gate 0b, same `step_0_init`. Always fires (unconditional: every new chain needs scaffolding decisions recorded).
 
 **[Autopilot default: skip AskUserQuestion entirely. Auto-set: `license: "None"`, `xcode_project: false`. For git: use auto-detect results (Outcome A/B/C) same as manual path. For commit: always `initial_commit_push: "commit"`, regardless of remote state (autopilot never pushes unattended; any separately-orchestrated automated publish flow runs after a local commit, never through this field — ADR-0020 D2). Emit: "Gate 0d: autopilot — scaffolding auto-configured ✓". Skip all secondary prompts (remote URL, anonymize re-confirm).]**
 
@@ -1349,7 +1325,7 @@ question: "Gate 0d — Public repo detected. Anonymize deliverables? (Human appr
 header: "Gate 0d · Anonymize check"
 options:
   - label: "Yes (recommended for public)"
-    description: "manifest.anonymize = true; Gate 5.5 activates post-review"
+    description: "manifest.anonymize = true; dispatch templates carry the anonymize directive"
   - label: "No — proceed without anonymization"
     description: "manifest.anonymize stays false"
 ```
@@ -1731,7 +1707,7 @@ Wait for both agents. Merge the two finding lists, deduplicate by file+location,
 
 **Gate 5.1 — Deep refactor (conditional)**
 
-Trigger: post Gate 5 (review complete or skipped), pre Gate 5.5. Always shown.
+Trigger: post Gate 5 (review complete or skipped), pre Gate 5.6. Always shown.
 
 Use `AskUserQuestion`:
 ```
@@ -1739,47 +1715,34 @@ question: "Gate 5.1 — Run deep-refactor? (Human approval required)\n\nOptional
 header: "Gate 5.1 · Refactor"
 options:
   - label: "Run deep-refactor"
-    description: "Invoke /skill deep-refactor on the project root, then proceed to Gate 5.5"
-  - label: "Skip (proceed to Gate 5.5)"
-    description: "Silent no-op — Gate 5 → Gate 5.5 behavior is unchanged"
+    description: "Invoke /skill deep-refactor on the project root, then proceed to Gate 5.6"
+  - label: "Skip (proceed to Gate 5.6)"
+    description: "Silent no-op — Gate 5 → Gate 5.6 behavior is unchanged"
   - label: "Abort chain"
     description: "Terminate the chain"
 ```
 
-"Run deep-refactor": emit "Gate 5.1: deep-refactor active ✓ — invoking deep-refactor skill...". Invoke Skill(skill="deep-refactor", args="<project_root>"). Regardless of how deep-refactor exits (completed / aborted by user / errored), proceed to Gate 5.5.
-"Skip (proceed to Gate 5.5)": emit "Gate 5.1: skipped ✓ — proceeding to Gate 5.5...". Proceed to Gate 5.5 (zero behavior change).
+"Run deep-refactor": emit "Gate 5.1: deep-refactor active ✓ — invoking deep-refactor skill...". Invoke Skill(skill="deep-refactor", args="<project_root>"). Regardless of how deep-refactor exits (completed / aborted by user / errored), proceed to Gate 5.6.
+"Skip (proceed to Gate 5.6)": emit "Gate 5.1: skipped ✓ — proceeding to Gate 5.6...". Proceed to Gate 5.6 (zero behavior change).
 "Abort chain": emit "Gate 5.1: aborted ✓ — terminating chain.". Then abort.
 
 **[Autopilot default: "Skip". Emit: "Gate 5.1: autopilot — deep-refactor skipped ✓"]**
 
 ---
 
-**Gate 5.5 — Humanize deliverables (conditional)**
+**Gate 5.6 — Transition to commit (unconditional, no user prompt)**
 
-Trigger: post Gate 5 (review complete or skipped), pre Step 7. Only if `manifest.humanize = true`.
-If `manifest.humanize = false`: Gate 5.5 silent → transition `<current_step> → step_7_commit` (current_step is `step_6_review` if RTF ran, or `gate_5_review_decision` if review was skipped — both are valid source states), then proceed directly to Step 7 (`commit` skill).
+Trigger: post Gate 5.1, pre Step 7.
 
-Action:
-1. Identify the text deliverables for the cycle: README, CHANGELOG, ADR (prose sections), inline `.md` docs with > 100 words, SPEC.md if modified.
-2. For each identified file, invoke `/skill humanize-en <file-path>`.
-   - The skill shows an internal confirmation gate for each file (diff → write/skip/discard).
-   - Wait for the user's response before moving to the next file.
-3. After all files have been processed (or skipped), use `AskUserQuestion`:
+Transition `<current_step> → step_7_commit` (current_step is `step_6_review` if RTF ran, or
+`gate_5_review_decision` if review was skipped — both are valid source states), then proceed
+directly to Step 7 (`commit` skill).
 
-```
-question: "Gate 5.5 — Humanize complete (Human approval required)\n\nFiles processed by humanize-en: <list or 'none'>\nProceed to commit?\n\nOnly you can confirm the deliverables are ready."
-header: "Gate 5.5 · Humanize"
-options:
-  - label: "Proceed to commit"
-    description: "Invoke the commit skill (Step 7)"
-  - label: "Abort chain"
-    description: "Terminate the chain without committing"
-```
-
-"Proceed to commit" → transition `step_7_commit`, invoke `commit` skill.
-"Abort chain" → abort.
-
-**[Autopilot default: "Proceed to commit". Emit: "Gate 5.5: autopilot — proceeding to commit ✓". Invoke commit skill with `--autopilot` appended to args.]**
+> This step is what remains of **Gate 5.5 (humanize deliverables), removed per ADR-0040**. The
+> gate listed README, CHANGELOG, ADR prose, `.md` docs and SPEC.md as its targets, and every one
+> of those is an internal artifact that no longer takes a humanize pass. Its state transition was
+> load-bearing, so it stays here; the humanize action and its `AskUserQuestion` are gone. The
+> letter `5.5` is not reused.
 
 ---
 
@@ -1800,7 +1763,6 @@ This skill DOES NOT modify any of the following. They remain active and orthogon
 - `~/.claude/settings.json`, `.mcp.json`, `.claude/rules/` — unchanged.
 
 - `~/.claude/skills/commit/SKILL.md` — invoked in Step 7 as the chain's final step. Manages HITL gate, Conventional Commits message generation, and PR option autonomously. The orchestrator calls it via the `Skill` tool with `context-hint = "<topic-full-title> (ADR: <adr-path>)"`. Commit is made only after an explicit user click.
-- `~/.claude/skills/humanize-en/SKILL.md` — invoked at Gate 5.5 (conditional on `manifest.humanize=true`). Rewrites the EN style of `.md` deliverables without altering facts/data. Internal write gate per file. Does not dispatch sub-agents.
 - `~/.claude/skills/deep-refactor/SKILL.md` — invoked at Gate 5.1 (conditional, AskUserQuestion gate); modifies target project source files and writes a report; does not update chain manifest, hook, or RTF state.
 
 - `~/.claude/skills/clean-public-repo/SKILL.md` — **recommended skill** (ADR-0011): for retroactive cleanup of existing repos, invokable on request after the chain. NOT invoked automatically.

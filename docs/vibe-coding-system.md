@@ -1104,6 +1104,32 @@ Fable model-row cache label fix, and the claude-api skill's own default-model mi
 Anthropic tooling, not this system's `researcher`/`architect` MCP usage). Source: `anthropics/claude-code`
 `CHANGELOG.md` (GitHub, fetched 2026-07-24).
 
+### Correction 2026-07-24 (humanize-en scope, ADR-0040)
+
+`humanize-en` had become the most-invoked skill in the system. The cause was its wiring, not the
+skill: the global rule, the skill's own `description` frontmatter, two hooks and two chain
+integrations all pushed it onto internal artifacts. ADR-0040 narrows it to text an outside audience
+reads and amends ADR-0015 accordingly.
+
+- **Perimeter is the audience, not the format** (sec. 8.6): Reddit and HN posts, forum threads, blog
+  posts, newsletters, announcements, marketing copy, third-party email. Not source code, config,
+  commit messages, PR and issue text, ADRs, specs, plans, README and repo docs, changelogs, release
+  notes, or anything gitignored. README sits on the internal side, recorded as a judgment call.
+- **Invocation is manual only** (sec. 8.6): `concept-to-code` Gate 5.5 and `commit` Step 3.5 removed.
+- **Gate 0c and Gate 5.5 removed from the chain** (sec. 11): every artifact the chain produces is
+  internal, so neither gate could fire. Per ADR-0027 an unreachable gate is a defect, not a safe
+  no-op. Gate 5.5's state transition to `step_7_commit` was load-bearing and survives as Gate 5.6,
+  action-free. The letters `0c` and `5.5` are not reused.
+- **`post-md-tells-hint.sh` retired** (sec. 7): it fired on every `.md` written. It was also already
+  a no-op for the model, printing its hint as plain stdout on exit 0, which `PostToolUse` sends to
+  the debug log rather than into context (`code.claude.com/docs/en/hooks`).
+- **`prompt-en-prose-detect.sh` narrowed** (sec. 7): one regex becomes two greps in AND, a writing
+  verb plus a publication target. It used to match the word rather than the intent, so a message
+  *about* Reddit fired it. Internal targets dropped from the target list. ADR-0034's dual-envelope
+  JSON output is preserved.
+
+Detail: `docs/architecture/ADR-0040-humanize-en-scope-narrowing.md`.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -1141,7 +1167,7 @@ Anthropic tooling, not this system's `researcher`/`architect` MCP usage). Source
 - **`review-triage-fix` skill** (sec. 8.6): per-branch JSON triage state machine, circuit breakers A–D, NIT batching. Step 6 in Standard chain. Prefix-cache discipline (PRIOR AGENT NOTES at END of dispatch briefs), no-op detection, hash-oscillation wording-preservation.
 - **`deep-refactor` skill** (sec. 8.6, ADR-0018): 4-dimension parallel audit (dead-code/perf/structure/security) → sequential fix loop with global circuit breaker. Gate 5.1 in Standard chain. Two mandatory report-only guards: `@objc`/`dynamic`/protocol-witness dead code; `async`/`actor`/`Sendable` perf. No test-cmd = report-only mode.
 - **`claude-md-slim` skill** (sec. 8.6, ADR-0019): audits project CLAUDE.md, extracts domain sections to `.claude/rules/<domain>.md`. Content-preservation hard gate. `--global` duplication scan. Harness 19/19.
-- **`humanize-en` skill** (sec. 8.6, ADR-0015): English prose humanizer. Triple-trigger via hint hook + conditional UserPromptSubmit hook + Gate 5.5/Step 3.5 in the chain.
+- **`humanize-en` skill** (sec. 8.6, ADR-0015, narrowed by ADR-0040): English prose humanizer. Manual invocation only, scoped to text an outside audience reads (Reddit/HN, forum, blog, newsletter, announcement). The `post-md-tells-hint.sh` hook, Gate 0c, Gate 5.5 and commit Step 3.5 were removed; the conditional UserPromptSubmit hook survives, narrowed to a writing verb AND a publication target.
 - **`design-brainstorm`, `macos-ux`, `ui-layout-audit`, `clean-public-repo`, `vibe-status`, `interview-driver`, `claude-md-generator`, `commit` skills** (sec. 8.6): chain-integrated skills and utilities — see sec. 8.6 table.
 - **`agent-design` knowledge base** (sec. 8.6): 7 Sayfan reference files covering prefix caching, multi-agent patterns, tool design, evaluation, deployment.
 - **Chain-stop fix** (sec. 11): CRITICAL continuation blocks for `interview-driver` and `design-brainstorm` now use positive-constraint imperative ("Your NEXT OUTPUT must be a Bash tool call") instead of passive prohibitions.
@@ -1153,7 +1179,7 @@ Anthropic tooling, not this system's `researcher`/`architect` MCP usage). Source
 
 ### Update 2026-05-29
 
-- **Gate 0d — Project scaffolding gate** (sec. 11): New gate in the `concept-to-code` chain that fires unconditionally after Gate 0c, before Step 1. Four questions in one `AskUserQuestion` call: git repo (private/public/none), license (MIT/Apache-2.0/GPL-3.0/None), Xcode project (yes/no), initial commit behavior (commit+push/commit-only/none). Conditional follow-ups: remote URL (if push selected), anonymize re-confirm (if public). Sets 6 new manifest fields: `git_init`, `git_visibility`, `license`, `xcode_project`, `initial_commit_push`, `git_remote_url`. These cascade into Step 2 architect brief (Xcode hint), Step 5 coder dispatch (LICENSE file + Xcode scaffold tasks), and Step 7 push logic.
+- **Gate 0d — Project scaffolding gate** (sec. 11): New gate in the `concept-to-code` chain that fires unconditionally after Gate 0b, before Step 1 (after Gate 0c until ADR-0040 removed that gate). Four questions in one `AskUserQuestion` call: git repo (private/public/none), license (MIT/Apache-2.0/GPL-3.0/None), Xcode project (yes/no), initial commit behavior (commit+push/commit-only/none). Conditional follow-ups: remote URL (if push selected), anonymize re-confirm (if public). Sets 6 new manifest fields: `git_init`, `git_visibility`, `license`, `xcode_project`, `initial_commit_push`, `git_remote_url`. These cascade into Step 2 architect brief (Xcode hint), Step 5 coder dispatch (LICENSE file + Xcode scaffold tasks), and Step 7 push logic.
 - **Step 6 Dynamic Workflow dispatch** (sec. 11): The review-triage-fix cycle in Step 6 now has a workflow path mirroring ADR-0016 Step 5. When `hook_verified=true`: 4-phase JS workflow — (1) reviewer agent returns findings with file + fix_type fields, (2) in-script group-by-file, (3) parallel fixer dispatch per file group with `agentType` from `fix_type`, (4) re-reviewer. Writes `.claude/step6-report.json`. Sets `step6_mode: "workflow"` in manifest. When `hook_verified=false`: falls back to `/skill review-triage-fix`. New manifest field: `step6_mode`.
 - **Step 7 push** (sec. 11): After commit, if `initial_commit_push=push` and `git_remote_url` is set: `git remote add origin <url>` (if absent) then `git push -u origin HEAD`. Graceful error handling — push failure reports to user without aborting the chain (commit already succeeded).
 - **pre-flight-pattern-enforce v1.3** (sec. 7): Workflow subagent transcripts stored at `subagents/workflows/<wf_id>/agent-<id>.jsonl` (undocumented path change in v2.1.154). Hook v1.3 adds `find`-based fallback that searches the workflows directory. Smoke test 2026-05-29 on v2.1.156: `hook_verified=true` confirmed. ADR-0016 status: Proposed → Accepted.
@@ -2399,7 +2425,7 @@ Research $ARGUMENTS:
 | `review-triage-fix` | `/skill review-triage-fix` | After implementation, before merge | Per-branch JSON state, circuit breakers A–D, NIT batching. Step 6 in Standard chain |
 | `deep-refactor` | `/skill deep-refactor` | Whole-codebase health audit | 4-dim parallel audit → sequential fix. Gate 5.1 in Standard chain (ADR-0018) |
 | `claude-md-slim` | `/skill claude-md-slim [--global] [<root>]` | CLAUDE.md has grown >100 lines | Extracts domain sections to rules files. ≥30% reduction target (ADR-0019) |
-| `humanize-en` | `/skill humanize-en` | Before publishing prose (docs, commits, PR bodies) | Strips AI tells, preserves Vibrofer IT terms (ADR-0015) |
+| `humanize-en` | `/skill humanize-en` | Before publishing prose to an outside audience (Reddit/HN, forum, blog, newsletter). NOT for docs, ADR, commits, PR bodies | Strips AI tells, preserves Vibrofer IT terms (ADR-0015, narrowed by ADR-0040) |
 | `design-brainstorm` | invoked by `concept-to-code` at Gate 1b | When design space is wide, before architecture | Structured ideation → BRAINSTORM.md |
 | `macos-ux` | invoked by `concept-to-code` at Gate 1c | macOS/SwiftUI projects | HIG + accessibility rules. Auto-detected from SPEC.md |
 | `ui-layout-audit` | invoked by `concept-to-code` at Gate 5.05 | When UI files are present after implementation | Layout conformance review |

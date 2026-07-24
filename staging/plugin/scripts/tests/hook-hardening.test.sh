@@ -154,7 +154,7 @@ fi
 # Test 4 (finding 5 / D4): prompt-en-prose-detect.sh emits both the legacy top-level
 # additionalContext key and the documented hookSpecificOutput envelope (verified against
 # code.claude.com/docs during planning — ADR-0034 §1 Finding 5).
-PAYLOAD4='{"prompt":"please draft a README section for this feature"}'
+PAYLOAD4='{"prompt":"draft a reddit post announcing this release"}'
 OUT4=$(printf '%s' "$PAYLOAD4" | bash "$SCRIPTS/prompt-en-prose-detect.sh" 2>&1)
 rc4=$?
 TOP4=$(printf '%s' "$OUT4" | python3 -c "import json,sys
@@ -187,6 +187,28 @@ if [ "$rc4b" -eq 0 ] && [ -z "$OUT4B" ]; then
   ok "4b: non-matching prompt stays silent (no tokens spent) [regression pin]"
 else
   bad "4b: non-matching prompt regression (rc=$rc4b out='$OUT4B')"
+fi
+
+# Test 4c (ADR-0040): an internal target must stay silent. README, PR, issue, changelog and
+# release notes were removed from the target list — those are written plainly, no humanize pass.
+PAYLOAD4C='{"prompt":"please draft a README section for this feature"}'
+OUT4C=$(printf '%s' "$PAYLOAD4C" | bash "$SCRIPTS/prompt-en-prose-detect.sh" 2>&1)
+rc4c=$?
+if [ "$rc4c" -eq 0 ] && [ -z "$OUT4C" ]; then
+  ok "4c: internal target (README) stays silent"
+else
+  bad "4c: internal target still fires (rc=$rc4c out='$OUT4C')"
+fi
+
+# Test 4d (ADR-0040): naming a publication target without a writing verb must stay silent.
+# The old single-regex form matched the word, so a message *about* Reddit fired the hook.
+PAYLOAD4D='{"prompt":"the skill is for publications, for example reddit or forum posts"}'
+OUT4D=$(printf '%s' "$PAYLOAD4D" | bash "$SCRIPTS/prompt-en-prose-detect.sh" 2>&1)
+rc4d=$?
+if [ "$rc4d" -eq 0 ] && [ -z "$OUT4D" ]; then
+  ok "4d: publication target without a writing verb stays silent"
+else
+  bad "4d: target-without-verb still fires (rc=$rc4d out='$OUT4D')"
 fi
 
 echo "----"
