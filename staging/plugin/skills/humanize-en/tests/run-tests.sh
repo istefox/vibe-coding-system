@@ -69,33 +69,11 @@ check_ge "AI-heavy fixture → >= 3 tells" 3 "$RESULT"
 # T5: AI-heavy fixture returns >= 10 tells (strong signal)
 check_ge "AI-heavy fixture → >= 10 tells (strong)" 10 "$RESULT"
 
-# T6: post-md-tells-hint.sh exists and is executable
-HINT_HOOK="$HOME/.claude/hooks/post-md-tells-hint.sh"
-if [ -x "$HINT_HOOK" ]; then
-  printf 'PASS  post-md-tells-hint.sh is executable\n'
-  PASS=$((PASS + 1))
-else
-  printf 'FAIL  post-md-tells-hint.sh missing or not executable\n'
-  FAIL=$((FAIL + 1))
-fi
-
-# T7: hook on clean fixture → no output
-HOOK_OUT=$(echo '{"tool_input":{"file_path":"'"$CLEAN"'"}}' | bash "$HINT_HOOK" 2>/dev/null)
-check "hint hook on clean file → silent" "" "$HOOK_OUT"
-
-# T8: hook on AI-heavy fixture → prints hint
-HOOK_OUT=$(echo '{"tool_input":{"file_path":"'"$HEAVY"'"}}' | bash "$HINT_HOOK" 2>/dev/null)
-if echo "$HOOK_OUT" | grep -q "humanize-en"; then
-  printf 'PASS  hint hook on AI-heavy fixture → prints hint\n'
-  PASS=$((PASS + 1))
-else
-  printf 'FAIL  hint hook on AI-heavy fixture → no hint printed (got: %s)\n' "$HOOK_OUT"
-  FAIL=$((FAIL + 1))
-fi
-
-# T9: hook on non-.md file → no output
-HOOK_OUT=$(echo '{"tool_input":{"file_path":"/tmp/foo.py"}}' | bash "$HINT_HOOK" 2>/dev/null)
-check "hint hook on .py file → silent" "" "$HOOK_OUT"
+# T6-T9 removed with post-md-tells-hint.sh (ADR-0040). The hook fired on every .md written,
+# which in this repo means every ADR and every doc. It was also a no-op from the model's point
+# of view: it printed its hint as plain stdout on exit 0, and PostToolUse stdout on exit 0 goes
+# to the debug log, never into context (code.claude.com/docs/en/hooks).
+# detect-ai-tells.sh itself stays and keeps its coverage in T1-T5 above.
 
 # T10: prompt-en-prose-detect.sh exists and is executable
 PROMPT_HOOK="$HOME/.claude/hooks/prompt-en-prose-detect.sh"
@@ -121,15 +99,14 @@ fi
 HOOK_OUT=$(echo '{"prompt":"fix the bug in foo.py where the loop runs twice"}' | bash "$PROMPT_HOOK" 2>/dev/null)
 check "prompt hook on code-task → silent" "" "$HOOK_OUT"
 
-# T13: README prompt → emits additionalContext
+# T13: README prompt → silent (ADR-0040: internal artifact, no humanize pass)
 HOOK_OUT=$(echo '{"prompt":"write the README for my open source project"}' | bash "$PROMPT_HOOK" 2>/dev/null)
-if echo "$HOOK_OUT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'additionalContext' in d" 2>/dev/null; then
-  printf 'PASS  prompt hook on README prompt → emits additionalContext\n'
-  PASS=$((PASS + 1))
-else
-  printf 'FAIL  prompt hook on README prompt → no additionalContext (got: %s)\n' "$HOOK_OUT"
-  FAIL=$((FAIL + 1))
-fi
+check "prompt hook on README prompt → silent" "" "$HOOK_OUT"
+
+# T14: publication target named without a writing verb → silent (ADR-0040: the hook must match
+# the intent, not the word — a message *about* Reddit is not a request to write a Reddit post)
+HOOK_OUT=$(echo '{"prompt":"the skill is for publications, for example reddit or forum posts"}' | bash "$PROMPT_HOOK" 2>/dev/null)
+check "prompt hook on target-without-verb → silent" "" "$HOOK_OUT"
 
 # Summary
 printf '\n--- humanize-en harness: PASS=%d FAIL=%d ---\n' "$PASS" "$FAIL"

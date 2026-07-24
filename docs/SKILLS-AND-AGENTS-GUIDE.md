@@ -298,9 +298,12 @@ Rewrites English prose to remove vocabulary blacklist items (em-dashes, "leverag
 "meticulous", etc.), passive constructions, filler openers. Does not change facts, numbers,
 names, or code.
 
-Called automatically in:
-- concept-to-code Gate 5.5 (deliverables on public repos)
-- commit skill Step 3.5 (commit message on public repos)
+Manual invocation only. Nothing calls it automatically (ADR-0040).
+
+Use it for text an outside audience reads: Reddit and HN posts, forum threads, blog posts,
+newsletters, announcements, marketing copy, email to third parties. Do not use it for
+programming or internal artifacts — code, config, commit messages, PR and issue text, ADRs,
+specs, plans, README and other repo docs, changelogs, release notes.
 
 ---
 

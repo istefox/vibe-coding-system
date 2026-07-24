@@ -444,3 +444,32 @@ Key architectural decisions:
   reportable via /feedback.
 
 Detail: `docs/architecture/ADR-0038-63-native-build-agent-tool-resolution.md`.
+
+## Decisions from the humanize-en scope narrowing (ADR-0040)
+
+`humanize-en` had become the most-invoked skill in the system. Six wiring points pushed it onto
+internal artifacts; the skill itself was never the problem. ADR-0040 amends ADR-0015.
+
+Key architectural decisions:
+- **Perimeter is the audience, not the format:** the skill applies to text an outside human reads
+  (Reddit/HN, forum, blog, newsletter, announcement, marketing, third-party email) and never to
+  source code, config, commit messages, PR/issue text, ADRs, specs, plans, README and repo docs,
+  changelogs, release notes, or gitignored files. **README sits on the internal side** — a judgment
+  call, recorded as one.
+- **The skill's `description` frontmatter carries the perimeter** with a `NEGATIVE:` block: that
+  field is what the model reads when deciding to invoke, so it matters as much as the global rule.
+- **Invocation is manual only.** `concept-to-code` Gate 5.5 and `commit` Step 3.5 removed.
+- **Gates removed, not defaulted off** (ADR-0027 principle): every artifact the chain produces is
+  internal, so Gate 5.5 could never fire. Its state transition to `step_7_commit` was load-bearing
+  and survives as **Gate 5.6**, action-free. Letters `0c` and `5.5` are not reused.
+- **`post-md-tells-hint.sh` retired**, and found to have been a no-op all along: plain stdout on
+  exit 0 reaches the debug log, not the model, for every event except UserPromptSubmit /
+  UserPromptExpansion / SessionStart (`code.claude.com/docs/en/hooks`).
+- **`prompt-en-prose-detect.sh` narrowed to a writing verb AND a publication target** (two greps in
+  AND). It matched the word, not the intent, so a message *about* Reddit fired it. `post` is not a
+  verb here — it is the noun in "a reddit post". ADR-0034's dual-envelope output preserved.
+- **`manifest-validate.sh` invariant 12 untouched:** conditional on "if present", so pre-ADR-0040
+  manifests stay valid. No migration, no schema bump.
+- **Historical ADRs and plans not edited in place** (ADR-0034 precedent); living docs updated.
+
+Detail: `docs/architecture/ADR-0040-humanize-en-scope-narrowing.md`.

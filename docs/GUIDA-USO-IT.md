@@ -424,11 +424,12 @@ seamless, robust, tapestry, pivotal, ...), opener vietati (Additionally, Moreove
 
 `target` può essere un path file o testo inline. Se omesso chiede incolla o path.
 
-**Regola globale:** ogni deliverable in prosa inglese prodotto per output (README, docs, ADR,
-commit message su repo pubblica, PR body, post Reddit/forum) passa per humanize-en prima di
-essere scritto o mostrato. Questa skill è invocata automaticamente da concept-to-code Gate 5.5
-e da commit Step 3.5 (repo pubbliche). Non si applica a: testo in italiano, codice, file di
-config, messaggi di chat.
+**Regola globale (ADR-0040):** passa per humanize-en solo la prosa inglese destinata a un
+pubblico esterno: post Reddit e HN, thread di forum, blog, newsletter, annunci, testi
+promozionali, email a terzi. Non si applica ad artefatti interni e di programmazione: codice,
+file di config, commit message, testo di PR e issue, ADR, spec, piani, README e altre docs di
+repo, changelog, release notes, testo in italiano, messaggi di chat. Invocazione solo manuale,
+nessuna skill e nessuno step di catena la chiama in automatico.
 
 **Modifica file:** mostra il testo rielaborato e chiede Write / Show diff / Discard prima di
 sovrascrivere qualcosa.

@@ -27,7 +27,7 @@ Closes the implementation cycle with a HITL-verified Conventional Commit.
 Optional `context-hint`: brief feature description for the commit body.
 From the concept-to-code chain: `<topic-full-title> (ADR: <adr-path>)`.
 
-`--autopilot`: when present in args, **skip Step 4 HITL gate** and execute the commit immediately with the generated (and optionally humanized) message. Emit: `"Commit: autopilot — executing commit directly..."` before `git commit`. Step 6 (PR) is also skipped in autopilot mode. **Only set by project-conductor or c2c when `manifest.autopilot=true`** — never set manually unless you explicitly want unattended commits.
+`--autopilot`: when present in args, **skip Step 4 HITL gate** and execute the commit immediately with the generated message. Emit: `"Commit: autopilot — executing commit directly..."` before `git commit`. Step 6 (PR) is also skipped in autopilot mode. **Only set by project-conductor or c2c when `manifest.autopilot=true`** — never set manually unless you explicitly want unattended commits.
 
 ---
 
@@ -97,21 +97,9 @@ Conventional Commits format (English):
 - **NEVER** add `Co-Authored-By: Claude` or similar trailers (`settings.json attribution` already disabled)
 - **NEVER** add `BREAKING CHANGE` unless explicitly verified from the diff
 
-### Step 3.5 — Humanize message (conditional, public repos only)
-
-```bash
-"$HOME"/.claude/skills/clean-public-repo/scripts/detect-public-remote.sh \
-  "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-```
-
-- Output `silent` → Step 3.5 silent, proceed to Step 4 with the message from Step 3.
-- Output `public` → emit `"Public repo detected — humanizing commit message (Step 3.5)..."`, then invoke `/skill humanize-en` on the commit message (subject + body, inline text mode):
-  - Pass subject and body as inline text.
-  - The skill returns the humanized text (no write gate: inline mode).
-  - If humanize-en reports "0 patterns / text is clean": the message is unchanged — use the original Step 3 message for Step 4.
-  - If humanize-en returns a rewritten message: replace the Step 3 message with it.
-  - **Immediately** proceed to Step 4 (AskUserQuestion HITL gate) — do NOT wait for additional user input after humanize-en returns.
-- **NEVER** humanize after the "Approve" click in Step 4: what the user approves is what gets committed.
+> **Step 3.5 (humanize message) was removed** — see ADR-0040. A commit message is an internal
+> artifact, so it never gets a humanize pass. Step numbering is unchanged on purpose: other
+> skills refer to these steps by number.
 
 ### Step 3.6 — Ensure feature branch (automatic, no gate)
 
