@@ -40,6 +40,7 @@ plugin/skills/spec-from-issue/SKILL.md|skills/spec-from-issue/SKILL.md
 plugin/scripts/stop-gate.sh|hooks/stop-gate.sh
 plugin/scripts/pre-flight-pattern-enforce.sh|hooks/pre-flight-pattern-enforce.sh
 plugin/scripts/write-scope-enforce.sh|hooks/write-scope-enforce.sh
+plugin/scripts/agent-write-scope.sh|hooks/agent-write-scope.sh
 plugin/scripts/db-backup-guardrail.sh|hooks/db-backup-guardrail.sh
 plugin/scripts/approve-test-cmd.sh|hooks/approve-test-cmd.sh
 plugin/scripts/session-context-inject.sh|hooks/session-context-inject.sh
@@ -154,7 +155,7 @@ if [ "$APPLY" -eq 1 ]; then
   chmod +x "$DEST/hooks/nightly-guard.sh" "$DEST/hooks/publish-feature.sh" \
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
-    "$DEST/hooks/write-scope-enforce.sh" 2>/dev/null || true
+    "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" 2>/dev/null || true
 fi
 
 # MANUAL STEP notices are gated on the state they describe. They used to print unconditionally,
@@ -195,6 +196,23 @@ write-scope-enforce (issue #87, ADR-0016 Addendum 2026-07-25d) denies a parallel
 write outside the file it was assigned. It is inert by construction: with no write-scope line in
 an agent's transcript it allows and exits, so wiring it globally affects nothing but Step 6
 Phase 3. Until this entry exists the hook is deployed but never invoked.
+NOTE
+fi
+
+if ! grep -q 'agent-write-scope' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this PreToolUse entry to ~/.claude/settings.json (alongside the write-scope-enforce entry):
+
+  { "matcher": "Write|Edit|MultiEdit",
+    "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/agent-write-scope.sh" } ] }
+
+agent-write-scope (issue #58, gap 2) confines the architect agent to docs/architecture/ and
+docs/superpowers/plans/. Claude Code's frontmatter grammar has no path restriction for Write, so
+architect.md's write-scope line is prose until this hook enforces it. Inert for every other agent
+type. Until this entry exists the hook is deployed but never invoked.
 NOTE
 fi
 

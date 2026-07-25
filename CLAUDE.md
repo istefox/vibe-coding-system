@@ -502,6 +502,31 @@ Key architectural decisions:
 
 Detail: `docs/architecture/ADR-0036-40-agent-tool-scoping.md`.
 
+## Decisions from the architect Write-scope enforcement (ADR-0041)
+
+`agent-write-scope.sh`, a `PreToolUse` hook on `Write|Edit|MultiEdit`, closes the gap ADR-0036 §3.3
+disclosed: Claude Code's frontmatter grammar has no path restriction for `Write`, so the architect's
+write-scope line was prose. The hook confines `agent_type: architect` to `docs/architecture/` and
+`docs/superpowers/plans/`; inert for every other agent, allow on every failure mode.
+
+Two findings from the investigation, both recorded rather than silently patched:
+
+- **The declared scope was wrong.** `architect.md` named only `docs/architecture/**`, while c2c
+  Step 2 requires the plan under `docs/superpowers/plans/` and hard-aborts without it. Enforcing
+  the file literally would have broken every chain run. Both roots are now named, kept in agreement
+  with the hook by test E and guarded by B2.
+- **ADR-0036 §2.1 asserts an exclusion its own grant does not express** — it says `git commit`/`git
+  push` are not in the allowlist while granting `Bash(git *)`, which matches every git subcommand,
+  and no global deny covers plain commit/push. Left as-is deliberately: `agent-tool-scoping.test.sh`
+  A1 pins that grant as blueprint text reproduced byte-for-byte, so narrowing it supersedes an
+  Accepted decision and belongs in its own issue.
+
+Gap 1 of issue #58 (interpreter-wrapper bypass) is **not** implemented — it needs command-content
+inspection, whose false-positive surface is real (`rg "git commit"` is a legitimate read-only
+search). Deployed by sync, **wired by hand**.
+
+Detail: `docs/architecture/ADR-0041-58-agent-write-scope.md`.
+
 ## Decisions from the native-build tool-resolution fix (ADR-0038)
 
 Root-cause classification and fix for issue #63 (found by the 2026-07-14 post-upgrade smoke test):

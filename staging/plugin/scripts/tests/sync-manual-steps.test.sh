@@ -26,6 +26,7 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 WIRING_MARK="alongside the Edit|Write protect-files entry"
 SCOPE_MARK="alongside the pre-flight-pattern-enforce entry"
+ARCH_MARK="alongside the write-scope-enforce entry"
 RETIRED_MARK="MANUAL STEP: retired hook cleanup"
 CLEAR_MARK="no manual steps outstanding"
 
@@ -38,7 +39,7 @@ CLEAR_MARK="no manual steps outstanding"
 build_home() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   case "$2" in
-    yes) printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
+    yes) printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     no)  printf '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     nofile) : ;;
   esac
@@ -101,6 +102,10 @@ case "$OUT" in
   *"$SCOPE_MARK"*) ok "D2: write-scope wiring notice also fail-safes on a missing settings.json" ;;
   *) bad "D2: missing settings.json silently treated as write-scope-wired" ;;
 esac
+case "$OUT" in
+  *"$ARCH_MARK"*) ok "D3: agent-write-scope notice also fail-safes on a missing settings.json" ;;
+  *) bad "D3: missing settings.json silently treated as agent-write-scope-wired" ;;
+esac
 
 # =====================================================================================
 # E. The two wiring notices must be independent — issue #87 added the second one. If wiring
@@ -116,6 +121,12 @@ esac
 case "$OUT" in
   *"$SCOPE_MARK"*) ok "E2: write-scope notice fires independently of the nightly-guard one" ;;
   *) bad "E2: write-scope notice suppressed although it is not wired" ;;
+esac
+# E3: three wiring notices now share the "hook wiring" heading. Each must key off its own hook,
+# so wiring any one of them cannot mute the reminders for the other two.
+case "$OUT" in
+  *"$ARCH_MARK"*) ok "E3: agent-write-scope notice fires independently too" ;;
+  *) bad "E3: agent-write-scope notice suppressed although it is not wired" ;;
 esac
 
 echo "----"

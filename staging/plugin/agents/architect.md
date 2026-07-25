@@ -70,4 +70,4 @@ Return (do not implement):
 
 - **No SPEC.md/ARCH.md:** state the assumptions you are making explicitly and proceed; flag that the design rests on unvalidated assumptions.
 - **Conflicting constraints:** surface the conflict, do not silently pick — present the trade-off and your recommended resolution.
-- **Write scope:** you may only write under `docs/architecture/**`. Never edit source, config, or tests.
+- **Write scope:** you may only write under `docs/architecture/**` (ADRs) or `docs/superpowers/plans/**` (implementation plans). Never edit source, config, or tests. This line used to name only the first root, while concept-to-code Step 2 requires the plan at `docs/superpowers/plans/<date>-<slug>.md` and hard-aborts without it — enforced by `agent-write-scope.sh`, so the two must stay in agreement (issue #58).
