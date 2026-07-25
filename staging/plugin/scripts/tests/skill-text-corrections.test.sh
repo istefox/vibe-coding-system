@@ -218,5 +218,44 @@ sed -n '3p' "$FS_SKILL" | grep -qF 'already-installed skill already covers the r
 frontmatter_ok "$FS_SKILL" && ok "E4: find-skills frontmatter still parses" \
   || bad "E4: find-skills frontmatter should still parse"
 
+# =====================================================================================
+# Section F (issue #56) -- disable-model-invocation restored on the two skills that lost it
+# =====================================================================================
+# Both skills carried the flag until the #29 staging refresh mirrored deployment wholesale
+# (ADR-0025 Consequences flagged it and left it, being out of that issue's scope). Without it the
+# model may invoke them on its own: interview-driver seizes the turn with AskUserQuestion, and
+# fastapi-react-vibe writes a multi-file scaffold. Blueprint sec. 8's own templates for both skills
+# show the flag, so this restores a documented default rather than inventing one.
+# The flag's other documented effect is a trade-off, not a bug (blueprint changelog 2026-07-09,
+# CC v2.1.196): a scheduled /loop fire does NOT execute a flagged skill, it pastes it as plain text.
+# Neither of these two is a /loop target, so the safety side wins here.
+
+for _pair in "interview-driver" "fastapi-react-vibe"; do
+  _f="$STAGING/plugin/skills/$_pair/SKILL.md"
+  _close=$(awk 'NR>1 && $0=="---"{print NR; exit}' "$_f" 2>/dev/null)
+  if [ -n "$_close" ] && sed -n "2,${_close}p" "$_f" | grep -qx 'disable-model-invocation: true'; then
+    ok "F: $_pair carries disable-model-invocation: true in frontmatter"
+  else
+    bad "F: $_pair should carry disable-model-invocation: true (model can self-invoke it today)"
+  fi
+done
+
+# F3: both files still parse as frontmatter after the insertion.
+frontmatter_ok "$STAGING/plugin/skills/interview-driver/SKILL.md" \
+  && ok "F3: interview-driver frontmatter still parses" \
+  || bad "F3: interview-driver frontmatter should still parse"
+frontmatter_ok "$STAGING/plugin/skills/fastapi-react-vibe/SKILL.md" \
+  && ok "F4: fastapi-react-vibe frontmatter still parses" \
+  || bad "F4: fastapi-react-vibe frontmatter should still parse"
+
+# F5: the blueprint sentence that names which skills carry the flag must not still name
+# project-bootstrap, retired from staging by ADR-0025. It named three skills, and was wrong about
+# all three: two had lost the flag and one no longer existed.
+if grep -q 'Three staged skills carry that flag' "$STAGING/../docs/vibe-coding-system.md"; then
+  bad "F5: blueprint still claims 'Three staged skills carry that flag' (false on all three)"
+else
+  ok "F5: blueprint's stale flag-carrier claim is corrected"
+fi
+
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
