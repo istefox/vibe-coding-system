@@ -218,6 +218,59 @@ sed -n '3p' "$FS_SKILL" | grep -qF 'already-installed skill already covers the r
 frontmatter_ok "$FS_SKILL" && ok "E4: find-skills frontmatter still parses" \
   || bad "E4: find-skills frontmatter should still parse"
 
+# --- E5-E8 (issue #59): the BODY must not be broader than the frontmatter it sits under -----------
+# #39 narrowed line 3 and stopped there, by its own SPEC's scope. The body kept telling the model to
+# use the skill for "how do I do X" and "can you do X" — the exact cases line 3's NEGATIVE clause
+# excludes. A model reasoning from body content rather than frontmatter alone would have walked
+# straight back into the overlap the frontmatter fix was written to close. Same defect class as
+# ADR-0041 Finding A and ADR-0042: prose and machine-read field disagreeing, with nothing in the
+# file to say which one wins.
+FS_BODY=$(sed -n '5,$p' "$FS_SKILL")
+
+E5_BROAD=""
+# Checked as whole phrases: "how do I do X" as a TRIGGER is what must go. The narrowed body may
+# still mention such a question as an example of what NOT to fire on, which is why E6 exists.
+for _p in 'Asks "how do I do X"' 'Asks "can you do X"' 'Expresses interest in extending agent capabilities' \
+          'Mentions they wish they had help with a specific domain'; do
+  printf '%s' "$FS_BODY" | grep -qF "$_p" && E5_BROAD="$E5_BROAD | $_p"
+done
+if [ -z "$E5_BROAD" ]; then
+  ok "E5: body no longer lists general-question triggers"
+else
+  bad "E5: body still lists triggers the frontmatter excludes:$E5_BROAD"
+fi
+
+# E6: the body carries the frontmatter's NEGATIVE routing, not just the positive scope. Stating
+# where the skill applies without stating where it does not is what left the old body broad.
+if printf '%s' "$FS_BODY" | grep -qF 'Do NOT use this skill' \
+   && printf '%s' "$FS_BODY" | grep -qiF 'already installed'; then
+  ok "E6: body carries the NEGATIVE routing, including the installed-skill exclusion"
+else
+  bad "E6: body should carry the NEGATIVE routing, including the installed-skill exclusion"
+fi
+
+# E7: the worked examples must be skill-discovery requests, not ordinary task requests. Examples are
+# what a model pattern-matches on, so a narrowed prose section with broad examples under it teaches
+# the broad behaviour anyway.
+# Scoped to the example lines themselves (those mapping a user utterance to a `npx skills find`
+# command), NOT to the whole body: the corrected body legitimately quotes "How do I make my React
+# app faster?" as a case to answer directly rather than search on. A bare absence check would pass
+# on capitalisation alone here, which is not evidence of anything.
+if printf '%s' "$FS_BODY" | grep -F '`npx skills find' | grep -qiE '"?how do i|can you help me'; then
+  bad "E7: a search example is still phrased as an ordinary task request"
+else
+  ok "E7: search examples are phrased as skill-discovery requests"
+fi
+
+# E8 (non-regression): the body still documents the CLI it exists to drive — the narrowing must not
+# hollow the skill out.
+if printf '%s' "$FS_BODY" | grep -qF 'npx skills find' \
+   && printf '%s' "$FS_BODY" | grep -qF 'npx skills add'; then
+  ok "E8: body still documents the find/add commands"
+else
+  bad "E8: body should still document the find/add commands"
+fi
+
 # =====================================================================================
 # Section F (issue #56) -- disable-model-invocation restored on the two skills that lost it
 # =====================================================================================
