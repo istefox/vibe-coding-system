@@ -37,6 +37,11 @@ user/rules/sql-migrations.md|rules/sql-migrations.md
 user/rules/swift.md|rules/swift.md
 user/rules/typescript-react.md|rules/typescript-react.md
 user/rules/web-vanilla.md|rules/web-vanilla.md
+plugin/skills/adr-writer/SKILL.md|skills/adr-writer/SKILL.md
+plugin/skills/code-review-checklist/SKILL.md|skills/code-review-checklist/SKILL.md
+plugin/skills/fastapi-react-vibe/SKILL.md|skills/fastapi-react-vibe/SKILL.md
+plugin/skills/interview-driver/SKILL.md|skills/interview-driver/SKILL.md
+plugin/skills/swift-vibe/SKILL.md|skills/swift-vibe/SKILL.md
 plugin/scripts/nightly-guard.sh|hooks/nightly-guard.sh
 plugin/scripts/publish-feature.sh|hooks/publish-feature.sh
 plugin/scripts/set-branch-protection.sh|hooks/set-branch-protection.sh

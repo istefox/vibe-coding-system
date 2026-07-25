@@ -40,11 +40,14 @@ check_pairs() {
 # The reverse direction (ADR-0043): asserts every file matching <name-pattern> under
 # <staging-relative-dir> appears as a src on some PAIRS line. Compares the staging-relative path
 # exactly as PAIRS spells it, so a typo'd entry counts as missing rather than as coverage.
+# <name-pattern> may span a directory level (e.g. '*/SKILL.md'), which is why the relative path is
+# derived by stripping the staging prefix rather than by basename — the first version flattened
+# skills/<name>/SKILL.md to skills/SKILL.md and would have reported every skill as uncovered.
 check_complete() {
   _file="$1"; _dir="$2"; _pat="$3"
   for _f in "$STAGING/$_dir"/$_pat; do
     [ -f "$_f" ] || continue                       # unexpanded glob when a dir is empty
-    _rel="$_dir/$(basename "$_f")"
+    _rel="${_f#$STAGING/}"
     if cut -d'|' -f1 < "$_file" | grep -qxF "$_rel"; then
       PASS=$((PASS+1)); printf 'PASS: covered by PAIRS: %s\n' "$_rel"
     else
@@ -99,6 +102,10 @@ check_pairs "$STAGING" "$tmp/real-pairs"
 # not a completeness fix — ADR-0043 Consequences.
 check_complete "$tmp/real-pairs" "plugin/agents" '*.md'
 check_complete "$tmp/real-pairs" "user/rules" '*.md'
+# Skills: SKILL.md only, not the scripts/ and tests/ files under each skill. Those are vendored
+# selectively by design (ADR-0024 scope), so demanding an entry for each would report intended
+# absences as defects. A skill's SKILL.md is the file that always has to reach the machine.
+check_complete "$tmp/real-pairs" "plugin/skills" '*/SKILL.md'
 
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

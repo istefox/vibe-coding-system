@@ -1,6 +1,7 @@
 ---
 name: fastapi-react-vibe
 description: This skill should be used when adding a CRUD resource to a FastAPI+React project and a full backend+frontend scaffold is needed.
+disable-model-invocation: true
 ---
 
 Generate the scaffold for the "$ARGUMENTS" resource.
