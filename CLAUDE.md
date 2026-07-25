@@ -521,11 +521,41 @@ Two findings from the investigation, both recorded rather than silently patched:
   A1 pins that grant as blueprint text reproduced byte-for-byte, so narrowing it supersedes an
   Accepted decision and belongs in its own issue. **Resolved by ADR-0042** (issue #91) — see below.
 
-Gap 1 of issue #58 (interpreter-wrapper bypass) is **not** implemented — it needs command-content
-inspection, whose false-positive surface is real (`rg "git commit"` is a legitimate read-only
-search). Deployed by sync, **wired by hand**.
+Gap 1 of issue #58 (interpreter-wrapper bypass) was deferred here on the false-positive argument;
+**ADR-0045 closed it** after that argument turned out to be an artifact of substring matching.
+Deployed by sync, **wired by hand**.
 
 Detail: `docs/architecture/ADR-0041-58-agent-write-scope.md`.
+
+## Decisions from the interpreter-wrapper closure (ADR-0045)
+
+Closes issue #58 gap 1, the last piece. `agent-command-scope.sh`, a `PreToolUse` hook on `Bash`,
+denies `architect` and `reviewer` any mutating git command, directly or through `bash -c`,
+`python3 -c` or `awk`. Inert for every other agent, allow on every failure mode.
+
+- **The objection that deferred this three times was wrong, and worth understanding.** A denylist on
+  `git commit` blocks `rg "git commit" .` — true of a *substring* match, false of a
+  **command-position** match. A verb inside quotes is data and never reaches a command position.
+  That case is now section C of the test file and every assertion in it passes.
+- **Threat model, stated in the ADR and the hook header: a guardrail against a shortcut, NOT a
+  sandbox.** `subprocess.run(["git","push"])` splits the verb across list elements; `eval`, base64
+  and variable splicing defeat it outright. **Two bypasses are pinned as expected-ALLOW** (section E),
+  so if anyone closes one, the test fails and the threat-model paragraph has to move with the code.
+  Anyone reading this hook as a security boundary will misuse it.
+- **Two rules.** R1: mutating verb at a shell command position (start, or after `;` `&&` `||` `|`
+  brace backtick `$(` or an interpreter's `-c` and its quote). R2: an exec construct
+  (`os.system`, `subprocess.*`, `execSync`, …) **and** a verb anywhere — compound, so
+  `os.system("git log")` and `print("git commit")` both pass.
+- **Removing the interpreter grants was rejected:** ADR-0036 §2.1 evidenced both from real dispatches
+  (test harness, `python3` YAML one-liners). Denying inline `-c` outright was rejected for the same
+  reason — the evidenced `python3` use *is* inline code.
+- **`fetch`/`pull`/`clone`/`init` are in the mutating set** though not destructive: neither agent has
+  reason to run them, and the failure direction is a denied read the agent can report.
+- Both agent files gain a **Command scope** bullet; test F pins prose and hook together.
+  Second-order execution stays invisible — `bash x.test.sh` is allowed and the hook cannot see what
+  the script does.
+
+Detail: `docs/architecture/ADR-0045-58-interpreter-wrapper-bypass.md`.
 
 ## Decisions from the architect git-grant narrowing (ADR-0042)
 
