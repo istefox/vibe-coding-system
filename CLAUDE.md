@@ -561,6 +561,32 @@ Supersedes ADR-0036 §2.1 **in part** — only that one entry; the rest of §2.1
 
 Detail: `docs/architecture/ADR-0042-91-architect-git-grant.md`.
 
+## Decisions from the PAIRS completeness check (ADR-0043)
+
+Closes issue #93. PR #90's fix to `architect.md` never deployed and nothing reported it: `PAIRS` did
+not mention `agents/` at all, so the file was never in the incremental path. Agent and rule files
+reached `~/.claude` only through `docs/RUNBOOK.md` Step 6's bulk `cp`, a full-install procedure
+nobody runs for a one-line frontmatter fix.
+
+- **The defect is the check's direction, not the missing entries.** `pairs-completeness.test.sh`
+  asserted every PAIRS *src* exists under `staging/` — it validates the list's own entries and is
+  blind by construction to a file the list omits. The fourteen entries added here (7 agents, 7 rules)
+  are the symptom; `check_complete` is the fix.
+- **Second self-test, deliberately.** The reverse check runs against a real non-empty subtree with an
+  empty PAIRS list and must flag every file. A glob matching nothing reports nothing, and a silent
+  zero-file result reads exactly like full coverage — the same failure shape the ADR exists to stop.
+- **Directory-level sync (Option B) deferred, not rejected.** ADR-0024 requires its own ADR for it,
+  and the reason is real: it must decide what happens to a deployed file that disappears from
+  staging, a question per-file `PAIRS` never has to answer. The completeness check gives most of the
+  protection — a new uncovered file fails CI — without settling it.
+- **`staging/plugin/hooks/hooks.json` excluded on purpose.** It has no deployed counterpart at all,
+  so an entry would *create* a file that has never existed, and whether CC reads a `hooks.json`
+  outside a plugin directory is unverified. Named as a choice, not left as an oversight.
+- Deploys nothing today: all fourteen were already byte-identical. Purely preventive — which is also
+  the condition that kept the gap invisible.
+
+Detail: `docs/architecture/ADR-0043-93-pairs-completeness.md`.
+
 ## Decisions from the native-build tool-resolution fix (ADR-0038)
 
 Root-cause classification and fix for issue #63 (found by the 2026-07-14 post-upgrade smoke test):
