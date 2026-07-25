@@ -22,6 +22,7 @@ APPLY=0
 # purpose (ADR-0025: machine-local keys need a jq del() pass, not a straight copy).
 PAIRS="
 user/CLAUDE.md|CLAUDE.md
+plugin/agents/architect.md|agents/architect.md
 plugin/scripts/nightly-guard.sh|hooks/nightly-guard.sh
 plugin/scripts/publish-feature.sh|hooks/publish-feature.sh
 plugin/scripts/set-branch-protection.sh|hooks/set-branch-protection.sh

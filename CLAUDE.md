@@ -519,13 +519,47 @@ Two findings from the investigation, both recorded rather than silently patched:
   push` are not in the allowlist while granting `Bash(git *)`, which matches every git subcommand,
   and no global deny covers plain commit/push. Left as-is deliberately: `agent-tool-scoping.test.sh`
   A1 pins that grant as blueprint text reproduced byte-for-byte, so narrowing it supersedes an
-  Accepted decision and belongs in its own issue.
+  Accepted decision and belongs in its own issue. **Resolved by ADR-0042** (issue #91) — see below.
 
 Gap 1 of issue #58 (interpreter-wrapper bypass) is **not** implemented — it needs command-content
 inspection, whose false-positive surface is real (`rg "git commit"` is a legitimate read-only
 search). Deployed by sync, **wired by hand**.
 
 Detail: `docs/architecture/ADR-0041-58-agent-write-scope.md`.
+
+## Decisions from the architect git-grant narrowing (ADR-0042)
+
+Closes issue #91, the contradiction ADR-0041 Finding B disclosed. `Bash(git *)` on `architect.md`
+becomes `Bash(git log*), Bash(git diff*), Bash(git show*), Bash(git status*), Bash(git rev-parse*)`.
+Supersedes ADR-0036 §2.1 **in part** — only that one entry; the rest of §2.1 stands.
+
+- **The grant contradicted its own paragraph.** §2.1 asserted `git commit`/`git push` were not in
+  the allowlist while granting `Bash(git *)`, which by its own word-boundary citation matches every
+  subcommand. No deny rule covered plain commit/push either. The architect could commit and push.
+  Issue #40's own `SPEC.md:11` had already named the symptom, so this corrects a pattern back to the
+  reasoning it was written for, rather than reversing a decision.
+- **Issue #91's Option B (deny rules) is unworkable, not merely worse.** `permissions.deny` is
+  session-global with no per-agent scoping, and the allow list carries `Bash(git commit*)` because
+  the `commit` skill needs it; deny overrides allow, so the rule would block the orchestrator's own
+  commit flow. Agent frontmatter has `tools` and no deny field. That is what leaves narrowing as the
+  only enforcement path.
+- **No-space form on purpose.** The ADR-0036 plan's Risk B warned against normalising blueprint's
+  space/no-space split *by accident*; this does it deliberately, toward sec. 3.3's reviewer form. No
+  mutating git subcommand begins with any of the five allowed words.
+- **Prose and grant now pinned together.** `architect.md` gains a **Command scope** bullet and test
+  A14 asserts every granted subcommand is named in it — the defect was a file whose prose and
+  frontmatter disagreed with no way to tell which was authoritative. A13 (no mutating entry) passes
+  before and after: a forward guard, not fix evidence.
+- **`architect.md` gets the first agent-file `PAIRS` entry.** `sync-to-claude.sh` did not touch
+  `agents/` at all, which is why PR #90's correction to the same file's write-scope line had never
+  reached `~/.claude` — found by this PR's own dry-run. Agent-file edits reach deployment only now.
+- **#58 gap 1 stays open and this does not close it.** `Bash(bash *)`/`Bash(python3 *)` still allow
+  a wrapped `bash -c "git commit …"`. Reviewer is untouched: its git grants were already read-only,
+  and its exposure is the same wrapper class. Also named: `git -C <path> log` and `git --no-pager
+  log` no longer match, a real behaviour change, tolerable because no chain brief asks architect for
+  git at all.
+
+Detail: `docs/architecture/ADR-0042-91-architect-git-grant.md`.
 
 ## Decisions from the native-build tool-resolution fix (ADR-0038)
 
