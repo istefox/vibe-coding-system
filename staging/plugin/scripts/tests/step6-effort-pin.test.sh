@@ -27,9 +27,13 @@ PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
-# Anchor on the "### Step 6" heading, NOT on "#### Workflow dispatch path (hook_verified =
-# true)" — that subheading is identical in Step 5 and Step 6, so matching it would capture
-# both blocks and every Step-6 assertion would be satisfiable by Step 5 text.
+# Anchor on the "### Step 6" heading rather than on the "#### Workflow dispatch path" subheading.
+# The two subheadings were once identical across Step 5 and Step 6, and matching them captured
+# both blocks — every Step-6 assertion was then satisfiable by Step 5 text, which is how the
+# first version of this file passed A2 vacuously. They now carry distinct names
+# (workflow-dispatch-pins.test.sh B4a/B4b/B5 keep them that way), but the step-level anchor is
+# kept deliberately: it is the more stable of the two and does not move if a subheading is
+# reworded again.
 STEP6="$TMP/step6.md"
 awk '/^### Step 6 — Review cycle/{f=1}
      /^#### Skill fallback/{f=0}

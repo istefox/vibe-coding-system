@@ -575,7 +575,7 @@ wait for a human. If `hook_verified` is `true`, take the Workflow path; otherwis
 unattended run from stalling on the smoke-test prompt, and never takes the Workflow path unless hooks
 were already verified true.]**
 
-#### Workflow dispatch path (hook_verified = true)
+#### Workflow dispatch path — Step 5 implementation (hook_verified = true)
 
 **CONSTRAINT — NO inline source code in the generated workflow script:**
 Agent prompt strings in the JS workflow script MUST reference files by path only — never inline raw source code blocks. Embedding language-specific generics (e.g. `Array<T>`, `Result<T, E>`) or type annotations directly in JS template literals triggers a parse error (`Unexpected token`). If context requires a code snippet, write it to a temp file and pass the path to the agent.
@@ -794,7 +794,7 @@ Set `step5_mode: "agent_batch"` in the manifest when the fallback activates (via
 - If `manifest.hook_verified = true`: use Workflow dispatch path (below). Set `step6_mode: "workflow"` via bash sed substitution.
 - If `manifest.hook_verified = false` or `null`: use skill fallback (below). Set `step6_mode: "skill_fallback"` via bash sed substitution.
 
-#### Workflow dispatch path (hook_verified = true)
+#### Workflow dispatch path — Step 6 review cycle (hook_verified = true)
 
 Send the following workflow prompt to the session:
 
