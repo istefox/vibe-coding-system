@@ -147,6 +147,15 @@ sequential, and Phase 3 parallelises anyway — safe only because Phase 2 groups
 one file per agent. That mitigation is load-bearing and was implicit; `step6-effort-pin.test.sh`
 F1/F2 now pin both notes.
 
+**Addendum 2026-07-25c (Step 6 Phase 3 write scope, issue #83).** Phase 2's by-file grouping bounds
+where the findings are, not where the edits land — an agent fixing an import could write a file that
+was nobody's assigned file, and two agents would collide on it. The fix-agent prompt now forbids
+editing anything but its assigned file; a cross-file need goes into a `deferred` array, is confirmed
+or dismissed by Phase 4 without being acted on, and reaches the user through `step6-report.json`.
+The divergence from ADR-0018's sequential-fix invariant is deliberate and recorded. **It is an
+instruction, not an enforcement** — no hook constrains a subagent's write paths by file, and building
+one needs its own issue. Phase 2's grouping stays load-bearing.
+
 Detail: `docs/architecture/ADR-0016-dynamic-workflows-step5.md`.
 
 ## Decisions from chain deep-refactor-skill (ADR-0018)

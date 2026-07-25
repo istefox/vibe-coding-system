@@ -845,12 +845,26 @@ Phase 3 — Fix in parallel per file group:
   // Parallel dispatch is safe ONLY because Phase 2 grouped findings by file — one file per agent,
   // so no two agents ever edit the same file. ADR-0018 otherwise requires fix phases to be
   // sequential precisely to avoid that conflict. Change Phase 2's grouping and this breaks.
+  // The grouping alone is not enough (issue #83): it bounds where the FINDINGS are, not where the
+  // EDITS land. An agent fixing an import or a shared helper could write a file that was nobody's
+  // assigned file, and two agents would then collide on it. Hence the write-scope constraint in
+  // the prompt below. It is an instruction, not an enforcement — no hook constrains a subagent's
+  // write paths by file today (ADR-0016 Addendum 2026-07-25c).
   await parallel(fileGroups.map(group => () =>
     agent(`
       Fix the following findings in ${group[0].file}:
       ${JSON.stringify(group, null, 2)}
       Use Pre-flight Pattern Classifier (ADR-0001) for every Edit.
-      Return: { "fixed": [<id>, ...], "skipped": [<id>, ...], "notes": "<string>" }
+
+      WRITE SCOPE — you may edit ONLY ${group[0].file}. Other agents are fixing other files in
+      parallel right now, and editing outside your file can silently lose their work.
+      If resolving a finding needs a change in any other file, do NOT edit that file: record it
+      in "deferred" and leave the finding in "skipped". Reporting a deferred change is the
+      correct outcome, not a failure.
+
+      Return: { "fixed": [<id>, ...], "skipped": [<id>, ...],
+                "deferred": [{ "file": "<path>", "needed": "<what change and why>" }],
+                "notes": "<string>" }
     `, { agentType: group[0].fix_type, model: "opus", effort: FIX_EFFORT[group[0].fix_type] })
   ));
 
@@ -858,7 +872,12 @@ Phase 4 — Re-review:
   agent(`
     Re-review all files that were fixed in Phase 3.
     Confirm each finding from Phase 1 is resolved or document why it was skipped.
-    Return: { "resolved": [<id>, ...], "remaining": [<id>, ...], "summary": "<string>" }
+    Also read every "deferred" entry the fix agents returned — those are cross-file changes they
+    were forbidden to make. For each, state whether the need is real. Do NOT act on any of them:
+    a deferred item is carried to the report, never fixed here.
+    Return: { "resolved": [<id>, ...], "remaining": [<id>, ...],
+              "deferred_confirmed": [{ "file": "<path>", "needed": "<string>", "real": true|false }],
+              "summary": "<string>" }
   `, { agentType: "reviewer", model: "sonnet", effort: "high" })
 
 Final subagent writes <project_root>/.claude/step6-report.json:
@@ -868,15 +887,22 @@ Final subagent writes <project_root>/.claude/step6-report.json:
   "resolved_count": <n>,
   "remaining_count": <n>,
   "remaining_ids": [...],
+  "deferred": [{ "file": "<path>", "needed": "<string>", "real": true|false }],
   "summary": "<string>"
 }
+`deferred` aggregates the cross-file changes fix agents were forbidden to make (issue #83),
+confirmed or dismissed by Phase 4. Additive — a report written without the key stays valid and
+the orchestrator reads it as empty.
 ```
 
 After the workflow completes:
 1. Read `<project_root>/.claude/step6-report.json`.
 2. If absent or malformed → fall back to skill fallback below (record `step6_mode: "skill_fallback"`).
 3. If `remaining_count > 0` → present unresolved findings to user before transitioning.
-4. Evaluate Gate 5.05 (see §5 Gate 5.05 block).
+4. If `deferred` is non-empty, present the entries with `real: true` alongside them, labelled
+   "cross-file changes not applied — a fix agent needed them outside its assigned file". They are
+   findings for the user to decide on, never a failure signal and never auto-fixed here.
+5. Evaluate Gate 5.05 (see §5 Gate 5.05 block).
 
 #### Skill fallback (hook_verified = false or workflow unavailable)
 
