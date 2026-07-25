@@ -18,6 +18,9 @@
 *.bak
 *.bak-*
 
+# Reference material (local reading copies, not repo content)
+docs/books/
+
 # Session memory (runtime, not source of truth)
 .remember/logs/
 .remember/tmp/
