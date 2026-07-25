@@ -542,6 +542,56 @@ Pinned by `step6-effort-pin.test.sh` F2b and F3.
 
 ---
 
+## Addendum 2026-07-25d — write scope becomes enforced (issue #87)
+
+**Amends 25c**, which stated that the Phase 3 write-scope constraint was "an instruction to the
+agent, not an enforcement" and that closing that needed its own issue. It does, and this is it.
+
+`write-scope-enforce.sh` is a `PreToolUse` hook on `Edit|Write|MultiEdit`. It locates the calling
+subagent's own transcript from `.agent_id`, reads the `you may edit ONLY <path>` line out of the
+dispatch prompt, and denies any write to a different path with a reason telling the agent to
+record the change in `deferred`.
+
+**Every link was verified live on the current build before anything was written**, rather than
+inferred from the May smoke test:
+
+- `PreToolUse` fires inside workflow subagents — re-confirmed by a three-arm sandbox run (no
+  header → denied, malformed header → denied, canonical header → allowed), checked against the
+  filesystem rather than agent self-reports.
+- `.agent_id` is in the payload and discriminates parallel same-type agents. `.agent_type` cannot:
+  Phase 3 may dispatch three `coder` agents at once with three different files.
+- The dispatch prompt is in the subagent transcript as exactly **one** `user` entry, and is not
+  echoed by the assistant — so reading it is structural, not a bet on model behaviour. Had it
+  appeared only in an `assistant` entry, this design would have been abandoned.
+
+**Inertness is structural, not configured.** No scope line in an agent's transcript means the
+agent was never scoped, so the hook allows and exits. Step 5, the Agent-tool fallback, and every
+other skill are untouched with no manifest flag and no skill detection. This is a better property
+than the `nightly-guard`-style run-gating #87 originally proposed to copy.
+
+**Two deliberate divergences from `pre-flight-pattern-enforce.sh`**, which this hook otherwise
+mirrors closely:
+
+1. It reads `user` entries, not `assistant` ones — the marker is in the prompt, not in model output.
+2. **No main-session transcript fallback.** pattern-enforce falls back to the main jsonl because a
+   missed check there is merely a missed check; here it would be actively wrong, since an
+   orchestrator turn that quotes a scope line would bind every later edit in the session. Pinned
+   by `write-scope-enforce.test.sh` B5.
+
+**Residual coupling, disclosed:** the hook matches a literal string that lives in SKILL.md's Phase
+3 prompt. Reword the prompt and the hook goes silently inert while every other test still passes.
+`write-scope-enforce.test.sh` D1 asserts the marker is identical in both files — the same hazard
+class as the `FIX_EFFORT` table, handled the same way. The match deliberately omits the em-dash in
+`WRITE SCOPE — you may edit ONLY`: an em-dash where a pipe was expected is what silently
+invalidated the smoke test's own control arm, and depending on how a dash survives transcript
+encoding is not a risk worth taking.
+
+The hook is deployed by `sync-to-claude.sh` but wired by hand, since `settings.json` is not
+auto-synced. Until the wiring exists it is installed and never invoked; the sync script prints a
+conditional reminder that disappears once it is done.
+
+---
+
 ## References
 
 - Dynamic Workflows docs: `https://code.claude.com/docs/en/workflows`

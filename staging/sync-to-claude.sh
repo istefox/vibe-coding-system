@@ -39,6 +39,7 @@ plugin/scripts/tests/hook-verify-workflow.test.sh|hooks/tests/hook-verify-workfl
 plugin/skills/spec-from-issue/SKILL.md|skills/spec-from-issue/SKILL.md
 plugin/scripts/stop-gate.sh|hooks/stop-gate.sh
 plugin/scripts/pre-flight-pattern-enforce.sh|hooks/pre-flight-pattern-enforce.sh
+plugin/scripts/write-scope-enforce.sh|hooks/write-scope-enforce.sh
 plugin/scripts/db-backup-guardrail.sh|hooks/db-backup-guardrail.sh
 plugin/scripts/approve-test-cmd.sh|hooks/approve-test-cmd.sh
 plugin/scripts/session-context-inject.sh|hooks/session-context-inject.sh
@@ -152,7 +153,8 @@ done
 if [ "$APPLY" -eq 1 ]; then
   chmod +x "$DEST/hooks/nightly-guard.sh" "$DEST/hooks/publish-feature.sh" \
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
-    "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" 2>/dev/null || true
+    "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
+    "$DEST/hooks/write-scope-enforce.sh" 2>/dev/null || true
 fi
 
 # MANUAL STEP notices are gated on the state they describe. They used to print unconditionally,
@@ -176,6 +178,23 @@ Add this PreToolUse entry to ~/.claude/settings.json (alongside the Edit|Write p
 
 The staged reference version is staging/user/settings.json. Review the live file first — it may have
 diverged. nightly-guard is inert outside a nightly run, so wiring it globally is safe.
+NOTE
+fi
+
+if ! grep -q 'write-scope-enforce' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this PreToolUse entry to ~/.claude/settings.json (alongside the pre-flight-pattern-enforce entry):
+
+  { "matcher": "Edit|Write|MultiEdit",
+    "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/write-scope-enforce.sh" } ] }
+
+write-scope-enforce (issue #87, ADR-0016 Addendum 2026-07-25d) denies a parallel fix agent any
+write outside the file it was assigned. It is inert by construction: with no write-scope line in
+an agent's transcript it allows and exits, so wiring it globally affects nothing but Step 6
+Phase 3. Until this entry exists the hook is deployed but never invoked.
 NOTE
 fi
 
