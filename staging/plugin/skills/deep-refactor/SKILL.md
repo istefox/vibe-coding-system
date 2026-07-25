@@ -54,7 +54,14 @@ tagged `ACTION REQUIRED — not auto-fixed` in the report.
 
 All dispatched agents in Phases 1 and 2 run at `model: opus`. Audit agents make judgment calls on
 risk tagging; fix agents modify production source. Sonnet is insufficient for either role in this
-skill. Use `model: "opus"` in every Agent-tool dispatch.
+skill.
+
+**This applies to both dispatch mechanisms, not one.** Pin `model` explicitly on every `Agent`-tool
+dispatch AND on every `agent()` call in a Workflow script. A Workflow subagent given `agentType`
+but no `model` does not fall back to the agent's frontmatter — it inherits the main-loop (CLI
+session) model. The same is true of `opts.effort`, documented as "omit to inherit the session
+effort", so pin that too, at the agent's own frontmatter value. Naming only the Agent tool here is
+what previously left the audit phase's Branch A running on whatever the session happened to use.
 
 ---
 
@@ -217,6 +224,12 @@ Use Workflow dispatch to fan-out the 4 reviewer agents in parallel. The audit ph
 fan-out with no mid-run HITL — the canonical Workflow use case. Each agent only Reads (no Edits),
 so hook propagation risk is low. This is the default regardless of whether a project manifest is
 present: the smoke test (ADR-0016) passed on CC v2.1.156 and the result is global.
+
+Every `agent()` call in the script pins both values explicitly — `model: "opus", effort: "high"` —
+per the "model: opus requirement" section above. Omit either and the subagent takes the
+orchestrator session's value instead of the intended one: `opus` is this skill's stated
+requirement for audit agents, and `high` is `reviewer`'s own frontmatter effort. Branch B below
+pins `model` for the same reason; the two branches must not diverge.
 
 Conditions for Branch A:
 - No project manifest present (standalone invocation): use Branch A.

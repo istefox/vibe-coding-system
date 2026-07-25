@@ -184,20 +184,22 @@ fi
 
 #### Step 5 — Implementation dispatch
 
-**Worktree isolation check (same as c2c Step 5 §475–486):**
+**Worktree isolation check (same as c2c Step 5, "Pre-dispatch: worktree isolation check"):**
 ```bash
 git rev-parse --git-dir 2>/dev/null
 ```
 - exit 0 → dispatch coder with `isolation: worktree`.
 - exit non-0 → dispatch coder with `isolation: none`. Note in report: "worktree disabled."
 
-**Parallel-conflict scan (advisory, no gate — same as c2c §550–553):**
+**Parallel-conflict scan (advisory, no gate — same as c2c Step 5, "Before dispatch — parallel task conflict scan (GAP E)"):**
 Read the plan. If the same absolute file path appears in multiple unchecked task descriptions,
 emit a warning line before dispatching. Do not stop.
 
 **Dispatch:**
-- `hook_verified=true`: Workflow dispatch (ultracode keyword — same prompt as c2c §555–589,
-  with `$_project_context` injection if non-empty, with `coder_model` if set).
+- `hook_verified=true`: Workflow dispatch (ultracode keyword — same prompt as c2c Step 5's "Workflow dispatch path (hook_verified = true)" block),
+  with `$_project_context` injection if non-empty, with `coder_model` if set. That block pins `model` AND `effort` on every `agent()`
+  call; carry both across unchanged, since a Workflow subagent inherits the session value for
+  whichever one is omitted.
 - `hook_verified=false`: Agent-tool batch fallback (same as c2c fallback, groups of 2–3 tasks).
 
 Set `step5_mode` in manifest via bash sed after dispatch completes.
@@ -211,8 +213,9 @@ On halt: skip Steps 6 and 7, jump to Phase 2 (morning report).
 
 #### Step 6 — Review + fix
 
-Same dispatch as c2c Step 6: Workflow path (`hook_verified=true`, §710–771) or `review-triage-fix`
-skill fallback.
+Same dispatch as c2c Step 6: Workflow path (`hook_verified=true`, its "Workflow dispatch path
+(hook_verified = true)" block — note Step 5 carries a block with the identical heading, so take
+Step 6's) or `review-triage-fix` skill fallback.
 
 After fixes: re-run the approved test-cmd:
 ```bash
