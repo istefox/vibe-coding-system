@@ -104,9 +104,21 @@ orchestration script instead of turn-by-turn `Agent` tool calls. Max 16 concurre
 1000 total; state in script variables (not context window); session-bound resumability.
 
 Key constraints:
-- **Hook safety is a hard blocker.** `PreToolUse`/`PostToolUse` hook propagation inside
-  workflow subagents is undocumented. A smoke test (`hook_verified` manifest field) must
-  confirm pattern-enforce fires before the workflow path is used in production.
+- **Hook safety was the blocker, and it was cleared.** Hook propagation into workflow subagents
+  was undocumented at spec time; the smoke test of 2026-05-29 on CC v2.1.156 confirmed
+  `PreToolUse` fires and `agent_type` is set from the script's `agentType`, which is what moved
+  ADR-0016 from Proposed to Accepted. It took `pre-flight-pattern-enforce.sh` v1.3 to get there:
+  v2.1.154 had silently moved workflow subagent transcripts to
+  `subagents/workflows/<wf_id>/agent-<id>.jsonl`, so the hook needed a `find`-based fallback.
+  Read the recorded result in ADR-0016 § Smoke Test Result before treating this as open again —
+  its stale phrasing here already sent one investigation down a closed question. **Re-verified
+  2026-07-25 on the current build** (issue #87): a three-arm sandbox run confirmed propagation
+  still holds, the `subagents/workflows/<wf_id>/` layout is unchanged, and the hook validates the
+  canonical `PATTERN: <CATEGORY> | <payload>` format rather than merely the `PATTERN:` substring —
+  an em-dash instead of the pipe is blocked. The evidence stays build-specific, not permanent:
+  v2.1.154 is proof the substrate moves underneath, so re-run the test after a major CC bump
+  rather than trusting either date. `hook_verified` still defaults `false` per manifest, so the
+  safe fallback is unchanged.
 - **Fallback path.** If the keyword trigger fails or `hook_verified=false`, Step 5 reverts
   to the current Agent-tool batch dispatch (2-3 tasks per batch). No chain breakage.
 - **File handoff.** Workflow writes `.claude/step5-report.json`; orchestrator reads it
