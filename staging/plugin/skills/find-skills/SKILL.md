@@ -9,14 +9,24 @@ This skill helps you discover and install skills from the open agent skills ecos
 
 ## When to Use This Skill
 
-Use this skill when the user:
+Use this skill only when the user explicitly asks to find, search for, or install a skill:
 
-- Asks "how do I do X" where X might be a common task with an existing skill
-- Says "find a skill for X" or "is there a skill for X"
-- Asks "can you do X" where X is a specialized capability
-- Expresses interest in extending agent capabilities
-- Wants to search for tools, templates, or workflows
-- Mentions they wish they had help with a specific domain (design, testing, deployment, etc.)
+- "find a skill for X", "is there a skill that can…", "search skills for X"
+- "npx skills find X", "install a skill for X", "add the X skill"
+- Asks what skills exist for a domain, or how to browse or install one
+
+**Do NOT use this skill** when the user:
+
+- Asks how to do something, or asks you to do it. "How do I make my React app faster?" is a request
+  for help with React, not a request to go shopping for a skill. Answer it.
+- Asks whether you can do something. Say whether you can.
+- Wants a task that an already installed skill covers — use that skill, do not go looking for
+  another one.
+- Mentions a domain in passing. Interest in testing is not a request to install a testing skill.
+
+The distinction is the user's intent, not the topic. Almost every request touches some domain that
+has a skill somewhere; that is not a reason to search. Reach for this skill when acquiring a skill
+*is* the thing being asked for.
 
 ## What is the Skills CLI?
 
@@ -33,13 +43,14 @@ The Skills CLI (`npx skills`) is the package manager for the open agent skills e
 
 ## How to Help Users Find Skills
 
-### Step 1: Understand What They Need
+### Step 1: Understand What They Are Looking For
 
-When a user asks for help with something, identify:
+From the user's search request, identify:
 
-1. The domain (e.g., React, testing, design, deployment)
-2. The specific task (e.g., writing tests, creating animations, reviewing PRs)
-3. Whether this is a common enough task that a skill likely exists
+1. The domain they named (e.g., React, testing, design, deployment)
+2. The capability they want a skill to provide (e.g., writing tests, creating animations,
+   reviewing PRs)
+3. Whether an already installed skill covers it — if one does, say so and stop here
 
 ### Step 2: Check the Leaderboard First
 
@@ -59,9 +70,12 @@ npx skills find [query]
 
 For example:
 
-- User asks "how do I make my React app faster?" → `npx skills find react performance`
-- User asks "can you help me with PR reviews?" → `npx skills find pr review`
-- User asks "I need to create a changelog" → `npx skills find changelog`
+- "is there a skill for React performance?" → `npx skills find react performance`
+- "find me a skill for PR reviews" → `npx skills find pr review`
+- "install something that writes changelogs" → `npx skills find changelog`
+
+Note what these have in common: the user is asking for a *skill*, not for the work. "How do I make
+my React app faster?" belongs in the Do-NOT list above — answer it directly instead.
 
 ### Step 4: Verify Quality Before Recommending
 
