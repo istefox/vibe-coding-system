@@ -861,6 +861,9 @@ Phase 3 — Fix in parallel per file group:
       If resolving a finding needs a change in any other file, do NOT edit that file: record it
       in "deferred" and leave the finding in "skipped". Reporting a deferred change is the
       correct outcome, not a failure.
+      A hook enforces this. If a write is blocked with a write-scope message, that is the guard
+      working as intended, not an error on your part: record it in `deferred` and carry on with
+      your own file. Do not retry, do not reach for another tool, do not try to route around it.
 
       Return: { "fixed": [<id>, ...], "skipped": [<id>, ...],
                 "deferred": [{ "file": "<path>", "needed": "<what change and why>" }],

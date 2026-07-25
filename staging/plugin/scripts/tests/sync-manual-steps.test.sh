@@ -24,15 +24,21 @@ PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
-WIRING_MARK="MANUAL STEP: hook wiring"
+WIRING_MARK="alongside the Edit|Write protect-files entry"
+SCOPE_MARK="alongside the pre-flight-pattern-enforce entry"
 RETIRED_MARK="MANUAL STEP: retired hook cleanup"
 CLEAR_MARK="no manual steps outstanding"
 
+# Two wiring notices now share the "MANUAL STEP: hook wiring" heading (nightly-guard and, since
+# issue #87, write-scope-enforce), so the marks above discriminate on each notice's own body.
+# Matching the shared heading would make the two indistinguishable.
+
 # build_home <name> <wired:yes|no|nofile> <retired:yes|no> — returns the fixture HOME path.
+# "wired: yes" means BOTH hooks are wired, i.e. genuinely nothing outstanding.
 build_home() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   case "$2" in
-    yes) printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
+    yes) printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     no)  printf '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     nofile) : ;;
   esac
@@ -90,6 +96,26 @@ OUT=$(run_sync "$(build_home d nofile no)")
 case "$OUT" in
   *"$WIRING_MARK"*) ok "D1: wiring notice printed when settings.json is missing (fail-safe)" ;;
   *) bad "D1: missing settings.json silently treated as wired" ;;
+esac
+case "$OUT" in
+  *"$SCOPE_MARK"*) ok "D2: write-scope wiring notice also fail-safes on a missing settings.json" ;;
+  *) bad "D2: missing settings.json silently treated as write-scope-wired" ;;
+esac
+
+# =====================================================================================
+# E. The two wiring notices must be independent — issue #87 added the second one. If wiring
+# either hook suppressed the other's notice, installing one would silently mute the reminder for
+# the one still missing, which is the exact failure #85 set out to remove.
+_h="$TMP/e2"; mkdir -p "$_h/.claude/hooks"
+printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+OUT=$(run_sync "$_h")
+case "$OUT" in
+  *"$WIRING_MARK"*) bad "E1: nightly-guard notice printed although it IS wired" ;;
+  *) ok "E1: nightly-guard notice suppressed when only write-scope is missing" ;;
+esac
+case "$OUT" in
+  *"$SCOPE_MARK"*) ok "E2: write-scope notice fires independently of the nightly-guard one" ;;
+  *) bad "E2: write-scope notice suppressed although it is not wired" ;;
 esac
 
 echo "----"

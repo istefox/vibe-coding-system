@@ -168,6 +168,18 @@ The divergence from ADR-0018's sequential-fix invariant is deliberate and record
 instruction, not an enforcement** — no hook constrains a subagent's write paths by file, and building
 one needs its own issue. Phase 2's grouping stays load-bearing.
 
+**Addendum 2026-07-25d (write scope enforced, issue #87).** `write-scope-enforce.sh`, a
+`PreToolUse` hook on `Edit|Write|MultiEdit`, turns 25c's instruction into enforcement: it finds the
+calling subagent's transcript via `.agent_id`, reads the `you may edit ONLY <path>` line from the
+dispatch prompt, and denies writes elsewhere with a reason pointing at `deferred`. Inert by
+construction — no scope line means allow-and-exit, so nothing outside Step 6 Phase 3 is affected.
+Diverges from `pre-flight-pattern-enforce.sh` in two ways on purpose: it reads `user` entries (the
+marker is in the prompt, not model output) and it has **no main-session fallback**, since an
+orchestrator turn quoting a scope line would otherwise bind the whole session. The hook matches a
+string that lives in SKILL.md, so rewording that prompt makes it silently inert —
+`write-scope-enforce.test.sh` D1 pins the two together. Deployed by sync, **wired by hand**;
+inert until the `settings.json` entry exists.
+
 Detail: `docs/architecture/ADR-0016-dynamic-workflows-step5.md`.
 
 ## Decisions from chain deep-refactor-skill (ADR-0018)
