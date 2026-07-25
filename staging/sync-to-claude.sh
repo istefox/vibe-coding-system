@@ -155,7 +155,18 @@ if [ "$APPLY" -eq 1 ]; then
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" 2>/dev/null || true
 fi
 
-cat <<'NOTE'
+# MANUAL STEP notices are gated on the state they describe. They used to print unconditionally,
+# and on 2026-07-25 both were found already done — printing them every run made them fixed noise,
+# which is what buries a notice that actually matters. Each block below fires only when its step
+# is genuinely outstanding.
+MANUAL=0
+
+# Wiring: absent grep hit OR no settings.json at all. Fail-safe direction is to print — a state
+# that cannot be confirmed must not read as "already wired". grep, not jq: the script has no jq
+# dependency today and this check does not justify adding one.
+if ! grep -q 'nightly-guard' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
 
 --- MANUAL STEP: hook wiring (not auto-applied) ---
 Add this PreToolUse entry to ~/.claude/settings.json (alongside the Edit|Write protect-files entry):
@@ -165,14 +176,24 @@ Add this PreToolUse entry to ~/.claude/settings.json (alongside the Edit|Write p
 
 The staged reference version is staging/user/settings.json. Review the live file first — it may have
 diverged. nightly-guard is inert outside a nightly run, so wiring it globally is safe.
+NOTE
+fi
+
+if [ -f "$DEST/hooks/backup-before-deploy.sh" ]; then
+  MANUAL=1
+  cat <<'NOTE'
 
 --- MANUAL STEP: retired hook cleanup (not auto-applied) ---
 backup-before-deploy.sh is retired (issue #38, ADR-0034): never vendored into staging/, so this
-sync script has no PAIRS entry and no way to remove it from a deployed tree. If a deployed
-~/.claude/hooks/backup-before-deploy.sh still exists, review it (it is wired to no hook event in
+sync script has no PAIRS entry and no way to remove it from a deployed tree. The deployed
+~/.claude/hooks/backup-before-deploy.sh still exists — review it (it is wired to no hook event in
 settings.json and its body is a hardcoded one-shot backup dated 2026-05-19) and delete it by hand
 after confirming you no longer need that specific historical backup snapshot.
 NOTE
+fi
+
+# Say so explicitly. Printing nothing would be indistinguishable from having skipped the checks.
+[ "$MANUAL" -eq 0 ] && printf '\nno manual steps outstanding (hook wiring present, no retired hook to remove).\n'
 
 [ "$APPLY" -eq 0 ] && printf '\n(dry-run — no files written. Re-run with --apply after reviewing.)\n'
 exit 0
