@@ -175,5 +175,104 @@ else
   bad "F2: no-trailing-newline output as the last argument should pass"
 fi
 
+# =====================================================================================
+# Section G -- --global DUPLICATE removal vs the hard gate (issue #57, ADR-0044)
+# =====================================================================================
+# Step 3/4 delete a DUPLICATE section from the trimmed CLAUDE.md, leaving only a comment, on the
+# reasoning that the lines survive in ~/.claude/CLAUDE.md. Step 5.2 never passed the global file to
+# this script, so those lines had nowhere to be found.
+#
+# The issue that filed this said such a run "passes the gate only by accident" via substring
+# matching. That was true BEFORE issue #36. Since ADR-0032 made matching whole-line, it does not
+# pass at all: it ABORTS, every time --global finds a duplicate, which is the only thing --global
+# does. #36 did not cause that — it uncovered it by removing the accidental matches hiding it.
+# G1 pins the pre-fix behaviour so the direction of the change stays legible.
+#
+# Fix (ADR-0044, Option 2): --duplicate-lines + --duplicate-source. Deliberately NOT Option 1
+# (append the global file to the union), which would make EVERY original line satisfiable by the
+# global file and turn a false abort into a false pass on the project's own hard gate. G4 is the
+# assertion that earns the choice.
+
+G_DIR=$(mktemp -d "$TMP/g-global.XXXXXX")
+printf '# CLAUDE.md\n\n## Git\n\n- Conventional Commits in English\n\n## Python\n\n- Use python3 always\n' \
+  > "$G_DIR/original.md"
+printf '# CLAUDE.md\n\n<!-- duplicate of ~/.claude/CLAUDE.md — removed -->\n\n## Python\n\n- Use python3 always\n' \
+  > "$G_DIR/trimmed.md"
+printf '## Git\n- Conventional Commits in English\n' > "$G_DIR/dup-lines.txt"
+printf '## Git\n\n- Conventional Commits in English\n\n## Something else entirely\n' \
+  > "$G_DIR/global.md"
+
+# G1: without the flags, a DUPLICATE-removed section still aborts. Callers that do not opt in keep
+# today's strict behaviour exactly.
+if bash "$CHECK_SH" "$G_DIR/original.md" "$G_DIR/trimmed.md" >/dev/null 2>&1; then
+  bad "G1: DUPLICATE-removed lines passed the gate with no global source given"
+else
+  ok "G1: without the flags a DUPLICATE-removed section still aborts (unchanged contract)"
+fi
+
+# G2: with both flags, lines removed as DUPLICATE and present whole-line in the global file count
+# as preserved.
+if bash "$CHECK_SH" --duplicate-lines "$G_DIR/dup-lines.txt" --duplicate-source "$G_DIR/global.md" \
+     "$G_DIR/original.md" "$G_DIR/trimmed.md" >/dev/null 2>&1; then
+  ok "G2: DUPLICATE-removed lines verified against the global file pass the gate"
+else
+  bad "G2: DUPLICATE-removed lines present in the global file should pass"
+fi
+
+# G3: a line listed as DUPLICATE-removed but NOT actually in the global file still fails. The
+# exemption is verification, not a blanket waiver for anything the pipeline claims it removed.
+printf '## Absent from global\n' > "$G_DIR/dup-lines-lying.txt"
+printf '# CLAUDE.md\n\n## Absent from global\n' > "$G_DIR/orig-lying.md"
+printf '# CLAUDE.md\n' > "$G_DIR/trimmed-lying.md"
+if bash "$CHECK_SH" --duplicate-lines "$G_DIR/dup-lines-lying.txt" --duplicate-source "$G_DIR/global.md" \
+     "$G_DIR/orig-lying.md" "$G_DIR/trimmed-lying.md" >/dev/null 2>&1; then
+  bad "G3: a claimed-duplicate line absent from the global file was waived through"
+else
+  ok "G3: a claimed-duplicate line absent from the global file still fails"
+fi
+
+# G4: THE assertion that earns Option 2. A line lost from the local outputs, NOT in the duplicate
+# set, but present in the global file, must still fail. Option 1 (global file appended to the
+# union) would pass this — which is exactly why it was rejected.
+printf '# CLAUDE.md\n\n## Something else entirely\n' > "$G_DIR/orig-leak.md"
+printf '# CLAUDE.md\n' > "$G_DIR/trimmed-leak.md"
+if bash "$CHECK_SH" --duplicate-lines "$G_DIR/dup-lines.txt" --duplicate-source "$G_DIR/global.md" \
+     "$G_DIR/orig-leak.md" "$G_DIR/trimmed-leak.md" >/dev/null 2>&1; then
+  bad "G4: a genuinely lost line was excused because the global file happens to contain it"
+else
+  ok "G4: the global file excuses only lines in the duplicate set, not any lost line"
+fi
+
+# G5/G6: one flag without the other is a usage error, never a silent half-check. Asserted on the
+# stderr TEXT, not merely on a non-zero exit: before the fix these calls also exit non-zero, but
+# only because the flag name gets read as the <original> positional and the file does not exist.
+# Same exit code, entirely different reason — a code-only check would pass here and prove nothing.
+G5_ERR=$(bash "$CHECK_SH" --duplicate-lines "$G_DIR/dup-lines.txt" \
+  "$G_DIR/original.md" "$G_DIR/trimmed.md" 2>&1 >/dev/null)
+case "$G5_ERR" in
+  *--duplicate-source*) ok "G5: --duplicate-lines without --duplicate-source is a named usage error" ;;
+  *) bad "G5: --duplicate-lines alone should name the missing --duplicate-source (got: $G5_ERR)" ;;
+esac
+
+G6_ERR=$(bash "$CHECK_SH" --duplicate-source "$G_DIR/global.md" \
+  "$G_DIR/original.md" "$G_DIR/trimmed.md" 2>&1 >/dev/null)
+case "$G6_ERR" in
+  *--duplicate-lines*) ok "G6: --duplicate-source without --duplicate-lines is a named usage error" ;;
+  *) bad "G6: --duplicate-source alone should name the missing --duplicate-lines (got: $G6_ERR)" ;;
+esac
+
+# G7: SKILL.md must stop citing --global duplicate-removal as an example of the multiplicity
+# exemption — those lines are now verified explicitly, not tolerated implicitly.
+if grep -q 'duplicate-removal step (Step 3/4)' "$SKILL_MD"; then
+  bad "G7: SKILL.md still lists --global duplicate-removal under the multiplicity exemption"
+else
+  ok "G7: SKILL.md no longer files --global duplicate-removal under the multiplicity exemption"
+fi
+
+# G8: SKILL.md Step 5.2 must actually pass the flags, or the script change is dead code.
+grep -qF -- '--duplicate-lines' "$SKILL_MD" && grep -qF -- '--duplicate-source' "$SKILL_MD" \
+  && ok "G8: SKILL.md wires both flags into the Step 5.2 invocation" \
+  || bad "G8: SKILL.md should pass --duplicate-lines and --duplicate-source in Step 5.2"
+
 printf 'PASS=%d FAIL=%d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

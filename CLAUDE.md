@@ -587,6 +587,37 @@ nobody runs for a one-line frontmatter fix.
 
 Detail: `docs/architecture/ADR-0043-93-pairs-completeness.md`.
 
+## Decisions from the claude-md-slim global-duplicate gate (ADR-0044)
+
+Closes issue #57. `--global` deletes a DUPLICATE section from the trimmed CLAUDE.md because its
+content lives in `~/.claude/CLAUDE.md`, but Step 5.2's `content-union-check.sh` was never given that
+file.
+
+- **The issue's premise was stale and the truth was worse.** It said such a run "passes the gate only
+  by accident" via substring matching. ADR-0032 replaced substring with whole-line matching, so it
+  did not pass — it **aborted**, every time `--global` found a duplicate, which is all `--global`
+  does. Reproduced live before fixing. #36 did not break it; it uncovered it. Test G1 pins the
+  pre-fix behaviour.
+- **Option 1 (append the global file to the union) rejected on gate strength, not effort.** It makes
+  every original line satisfiable by the global file, so a line genuinely lost in a botched
+  extraction would count as preserved because something identical sits in the global CLAUDE.md — a
+  false pass on the hard gate, traded for a false abort. **Test G4 fails under Option 1**, which is
+  what makes the choice enforced rather than merely stated.
+- **The exemption is a verification, both flags or neither.** A line counts only if it is *both*
+  declared removed *and* actually present whole-line in the global file (G3). One flag alone is a
+  named usage error: a declared-but-unverified exemption is worse than none. G5/G6 assert the stderr
+  text, not just a non-zero exit — before the fix those calls also exited non-zero, for the unrelated
+  reason that the flag name was read as the `<original>` positional.
+- **The skill's own `tests/run-tests.sh` tests the DEPLOYED copy** (`$HOME/.claude/skills/…`), so its
+  green result during this work validated the old script and proved nothing about the change. Re-run
+  it after sync. ADR-0032 flagged the file as `$HOME`-coupled and CI-dark; this is the first time it
+  actively misled a verification step.
+- **The 60% DUPLICATE heuristic is untouched:** a section only mostly present in the global file
+  still gets removed whole, and its minority lines now fail loudly instead of vanishing. Right
+  direction, not the same as solved.
+
+Detail: `docs/architecture/ADR-0044-57-global-duplicate-union-check.md`.
+
 ## Decisions from the native-build tool-resolution fix (ADR-0038)
 
 Root-cause classification and fix for issue #63 (found by the 2026-07-14 post-upgrade smoke test):

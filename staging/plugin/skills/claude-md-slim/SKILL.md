@@ -116,6 +116,17 @@ DUPLICATE sections are tracked separately from the `extractable` plan list. They
 the Step 6 diff as `<!-- duplicate of ~/.claude/CLAUDE.md — removed -->` blocks. The global
 file is never written.
 
+**Collect the removed lines as you go.** Append every non-empty line of each DUPLICATE section
+to a temp file — Step 5.2 needs it to verify the claim that those lines survive in the global
+file (issue #57, ADR-0044). Without it the content-preservation gate has no way to see where the
+content went and aborts the whole plan:
+
+```bash
+DUP_LINES_TMP=$(mktemp /tmp/claude-md-slim-duplines.XXXXXX)
+# inside the DUPLICATE branch, before rm -f "$SECTION_TMP":
+grep -v '^[[:space:]]*$' "$SECTION_TMP" >> "$DUP_LINES_TMP"
+```
+
 ### Step 4 — Plan extraction
 
 For each `extractable` row:
@@ -156,12 +167,28 @@ Write the planned trimmed CLAUDE.md and each planned rules file to temp files fo
 
 2. **Content-preservation invariant** (the HARD gate):
    ```bash
+   # [--global only, and only when Step 3 flagged at least one DUPLICATE section]
+   # Without these two flags the removed lines are in no output file and the gate aborts every
+   # such run (issue #57, ADR-0044). They are passed together or not at all — one alone is a
+   # usage error, by design, since a declared-but-unverified exemption is worse than none.
+   DUP_ARGS=""
+   if [ -n "${DUP_LINES_TMP:-}" ] && [ -s "${DUP_LINES_TMP:-/dev/null}" ]; then
+     DUP_ARGS="--duplicate-lines $DUP_LINES_TMP --duplicate-source $HOME/.claude/CLAUDE.md"
+   fi
+
    bash "$SKILL_DIR/scripts/content-union-check.sh" \
+     $DUP_ARGS \
      "$CLAUDE_MD" \
      "$planned_trimmed_tmp" \
      "$planned_rules_tmp_1" \
      "$planned_rules_tmp_2" ...
    ```
+
+   The global file is read, never appended to the union: a line removed as a DUPLICATE is
+   preserved only if it is *both* in the removed-lines list *and* present whole-line in
+   `~/.claude/CLAUDE.md`. Any other lost line still fails, even if the global file happens to
+   contain an identical one. See ADR-0044 for why the simpler "add the global file as another
+   union input" was rejected.
    If the script exits non-zero, ABORT the plan immediately. Print the missing-line count
    reported on stderr. Do NOT show the diff, do NOT present the HITL question, do NOT write.
    The user message is:
@@ -180,9 +207,15 @@ Write the planned trimmed CLAUDE.md and each planned rules file to temp files fo
      line survives at least once, not that it survives the same number of times. A line
      duplicated in the original CLAUDE.md and collapsed to a single copy in the output is not
      content loss: the pipeline's own merge step (Step 7.4, dedup by exact-line match against a
-     pre-existing target rules file) and the `--global` duplicate-removal step (Step 3/4)
-     legitimately reduce occurrence counts by design. Enforcing multiplicity would make the
-     invariant fail on the skill's own intended behavior. See ADR-0032 D2.
+     pre-existing target rules file) legitimately reduces occurrence counts by design. Enforcing
+     multiplicity would make the invariant fail on the skill's own intended behavior. See
+     ADR-0032 D2.
+   - **`--global` DUPLICATE removal is no longer filed here** (ADR-0044, issue #57). It used to be
+     listed above as another example of the multiplicity exemption, which was never accurate:
+     those lines are removed entirely, not merely deduplicated, so no amount of multiplicity
+     tolerance covered them and the gate aborted on every `--global` run that found a duplicate.
+     They are now verified explicitly against `~/.claude/CLAUDE.md` via `--duplicate-lines` /
+     `--duplicate-source`, which is a check, not an exemption.
 
 3. **Reduction metric.** Compute
    `R = (N_before - N_after) * 100 / N_before`.
