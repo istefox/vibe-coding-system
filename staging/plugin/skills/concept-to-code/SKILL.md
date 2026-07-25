@@ -835,6 +835,16 @@ Phase 2 — Group findings by file (in-script, no agent):
   const FIX_EFFORT = { debugger: "high", refactorer: "medium", coder: "high" };
 
 Phase 3 — Fix in parallel per file group:
+  // model: "opus" deliberately overrides the sonnet frontmatter of coder/refactorer/debugger.
+  // This is a cross-skill convention, not drift here: same override in review-triage-fix
+  // (SKILL.md:170 — "fix agents make judgment calls without a structured plan, Opus reduces
+  // the risk of introducing new issues") and in deep-refactor (its "model: opus requirement"
+  // section), decided in ADR-0018 § Dispatch model. Model and effort come from different
+  // places on purpose — model overridden to opus, effort still each agent's frontmatter value
+  // via FIX_EFFORT — so the mismatch below is intended, not a leftover.
+  // Parallel dispatch is safe ONLY because Phase 2 grouped findings by file — one file per agent,
+  // so no two agents ever edit the same file. ADR-0018 otherwise requires fix phases to be
+  // sequential precisely to avoid that conflict. Change Phase 2's grouping and this breaks.
   await parallel(fileGroups.map(group => () =>
     agent(`
       Fix the following findings in ${group[0].file}:

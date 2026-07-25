@@ -133,8 +133,19 @@ lookup keyed by `fix_type`, since `agentType` there is chosen at runtime. `step6
 asserts the map against the agent frontmatter, so Step 6 is the one call site where the
 not-linked problem above is caught by CI rather than by review. Corrected in the same edit: the
 Step 6 template called `agent(opts, prompt)`, inverting the `agent(prompt, opts)` API that Step 5
-already had right. Phase 3's `model: "opus"` override of the fix agents' `sonnet` frontmatter is
-older than this change and stays as-is, recorded in no ADR.
+already had right.
+
+**Correction (same day).** That addendum first said Phase 3's `model: "opus"` override was
+"recorded in no ADR". Wrong. It is the third site of a cross-skill convention decided in
+**ADR-0018 § Dispatch model** and written out twice — `review-triage-fix/SKILL.md:170` and
+`deep-refactor/SKILL.md`'s "model: opus requirement" section. It reached this file byte-identical
+through the ADR-0024 vendoring commit (`5e87329`), which is why no design commit for it exists
+here. What was actually missing was Step 6's cross-reference, now added in Phase 3 along with the
+note that model (`opus`, overridden) and effort (frontmatter, via `FIX_EFFORT`) come from
+different places on purpose. Recorded in the same comment: ADR-0018 requires fix phases to be
+sequential, and Phase 3 parallelises anyway — safe only because Phase 2 groups findings by file,
+one file per agent. That mitigation is load-bearing and was implicit; `step6-effort-pin.test.sh`
+F1/F2 now pin both notes.
 
 Detail: `docs/architecture/ADR-0016-dynamic-workflows-step5.md`.
 

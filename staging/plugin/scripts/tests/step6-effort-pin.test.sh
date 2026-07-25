@@ -9,6 +9,9 @@
 # cycle ran at the orchestrator's level and discarded each agent's frontmatter calibration
 # (refactorer being the visible case: frontmatter medium, inherited high).
 #
+# Section F additionally covers the Phase 3 dispatch block's documentation: the file is now
+# about that block generally, not only the effort pin it was created for.
+#
 # Every assertion is scoped to the Step 6 workflow-dispatch block, extracted below. The
 # Step 5 block already contains the phrase "omit to inherit the session effort", so a
 # whole-file grep would report green while Step 6 stayed unpinned.
@@ -113,6 +116,28 @@ if grep -q 'Pin `effort` explicitly too' "$CC_SKILL" \
   ok "E1: Step 5 effort-pin anchors intact (C6/C7 non-regression)"
 else
   bad "E1: Step 5 effort-pin text was disturbed by the Step 6 edit"
+fi
+
+# =====================================================================================
+# F. Phase 3 documentation. The model: "opus" override contradicts the fix agents' sonnet
+# frontmatter and arrived byte-identical via the ADR-0024 vendoring commit, so it reads as
+# drift unless the block says otherwise. The rationale of record lives in ADR-0018 and in
+# review-triage-fix/SKILL.md:170 — Step 6 is the third site of that convention and was the
+# only one not citing it.
+if grep -q 'ADR-0018' "$STEP6"; then
+  ok "F1: Phase 3 cites ADR-0018 for the opus override"
+else
+  bad "F1: opus override has no rationale pointer in Step 6"
+fi
+
+# F2: ADR-0018 argues fix phases must be sequential Agent-tool, never Workflow, partly because
+# parallel fixes on a shared tree risk edit conflicts. Phase 3 uses parallel() anyway; it is
+# safe only because Phase 2 grouped findings by file, so no two agents touch the same file.
+# That mitigation is load-bearing and was implicit — a Phase 2 refactor could drop it blind.
+if grep -q 'one file per agent' "$STEP6"; then
+  ok "F2: the by-file grouping is documented as what makes parallel fixes safe"
+else
+  bad "F2: parallel-dispatch safety rationale missing from Phase 3"
 fi
 
 echo "----"
