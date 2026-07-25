@@ -196,7 +196,7 @@ Read the plan. If the same absolute file path appears in multiple unchecked task
 emit a warning line before dispatching. Do not stop.
 
 **Dispatch:**
-- `hook_verified=true`: Workflow dispatch (ultracode keyword — same prompt as c2c Step 5's "Workflow dispatch path (hook_verified = true)" block),
+- `hook_verified=true`: Workflow dispatch (ultracode keyword — same prompt as c2c's "Workflow dispatch path — Step 5 implementation (hook_verified = true)" block),
   with `$_project_context` injection if non-empty, with `coder_model` if set. That block pins `model` AND `effort` on every `agent()`
   call; carry both across unchanged, since a Workflow subagent inherits the session value for
   whichever one is omitted.
@@ -213,9 +213,8 @@ On halt: skip Steps 6 and 7, jump to Phase 2 (morning report).
 
 #### Step 6 — Review + fix
 
-Same dispatch as c2c Step 6: Workflow path (`hook_verified=true`, its "Workflow dispatch path
-(hook_verified = true)" block — note Step 5 carries a block with the identical heading, so take
-Step 6's) or `review-triage-fix` skill fallback.
+Same dispatch as c2c Step 6: Workflow path (`hook_verified=true`, c2c's "Workflow dispatch path — Step 6 review cycle (hook_verified = true)" block)
+or `review-triage-fix` skill fallback.
 
 After fixes: re-run the approved test-cmd:
 ```bash

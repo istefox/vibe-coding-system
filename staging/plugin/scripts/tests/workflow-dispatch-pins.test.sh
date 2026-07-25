@@ -84,22 +84,33 @@ check_ref() {
 check_ref "B2" "Pre-dispatch: worktree isolation check"
 check_ref "B3" "parallel task conflict scan"
 
-# B4: the Step 5 / Step 6 workflow blocks share the heading "Workflow dispatch path
-# (hook_verified = true)" verbatim, so a bare heading reference is ambiguous between them.
-# autopilot-build must disambiguate by step, not just repeat the heading.
-if grep -q "Step 5.*Workflow dispatch path" "$AB" && grep -q "Step 6.*Workflow dispatch path" "$AB"; then
-  ok "B4: both workflow references name their step, resolving the duplicate heading"
-else
-  bad "B4: workflow dispatch references do not disambiguate Step 5 from Step 6"
-fi
+# B4a/B4b: the Step 5 and Step 6 workflow blocks used to share a heading verbatim, which made any
+# bare reference ambiguous. They now carry distinct names. Each must be named by autopilot-build AND
+# resolve to exactly one heading in c2c — stricter than mere existence, because it fails both on a
+# rename in c2c and on a duplicate being reintroduced.
+check_unique_ref() {
+  _label="$1"; _needle="$2"
+  if ! grep -q "$_needle" "$AB"; then
+    bad "$_label: autopilot-build does not name \"$_needle\""
+    return
+  fi
+  _n=$(grep -c "^#### $_needle\$" "$CC")
+  if [ "$_n" -eq 1 ]; then
+    ok "$_label: named in autopilot-build, exactly one such heading in concept-to-code"
+  else
+    bad "$_label: expected exactly 1 heading \"$_needle\" in concept-to-code, found $_n"
+  fi
+}
+check_unique_ref "B4a" "Workflow dispatch path — Step 5 implementation (hook_verified = true)"
+check_unique_ref "B4b" "Workflow dispatch path — Step 6 review cycle (hook_verified = true)"
 
-# B5: sanity — that heading really is duplicated in c2c, which is why B4 matters. If a future
-# edit makes it unique, B4's requirement becomes cosmetic rather than load-bearing.
-DUP=$(grep -c '^#### Workflow dispatch path (hook_verified = true)$' "$CC")
-if [ "$DUP" -eq 2 ]; then
-  ok "B5: the heading is still duplicated in c2c (2 occurrences), so B4 is load-bearing"
+# B5: the old ambiguous form must be gone entirely. Leaving one behind would mean a half-done
+# rename, with some references pointing at a heading that still collides.
+OLD=$(grep -c '^#### Workflow dispatch path (hook_verified = true)$' "$CC")
+if [ "$OLD" -eq 0 ]; then
+  ok "B5: the old shared heading no longer appears in concept-to-code"
 else
-  bad "B5: expected 2 occurrences of the shared heading in c2c, found $DUP"
+  bad "B5: the old shared heading still appears $OLD time(s) — rename incomplete"
 fi
 
 echo "----"

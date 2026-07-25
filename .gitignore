@@ -29,14 +29,3 @@ docs/books/
 .remember/recent.md
 .remember/archive.md
 .remember/remember.md
-.claude/.triage-fix-last-main.json
-.claude/.triage-fix-last-feat_28-vendor-deployed-only-skills-and-hooks.json
-.claude/.triage-fix-last-feat_29-refresh-stale-staging-copies.json
-.claude/.triage-fix-last-feat_30-clean-public-repo-private-history.json
-.claude/.triage-fix-last-feat_31-c2c-bsd-slug-autopilot-gates.json
-.claude/.triage-fix-last-feat_32-manifest-helpers-guards.json
-.claude/.triage-fix-last-feat_33-hook-verify-session-filter.json
-.claude/.triage-fix-last-feat_34-scope-guards.json
-.claude/.triage-fix-last-feat_35-refactor-snapshot-deep-refactor.json
-.claude/.triage-fix-last-feat_36-claude-md-slim-union-check.json
-.claude/.triage-fix-last-feat_37-vibe-status-recursion-chains.json
