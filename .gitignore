@@ -18,8 +18,12 @@
 *.bak
 *.bak-*
 
-# Reference material (local reading copies, not repo content)
-docs/books/
+# Reference material (local reading copies, not repo content).
+# Directory contents are ignored, not the directory itself — a `docs/books/` pattern would
+# exclude the parent and make the negation below inert (git cannot re-include a file whose
+# parent directory is excluded). The integration report is repo content and is tracked.
+docs/books/*
+!docs/books/INTEGRATION-REPORT-agentic-spec.md
 
 # Session memory (runtime, not source of truth)
 .remember/logs/
