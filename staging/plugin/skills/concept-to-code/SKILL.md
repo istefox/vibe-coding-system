@@ -801,7 +801,7 @@ Send the following workflow prompt to the session:
 ```
 ultracode — use a workflow to run a parallel review-and-fix cycle.
 IMPORTANT: The workflow script must be deterministic — do NOT use Date.now(), new Date(), or Math.random(). These calls throw at runtime and break workflow resume (CC 2.1.172 removed the validation warning but the runtime constraint remains).
-IMPORTANT: every agent() call pins its model explicitly (reviewer → sonnet, fix agents → opus). A workflow subagent with agentType but no model inherits the main-loop (CLI session) model, not the agent frontmatter — so omit nothing.
+IMPORTANT: every agent() call pins BOTH its model and its effort explicitly (reviewer → sonnet/high, fix agents → opus plus the FIX_EFFORT value for their type). A workflow subagent with agentType but no model inherits the main-loop (CLI session) model, not the agent frontmatter. `opts.effort` behaves identically — the Workflow tool documents it as "omit to inherit the session effort" — so an omitted effort silently runs the whole review-and-fix cycle at the orchestrator's level and discards each agent's frontmatter calibration. Omit neither.
 
 FINDINGS_SCHEMA (each finding object):
 {
@@ -815,11 +815,11 @@ FINDINGS_SCHEMA (each finding object):
 }
 
 Phase 1 — Review:
-  agent({ agentType: "reviewer", model: "sonnet" }, `
+  agent(`
     Review all files modified in this implementation cycle.
     Return a JSON array of findings matching FINDINGS_SCHEMA.
     Key: "findings". No other top-level keys.
-  `)
+  `, { agentType: "reviewer", model: "sonnet", effort: "high" })
 
 Phase 2 — Group findings by file (in-script, no agent):
   const findings = JSON.parse(reviewResult).findings ?? [];
@@ -829,23 +829,27 @@ Phase 2 — Group findings by file (in-script, no agent):
     byFile[f.file].push(f);
   }
   const fileGroups = Object.values(byFile);
+  // agentType is chosen at runtime from fix_type, so effort cannot be a literal — it is
+  // looked up by the same key. Values mirror each agent's own frontmatter, exactly as the
+  // Step 5 table does; they are not linked, so a frontmatter change means changing this too.
+  const FIX_EFFORT = { debugger: "high", refactorer: "medium", coder: "high" };
 
 Phase 3 — Fix in parallel per file group:
   await parallel(fileGroups.map(group => () =>
-    agent({ agentType: group[0].fix_type, model: "opus" }, `
+    agent(`
       Fix the following findings in ${group[0].file}:
       ${JSON.stringify(group, null, 2)}
       Use Pre-flight Pattern Classifier (ADR-0001) for every Edit.
       Return: { "fixed": [<id>, ...], "skipped": [<id>, ...], "notes": "<string>" }
-    `)
+    `, { agentType: group[0].fix_type, model: "opus", effort: FIX_EFFORT[group[0].fix_type] })
   ));
 
 Phase 4 — Re-review:
-  agent({ agentType: "reviewer", model: "sonnet" }, `
+  agent(`
     Re-review all files that were fixed in Phase 3.
     Confirm each finding from Phase 1 is resolved or document why it was skipped.
     Return: { "resolved": [<id>, ...], "remaining": [<id>, ...], "summary": "<string>" }
-  `)
+  `, { agentType: "reviewer", model: "sonnet", effort: "high" })
 
 Final subagent writes <project_root>/.claude/step6-report.json:
 {

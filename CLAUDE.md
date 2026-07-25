@@ -125,6 +125,17 @@ orchestrator would have silently raised every dispatched agent and discarded the
 calibration. The table in SKILL.md is not linked to the frontmatter files: changing one means
 changing both.
 
+**Addendum 2026-07-25b (Step 6).** The same pin now covers the Step 6 review-and-fix workflow,
+which the first pass missed: it was explicit about `model` and silent about `effort`, so the whole
+cycle inherited the orchestrator's level, `refactorer` most visibly (frontmatter `medium`). Both
+`reviewer` dispatches pin `sonnet`/`high`; the fix agents resolve effort through a `FIX_EFFORT`
+lookup keyed by `fix_type`, since `agentType` there is chosen at runtime. `step6-effort-pin.test.sh`
+asserts the map against the agent frontmatter, so Step 6 is the one call site where the
+not-linked problem above is caught by CI rather than by review. Corrected in the same edit: the
+Step 6 template called `agent(opts, prompt)`, inverting the `agent(prompt, opts)` API that Step 5
+already had right. Phase 3's `model: "opus"` override of the fix agents' `sonnet` frontmatter is
+older than this change and stays as-is, recorded in no ADR.
+
 Detail: `docs/architecture/ADR-0016-dynamic-workflows-step5.md`.
 
 ## Decisions from chain deep-refactor-skill (ADR-0018)
