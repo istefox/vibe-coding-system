@@ -61,6 +61,7 @@ plugin/scripts/stop-gate.sh|hooks/stop-gate.sh
 plugin/scripts/pre-flight-pattern-enforce.sh|hooks/pre-flight-pattern-enforce.sh
 plugin/scripts/write-scope-enforce.sh|hooks/write-scope-enforce.sh
 plugin/scripts/agent-write-scope.sh|hooks/agent-write-scope.sh
+plugin/scripts/agent-command-scope.sh|hooks/agent-command-scope.sh
 plugin/scripts/db-backup-guardrail.sh|hooks/db-backup-guardrail.sh
 plugin/scripts/approve-test-cmd.sh|hooks/approve-test-cmd.sh
 plugin/scripts/session-context-inject.sh|hooks/session-context-inject.sh
@@ -175,7 +176,8 @@ if [ "$APPLY" -eq 1 ]; then
   chmod +x "$DEST/hooks/nightly-guard.sh" "$DEST/hooks/publish-feature.sh" \
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
-    "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" 2>/dev/null || true
+    "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
+    "$DEST/hooks/agent-command-scope.sh" 2>/dev/null || true
 fi
 
 # MANUAL STEP notices are gated on the state they describe. They used to print unconditionally,
@@ -233,6 +235,24 @@ agent-write-scope (issue #58, gap 2) confines the architect agent to docs/archit
 docs/superpowers/plans/. Claude Code's frontmatter grammar has no path restriction for Write, so
 architect.md's write-scope line is prose until this hook enforces it. Inert for every other agent
 type. Until this entry exists the hook is deployed but never invoked.
+NOTE
+fi
+
+if ! grep -q 'agent-command-scope' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this PreToolUse entry to ~/.claude/settings.json (alongside the agent-write-scope entry):
+
+  { "matcher": "Bash",
+    "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/agent-command-scope.sh" } ] }
+
+agent-command-scope (issue #58, gap 1) denies architect and reviewer any mutating git command,
+directly or wrapped in bash -c / python3 -c / awk. Their read-only git grants are otherwise
+subsumed by the interpreters they hold for verification. Inert for every other agent type. It is a
+guardrail against a shortcut, NOT a sandbox — see ADR-0045's threat model before relying on it.
+Until this entry exists the hook is deployed but never invoked.
 NOTE
 fi
 

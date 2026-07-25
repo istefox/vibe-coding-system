@@ -27,6 +27,7 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 WIRING_MARK="alongside the Edit|Write protect-files entry"
 SCOPE_MARK="alongside the pre-flight-pattern-enforce entry"
 ARCH_MARK="alongside the write-scope-enforce entry"
+CMD_MARK="alongside the agent-write-scope entry"
 RETIRED_MARK="MANUAL STEP: retired hook cleanup"
 CLEAR_MARK="no manual steps outstanding"
 
@@ -39,7 +40,7 @@ CLEAR_MARK="no manual steps outstanding"
 build_home() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   case "$2" in
-    yes) printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
+    yes) printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     no)  printf '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     nofile) : ;;
   esac
@@ -122,11 +123,30 @@ case "$OUT" in
   *"$SCOPE_MARK"*) ok "E2: write-scope notice fires independently of the nightly-guard one" ;;
   *) bad "E2: write-scope notice suppressed although it is not wired" ;;
 esac
-# E3: three wiring notices now share the "hook wiring" heading. Each must key off its own hook,
-# so wiring any one of them cannot mute the reminders for the other two.
+# E3: four wiring notices now share the "hook wiring" heading. Each must key off its own hook,
+# so wiring any one of them cannot mute the reminders for the others.
 case "$OUT" in
   *"$ARCH_MARK"*) ok "E3: agent-write-scope notice fires independently too" ;;
   *) bad "E3: agent-write-scope notice suppressed although it is not wired" ;;
+esac
+case "$OUT" in
+  *"$CMD_MARK"*) ok "E4: agent-command-scope notice fires independently too (issue #58 gap 1)" ;;
+  *) bad "E4: agent-command-scope notice suppressed although it is not wired" ;;
+esac
+
+# E5: the reverse direction for the newest notice — wiring it must suppress its own reminder while
+# leaving the others alone. Without this, E4 alone would pass on a notice that prints
+# unconditionally, which is the fixed-noise problem #85 existed to remove.
+_h="$TMP/e5"; mkdir -p "$_h/.claude/hooks"
+printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+OUT5=$(run_sync "$_h")
+case "$OUT5" in
+  *"$CMD_MARK"*) bad "E5: agent-command-scope notice printed although it IS wired" ;;
+  *) ok "E5: agent-command-scope notice suppressed once wired" ;;
+esac
+case "$OUT5" in
+  *"$ARCH_MARK"*) ok "E6: wiring agent-command-scope does not mute the agent-write-scope notice" ;;
+  *) bad "E6: agent-write-scope notice muted by an unrelated hook being wired" ;;
 esac
 
 echo "----"
