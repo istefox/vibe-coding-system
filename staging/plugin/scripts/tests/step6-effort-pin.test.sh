@@ -144,6 +144,25 @@ else
   bad "F2: parallel-dispatch safety rationale missing from Phase 3"
 fi
 
+# F2b (issue #83): the grouping alone bounds where the FINDINGS are, not where the EDITS land.
+# An agent fixing an import or a shared helper can write a file that was nobody's assigned file,
+# and then two agents collide on it. The prompt must forbid that explicitly.
+if grep -q 'edit ONLY' "$STEP6"; then
+  ok "F2b: the fix-agent prompt constrains writes to its assigned file"
+else
+  bad "F2b: no write-scope constraint — grouping bounds findings, not edits (issue #83)"
+fi
+
+# F3: a cross-file need has to survive aggregation, so it is a structured field and not prose in
+# `notes`. It must appear in BOTH schemas — the fix agent's return and step6-report.json — or the
+# orchestrator never sees what the agent deferred.
+F3N=$(grep -c '"deferred"' "$STEP6")
+if [ "$F3N" -ge 2 ]; then
+  ok "F3: deferred present in both the fix-agent return and the step6-report schema"
+else
+  bad "F3: expected deferred in 2 schemas, found $F3N occurrence(s)"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

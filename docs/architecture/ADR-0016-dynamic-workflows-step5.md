@@ -507,6 +507,41 @@ The audit log cannot distinguish a *workflow* coder from an Agent-tool coder, si
 
 ---
 
+## Addendum 2026-07-25c — fix-agent write scope in Step 6 Phase 3 (issue #83)
+
+**Amends:** nothing in the decision above. Adds a constraint to the Step 6 workflow dispatch path
+this ADR owns.
+
+ADR-0018 § Dispatch model requires fix phases to be **sequential Agent-tool, never Workflow**, partly
+because parallel fixes mutating a shared tree risk edit conflicts. `review-triage-fix` states the
+same as an invariant ("Dispatch always sequential. Never fix in parallel: same codebase"). Step 6
+Phase 3 parallelises regardless, and PR #80 documented that tension without resolving it.
+
+**The divergence is deliberate and stays.** Phase 2 assigns each agent the findings for one distinct
+file, so the risk shape is not the unconstrained parallel fixing ADR-0018 argues against. But the
+grouping bounds where the *findings* are, not where the *edits* land: an agent resolving an import or
+a shared helper could write a file that was nobody's assigned file, and two agents would then collide
+on it. Phase 3's prompt now forbids that — an agent may edit only its assigned file, and a cross-file
+need is recorded in a `deferred` array rather than acted on. Phase 4 confirms or dismisses each
+deferred entry without acting, and the orchestrator surfaces the confirmed ones to the user.
+
+**Limitation, stated plainly: this is an instruction to the agent, not an enforcement.** No hook
+constrains a subagent's write paths by file today. A determined or confused agent can still write
+outside its scope, and nothing would stop it. Building that enforcement is a separate design — a
+`PreToolUse` matcher that knows the dispatching agent's assigned path — and belongs in its own issue
+rather than being implied by this addendum.
+
+**Phase 2's grouping remains load-bearing.** The whole argument for parallel fixing rests on one file
+per agent. Change how Phase 2 groups and this addendum's reasoning collapses with it.
+
+Options rejected: going sequential (removes the risk but discards the reason Step 6 uses Workflow at
+all), and documenting without acting (PR #80 already documented the first level; documenting the
+second without acting would read as deferral).
+
+Pinned by `step6-effort-pin.test.sh` F2b and F3.
+
+---
+
 ## References
 
 - Dynamic Workflows docs: `https://code.claude.com/docs/en/workflows`
