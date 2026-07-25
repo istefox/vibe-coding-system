@@ -161,6 +161,21 @@ Key architectural decisions:
 - **No test-cmd = report-only mode:** if `.claude/test-cmd` is `NONE` or baseline is RED, auto-fix is blocked. Gate 0 messaging explains why no fixes landed.
 - **Security findings:** always `report-only` regardless of `risk_level`. High-risk findings (hardcoded secrets, auth bypass) are never auto-fixed.
 
+**Addendum 2026-07-25 (Branch A pins).** The audit phase's Branch A (Workflow, the default) pinned
+neither `model` nor `effort`, so it ran on the session's values while the skill's own "model: opus
+requirement" section demanded Opus. Root cause was that section's wording — "in every **Agent-tool**
+dispatch" — naming one mechanism where two exist, leaving the Workflow branch outside its own rule.
+Both branches now pin `model: "opus", effort: "high"`, and the requirement is stated for both
+mechanisms. The model half was wrong on every default run; the effort half only looked right
+because `reviewer`'s frontmatter happens to match the orchestrator's current level.
+
+Same pass fixed the same class in `autopilot-build`, which delegated to `concept-to-code` by line
+range (`§475–486` and three others). All four had drifted off target, partly from this repo's own
+recent edits. They now name headings instead, and `workflow-dispatch-pins.test.sh` asserts each
+named heading still exists in the file it points into — a reference that fails loudly instead of
+rotting quietly. The Step 5 and Step 6 workflow blocks share a heading verbatim, so those two
+references must name their step as well.
+
 Detail: `docs/architecture/ADR-0018-deep-refactor-skill.md`.
 
 ## Decisions from the claude-md-slim chain (ADR-0019)
