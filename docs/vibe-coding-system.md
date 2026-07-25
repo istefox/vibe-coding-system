@@ -1196,6 +1196,33 @@ reads and amends ADR-0015 accordingly.
 
 Detail: `docs/architecture/ADR-0040-humanize-en-scope-narrowing.md`.
 
+### Correction 2026-07-25 (issue #91, architect git grant narrowed, ADR-0042)
+
+The 2026-07-11 reconciliation above restored `Bash(git *)` on architect as blueprint's own text,
+byte-for-byte, while ADR-0036 §2.1's prose asserted in the same paragraph that `git commit`/`git
+push` were not in the allowlist. Both statements cannot be true: by that section's own citation of
+`code.claude.com/docs/en/permissions`, the space before the wildcard enforces a word boundary and
+nothing else, so `Bash(git *)` matches every git subcommand. The global `permissions.deny` list
+covers `git push --force`, `git reset --hard` and `git clean -f`, but neither plain `git commit` nor
+plain `git push`. The architect could commit and push, and nothing recorded that as a decision.
+
+- **architect git scope** (sec. 3.1): `Bash(git *)` is replaced by `Bash(git log*), Bash(git diff*),
+  Bash(git show*), Bash(git status*), Bash(git rev-parse*)` — the read-only set §2.1's own rationale
+  named. This is a **deliberate divergence from the sec. 3.1 example above**, recorded in the
+  stacked correction under that example; do not "restore" it. The no-space form matches sec. 3.3's
+  blueprint-native `Bash(git diff*)` for reviewer, and no mutating git subcommand begins with any of
+  those five words.
+- **Prose and grant now held together by a test** (sec. 3.1): `architect.md` gains a **Command
+  scope** bullet naming the same five subcommands, and `agent-tool-scoping.test.sh` A14 asserts
+  every granted subcommand appears in it. The original defect was precisely a file whose prose and
+  frontmatter disagreed with no way for a reader to tell which one was authoritative.
+- **What this does not close** (sec. 3.1, 3.3): architect keeps `Bash(bash *)` and `Bash(python3 *)`,
+  so a wrapped `bash -c "git commit …"` still reaches git. That is the wrapped-command residual the
+  2026-07-11 note already disclosed, tracked as issue #58 gap 1 and unresolved. Reviewer is
+  untouched: its git grants were always read-only, and its exposure is the same wrapper class.
+
+Detail: `docs/architecture/ADR-0042-91-architect-git-grant.md`.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -1406,6 +1433,8 @@ Update your memory with patterns and decisions you discover.
 ```
 
 > **Deployment note (2026-07-11, ADR-0036):** the deployed/staging `architect.md` widens `tools` beyond the two entries above -- `Bash(git *), Bash(rg *)` stay unchanged, plus `Bash(bash *), Bash(npx markdownlint-cli2*), Bash(npx --yes markdownlint-cli2*), Bash(python3 *), Bash(shasum *)` for the verification-by-execution this roadmap's architect dispatches routinely use (test harness, `npx markdownlint-cli2`, frontmatter/YAML checks, content hashing) -- still far short of unrestricted Bash for direct invocations (the interpreter-class entries `bash`/`python3` remain a disclosed wrapped-command residual — ADR-0036 Consequences). `permissionMode: plan` is deliberately **not** restored: verified against `code.claude.com/docs/en/agent-sdk/permissions` (2026-07-11), plan mode blocks every file write pending manual approval "regardless of existing allow rules," and architect's only deliverable is writing the ADR and the plan -- every unattended dispatch (`autopilot-build`, `nightly-autopilot`) would stall on that gate. `effort: xhigh`, not `max` (`max` does not persist in file-based agent config -- `code.claude.com/docs/en/model-config`, 2026-07-11). `memory: project` (shown above) stays absent, superseded by ADR-0012/ADR-0013; not reintroduced. `Write` itself carries no path-scoped rule -- `code.claude.com/docs/en/tools-reference` (2026-07-11) documents path pattern matching for `Read`/`Grep`/`Edit` only, not `Write` -- the write-scope guard stays prompt-level plus the global `protect-files.sh` denylist, a disclosed residual gap. Full reasoning: ADR-0036.
+
+> **Correction (2026-07-25, ADR-0042, issue #91):** two claims in the note above are superseded. `Bash(git *)` does **not** stay unchanged: it is replaced by `Bash(git log*), Bash(git diff*), Bash(git show*), Bash(git status*), Bash(git rev-parse*)`, a deliberate divergence from the example block above. It also never meant what the note implied — the space before the wildcard enforces a word boundary and nothing more, so `Bash(git *)` matched `git commit` and `git push` too, while ADR-0036 §2.1 asserted in the same paragraph that both were excluded and no `permissions.deny` entry covered them. The write-scope gap is closed as well: `agent-write-scope.sh` (ADR-0041, issue #58) is a `PreToolUse` hook confining architect writes to `docs/architecture/` and `docs/superpowers/plans/` — the second root matters, because `concept-to-code` Step 2 requires the plan there and hard-aborts without it. Still open, and disclosed in both notes: the interpreter-class entries `bash`/`python3` let a wrapped `bash -c "git commit …"` through (issue #58 gap 1).
 
 ### 3.2 coder
 

@@ -1,10 +1,16 @@
 #!/bin/bash
 # agent-tool-scoping test harness (ADR-0036) -- four frontmatter defects from the audit (SPEC.md /
 # issue #40) across architect.md, reviewer.md, researcher.md, and docs/vibe-coding-system.md sec. 3:
-#   Section A -- architect.md: unrestricted Bash scoped to Bash(git *)/Bash(rg *) (blueprint,
-#     restored) plus four verification-tool entries (deliberate widening, ADR-0036 SS2.1); effort:
+#   Section A -- architect.md: unrestricted Bash scoped to Bash(rg *) (blueprint, restored) plus
+#     four verification-tool entries (deliberate widening, ADR-0036 SS2.1); effort:
 #     max corrected to effort: xhigh (ADR-0036 SS2.4); permissionMode: plan deliberately NOT restored
 #     (ADR-0036 SS2.2 -- verified against a live Claude Code docs constraint, not this plan's call).
+#     SUPERSEDED IN PART (ADR-0042, issue #91): blueprint's other architect entry, Bash(git *),
+#     matched EVERY git subcommand -- commit and push included -- while ADR-0036 SS2.1's own prose
+#     asserted they were excluded, and no deny rule covered plain commit/push. A1 now asserts its
+#     ABSENCE and A12 the five read-only replacements. Do not "restore" Bash(git *) to match
+#     blueprint sec. 3.1's code block: that divergence is deliberate and recorded in the sec. 3.1
+#     deployment note.
 #   Section B -- reviewer.md: unrestricted Bash scoped to Bash(git diff*)/Bash(git log*) (blueprint,
 #     restored, still no git add/commit) plus three verification-tool entries (ADR-0036 SS2.5).
 #   Section C -- researcher.md: NOT edited (ADR-0036 SS2.6/SS3.6). Non-regression invariant only --
@@ -57,9 +63,15 @@ frontmatter_ok() {
 # Section A -- architect.md: Bash scope, effort pin, permissionMode invariant
 # =====================================================================================
 
-# A1-A6 (static, genuine RED now): the six Bash entries are present in the tools: line.
-sed -n '4p' "$ARCH_AGENT" | grep -qF 'Bash(git *)' \
-  && ok "A1: Bash(git *) present" || bad "A1: Bash(git *) should be present"
+# A1 (ADR-0042, issue #91 -- inverted from ADR-0036's "present"): Bash(git *) grants every git
+# subcommand, so it is the one entry that must NOT be here. See A12 for what replaced it.
+if sed -n '4p' "$ARCH_AGENT" | grep -qF 'Bash(git *)'; then
+  bad "A1: Bash(git *) grants git commit/push and must be gone (ADR-0042)"
+else
+  ok "A1: Bash(git *) is absent (ADR-0042 supersedes ADR-0036 SS2.1)"
+fi
+
+# A2-A6 (static): the remaining five Bash entries are present in the tools: line.
 sed -n '4p' "$ARCH_AGENT" | grep -qF 'Bash(rg *)' \
   && ok "A2: Bash(rg *) present" || bad "A2: Bash(rg *) should be present"
 sed -n '4p' "$ARCH_AGENT" | grep -qF 'Bash(bash *)' \
@@ -103,6 +115,65 @@ if sed -n '4p' "$ARCH_AGENT" | grep -qF 'Write' \
   ok "A11: Write and both context7 tools still present on the tools: line"
 else
   bad "A11: Write and both context7 tools should still be present on the tools: line"
+fi
+
+# A12 (ADR-0042, issue #91 -- genuine RED before the fix): the five read-only git entries that
+# replace Bash(git *). No-space form, matching reviewer's blueprint-native Bash(git diff*) --
+# deliberately normalising the space/no-space split the ADR-0036 plan's Risk B warned against
+# doing by accident. No mutating git subcommand begins with any of these five words, so the
+# looser prefix match costs nothing here.
+A12_MISSING=""
+for _e in 'Bash(git log*)' 'Bash(git diff*)' 'Bash(git show*)' 'Bash(git status*)' 'Bash(git rev-parse*)'; do
+  sed -n '4p' "$ARCH_AGENT" | grep -qF "$_e" || A12_MISSING="$A12_MISSING $_e"
+done
+if [ -z "$A12_MISSING" ]; then
+  ok "A12: all five read-only git entries present"
+else
+  bad "A12: missing read-only git entries:$A12_MISSING"
+fi
+
+# A13 (ADR-0042): no mutating git entry may be granted. NOTE -- this one passes before the fix as
+# well as after: the defect was never a spelled-out Bash(git commit*) entry, it was Bash(git *)
+# silently covering it, which is A1's job. A13 is a forward guard against someone adding one by
+# hand, not evidence that anything was fixed.
+A13_BAD=""
+for _e in 'Bash(git commit' 'Bash(git push' 'Bash(git add' 'Bash(git reset' 'Bash(git checkout' \
+          'Bash(git merge' 'Bash(git rebase' 'Bash(git clean' 'Bash(git stash'; do
+  sed -n '4p' "$ARCH_AGENT" | grep -qF "$_e" && A13_BAD="$A13_BAD $_e"
+done
+if [ -z "$A13_BAD" ]; then
+  ok "A13: no mutating git subcommand is granted"
+else
+  bad "A13: mutating git entries granted:$A13_BAD"
+fi
+
+# A14 (ADR-0042): coupling, tools: line -> body. Every git subcommand actually granted must be
+# named in the body's Command-scope bullet. ADR-0041 Finding A is the reason this exists: when an
+# agent's prose and its grant disagree, one of them is lying to whoever reads it next, and the
+# file itself gives no sign which. The reverse direction is covered by A13.
+A14_SCOPE=$(grep -F '**Command scope:**' "$ARCH_AGENT")
+A14_UNDOC=""
+if [ -z "$A14_SCOPE" ]; then
+  bad "A14: no '**Command scope:**' bullet in the body to check the grant against"
+else
+  for _sub in $(sed -n '4p' "$ARCH_AGENT" | grep -o 'Bash(git [a-z-]*' | sed 's/Bash(git //'); do
+    printf '%s' "$A14_SCOPE" | grep -qF "git $_sub" || A14_UNDOC="$A14_UNDOC git-$_sub"
+  done
+  if [ -z "$A14_UNDOC" ]; then
+    ok "A14: every granted git subcommand is named in the Command-scope bullet"
+  else
+    bad "A14: granted but undocumented in the Command-scope bullet:$A14_UNDOC"
+  fi
+fi
+
+# A15 (ADR-0042): the body says out loud what the grant no longer permits, and why routing around
+# it is not the move -- the same phrasing discipline the write-scope hooks (#87/#58) rely on.
+if [ -n "$A14_SCOPE" ] \
+   && printf '%s' "$A14_SCOPE" | grep -qF 'git commit' \
+   && printf '%s' "$A14_SCOPE" | grep -qF 'git push'; then
+  ok "A15: Command-scope bullet names git commit and git push as excluded"
+else
+  bad "A15: Command-scope bullet should name git commit and git push as excluded"
 fi
 
 # =====================================================================================
