@@ -68,6 +68,8 @@ plugin/scripts/session-context-inject.sh|hooks/session-context-inject.sh
 plugin/scripts/ensure-state-dir.sh|hooks/ensure-state-dir.sh
 plugin/scripts/mark-dirty.sh|hooks/mark-dirty.sh
 plugin/scripts/post-write-check.sh|hooks/post-write-check.sh
+plugin/scripts/secret-scan.sh|hooks/secret-scan.sh
+plugin/scripts/dependency-scan.sh|hooks/dependency-scan.sh
 plugin/scripts/prompt-en-prose-detect.sh|hooks/prompt-en-prose-detect.sh
 plugin/scripts/reset-gate-counter.sh|hooks/reset-gate-counter.sh
 plugin/scripts/usage-daily-hint.sh|hooks/usage-daily-hint.sh
