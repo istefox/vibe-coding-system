@@ -1,44 +1,41 @@
-# SPEC — Proportional audit depth: risk and task_type axes
+# SPEC — SAST job and a security-audit skill
 
-Source: GitHub issue #109
+Source: GitHub issue #110
 
 ## Objectives
-1. Make audit depth a function of risk and task type, not only of change size.
-2. Default to the strictest profile when unset.
-3. Fold Grove's five delegation factors into the same fields so two scoring schemes cannot drift.
+1. Run a real static analyser somewhere in the system, instead of relying only on LLM judgement.
+2. Provide the ten-step security audit protocol as an on-demand skill.
+3. Keep every security finding report-only.
 
 ## Scope
-In: additive `risk` and `task_type` manifest fields; Gate 2 sets them; Step 5 and Step 6 select depth from `max()` of the axes; a conditional validator invariant; a new test file in both CI registries.
-Out: a full gate matrix per quadrant; per-file risk tagging.
+In: an opt-in `security-audit` CI job in the project template; a new `security-audit` skill implementing the ten-step protocol; a new test file in both CI registries.
+Out: DAST; a commercial scanner; auto-fixing any security finding.
 
 ## Stack
-YAML manifest fields + bash 3.2 validation + Markdown skill instructions.
+GitHub Actions + Semgrep default rules for the CI job; Markdown skill instructions for the protocol.
 
 ## Architecture
-- Modified: `manifest-init.sh` (additive fields), `manifest-validate.sh` (conditional invariant).
-- Modified: `concept-to-code/SKILL.md` Gate 2, Step 5, Step 6.
-- Must be reconciled with ADR-0017, which owns chain routing: this extends that decision, it does not replace it.
-- New: test file in both CI registries.
+- Modified: `staging/project-templates/ci/ci.yml` — opt-in job, absent by default in generated repos.
+- New: `staging/plugin/skills/security-audit/SKILL.md`.
+- New: test file in both CI registries asserting the skill's structural anchors and the template job.
 
 ## Data model
-- `risk: low|high` (default: high when unset, per the spec's instruction to default strict).
-- `task_type: boilerplate|glue|novel-algorithm|regulated|legacy-integration|perf-critical`.
+Findings are report-only. High-risk findings are tagged `ACTION REQUIRED — not auto-fixed`.
 
 ## API / Interfaces
-Effective profile = strictest of (size axis from `chain_path`, risk, task_type). The strict profile forces the Step 6 review cycle and disables review shortcuts.
+The skill's ten steps, in the source order: automated scanners; separate-AI review; human checklist; penetration testing and fuzzing; security-focused unit tests; training-cutoff compensation (name the current OWASP Top 10 by year); logging hygiene; updated tooling; warnings in context; slow down.
 
 ## UI flows
-Gate 2 shows the architect's proposal and the human confirms; in autopilot the strict default stands with no prompt.
+On-demand invocation; output is a findings report, never a clearance. The skill must state explicitly that AI review is one input to a security assessment and never security clearance.
 
 ## Edge cases
-- A manifest without the fields must behave exactly as today and must validate.
-- An out-of-enum value must fail validation with a named reason.
-- `risk: high` must force the Step 6 cycle even when Gate 5 would have offered to skip it.
-- The default-strict rule must not silently make every existing chain stricter — it applies to the new fields only when they are present or when the chain opts in.
+- Semgrep absent must degrade gracefully, not fail the run.
+- The report-only invariant from ADR-0018 must hold regardless of risk level.
+- The opt-in job must be genuinely absent by default.
 
 ## Success criteria
-- [ ] A manifest without the fields behaves as today and validates.
-- [ ] `risk: high` forces the Step 6 review cycle.
-- [ ] An out-of-enum value fails validation with a named reason.
-- [ ] The ADR reconciles this with ADR-0017.
+- [ ] The skill's ten steps are present as named, testable anchors.
+- [ ] The report-only invariant is asserted by a test.
+- [ ] The CI job is opt-in and absent by default in generated repos.
+- [ ] The skill states that AI review is never clearance.
 - [ ] The new test file is registered in BOTH CI registries.

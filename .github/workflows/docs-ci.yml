@@ -41,7 +41,7 @@ jobs:
       - name: Run offline shell harnesses
         run: |
           set -e
-          for t in phase1 prep hook-probe hook-verify-workflow pairs-completeness clean-public-repo-history-safety concept-to-code-bsd-autopilot-gates concept-to-code-manifest-helpers-guards scope-guards refactor-snapshot-deep-refactor claude-md-slim-content-union-whole-line hook-hardening skill-text-corrections agent-tool-scoping post-write-check step5-checkpoint-review step6-effort-pin workflow-dispatch-pins sync-manual-steps write-scope-enforce agent-write-scope agent-command-scope secret-dep-gate weakening-wiring spec-coverage test-write-scope recovery-preflight reward-hack-detectors diff-budget-scope interface-immutability project-ci-checks proportional-audit-depth; do
+          for t in phase1 prep hook-probe hook-verify-workflow pairs-completeness clean-public-repo-history-safety concept-to-code-bsd-autopilot-gates concept-to-code-manifest-helpers-guards scope-guards refactor-snapshot-deep-refactor claude-md-slim-content-union-whole-line hook-hardening skill-text-corrections agent-tool-scoping post-write-check step5-checkpoint-review step6-effort-pin workflow-dispatch-pins sync-manual-steps write-scope-enforce agent-write-scope agent-command-scope secret-dep-gate weakening-wiring spec-coverage test-write-scope recovery-preflight reward-hack-detectors diff-budget-scope interface-immutability project-ci-checks proportional-audit-depth sast-security-audit; do
             printf '::group::%s\n' "$t"
             bash "staging/plugin/scripts/tests/$t.test.sh"
             printf '::endgroup::\n'

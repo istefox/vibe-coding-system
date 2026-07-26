@@ -229,3 +229,82 @@ jobs:
           else
             echo "::notice::.claude/scripts/interface-check.sh not present — run vendor-checks.sh to enable this gate (issue #108)"
           fi
+
+  # ================================================================================================
+  # security-audit — a THIRD job, separate from `ci` and `checks` (ADR-0056, issue #110). Opt-in:
+  # SAST is irrelevant to some target repos (a docs repo, a shell-script repo) and adds real
+  # runtime, so the whole job is inert unless the target repo commits the opt-in marker file
+  # `.claude/security-audit-enabled` (ADR-0053 §D1 shape: presence is the opt-in, absence is
+  # inert — no `publish: true`-style key needed because there is nothing else to configure).
+  #
+  # THE SEMGREP VERSION PIN IS LOAD-BEARING, NOT HYGIENE (ADR-0056 §D2). ADR-0039 §D4 removed
+  # linters from the write path because "a verdict that depends on which tools are installed is
+  # not a verdict" (shellcheck's SC2148 was invisible on macOS, red on CI — real evidence). Semgrep
+  # is that class of tool. What makes this job legitimate instead of a reversal of that rule is: a
+  # declared runner PLUS a pinned Semgrep version PLUS a pinned ruleset — two runs of the same
+  # commit agree. Tagging the image below with the floating "most recent build" tag would
+  # reintroduce exactly the non-determinism ADR-0039 removed, one registry push at a time.
+  #
+  # DO NOT CHANGE THE IMAGE TAG BELOW TO A FLOATING TAG, AND DO NOT REPLACE THE NAMED RULESET
+  # BELOW WITH THE DYNAMIC PER-LANGUAGE AUTO-DETECT MODE. Both are the pin. The version will go
+  # stale (ADR-0056 Consequences, negative) — that is the accepted cost of determinism; re-pin by
+  # hand when the ruleset needs new rule classes, the same drift ADR-0054 §D3 already accepted for
+  # the vendored check scripts.
+  #
+  # ERROR BLOCKS, WARNING AND INFO PRINT (ADR-0056 §D3, same evidence-quality split as ADR-0054
+  # §D5). A job that fires on INFO is a job someone adds to the ignore list, and the ERROR
+  # findings go unread with it.
+  security-audit:
+    name: security-audit
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.170.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Presence-based opt-in (ADR-0053 §D1 shape): the marker carries no keys because there is
+      # nothing else to configure. Every later step in this job is gated on this output, never on
+      # a job-level `if:`, so a repo that has not opted in gets one cheap notice step instead of a
+      # job GitHub reports as skipped-with-no-explanation.
+      - name: Opt-in check
+        id: optin
+        run: |
+          if [ -f .claude/security-audit-enabled ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::.claude/security-audit-enabled not present — security-audit is opt-in, skipping (ADR-0056)"
+          fi
+
+      - name: Semgrep scan (pinned ruleset)
+        if: steps.optin.outputs.enabled == 'true'
+        run: |
+          # Named published pack, never the dynamic auto-detect config mode — that mode resolves
+          # rules per language at scan time, which is one more axis of non-determinism this job
+          # exists to remove (ADR-0056 §D2).
+          semgrep scan --config=p/owasp-top-ten --json --output=semgrep-results.json .
+
+      - name: Semgrep findings — ERROR blocks, WARNING/INFO print (ADR-0056 §D3)
+        if: steps.optin.outputs.enabled == 'true'
+        run: |
+          errors=$(jq '[.results[] | select(.extra.severity == "ERROR")] | length' semgrep-results.json)
+          warnings=$(jq '[.results[] | select(.extra.severity == "WARNING")] | length' semgrep-results.json)
+          infos=$(jq '[.results[] | select(.extra.severity == "INFO")] | length' semgrep-results.json)
+
+          echo "Semgrep findings — ERROR: $errors  WARNING: $warnings  INFO: $infos"
+
+          # WARNING and INFO print only — never fail the build (ADR-0056 §D3, the same
+          # evidence-quality split ADR-0054 §D5 draws between mechanical and heuristic findings).
+          # Semgrep's default ERROR-severity rules are high-confidence; WARNING/INFO carry the
+          # false-positive rate that would get this job added to the ignore list.
+          if [ "$warnings" -gt 0 ] || [ "$infos" -gt 0 ]; then
+            echo "::notice::$warnings WARNING and $infos INFO finding(s) — printed, never block the build"
+            jq -r '.results[] | select(.extra.severity == "WARNING" or .extra.severity == "INFO") | "\(.extra.severity): \(.path):\(.start.line) \(.check_id)"' semgrep-results.json
+          fi
+
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors ERROR-severity Semgrep finding(s) — see the job log above"
+            jq -r '.results[] | select(.extra.severity == "ERROR") | "\(.path):\(.start.line) \(.check_id) — \(.extra.message)"' semgrep-results.json
+            exit 1
+          fi
