@@ -128,14 +128,25 @@ Reading the result — the scripts report, this step decides:
 - **`WEAKENED` lines are advisory in attended mode.** They render in the Step 4 `Pre-commit
   findings` block and stop nothing here — `review-triage-fix`'s own circuit breaker B is the actual
   enforcement point; this call is a heads-up at commit time, not a second gate.
+- **`SUSPECT` lines (ADR-0051, issue #105) are advisory ALWAYS, including under `--autopilot`.**
+  They are the reward-hacking heuristics (`literal-assertion-added` — ships disabled by default,
+  `zero-assertion-test`, `deleted-public-symbol`, `swallowed-error`) emitted by the same
+  `weakening-scan.sh` call, extracted with `printf '%s\n' "$weakening_findings" | grep '^SUSPECT'`
+  — never `[ -n ... ]`, same trap as `WEAKENED`. Render them in the Step 4 `Pre-commit findings`
+  block (attended) or print them alongside the other reporters (autopilot, since Step 4 is
+  skipped there). Unlike `SECRET` and `WEAKENED`, a `SUSPECT` finding **never aborts the commit,
+  in any mode** — it is a heuristic over a diff with no type information and no test execution
+  (ADR-0051 §D2), the same reason it does not gate the Step 5 → Step 6 transition.
 - **Exit code 2 or 3 means the check did NOT run** (bad invocation, or an awk that cannot express
   the rules). Report it as unknown and say so — an empty finding list from a run that never
   happened is not a clean result.
 - **In `--autopilot` mode** (Step 4 is skipped there, so the gate cannot be what catches this): any
   `SECRET` finding **aborts the commit**, prints the findings, and exits without committing; any
   `WEAKENED` finding **also aborts the commit** the same way, and prints the findings; a `NEWDEP`
-  finding is printed and the commit proceeds. Aborting unattended on a secret or on detected test
-  weakening is the correct fail direction, consistent with `ADR-0020`'s autonomy boundary.
+  finding is printed and the commit proceeds; a `SUSPECT` finding is printed and the commit
+  proceeds — see the bullet above, this is never an abort condition. Aborting unattended on a
+  secret or on detected test weakening is the correct fail direction, consistent with
+  `ADR-0020`'s autonomy boundary.
 
 `git diff HEAD` covers tracked changes only, so a brand-new, still-untracked manifest is invisible
 to the dependency gate. The secret scan's `--files` union does cover it — the asymmetry is known,

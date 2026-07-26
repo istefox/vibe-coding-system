@@ -131,3 +131,53 @@ with no second edit. This is that payoff being collected; a sibling script would
   cardboard-muffin edit. It reports the co-change shape and leaves the judgment to a human.
 - Instruction, not enforcement, for the surfacing half: the harness pins that the Gate 5 text and
   the schema field exist, never that a human reads them.
+
+## Addendum 2026-07-26 (Task 4 measurement — `literal-assertion-added` ships disabled)
+
+Measured per §D5, against this repository's own history rather than a fixture (the ADR-0046 §D1 /
+ADR-0048 §RE method): `weakening-scan.sh` (post-implementation) was run over the diff of each of
+this repo's last 153 non-merge commits.
+
+| detector | real-history hits (153 commits) | verdict |
+|---|---|---|
+| `zero-assertion-test` | 1 (before a fix described below) → 0 after | true positive avoided, not a real finding |
+| `deleted-public-symbol` | 0 | no evidence either way (see below) |
+| `swallowed-error` | 6, all in one file (`usage-report.py`) | 6/6 true positives by the rule as written (`except …: continue/pass`, no log, no rethrow, no comment) |
+| `literal-assertion-added` | 0 | no evidence either way (see below) |
+
+**One real false positive was found and fixed during measurement, not merely observed.** Commit
+`a5e891b`'s test fixture `def test_sneaky(): assert True` — a one-line def with an inline assert —
+was flagged `zero-assertion-test` because the state machine that opens a test body on a `def
+test_*` line never checked that same line for an assertion token before falling through to the
+next line. Fixed by checking the opening line itself; the corpus run above is post-fix and the
+one-liner case is now a permanent fixture in `reward-hack-detectors.test.sh` (implicit in the
+one-line-def coverage, guarding the regression).
+
+**`swallowed-error`'s 6 hits are all true positives by the literal rule** (empty or no
+log/no-rethrow catch), and none carry an explaining comment, so none are excluded. Whether
+`except json.JSONDecodeError: continue` is *bad* is a judgment call a human reviewer makes cheaply
+at Gate 5 — the detector's job is only to surface the shape, and it did, with no noise. Ships
+**enabled**.
+
+**`zero-assertion-test` and `deleted-public-symbol` had zero real-history hits and ship enabled
+anyway**, on the strength of the synthetic true-positive/exclusion battery in
+`reward-hack-detectors.test.sh` (sections HA/HB) and the absence of any false-alarm evidence — a
+silent corpus is not a damning one when the fixtures independently confirm correct behavior.
+
+**`literal-assertion-added` ships DISABLED BY DEFAULT**, opt-in via
+`WEAKENING_SCAN_LITERAL_ASSERTION=1`. Real history gave *no* signal either way: this repository's
+own tests are bash `[ … ]`/`-eq` idiom, never `assert`/`expect(`-style tokens, so the detector was
+never exercised by any of the 153 commits — silence, not vindication. What settled it was a
+5-diff synthetic sample of realistic co-changes (3 ordinary legitimate, 1 deliberately malicious,
+1 a Jest `toBe()` case the detector's quoted-literal pattern does not reach): **4 of 5 fired, and
+3 of those 4 were the legitimate cases** — exactly the failure mode §D5 and the Alternatives
+section predicted in advance ("adding a test for a new constant is exactly the shape it matches").
+The malicious case was also caught (recall is fine); precision on this small sample is 25%. The
+code stays wired, tested (HA4/HB4/HG1-5 all exercise it via the opt-in), and disabled by default —
+an operator with review capacity for a majority-false-alarm advisory signal can turn it on.
+
+Both corpora are reproducible (`git log --no-merges` over this repo; the fixture diffs are inline
+in the harness). The 5-diff synthetic sample is small by construction — enough to confirm the
+structural argument in §D2/§D5, not a statistically powered estimate — and a team whose tests are
+mostly pytest/Jest-style literal comparisons may see a different (still expected to be low, per
+that same structural argument) precision if they opt in.
