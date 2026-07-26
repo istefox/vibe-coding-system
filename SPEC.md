@@ -1,48 +1,43 @@
-# SPEC — Generator/verifier separation: dispatch the tester, deny coder test writes
+# SPEC — Recovery-readiness pre-flight for concept-to-code Step 5
 
-Source: GitHub issue #103
-
-Depends on issue #102: the tester is briefed from the SPEC's requirement IDs, so those must exist first.
+Source: GitHub issue #104
 
 ## Objectives
-1. Have a different agent write the tests than the one that writes the implementation.
-2. Brief that agent from the specification, never from the implementation.
-3. Enforce the separation mechanically, not by prompt.
+1. Refuse to dispatch coders until the work is recoverable.
+2. Record the recovery baseline so a later step can name the rollback target.
 
 ## Scope
-In: a `tester` dispatch per task group in c2c Step 5 on BOTH dispatch paths; a `PreToolUse` hook denying `coder` writes under test paths; an additive `tests_written_by` field in `step5-report.json`; a new test file in both CI registries.
-Out: changing `refactorer` or `debugger` behaviour; retrofitting chains already completed.
+In: a pre-dispatch assertion block at the top of c2c Step 5; an additive manifest field for the baseline sha; a new test file in both CI registries.
+Out: automatic stashing; automatic branch creation.
 
 ## Stack
-Markdown skill instructions plus a bash 3.2 `PreToolUse` hook, modelled on `write-scope-enforce.sh`, which already resolves the calling subagent's transcript via `.agent_id` and reads a scope marker from the dispatch prompt.
+Markdown skill instructions plus bash 3.2, copying the pattern already used at `deep-refactor/SKILL.md:118` (baseline commit hash) and `:173` (dirty-tree check) rather than inventing a second idiom.
 
 ## Architecture
-- Modified: `concept-to-code/SKILL.md` Step 5 — the Workflow path and the Agent-tool batch fallback each gain a tester stage stated independently, so behaviour does not depend on whether `hook_verified` flipped.
-- New: `staging/plugin/scripts/tester-scope-enforce.sh` (name TBD by the architect) — `PreToolUse` on `Edit|Write|MultiEdit`, denies `agent_type: coder` a write whose path matches a test directory or test-file pattern.
-- Modified: the `step5-report.json` schema block.
-- Unchanged: `staging/plugin/agents/tester.md` — the agent already exists and is correctly specified; only the dispatch graph is wrong.
+- Modified: `concept-to-code/SKILL.md` Step 5, new pre-dispatch block.
+- Modified: `manifest-init.sh` / the manifest schema — additive `recovery_baseline_sha`.
+- Modified: `manifest-validate.sh` — a conditional invariant so pre-existing manifests stay valid.
+- New: test file in both CI registries.
 
 ## Data model
-`step5-report.json` gains `tests_written_by: "tester" | "coder" | "none"` per task. Additive.
+`recovery_baseline_sha: <40-hex|null>` in the manifest. Additive, nullable.
 
 ## API / Interfaces
-The hook follows the established contract: reads the hook payload JSON on stdin, emits a deny decision with a reason, exits 0 always, allows on every failure mode, and is inert when no test-scope marker is present in the dispatch.
+Assertions, in order: working tree clean or explicitly stashed; current branch is not the default branch; HEAD sha resolvable and recorded. Failure prints the exact remediation command and refuses dispatch.
 
 ## UI flows
-None. A denied write returns a reason to the coder naming the tester as the owner of test files.
+None. In autopilot the refusal is recorded and halts the feature — autopilot bypasses human prompts, not safety checks.
 
 ## Edge cases
-- The hook must be inert outside Step 5 — an orchestrator turn or another skill writing a test file must not be blocked.
-- A `tester` writing a test file must be allowed.
-- A `coder` writing a non-test file must be allowed.
-- A test-path pattern must cover the conventions already used here: `tests/`, `*_test.*`, `*.test.*`, `*.spec.*`, `test_*`, `*Tests.*`.
-- Pin `model` and `effort` explicitly on the tester dispatch (`sonnet` / `medium`), per the existing Step 5 rule that an omitted value inherits the session rather than the frontmatter.
+- A detached HEAD must be treated as a failure with a clear reason.
+- A repo with no commits yet has no HEAD to record — fail with a named reason.
+- The check must run before any dispatch, including on the Workflow path.
+- Autopilot must not be able to skip it.
 
 ## Success criteria
-- [ ] A Step 5 run dispatches tester before coder per task group, on both dispatch paths.
-- [ ] A simulated `coder` Edit to a test path is denied with a reason naming the tester.
-- [ ] A simulated `tester` Edit to the same path is allowed.
-- [ ] A `coder` Edit to a source path is allowed.
-- [ ] The hook is inert when the dispatch carries no test-scope marker.
-- [ ] `tests_written_by` appears per task and a report lacking it is still read.
+- [ ] A dirty tree refuses dispatch with a named remediation command.
+- [ ] Being on the default branch refuses dispatch.
+- [ ] A clean feature branch dispatches and the manifest carries the baseline sha.
+- [ ] Autopilot mode still honours the refusal.
+- [ ] A manifest without the field still validates.
 - [ ] The new test file is registered in BOTH CI registries.
