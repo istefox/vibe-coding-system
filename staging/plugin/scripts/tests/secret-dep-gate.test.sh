@@ -559,6 +559,81 @@ if [ "$F4OK" -eq 1 ]; then
   ok "F4: the invariant guardrail bullet and Step 1's four filename patterns are intact (forward guard)"
 else bad "F4: a guardrail bullet or a Step 1 filename pattern was weakened — restore it, do not edit this assertion"; fi
 
+# F5/F6 — the CI template (ADR-0046 §D10). The two steps are ADVISORY and, until issue #108
+# settles the vendoring, INERT in a generated project: nothing copies the scripts into a target
+# repo's .claude/scripts/. The `[ -x … ]` guard is what makes them inert rather than red — a
+# missing script must print a skip notice, never fail a target repo's required check.
+CITPL="$STAGING/project-templates/ci/ci.yml"
+F5OK=1
+grep -qF 'name: Secret scan (advisory)'     "$CITPL" || F5OK=0
+grep -qF 'name: Dependency scan (advisory)' "$CITPL" || F5OK=0
+grep -qF '[ -x .claude/scripts/secret-scan.sh ]'     "$CITPL" || F5OK=0
+grep -qF '[ -x .claude/scripts/dependency-scan.sh ]' "$CITPL" || F5OK=0
+if [ "$F5OK" -eq 1 ]; then
+  ok "F5: the CI template carries both advisory steps, each guarded on an executable script"
+else bad "F5: a step name or its [ -x .claude/scripts/… ] guard is missing from $CITPL"; fi
+
+# F6 — ALWAYS-PASS FORWARD GUARD (plan A4). Never fix evidence: it is green before and after the
+# Task 7 edit. `__TEST_CMD__` is substituted by nightly-autopilot at drop time and asserted on by
+# nightly-autopilot/tests/run-tests.sh; the job name `ci` is the required status check that
+# set-branch-protection.sh enforces on main. Adding steps must not disturb either.
+F6OK=1
+grep -qF '__TEST_CMD__' "$CITPL" || F6OK=0
+grep -qE '^  ci:$'      "$CITPL" || F6OK=0
+grep -qE '^    name: ci$' "$CITPL" || F6OK=0
+if [ "$F6OK" -eq 1 ]; then
+  ok "F6: the template still has __TEST_CMD__ and the job name ci (forward guard)"
+else bad "F6: the __TEST_CMD__ token or the ci job name was disturbed — restore it"; fi
+
+# ==============================================================================================
+# G. Registration (ADR-0046 §D12). Three mechanisms, deliberately not the same one:
+#
+#   1. .github/workflows/ci.yml picks this file up by GLOB over staging/plugin/scripts/tests/ —
+#      nothing to assert and nothing to do, which is exactly why it is not the risk.
+#   2. .github/workflows/docs-ci.yml runs an EXPLICIT NAMED LIST. A new harness that nobody
+#      appends to it is never run there and nothing says so. That has been missed before, so G1
+#      lives INSIDE the harness it registers: it cannot go green until the append is made.
+#   3. staging/sync-to-claude.sh PAIRS is the only path by which a repo-side edit reaches
+#      ~/.claude. No entry, no deployment, silently (ADR-0043's whole lesson).
+#
+# G1 asserts on the loop line specifically rather than on the file, because the name also occurs
+# in this repository's docs; a match anywhere in docs-ci.yml would be satisfiable by a comment.
+# ==============================================================================================
+DOCSCI="$REPO/.github/workflows/docs-ci.yml"
+SYNCSH="$STAGING/sync-to-claude.sh"
+
+if [ -f "$DOCSCI" ]; then
+  ok "G0a: docs-ci.yml is where this harness expects it (the anchor G1 reads)"
+else bad "G0a: $DOCSCI not found — G1 below is meaningless"; fi
+if [ -f "$SYNCSH" ]; then
+  ok "G0b: sync-to-claude.sh is where this harness expects it (the anchor G2/G3 read)"
+else bad "G0b: $SYNCSH not found — G2/G3 below are meaningless"; fi
+
+DOCSCI_LOOP=$(grep 'for t in ' "$DOCSCI" 2>/dev/null | head -1)
+if printf '%s' "$DOCSCI_LOOP" | grep -qE '[[:space:]]secret-dep-gate[[:space:];]'; then
+  ok "G1: docs-ci.yml's shell-tests loop list runs secret-dep-gate"
+else bad "G1: secret-dep-gate is not in docs-ci.yml's explicit harness list — append it (singular name, plan PF1)"; fi
+
+# G2 — read the PAIRS heredoc block, not the whole file, so a mention in a comment cannot pass
+# for an entry. Same extraction pairs-completeness.test.sh uses.
+awk '/^PAIRS="$/{f=1; next} /^"$/{f=0} f' "$SYNCSH" >"$TMP/pairs"
+G2OK=1
+grep -qxF 'plugin/scripts/secret-scan.sh|hooks/secret-scan.sh'     "$TMP/pairs" || G2OK=0
+grep -qxF 'plugin/scripts/dependency-scan.sh|hooks/dependency-scan.sh' "$TMP/pairs" || G2OK=0
+if [ "$G2OK" -eq 1 ]; then
+  ok "G2: PAIRS deploys both reporters to ~/.claude/hooks/"
+else bad "G2: a PAIRS entry for secret-scan.sh or dependency-scan.sh is missing — edits will never deploy"; fi
+
+# G3 — the harness itself gets NO PAIRS entry, matching every harness added since ADR-0041: it
+# validates staging/ and runs in this repository's CI, so deploying it to ~/.claude would create
+# a second copy that drifts. Asserted as an absence so a future well-meaning addition has to
+# argue with a red test rather than slip in.
+if grep -q 'secret-dep-gate' "$TMP/pairs"; then
+  bad "G3: PAIRS gained an entry for the harness — ADR-0046 §D12 says it does not deploy"
+else
+  ok "G3: no PAIRS entry for the harness (ADR-0046 §D12)"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -31,3 +31,47 @@ jobs:
 
       - name: Run tests
         run: __TEST_CMD__
+
+      # --- Advisory pre-merge reporters (ADR-0046 §D10, issue #100) ---------------------------
+      # Both scripts exit 0 on a completed scan, findings or not, so a finding is printed in the
+      # log and this `ci` check stays green. Turning a finding into a red build is the fail-closed
+      # `checks` job, which belongs to issue #108 by its own SPEC — creating it here would make
+      # #108 a merge conflict instead of a feature.
+      #
+      # KNOWN GAP, stated rather than left to be discovered: nothing yet copies secret-scan.sh and
+      # dependency-scan.sh into a target repo's .claude/scripts/. That vendoring is #108's as well,
+      # so in a freshly generated project both steps are INERT. The `[ -x … ]` guard is what makes
+      # them inert rather than red, and the skip notice makes the inertness visible in the CI log
+      # instead of silent.
+
+      - name: Secret scan (advisory)
+        run: |
+          if [ -x .claude/scripts/secret-scan.sh ]; then
+            # Whole tree, so no base ref and no fetch-depth change to the checkout above.
+            # Identical behaviour on push and pull_request.
+            git ls-files | .claude/scripts/secret-scan.sh --files -
+          else
+            echo "::notice::.claude/scripts/secret-scan.sh not present — secret scan skipped (issue #108 vendors it)"
+          fi
+
+      - name: Dependency scan (advisory)
+        run: |
+          if [ -x .claude/scripts/dependency-scan.sh ]; then
+            # A dependency check needs a diff by definition. Resolve the base ref, verify a merge
+            # base exists, and skip with a notice otherwise — never a hard failure on a shallow
+            # clone or on a push build, which has no base ref at all.
+            base="${GITHUB_BASE_REF:-}"
+            if [ -z "$base" ]; then
+              echo "::notice::no base ref (push build) — dependency scan needs a diff, skipped"
+            else
+              git fetch --no-tags --depth=50 origin "$base" >/dev/null 2>&1 || true
+              mb=$(git merge-base "origin/$base" HEAD 2>/dev/null || true)
+              if [ -z "$mb" ]; then
+                echo "::notice::no merge base with origin/$base (shallow clone?) — dependency scan skipped"
+              else
+                git diff "$mb" HEAD | .claude/scripts/dependency-scan.sh --diff
+              fi
+            fi
+          else
+            echo "::notice::.claude/scripts/dependency-scan.sh not present — dependency scan skipped (issue #108 vendors it)"
+          fi

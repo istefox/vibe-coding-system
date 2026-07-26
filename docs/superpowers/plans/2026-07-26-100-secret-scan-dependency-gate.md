@@ -109,9 +109,9 @@ validation counts unchecked `- [ ]` items here; the authoritative task detail is
 - [x] Task 4 — RED: section E for `dependency-scan.sh`
 - [x] Task 5 — GREEN: implement `staging/plugin/scripts/dependency-scan.sh`
 - [x] Task 6 — Wire `commit` Step 1, with section F1–F4 seen RED first
-- [ ] Task 7 — CI template steps, section F5 seen RED first
-- [ ] Task 8 — Registration in both registries and in `PAIRS`, section G seen RED first
-- [ ] Task 9 — Close-out
+- [x] Task 7 — CI template steps, section F5 seen RED first
+- [x] Task 8 — Registration in both registries and in `PAIRS`, section G seen RED first
+- [x] Task 9 — Close-out
 
 ---
 

@@ -1223,6 +1223,52 @@ plain `git push`. The architect could commit and push, and nothing recorded that
 
 Detail: `docs/architecture/ADR-0042-91-architect-git-grant.md`.
 
+### Addition 2026-07-26 (issue #100, secret content scan and dependency gate, ADR-0046)
+
+Until now the only defence against committing a credential was a filename check in `commit`
+Step 1: a key pasted into a file with an ordinary name was invisible. Two reporters close that,
+`secret-scan.sh` and `dependency-scan.sh`, both under `staging/plugin/scripts/` and both deployed
+to `~/.claude/hooks/` by `sync-to-claude.sh`. Neither is a hook — no `settings.json` wiring, no
+manual step.
+
+- **Detection is prefix- or keyword-anchored, never entropy-based** (sec. 7, sec. 8): measured,
+  not assumed. The cheap entropy proxy `[A-Za-z0-9+/]{32,}` matches ordinary prose in this
+  repository, because `/` is in the base64 alphabet and absolute paths therefore score as
+  high-entropy blobs. Eleven anchored rules replace it, with one keyword heuristic
+  (`assigned-secret`) carrying four exclusions. The false-positive corpus is **this repository
+  itself**: section D of the harness runs the scanner over `git ls-files` and fails if any content
+  rule fires, so a future document cannot quietly introduce one.
+- **Three exit codes, because "found nothing" and "did not run" are different answers**
+  (sec. 7): 0 = scan completed with or without findings, 2 = invalid invocation, 3 = the local
+  `awk` cannot express `{16}` interval syntax and every rule would be silently inert. That third
+  code is the ADR-0043 lesson on new ground — a check that reports nothing must be
+  distinguishable from a check that finds nothing.
+- **Reporters, not gates** (sec. 8): both exit 0 even on a finding, and the caller decides whether
+  it blocks. `commit` Step 1 renders them in a `Pre-commit findings` block; on the unattended
+  path a `SECRET` finding aborts and a `NEWDEP` finding never does. That mirrors
+  `weakening-scan.sh`, and is what will let issue #108 run the same scripts fail-closed in CI
+  without modifying them.
+- **The CI template gains two advisory steps** (sec. 11, `project-templates/ci/ci.yml`): inside
+  the existing `ci` job, guarded on `[ -x .claude/scripts/<script>.sh ]`. The job name `ci` and
+  the `__TEST_CMD__` token are untouched — `set-branch-protection.sh` requires the first and
+  `nightly-autopilot/tests/run-tests.sh` asserts on the second. **Both steps are inert in a
+  freshly generated project**: nothing yet copies the scripts into a target repo's
+  `.claude/scripts/`, which is issue #108's, so they print a skip notice rather than failing a
+  build.
+- **`protect-files.sh` constrains filenames at design time** (sec. 7): its `PROTECTED` list holds
+  the substring `secrets`, so three paths this feature's SPEC named literally were unwritable by
+  any agent — the ADR's own first filename was denied, which is how the constraint was found
+  rather than assumed. Every filename here uses the singular `secret`, the `docs-ci.yml` registry
+  entry included. Check a new filename against that deny list before writing it into a spec, and
+  never write such a path through `Bash` to dodge the hook.
+
+Recorded as consequences, not fixed: the filename rule now fires on documentation *about*
+secrets, starting with this feature's own files (narrowing it would weaken an existing invariant
+guardrail); and `commit/SKILL.md`, invoked by `concept-to-code` Step 7, `project-init` and
+`autopilot-build`, gains new blocking behaviour on an unattended path.
+
+Detail: `docs/architecture/ADR-0046-100-secret-scan-dependency-gate.md`.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
