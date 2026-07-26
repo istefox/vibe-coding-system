@@ -75,3 +75,30 @@ jobs:
           else
             echo "::notice::.claude/scripts/dependency-scan.sh not present — dependency scan skipped (issue #108 vendors it)"
           fi
+
+      # --- Interface immutability gate (ADR-0053 §D5) — BLOCKING, unlike the two advisory
+      # reporters above. interface-check.sh is a CHECKER (exit 0/2/3), not a reporter, and this
+      # step lets its exit code propagate straight into the job result on purpose: a project only
+      # reaches a red build here by having declared `.claude/protected-interfaces` itself
+      # (ADR-0053 §D1/§D2 — inert when absent, so a project with no declaration never fails this
+      # step). Same vendoring gap as the two reporters above: nothing yet copies
+      # interface-check.sh into a target repo's .claude/scripts/ (issue #108); the `[ -x … ]`
+      # guard keeps a freshly generated project inert rather than red until that lands.
+      - name: Interface immutability gate
+        run: |
+          if [ -x .claude/scripts/interface-check.sh ]; then
+            base="${GITHUB_BASE_REF:-}"
+            if [ -z "$base" ]; then
+              echo "::notice::no base ref (push build) — interface check needs a diff, skipped"
+            else
+              git fetch --no-tags --depth=50 origin "$base" >/dev/null 2>&1 || true
+              mb=$(git merge-base "origin/$base" HEAD 2>/dev/null || true)
+              if [ -z "$mb" ]; then
+                echo "::notice::no merge base with origin/$base (shallow clone?) — interface check skipped"
+              else
+                git diff --no-renames "$mb" HEAD | .claude/scripts/interface-check.sh --root .
+              fi
+            fi
+          else
+            echo "::notice::.claude/scripts/interface-check.sh not present — interface check skipped (issue #108 vendors it)"
+          fi

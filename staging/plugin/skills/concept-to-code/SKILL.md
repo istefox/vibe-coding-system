@@ -1328,7 +1328,9 @@ After the workflow completes:
 4. If `deferred` is non-empty, present the entries with `real: true` alongside them, labelled
    "cross-file changes not applied — a fix agent needed them outside its assigned file". They are
    findings for the user to decide on, never a failure signal and never auto-fixed here.
-5. Evaluate Gate 5.05 (see §5 Gate 5.05 block).
+5. Run the Interface immutability gate (below) over the cumulative diff since `$_pre5` — after
+   the fix cycle, before the review is accepted.
+6. Evaluate Gate 5.05 (see §5 Gate 5.05 block).
 
 #### Skill fallback (hook_verified = false or workflow unavailable)
 
@@ -1340,7 +1342,73 @@ Execute review-triage-fix v1.2 with Add+Remove rule.
 Return final report.
 ```
 
-After review (or skip), evaluate Gate 5.05 (see §5 Gate 5.05 block).
+After review (or skip), run the Interface immutability gate (below) over the cumulative diff
+since `$_pre5`, then evaluate Gate 5.05 (see §5 Gate 5.05 block).
+
+#### Interface immutability gate — Step 6, before the review closes (ADR-0053)
+
+Checks that the diff accumulated since Step 5 began has not removed or rewritten a signature the
+project declared protected in `.claude/protected-interfaces`. Runs at the END of Step 6, after
+whichever review/fix path just ran — after the code exists, before the review is accepted (§D5) —
+because a fix agent's own edit can break a protected interface exactly as easily as the original
+implementation could.
+
+**Directory-family contract table (§D3). Read this before copying an idiom from any of the four
+scripts below — the reporter/checker confusion in this family has now been written down three
+times (ADR-0048 §D7, ADR-0052, and here) — do not copy one row's idiom into another's block:**
+
+| script | contract | caller idiom |
+|---|---|---|
+| `weakening-scan.sh` | reporter | grep stdout for `^WEAKENED` |
+| `diff-budget-check.sh` | reporter | grep stdout, `CLEAN` sentinel |
+| `spec-coverage.sh` | checker | branch on exit code |
+| `interface-check.sh` | checker | branch on exit code |
+
+**Resolution** (`staging/plugin/scripts/`, deploying to `~/.claude/hooks/` — the standalone-CI
+shape `secret-scan.sh`/`dependency-scan.sh` already use, **not** the
+`skills/concept-to-code/scripts/` shape `spec-coverage.sh`/`diff-budget-check.sh` use, because
+this script's inputs are a project-level declaration file plus a diff, never a chain artifact —
+ADR-0053 Task 2, mirroring ADR-0048 §A6's reasoning in the opposite direction):
+```bash
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/interface-check.sh" ]; then
+  _icheck="$CLAUDE_PLUGIN_ROOT/scripts/interface-check.sh"
+elif [ -f "$HOME/.claude/hooks/interface-check.sh" ]; then
+  _icheck="$HOME/.claude/hooks/interface-check.sh"
+else
+  _icheck=""     # gate did not run — report it, do not infer a clean result
+fi
+```
+
+**Invocation and exit-code idiom** (checker — branch on the exit code, never grep stdout for a
+sentinel the way the two reporters above are handled. The diff MUST be generated with
+`--no-renames`, per the script's own header — git's default rename detection can collapse a
+same-content file move into a rename record with no `-`/`+` lines at all, hiding a real
+relocation from a purely textual check):
+```bash
+if [ -n "$_icheck" ]; then
+  _iout=$(git diff --no-renames "$_pre5" | bash "$_icheck" --root "<project_root>" 2>&1)
+  _irc=$?
+fi
+```
+`_irc = 0` → no protected interface broken, including the common case where the project declares
+none at all (inert by construction, ADR-0053 §D1 — the script itself is silent on both streams
+when `.claude/protected-interfaces` is absent or comment/blank-only). `_irc = 3` → one or more
+protected interfaces broken, `_iout` carries the `PROTECTED<TAB><entry><TAB><file>:<line><TAB>removed|changed`
+lines. `_irc = 2`, or `_icheck` empty: unavailable, fail-open (see Policy).
+
+**Do not copy `weakening-scan.sh`'s or `diff-budget-check.sh`'s branching into this block, and do
+not copy this block's exit-code branching into theirs.**
+
+**Policy — this gate BLOCKS** (ADR-0053 §D2). Unlike every array in `step5-report.json` above
+except `weakening_findings`, do not soften this to advisory to match `suspect_findings` or
+`budget_findings` — the signal here is mechanical (a protected signature is either still present
+or it is not), which is exactly why it is allowed to block where a heuristic finding is not:
+- Attended: present the `PROTECTED` findings and do NOT proceed to Gate 5.05 without user
+  acknowledgment.
+- Autopilot (`manifest.autopilot = true`): halt — do not proceed to Gate 5.05.
+- `_irc = 2`, or `_icheck` empty (script did not resolve): fail-open, visibly — note it in the
+  summary shown at Gate 5.05 and proceed.
 
 ### Step 7 — Commit (invoke `commit` skill, always)
 
@@ -1988,6 +2056,15 @@ options:
 Reject behavior: transition back to `step_2_architecture`; re-dispatch architect with the feedback as addendum.
 
 **[Autopilot default: "Approve". Emit: "Gate 2: autopilot — architecture auto-approved ✓"]**
+
+**Protected-interface proposal (ADR-0053 §D6, only if the architect's report includes a
+`PROPOSED PROTECTED INTERFACES:` block):** show that block's entries and reasons alongside Gate
+2a's key decisions. Approving Gate 2a approves the architecture, **not** the protection — it does
+NOT create `.claude/protected-interfaces`. State this explicitly so it is not assumed: the
+operator creates the file by hand if they want the protection. `interface-check.sh` BLOCKS once
+the file exists (ADR-0053 §D2), so a declaration the operator did not knowingly make is a block
+they will not understand. No new manifest gate, no new transition — this rides on Gate 2a's
+existing HITL review.
 
 **Gate 2b — Test-cmd TOFU (only if test-cmd candidate != NONE):**
 
