@@ -11,3 +11,24 @@
 38-hook-hardening-enum-value-lock-ownership	38	Hook hardening: enum value, lock ownership, trust hash
 39-skill-text-corrections-across-five-stand	39	Skill text corrections across five standalone skills
 40-agent-tool-scoping-per-blueprint-section	40	Agent tool scoping per blueprint section 3
+120-accessibility-and-i18n-gates	120	Accessibility and i18n gates
+119-licence-and-provenance-scanning	119	Licence and provenance scanning
+118-agent-level-instrumentation-metrics	118	Agent-level instrumentation metrics
+117-canonical-mechanism-conformance	117	Canonical-mechanism conformance
+116-litter-and-debris-discipline-across-agen	116	Litter and debris discipline across agents
+115-human-gate-coverage-test-diff-and-direct	115	Human-gate coverage: test diff and direction check
+114-external-dependency-feasibility-gate	114	External-dependency feasibility gate
+113-untrusted-input-hardening-for-issue-driv	113	Untrusted-input hardening for issue-driven design
+112-context-occupancy-instrumentation-and-pr	112	Context-occupancy instrumentation and PreCompact guard
+111-tracer-bullet-probe-step	111	Tracer-bullet probe step
+110-sast-job-and-a-security-audit-skill	110	SAST job and a security-audit skill
+109-proportional-audit-depth-risk-and-task-t	109	Proportional audit depth: risk and task_type axes
+108-run-the-deterministic-checks-in-the-targ	108	Run the deterministic checks in the target project CI
+107-interface-immutability-gate	107	Interface immutability gate
+106-per-task-diff-budget-and-scope-check	106	Per-task diff budget and scope check
+105-reward-hacking-detectors-literal-asserti	105	Reward-hacking detectors: literal assertions, deleted symbols, swallowed errors
+104-recovery-readiness-pre-flight-for-concep	104	Recovery-readiness pre-flight for concept-to-code Step 5
+103-generator-verifier-separation-dispatch-t	103	Generator/verifier separation: dispatch the tester, deny coder test writes
+102-requirement-ids-in-spec-and-a-coverage-c	102	Requirement IDs in SPEC and a coverage check
+101-wire-the-anti-test-weakening-detector-in	101	Wire the anti-test-weakening detector into every unattended path
+100-secrets-and-dependency-gate-content-scan	100	Secrets and dependency gate: content scan, lockfile check, CI steps
