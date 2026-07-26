@@ -2087,6 +2087,32 @@ paths:
 - Explicit eager loading with `selectinload` / `joinedload`
 ```
 
+Another project-specific example — this one declares canonical mechanisms rather than API
+conventions (ADR-0063):
+
+`<repo>/.claude/rules/canonical-mechanisms.md`:
+
+```markdown
+---
+paths:
+  - "**/*.py"
+---
+
+# Canonical mechanisms
+
+- HTTP client → `httpx.AsyncClient` (`app/http.py`)
+- Logger → `structlog.get_logger()` (`app/logging.py`)
+- Config → `app.config.settings`
+```
+
+Flat list, one line per mechanism (`name → import path or symbol`), deliberately not a schema: the
+value is a coder reading one line before writing an HTTP call, and a structured format would raise
+the cost of writing it enough that the file would go unwritten (ADR-0063 §D1). `project-init`
+drafts a first version by detecting the dominant mechanism already in use in the codebase, and a
+human approves it before anything is written (ADR-0063 §D2). An absent file means *nobody declared*
+a canonical mechanism, not that the project has none — the system cannot tell those two apart, and
+the reviewer stays silent either way (ADR-0063 §D5).
+
 ### 5.3 Advantages of the rules pattern
 
 1. CLAUDE.md stays under the <200-line threshold

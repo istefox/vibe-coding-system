@@ -1,40 +1,41 @@
-# SPEC — Litter and debris discipline across agents
+# SPEC — Canonical-mechanism conformance
 
-Source: GitHub issue #116
+Source: GitHub issue #117
 
 ## Objectives
-1. Make every writing agent account for the debris it creates.
-2. Distinguish scratch artifacts from real new files at the commit gate.
+1. Let a project declare its one true HTTP client, logger, config accessor, DB access layer and error type.
+2. Have the reviewer flag a hand-rolled equivalent.
 
 ## Scope
-In: a cleanup clause in `coder.md`, `debugger.md`, `refactorer.md`; scratch-path classification in `commit` Step 1; a new test file in both CI registries.
-Out: a dedicated cleanup agent running the six sequential elegance passes — `auto-format.sh`, the reviewer and `deep-refactor` already cover that ground and a per-task dispatch is disproportionate.
+In: a `.claude/rules/canonical-mechanisms.md` convention; a first-draft generator in `project-init`; a reviewer checklist item; a new test file in both CI registries.
+Out: per-language lint rules enforcing conformance mechanically — a reviewer-level check is the proportionate first step.
 
 ## Stack
-Markdown agent bodies + bash 3.2 classification.
+Markdown rules file with `paths:` frontmatter (the established `.claude/rules/` convention) + bash detection in `project-init`.
 
 ## Architecture
-- Modified: `staging/plugin/agents/coder.md`, `debugger.md`, `refactorer.md` — a cleanup clause in the Output Format: list every temporary file, scratch script, debug log statement and temp branch created, and its disposition, before reporting done.
-- Modified: `commit/SKILL.md` Step 1 — classify scratch-looking untracked paths into their own group.
-- New: test file in both CI registries asserting the prose anchors and the classification.
+- New convention: `.claude/rules/canonical-mechanisms.md`, one line per mechanism, `name → import path or symbol`, with `paths:` frontmatter so it loads only for the relevant stack.
+- Modified: `staging/plugin/skills/project-init/SKILL.md` — generate a first draft by detecting the dominant mechanism in existing code (most-imported HTTP client, logger, config module).
+- Modified: `staging/plugin/agents/reviewer.md` — add the conformance question to the Consistency checklist, severity MINOR.
+- New: test file in both CI registries.
 
 ## Data model
-Scratch patterns, from the failure modes the source names: `tmp`, `scratch`, `debug`, `backup`, `*.log`, `interim_*`, `*_just_in_case`.
+One `name → symbol` line per mechanism; `#` comments allowed.
 
 ## API / Interfaces
-Classification only; nothing is deleted automatically. Deletion stays a human decision.
+None beyond the file convention. Absent file means the check is inert.
 
 ## UI flows
-The commit gate renders scratch-looking untracked files as a distinct group from ordinary new files.
+None.
 
 ## Edge cases
-- An ordinary new source file must not be misclassified.
-- A legitimate file named e.g. `debug.py` in a project that ships a debugger is a false positive — classification is advisory and never blocks.
-- The agent-file anchors must be exact strings a test can assert.
+- A repo with no dominant mechanism (a tie, or a single usage) must produce no draft rather than a wrong one.
+- A repo with no canonical-mechanisms file must behave exactly as today.
+- The reviewer must not flag the canonical mechanism itself as a violation.
 
 ## Success criteria
-- [ ] Each of the three agent files contains the cleanup anchor.
-- [ ] A scratch-named untracked file is rendered in its own group in the commit gate.
-- [ ] An ordinary new source file is not misclassified.
-- [ ] Nothing is deleted automatically.
+- [ ] `project-init` on a repo with a dominant HTTP client emits a draft naming it.
+- [ ] A repo with no dominant mechanism produces no draft.
+- [ ] The reviewer checklist contains the anchor.
+- [ ] A repo with no canonical-mechanisms file behaves exactly as today.
 - [ ] The new test file is registered in BOTH CI registries.
