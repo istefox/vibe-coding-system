@@ -29,19 +29,25 @@ SCOPE_MARK="alongside the pre-flight-pattern-enforce entry"
 ARCH_MARK="alongside the write-scope-enforce entry"
 CMD_MARK="alongside the agent-write-scope entry"
 TEST_MARK="alongside the agent-command-scope entry"
+PRECOMPACT_MARK="PreCompact is not currently in the hooks block"
 RETIRED_MARK="MANUAL STEP: retired hook cleanup"
 CLEAR_MARK="no manual steps outstanding"
 
 # Two wiring notices now share the "MANUAL STEP: hook wiring" heading (nightly-guard and, since
 # issue #87, write-scope-enforce), so the marks above discriminate on each notice's own body.
 # Matching the shared heading would make the two indistinguishable.
+#
+# precompact-guard (issue #112, ADR-0058) is a CONTRACT CHANGE to this file, not just an addition:
+# the "yes" fixture below enumerates every wired hook and must include PreCompact too, or A3's
+# all-clear assertion breaks the moment sync-to-claude.sh's new notice exists (this caught
+# ADR-0049 too — see the comment on issue #87 above).
 
 # build_home <name> <wired:yes|no|nofile> <retired:yes|no> — returns the fixture HOME path.
-# "wired: yes" means BOTH hooks are wired, i.e. genuinely nothing outstanding.
+# "wired: yes" means every wired hook is present, i.e. genuinely nothing outstanding.
 build_home() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   case "$2" in
-    yes) printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
+    yes) printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     no)  printf '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     nofile) : ;;
   esac
@@ -108,6 +114,10 @@ case "$OUT" in
   *"$ARCH_MARK"*) ok "D3: agent-write-scope notice also fail-safes on a missing settings.json" ;;
   *) bad "D3: missing settings.json silently treated as agent-write-scope-wired" ;;
 esac
+case "$OUT" in
+  *"$PRECOMPACT_MARK"*) ok "D4: precompact-guard notice also fail-safes on a missing settings.json (issue #112)" ;;
+  *) bad "D4: missing settings.json silently treated as precompact-guard-wired" ;;
+esac
 
 # =====================================================================================
 # E. The two wiring notices must be independent — issue #87 added the second one. If wiring
@@ -164,6 +174,29 @@ OUT7=$(run_sync "$_h")
 case "$OUT7" in
   *"$TEST_MARK"*) bad "E8: test-write-scope notice printed although it IS wired" ;;
   *) ok "E8: test-write-scope notice suppressed once wired" ;;
+esac
+
+# E9: precompact-guard (issue #112) fires independently of the five PreToolUse wiring notices —
+# it is a different event key entirely (PreCompact), so nothing about the PreToolUse fixtures
+# above should affect it either way.
+case "$OUT" in
+  *"$PRECOMPACT_MARK"*) ok "E9: precompact-guard notice fires independently too (issue #112, ADR-0058)" ;;
+  *) bad "E9: precompact-guard notice suppressed although PreCompact is not wired" ;;
+esac
+
+# E10: the reverse direction — wiring PreCompact must suppress its own reminder while leaving the
+# PreToolUse notices alone. Without this, E9 alone would pass on a notice that prints
+# unconditionally, the same fixed-noise problem #85 existed to remove.
+_h="$TMP/e9"; mkdir -p "$_h/.claude/hooks"
+printf '{"hooks":{"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+OUT9=$(run_sync "$_h")
+case "$OUT9" in
+  *"$PRECOMPACT_MARK"*) bad "E10: precompact-guard notice printed although it IS wired" ;;
+  *) ok "E10: precompact-guard notice suppressed once wired" ;;
+esac
+case "$OUT9" in
+  *"$WIRING_MARK"*) ok "E11: wiring PreCompact does not suppress the nightly-guard notice" ;;
+  *) bad "E11: nightly-guard notice muted by an unrelated event key being wired" ;;
 esac
 
 echo "----"
