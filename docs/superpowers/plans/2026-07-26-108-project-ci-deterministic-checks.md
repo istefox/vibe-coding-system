@@ -14,7 +14,7 @@ every hook call site to serve this one.
 
 ## Task checklist
 
-- [ ] **Task 1 — RED harness.** `staging/plugin/scripts/tests/project-ci-checks.test.sh`.
+- [x] **Task 1 — RED harness.** `staging/plugin/scripts/tests/project-ci-checks.test.sh`.
   `C`-prefixed labels, hermetic, bash 3.2. Sections: **CA** the `checks` job exists in
   `staging/project-templates/ci/ci.yml`, is a **separate job** from `ci` (§D2), and each gate step
   is present; **CB** the fail-closed/print-only split of §D5 is exactly as specified — `SECRET`,
@@ -29,27 +29,27 @@ every hook call site to serve this one.
   Every assertion seen RED first. No fixture path may contain `secret`, `credential`, `.env`,
   `.pem`, `.key` — note `protect-files.sh` denies any path containing `secrets` (ADR-0046).
 
-- [ ] **Task 2 — the `checks` job.** Extend `staging/project-templates/ci/ci.yml` with a `checks`
+- [x] **Task 2 — the `checks` job.** Extend `staging/project-templates/ci/ci.yml` with a `checks`
   job, separate from `ci` (§D2), running the diff-scoped gates against the PR diff. Needs a base ref
   and therefore a `fetch-depth` adjustment on the checkout — `dependency-scan.sh`'s existing
   base-ref/merge-base pattern in that file is the one to follow. `interface-check.sh` already has a
   step there from #107; move or reconcile it into the new job rather than duplicating it, and pass
   `--no-renames` (ADR-0053 requires it). → CA/CB/CF green.
 
-- [ ] **Task 3 — skip notices.** Every gate step `[ -x … ]`-guarded, printing a visible skip notice
+- [x] **Task 3 — skip notices.** Every gate step `[ -x … ]`-guarded, printing a visible skip notice
   naming `vendor-checks.sh` as the remedy when the script is absent (§D4). → CC green.
 
-- [ ] **Task 4 — `vendor-checks.sh`.** Copies the current check scripts into a target repo's
+- [x] **Task 4 — `vendor-checks.sh`.** Copies the current check scripts into a target repo's
   `.claude/scripts/`. Idempotent, shows what it will overwrite before overwriting (the house rule:
   never overwrite an existing file without showing the diff first), and records the source revision
   so a stale copy is identifiable. Decide where it lives and register it in `PAIRS` following the
   nearest sibling. → CD green.
 
-- [ ] **Task 5 — documentation.** Say in the template header and in the RUNBOOK that vendoring is a
+- [x] **Task 5 — documentation.** Say in the template header and in the RUNBOOK that vendoring is a
   deliberate manual step, that the copies drift, and how to refresh them. This feature does nothing
   on merge day; the docs are what make that a known state rather than a surprise.
 
-- [ ] **Task 6 — registration + full suite.** New test file into **both** CI registries (`ci.yml`
+- [x] **Task 6 — registration + full suite.** New test file into **both** CI registries (`ci.yml`
   glob automatic; `.github/workflows/docs-ci.yml`'s explicit named list needs a manual append after
   `interface-immutability`). Then run every `staging/plugin/scripts/tests/*.test.sh`. **CE is the
   regression that matters** — `secret-dep-gate.test.sh`, `weakening-wiring.test.sh`,

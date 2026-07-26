@@ -72,6 +72,7 @@ plugin/scripts/post-write-check.sh|hooks/post-write-check.sh
 plugin/scripts/secret-scan.sh|hooks/secret-scan.sh
 plugin/scripts/dependency-scan.sh|hooks/dependency-scan.sh
 plugin/scripts/interface-check.sh|hooks/interface-check.sh
+plugin/scripts/vendor-checks.sh|hooks/vendor-checks.sh
 plugin/scripts/prompt-en-prose-detect.sh|hooks/prompt-en-prose-detect.sh
 plugin/scripts/reset-gate-counter.sh|hooks/reset-gate-counter.sh
 plugin/scripts/usage-daily-hint.sh|hooks/usage-daily-hint.sh
@@ -183,7 +184,7 @@ if [ "$APPLY" -eq 1 ]; then
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
     "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
-    "$DEST/hooks/agent-command-scope.sh" 2>/dev/null || true
+    "$DEST/hooks/agent-command-scope.sh" "$DEST/hooks/vendor-checks.sh" 2>/dev/null || true
 fi
 
 # MANUAL STEP notices are gated on the state they describe. They used to print unconditionally,

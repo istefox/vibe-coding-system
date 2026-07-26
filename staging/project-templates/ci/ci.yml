@@ -4,6 +4,23 @@
 # repo's TOFU-trusted command from .claude/test-cmd (fallback documented if absent).
 # The job name `ci` is the required status check that set-branch-protection.sh enforces on
 # main — keep the two in sync. No secrets are needed for a static build.
+#
+# TWO JOBS, TWO POSTURES (ADR-0054, issue #108). `ci` runs the project's own tests plus two
+# ADVISORY reporters that never fail the build. `checks`, below, is a SEPARATE job that runs the
+# same reporter scripts FAIL-CLOSED against the PR diff, plus the interface-immutability checker.
+# Splitting them matters for branch protection (ADR-0054 §D2): folding a heuristic or a
+# secret-scan false positive into `ci` would make "a gate fired" indistinguishable from "the tests
+# broke". A repo can require `checks` on main independently of `ci`.
+#
+# VENDORING IS MANUAL AND DELIBERATE, AND DRIFTS (ADR-0054 §D3/§D4). Every `.claude/scripts/*.sh`
+# referenced below must be copied into the target repo by hand, once, with
+# `vendor-checks.sh <repo-root> --apply` (`staging/plugin/scripts/vendor-checks.sh` in the
+# vibe-coding-system blueprint repo, deployed to `~/.claude/hooks/vendor-checks.sh`). Nothing here
+# fetches them at CI time — that would make a project's security gates depend on an external
+# service being up and honest. Until vendored, every gate step below is INERT: the `[ -x … ]`
+# guard turns a missing script into a visible skip notice, never a silent pass. The copies do not
+# refresh themselves; re-run vendor-checks.sh by hand when the source scripts change upstream, and
+# expect them to be stale most of the time — that is the accepted cost, not a bug.
 name: ci
 
 on:
@@ -34,15 +51,15 @@ jobs:
 
       # --- Advisory pre-merge reporters (ADR-0046 §D10, issue #100) ---------------------------
       # Both scripts exit 0 on a completed scan, findings or not, so a finding is printed in the
-      # log and this `ci` check stays green. Turning a finding into a red build is the fail-closed
-      # `checks` job, which belongs to issue #108 by its own SPEC — creating it here would make
-      # #108 a merge conflict instead of a feature.
+      # log and this `ci` check stays green. Turning a finding into a red build is the FAIL-CLOSED
+      # `checks` job below (issue #108 / ADR-0054) — the SAME scripts, called a second time with
+      # the opposite posture, never modified to get there (ADR-0054 §D1).
       #
-      # KNOWN GAP, stated rather than left to be discovered: nothing yet copies secret-scan.sh and
-      # dependency-scan.sh into a target repo's .claude/scripts/. That vendoring is #108's as well,
-      # so in a freshly generated project both steps are INERT. The `[ -x … ]` guard is what makes
-      # them inert rather than red, and the skip notice makes the inertness visible in the CI log
-      # instead of silent.
+      # INERT UNTIL VENDORED, by design (ADR-0054 §D4): nothing copies secret-scan.sh and
+      # dependency-scan.sh into a target repo's .claude/scripts/ automatically — that is a
+      # deliberate manual step, `vendor-checks.sh <repo-root> --apply`. Until it is run, both
+      # steps below are INERT. The `[ -x … ]` guard is what makes them inert rather than red, and
+      # the skip notice makes the inertness visible in the CI log instead of silent.
 
       - name: Secret scan (advisory)
         run: |
@@ -76,15 +93,123 @@ jobs:
             echo "::notice::.claude/scripts/dependency-scan.sh not present — dependency scan skipped (issue #108 vendors it)"
           fi
 
-      # --- Interface immutability gate (ADR-0053 §D5) — BLOCKING, unlike the two advisory
-      # reporters above. interface-check.sh is a CHECKER (exit 0/2/3), not a reporter, and this
-      # step lets its exit code propagate straight into the job result on purpose: a project only
-      # reaches a red build here by having declared `.claude/protected-interfaces` itself
-      # (ADR-0053 §D1/§D2 — inert when absent, so a project with no declaration never fails this
-      # step). Same vendoring gap as the two reporters above: nothing yet copies
-      # interface-check.sh into a target repo's .claude/scripts/ (issue #108); the `[ -x … ]`
-      # guard keeps a freshly generated project inert rather than red until that lands.
-      - name: Interface immutability gate
+  # ================================================================================================
+  # checks — a SEPARATE job from `ci` (ADR-0054 §D2, issue #108). Runs the SAME four scripts as
+  # `ci`'s advisory reporters plus interface-check.sh, but FAIL-CLOSED against the PR diff. `ci`
+  # is the required status check `set-branch-protection.sh` enforces on main; a repo opts `checks`
+  # into branch protection independently, so a gate firing here never reads as "the tests broke".
+  #
+  # THE POSTURE BELONGS TO THE CALLER, NOT THE SCRIPT (ADR-0054 §D1). secret-scan.sh,
+  # dependency-scan.sh and weakening-scan.sh are REPORTERS — they always exit 0 and signal through
+  # stdout only, exactly as ADR-0046/ADR-0047/ADR-0051 shipped them, because a false positive at
+  # the HOOK call site blocks an agent mid-run with no human present (fail-open there). Here, a
+  # false positive is a red build on a PR a human is already reading (fail-closed here). None of
+  # the four scripts below are modified to make this job possible — this job is the caller that
+  # turns a mechanical finding into a build failure instead of the script doing it.
+  #
+  # WHAT FAILS THE BUILD, WHAT ONLY PRINTS (ADR-0054 §D5) — mechanical vs. heuristic:
+  #   SECRET (secret-scan.sh)             -> FAILS the build
+  #   WEAKENED (weakening-scan.sh)        -> FAILS the build
+  #   interface-check.sh exit 3           -> FAILS the build (it is a CHECKER: the caller
+  #                                           branches on its exit code, not on stdout)
+  #   SUSPECT (weakening-scan.sh)         -> print-only (heuristic; ADR-0051 measured
+  #                                           literal-assertion-added at 25% precision)
+  #   NEWDEP notes (dependency-scan.sh)   -> print-only (no allow-list means "report everything")
+  # A `checks` job that fires on heuristics is a `checks` job someone adds to the ignore list.
+  #
+  # REPORTER TRAP, RESTATED AT EVERY CALL SITE BELOW (ADR-0054 §D6, the exact bug issue #100 hit):
+  # never `[ -n "$out" ]` to decide whether something was found — that is true even on a bare
+  # CLEAN sentinel. Never `n=$(... | grep -c '^X' ... || echo 0)` — `grep -c ... || echo 0` prints
+  # 0 AND exits 1 on no match, so the fallback ALSO fires, yielding the two-line string "0\n0".
+  # Use `printf '%s\n' "$out" | grep -q '^PATTERN'`, and `grep -c ... || true` if a count is ever
+  # genuinely needed.
+  #
+  # INERT UNTIL VENDORED (ADR-0054 §D4): every step is `[ -x .claude/scripts/<name> ]`-guarded and
+  # prints a skip notice naming `vendor-checks.sh` as the remedy when the script is absent — a
+  # skipped step and a passing step must never look the same in this log.
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Diff-scoped gates need the merge base with the PR's target branch, which a shallow
+          # (depth-1, the actions/checkout default) clone does not carry on the HEAD side. Full
+          # history here; each step below additionally fetches the base ref itself, following
+          # dependency-scan.sh's existing base-ref/merge-base pattern in the `ci` job above.
+          fetch-depth: 0
+
+      - name: Secret scan (fail-closed)
+        run: |
+          if [ -x .claude/scripts/secret-scan.sh ]; then
+            # Whole tree, so no base ref needed — identical behaviour on push and pull_request,
+            # matching the advisory step in the `ci` job above.
+            out=$(git ls-files | .claude/scripts/secret-scan.sh --files -)
+            printf '%s\n' "$out"
+            if printf '%s\n' "$out" | grep -q '^SECRET'; then
+              echo "::error::secret-scan.sh reported a SECRET finding — see the log above"
+              exit 1
+            fi
+          else
+            echo "::notice::.claude/scripts/secret-scan.sh not present — run vendor-checks.sh to enable this gate (issue #108)"
+          fi
+
+      - name: Dependency scan (print-only)
+        run: |
+          if [ -x .claude/scripts/dependency-scan.sh ]; then
+            base="${GITHUB_BASE_REF:-}"
+            if [ -z "$base" ]; then
+              echo "::notice::no base ref (push build) — dependency scan needs a diff, skipped"
+            else
+              git fetch --no-tags --depth=50 origin "$base" >/dev/null 2>&1 || true
+              mb=$(git merge-base "origin/$base" HEAD 2>/dev/null || true)
+              if [ -z "$mb" ]; then
+                echo "::notice::no merge base with origin/$base (shallow clone?) — dependency scan skipped"
+              else
+                # Print-only (ADR-0054 §D5): a NEWDEP finding never fails this job, regardless of
+                # what the pipeline's own exit status would otherwise be.
+                git diff "$mb" HEAD | .claude/scripts/dependency-scan.sh --diff || true
+              fi
+            fi
+          else
+            echo "::notice::.claude/scripts/dependency-scan.sh not present — run vendor-checks.sh to enable this gate (issue #108)"
+          fi
+
+      - name: Weakening scan (fail-closed)
+        run: |
+          if [ -x .claude/scripts/weakening-scan.sh ]; then
+            base="${GITHUB_BASE_REF:-}"
+            if [ -z "$base" ]; then
+              echo "::notice::no base ref (push build) — weakening scan needs a diff, skipped"
+            else
+              git fetch --no-tags --depth=50 origin "$base" >/dev/null 2>&1 || true
+              mb=$(git merge-base "origin/$base" HEAD 2>/dev/null || true)
+              if [ -z "$mb" ]; then
+                echo "::notice::no merge base with origin/$base (shallow clone?) — weakening scan skipped"
+              else
+                out=$(git diff "$mb" HEAD | .claude/scripts/weakening-scan.sh)
+                printf '%s\n' "$out"
+                if printf '%s\n' "$out" | grep -q '^WEAKENED'; then
+                  echo "::error::weakening-scan.sh reported a WEAKENED finding — see the log above"
+                  exit 1
+                fi
+                # SUSPECT is print-only, deliberately never reaches this branch (ADR-0054 §D5,
+                # ADR-0051's measured 25% precision on literal-assertion-added).
+              fi
+            fi
+          else
+            echo "::notice::.claude/scripts/weakening-scan.sh not present — run vendor-checks.sh to enable this gate (issue #108)"
+          fi
+
+      # interface-check.sh is a CHECKER, not a reporter — unlike the three steps above, the caller
+      # branches on its exit code, not on stdout (ADR-0053 §D2/§D3). Moved here from `ci` (was
+      # issue #107's original step) so a broken protected interface reads as "a gate fired"
+      # (checks) rather than "the tests broke" (ci) in branch protection (ADR-0054 §D2).
+      # `--no-renames` is required (ADR-0053): git's default rename detection can collapse a
+      # same-content file move into a rename record with no content lines at all, which would hide
+      # a path-glob relocation from this purely textual checker.
+      - name: Interface immutability gate (fail-closed)
         run: |
           if [ -x .claude/scripts/interface-check.sh ]; then
             base="${GITHUB_BASE_REF:-}"
@@ -96,9 +221,11 @@ jobs:
               if [ -z "$mb" ]; then
                 echo "::notice::no merge base with origin/$base (shallow clone?) — interface check skipped"
               else
+                # No `|| true`, no grep on stdout: exit 3 (a broken protected interface) is meant
+                # to propagate straight into this step's — and this job's — result.
                 git diff --no-renames "$mb" HEAD | .claude/scripts/interface-check.sh --root .
               fi
             fi
           else
-            echo "::notice::.claude/scripts/interface-check.sh not present — interface check skipped (issue #108 vendors it)"
+            echo "::notice::.claude/scripts/interface-check.sh not present — run vendor-checks.sh to enable this gate (issue #108)"
           fi

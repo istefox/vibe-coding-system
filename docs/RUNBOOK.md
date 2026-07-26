@@ -179,6 +179,32 @@ cp -R <vibe-repo>/staging/project-templates/app-fastapi-react/. ~/dev/<name>/
 # customize: name, real stack, commands; add CLAUDE.local.md to .gitignore
 ```
 
+### CI checks vendoring (issue #108, ADR-0054) — deliberate manual step, drifts
+
+`staging/project-templates/ci/ci.yml` includes a `checks` job that runs `secret-scan.sh`,
+`dependency-scan.sh` and `weakening-scan.sh` fail-closed against the PR diff, plus
+`interface-check.sh` as a checker, but only once they exist at `<target-repo>/.claude/scripts/`.
+Nothing puts them there automatically — that would mean a project's security gates depend on an
+external service being up and honest (ADR-0054 §D3). Vendor them by hand, once per target repo:
+
+```bash
+cd <vibe-repo>
+bash staging/plugin/scripts/vendor-checks.sh <target-repo-root>          # dry run: shows the diff
+bash staging/plugin/scripts/vendor-checks.sh <target-repo-root> --apply  # writes .claude/scripts/
+```
+
+Until this is run, every gate step in the `checks` job is INERT: it prints an `::notice::` skip
+line naming this same command as the remedy, and the job stays green with nothing checked — a
+skip is never meant to look like a pass.
+
+**The copies drift, and that is accepted, not a bug.** They are pinned at vendoring time (a
+change needs a visible diff in the PR that introduced it) and reviewable, but they do not refresh
+themselves — the same trade this file's own Step 5/6 sync already makes for `~/.claude`. Re-run
+`vendor-checks.sh <target-repo-root> --apply` by hand whenever the source scripts in this repo
+change and the target repo's gates should catch up; it is idempotent (a second run against an
+unchanged source touches nothing) and always shows the diff before overwriting a locally modified
+copy.
+
 ---
 
 ## Security notes
