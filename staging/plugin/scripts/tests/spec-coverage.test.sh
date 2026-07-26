@@ -652,6 +652,56 @@ else
   bad "RH6: the Step 2 architect dispatch prompt does not mention citing requirement IDs (Task 6)"
 fi
 
+# ==============================================================================================
+# RI. The two SPEC generators and the architect's plan-citation contract (ADR-0048 §D6).
+# EXPECTED RED until Task 8, except RI2/RI6 which are forward guards (green on arrival).
+# ==============================================================================================
+IVD="$STAGING/plugin/skills/interview-driver/SKILL.md"
+SFI="$STAGING/plugin/skills/spec-from-issue/SKILL.md"
+ARCH_AGENT="$STAGING/plugin/agents/architect.md"
+
+if grep -qF 'R-01' "$IVD" && grep -qi 'success criteria' "$IVD"; then
+  ok "RI1: interview-driver/SKILL.md requires enumerated R-01, R-02, ... success-criteria items"
+else
+  bad "RI1: interview-driver/SKILL.md does not mention R-01 alongside success criteria (Task 8)"
+fi
+
+RI2_CLOSE=$(awk 'NR>1 && $0=="---"{print NR; exit}' "$IVD")
+if [ -n "$RI2_CLOSE" ] && sed -n "2,${RI2_CLOSE}p" "$IVD" | grep -qx 'disable-model-invocation: true'; then
+  ok "RI2: forward guard — interview-driver/SKILL.md frontmatter still carries disable-model-invocation: true"
+else
+  bad "RI2: interview-driver/SKILL.md is missing disable-model-invocation: true — the /loop safety design (issue #56) — this is a forward guard, not fix evidence for this feature"
+fi
+
+if grep -qF 'R-01' "$SFI" && grep -qi 'success criteria' "$SFI"; then
+  ok "RI3: spec-from-issue/SKILL.md's Success criteria template requires R-NN-prefixed items starting at R-01"
+else
+  bad "RI3: spec-from-issue/SKILL.md does not require R-01-prefixed success-criteria items (Task 8)"
+fi
+
+if grep -qi 'id' "$SFI" && grep -qF 'never a reason to invent a criterion' "$SFI"; then
+  ok "RI4: spec-from-issue/SKILL.md carries the no-fabrication guardrail for IDs"
+else
+  bad "RI4: spec-from-issue/SKILL.md is missing the ID no-fabrication guardrail — the instruction 'give every criterion an ID' is satisfiable by producing more criteria (Task 8)"
+fi
+
+if grep -qE 'R-[0-9][0-9]' "$ARCH_AGENT" && grep -qi 'cite' "$ARCH_AGENT" && grep -qF '(R-02, R-05)' "$ARCH_AGENT"; then
+  ok "RI5: architect.md Output Format requires each plan task to cite requirement IDs, form (R-02, R-05)"
+else
+  bad "RI5: architect.md does not require requirement-ID citation on plan tasks (Task 8)"
+fi
+
+RI6_MISSING=""
+for _e in 'Bash(git log*)' 'Bash(git diff*)' 'Bash(git show*)' 'Bash(git status*)' 'Bash(git rev-parse*)'; do
+  sed -n '4p' "$ARCH_AGENT" | grep -qF "$_e" || RI6_MISSING="$RI6_MISSING $_e"
+done
+if [ -z "$RI6_MISSING" ] && ! sed -n '4p' "$ARCH_AGENT" | grep -qF 'Bash(git *)' \
+   && grep -qF 'Command scope' "$ARCH_AGENT" && grep -qF 'Write scope' "$ARCH_AGENT"; then
+  ok "RI6: forward guard — architect.md line 4 still carries the five read-only git entries, no Bash(git *), and the Command-scope/Write-scope bullets survive"
+else
+  bad "RI6: architect.md line 4 or its Command-scope/Write-scope bullets regressed — this is a forward guard duplicating agent-tool-scoping.test.sh A1/A12/A14, not fix evidence for this feature. Missing:$RI6_MISSING"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

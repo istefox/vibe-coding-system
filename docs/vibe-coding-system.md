@@ -1312,6 +1312,63 @@ every one of them without changing a byte of the detector or the skill it lives 
 
 Detail: `docs/architecture/ADR-0047-101-weakening-scan-wiring.md`.
 
+### Addition 2026-07-26 (issue #102, requirement IDs and the SPEC→plan→test coverage check,
+ADR-0048)
+
+Three artifacts the chain produces are supposed to say the same thing three times: a SPEC's
+success criteria, a plan's tasks, and a test suite. Nothing checked that they did — a requirement
+could be written into `SPEC.md`, quietly not decomposed into a plan task, and never tested, and
+every existing gate would still show green, because every gate measures whether the *plan* was
+executed, never whether the *SPEC* was. `spec-coverage.sh` closes that gap with a third Step 5 →
+Step 6 gate beside #100's reporters and #101's weakening scan.
+
+- **`R-NN` IDs at the start of a success-criteria checklist item, matched with a boundary anchor
+  on both sides** (sec. 5): `(^|[^A-Za-z0-9_])R-[0-9][0-9]([^0-9]|$)`. Measured before the design
+  was fixed: a naive `R-[0-9][0-9]` matches 30+ of the 34 existing SPEC files, every one from the
+  letter run in `ADR-0016`, `ADR-0047`, and so on. With both anchors the only matches left in the
+  whole repository are two prose lines in this feature's own SPEC.
+- **Backward compatibility is the hard gate, asserted against the real corpus, not a fixture.** A
+  SPEC with no IDs produces exit 0, empty stdout, empty stderr — not "0 IDs OK", not a warning.
+  The harness loops over all 34 `docs/specs/*.spec.md` plus `SPEC.md` and requires the silent pass
+  on each, with a `>= 30` count guard against a vacuous loop (the `pairs-completeness.test.sh`
+  self-test-2 lesson, reapplied to a different substrate).
+- **It blocks — the central call of this ADR, and for a different reason than #101's gate blocks.**
+  #101 blocks on a heuristic where a legitimately deleted test file can trigger a false halt; this
+  gate blocks on a mechanical fact — an ID is cited by a plan task and mentioned in a test, or it
+  is not — so its only false-positive class is "implemented but not cited", exactly the drift the
+  feature exists to surface. A report nobody must act on is a report nobody reads, the same
+  ADR-0047 §D7 lesson RTF breaker B already taught this codebase at the same boundary.
+- **Two adjacent gates, two opposite caller idioms, stated at the call site.** `spec-coverage.sh`
+  is a checker — the caller branches on the exit code (0 = covered or no IDs, 1 = uncovered,
+  2 = bad invocation, 3 = structural error). `weakening-scan.sh`, four lines above it in the same
+  SKILL.md, is a reporter — it always exits 0 and signals through stdout only. The block carries
+  the literal sentence "Do not copy one block's branching into the other," pinned by an assertion
+  rather than left as prose a reflow can silently drop.
+- **`.md` is never a discovered test file, and the reason is a checker that would pass itself.**
+  Test discovery is by basename, narrowed from `weakening-scan.sh`'s own predicate. Without the
+  `.md` exclusion, `--tests-root <project-root>` would discover the SPEC file itself as a test
+  file matching its own IDs, and every SPEC would be trivially self-covered — a checker that
+  always passes is worse than none.
+- **Both SPEC generators and the architect gain the same contract independently.**
+  `interview-driver` and `spec-from-issue` emit `R-01`, `R-02`, ... success-criteria items;
+  `spec-from-issue` also gains a no-fabrication guardrail (an ID is never a reason to invent a
+  criterion — ADR-0023 §D5's contract, extended). `architect.md`'s Output Format requires every
+  plan task to cite the IDs it satisfies, and the `concept-to-code` Step 2 dispatch states the
+  same requirement a second time — the ADR-0039 precedent, because the deployed `architect.md` can
+  be stale and the chain should not depend on which of the two files reached `~/.claude` most
+  recently.
+- **This is an instruction, not an enforcement** (ADR-0041/ADR-0045's distinction, applied again):
+  the gate is prose in a SKILL.md a model is asked to follow. Enforcing the transition inside
+  `manifest-transition.sh` was rejected on the same blast-radius ground as ADR-0047 A2. The harness
+  pins that the instruction exists; nothing pins that it is obeyed.
+- **No manifest field, no schema bump.** `step5-report.json` gains one additive
+  `requirement_coverage` object, the fourth extension of that schema on the same additive terms as
+  `step5_mode`, `checkpoint_reviews`, and `weakening_findings`. `autopilot-build`,
+  `nightly-autopilot`, `project-conductor`, `commit` and `review-triage-fix` are untouched — the
+  c2c gate halts before any of them gets a turn.
+
+Detail: `docs/architecture/ADR-0048-102-requirement-ids-coverage.md`.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
