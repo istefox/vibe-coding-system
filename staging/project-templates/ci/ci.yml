@@ -308,3 +308,60 @@ jobs:
             jq -r '.results[] | select(.extra.severity == "ERROR") | "\(.path):\(.start.line) \(.check_id) — \(.extra.message)"' semgrep-results.json
             exit 1
           fi
+
+  # ================================================================================================
+  # licence-scan — a FOURTH job, separate from ci/checks/security-audit (ADR-0065, issue #119).
+  # Follows security-audit's shape (ADR-0056, issue #110) EXACTLY — do not invent a second pattern:
+  # separate job, opt-in via a repo marker, pinned tool version. Opt-in because a licence scan is
+  # irrelevant to a private single-author repo and adds real runtime, same reasoning as
+  # security-audit.
+  #
+  # THE VERSION PIN IS LOAD-BEARING FOR THE SAME REASON AS security-audit's (ADR-0056 §D2, applies
+  # UNCHANGED per ADR-0065 §D1): a declared runner plus a pinned tool version is what makes two
+  # runs of the same commit agree. An unpinned scanner reintroduces exactly the machine-dependent
+  # verdict ADR-0039 §D4 removed. DO NOT CHANGE THE IMAGE TAG BELOW TO `:latest` OR ANY FLOATING
+  # TAG. Pinned to 7.2.1, the most recent stable semantic-version release verified on Docker Hub at
+  # authoring time (not a fabricated digest — see the plan for how this was established).
+  #
+  # REPORTS; NEVER BLOCKS (ADR-0065 §D3) — unlike security-audit's ERROR-blocks/WARNING-INFO-prints
+  # split, NO branch in this job may exit non-zero on a finding. A licence scanner reports what a
+  # dependency DECLARES, and declarations are frequently wrong, missing, or dual; treating that as
+  # a merge gate would block on metadata quality, not on legal risk.
+  #
+  # NOT LEGAL ADVICE, AND THIS JOB CANNOT SEE THE RISK THE FEATURE ACTUALLY NAMES (ADR-0065 §D4). A
+  # scanner finding is an input to a human decision about licensing, never a determination. A green
+  # run of this job does not mean the tree is clean or compliant — it means declared dependency
+  # metadata showed nothing. It reports what a dependency declares; it cannot see verbatim
+  # reproduction of an unattributed snippet, which is the risk this feature exists to address. That
+  # risk stays a documented human procedure in clean-public-repo's audit phase (ADR-0065 §D2) — a
+  # judgement about distinctiveness plus a network search, neither reproducible here — never a job
+  # in this file.
+  licence-scan:
+    name: licence-scan
+    runs-on: ubuntu-latest
+    container:
+      image: licensefinder/license_finder:7.2.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Presence-based opt-in (ADR-0053 §D1 shape, same as security-audit): the marker carries no
+      # keys, nothing else to configure. Gated on this output at every later step, never a
+      # job-level `if:`, so a repo that has not opted in gets one cheap notice step instead of a
+      # job GitHub reports as skipped-with-no-explanation.
+      - name: Opt-in check
+        id: optin
+        run: |
+          if [ -f .claude/licence-scan-enabled ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::.claude/licence-scan-enabled not present — licence-scan is opt-in, skipping (ADR-0065)"
+          fi
+
+      - name: Licence scan (pinned tool, report-only, NOT LEGAL ADVICE)
+        if: steps.optin.outputs.enabled == 'true'
+        run: |
+          echo "::notice::licence-scan reports DECLARED dependency metadata only. This is NOT LEGAL ADVICE: a finding here is an input to a human decision about licensing, never a determination. It cannot see verbatim reproduction of an unattributed snippet — that risk is a human procedure in clean-public-repo's audit phase (ADR-0065), not this job. This job never fails the build (ADR-0065 §D3): findings print here, they do not block."
+          license_finder --format json > licence-results.json || true
+          cat licence-results.json || true
