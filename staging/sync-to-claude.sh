@@ -49,6 +49,7 @@ plugin/skills/nightly-autopilot/SKILL.md|skills/nightly-autopilot/SKILL.md
 plugin/skills/nightly-autopilot/tests/run-tests.sh|skills/nightly-autopilot/tests/run-tests.sh
 plugin/scripts/tests/phase1.test.sh|hooks/tests/phase1.test.sh
 plugin/skills/project-conductor/SKILL.md|skills/project-conductor/SKILL.md
+plugin/skills/project-conductor/scripts/h16-direction-check.sh|skills/project-conductor/scripts/h16-direction-check.sh
 project-templates/ci/ci.yml|templates/ci.yml
 plugin/scripts/detect-test-cmd.sh|hooks/detect-test-cmd.sh
 plugin/scripts/roadmap-from-issues.sh|hooks/roadmap-from-issues.sh

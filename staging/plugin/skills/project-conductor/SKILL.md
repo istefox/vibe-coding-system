@@ -295,6 +295,51 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
   halt reason for the report, leave PROJECT.md as `[x]` (the code is committed locally, just not
   published), print the guard's `NIGHTLY-GUARD HALT` line, and go to Step 6B. Do not attempt the
   next feature — a poisoned run-level marker would halt every subsequent publish anyway.
+- **H16 — direction check (ADR-0061 §D2/§D3, issue #115).** Attended mode only (`_nightly=false`)
+  — nightly has no human present and `/goal` cannot answer `AskUserQuestion` (ADR-0022), so this
+  entire bullet is skipped when `_nightly=true`. Runs here, right after "✓ `<next-feature>`
+  complete", because `$_manifest` (the feature that just finished) and
+  `$_root/.claude/step5-report.json` (that same feature's Step 5 report) are both still the
+  CURRENT feature's — the next chain's own Step 5 overwrites the report before this skill would
+  ever get back here to compare two features' worth of it. See
+  `h16-direction-check.sh`'s own header for exactly what is and is not reachable across features
+  at this seam, and why (Task 4 finding, issue #115): only `tracer_bullet_verdict` genuinely
+  accumulates across the whole roadmap (it is manifest-persisted, one file per feature, never
+  overwritten); `budget_findings`/out-of-scope/`suspect_findings` are same-feature evidence only.
+  ```bash
+  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/skills/project-conductor/scripts/h16-direction-check.sh" ]; then
+    _h16="$CLAUDE_PLUGIN_ROOT/skills/project-conductor/scripts/h16-direction-check.sh"
+  elif [ -f "$HOME/.claude/skills/project-conductor/scripts/h16-direction-check.sh" ]; then
+    _h16="$HOME/.claude/skills/project-conductor/scripts/h16-direction-check.sh"
+  else
+    _h16=""    # neither resolves — no H16 evidence check; an un-synced machine keeps today's behaviour
+  fi
+  h16_out=""
+  [ -n "$_h16" ] && h16_out=$(bash "$_h16" --root "$_root" --this-manifest "$_manifest")
+  ```
+  If `$h16_out` carries no `^TRIGGER` line (i.e. is `CLEAN`, absent script, or resolution failed):
+  do nothing, no question, no log line, continue below. **This silence is the point** — H16 exists
+  to ask when there is a reason to, and an unconditional "still on track?" every single feature is
+  exactly the furniture ADR-0061 §D2 rejects. Never `[ -n "$h16_out" ]` (true even on `CLEAN`,
+  same trap `weakening_findings` already documents at the commit call site) — always
+  `printf '%s\n' "$h16_out" | grep -q '^TRIGGER'`.
+
+  If at least one `TRIGGER` line is present, ask (do NOT auto-answer or auto-complete):
+  ```
+  question: "H16 — direction check\n\nEvidence:\n<one line per TRIGGER, verbatim — the 3rd
+    tab-separated field of each>\n\nIs this still the right direction for the roadmap?"
+  header: "Conductor · Direction"
+  options:
+    - label: "Continue"
+      description: "Keep going with the roadmap as planned"
+    - label: "Pause and reconsider"
+      description: "Stop here — re-evaluate before starting the next feature"
+  ```
+  Record the answer by emitting it in the transcript (`"H16: <answer>"`) — no new manifest field,
+  no new advisory array (issue #115 Task 3 constraint; ADR-0052 §D5). "Continue": fall through to
+  "On success, return to Step 2" below, unchanged. "Pause and reconsider": go to Step 6B (paused)
+  instead of Step 2. **H16 never halts on its own** (§D3, every input above is a heuristic) — a
+  human choosing to pause is the human's decision, not the gate's.
 - On success, return to Step 2.
 
 **B — `current_step = step_4_session_boundary`:**
