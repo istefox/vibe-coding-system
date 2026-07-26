@@ -67,3 +67,7 @@ failure:
 
 # Hint for next action (UX)
 next_action: "Run /skill concept-to-code dynamic-workflows-step5 to start Step 1 interview"
+
+# Backfilled 2026-07-26: field added by ADR-0016 after this chain completed.
+# false = Agent-tool fallback dispatch, the documented default and what this chain used.
+hook_verified: false
