@@ -82,6 +82,7 @@ plugin/scripts/tests/run-hook-tests.sh|hooks/tests/run-hook-tests.sh
 plugin/skills/concept-to-code/SKILL.md|skills/concept-to-code/SKILL.md
 plugin/skills/concept-to-code/scripts/agent-notes-harvest.sh|skills/concept-to-code/scripts/agent-notes-harvest.sh
 plugin/skills/concept-to-code/scripts/detect-macos.sh|skills/concept-to-code/scripts/detect-macos.sh
+plugin/skills/concept-to-code/scripts/diff-budget-check.sh|skills/concept-to-code/scripts/diff-budget-check.sh
 plugin/skills/concept-to-code/scripts/gate0-detect.sh|skills/concept-to-code/scripts/gate0-detect.sh
 plugin/skills/concept-to-code/scripts/manifest-init.sh|skills/concept-to-code/scripts/manifest-init.sh
 plugin/skills/concept-to-code/scripts/manifest-set-artifact.sh|skills/concept-to-code/scripts/manifest-set-artifact.sh

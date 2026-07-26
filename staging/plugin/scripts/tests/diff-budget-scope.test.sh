@@ -1,0 +1,346 @@
+#!/bin/bash
+# diff-budget-scope.test.sh — offline, hermetic, no network, no $HOME dependency.
+# Bash 3.2 clean. Run: bash diff-budget-scope.test.sh
+#
+# Covers issue #106 / ADR-0052: a per-task diff budget (expected files + an approximate line
+# ceiling) declared optionally on a plan task line, checked at the existing Step 5 checkpoints
+# against `git diff --stat`, plus a whole-plan out-of-scope file check.
+#
+# ASSERTION LABELS ARE B-PREFIXED (BA1, BD3, BG2, ...) to stay distinguishable from every other
+# harness printing into the same CI shell-tests job (R-, H-, W-, ...).
+#
+# THE SCRIPT UNDER TEST IS A REPORTER (ADR-0052, matching weakening-scan.sh at the same Step 5
+# checkpoint), NOT spec-coverage.sh in the same directory (a CHECKER with an exit-code contract).
+# Always exits 0. Signals through stdout only, CLEAN sentinel when there is nothing. Do not copy
+# spec-coverage.sh's branch-on-exit-code idiom into this file's assertions — ADR-0048 §D7 already
+# had to write that sentence once (see BT section below, which restates the trap explicitly).
+#
+# BACKWARD COMPATIBILITY IS THE HARD GATE (ADR-0052 §D1, plan risk flag 2). Section BB runs
+# against the REAL corpus in docs/superpowers/plans/ (42 files at the time this was written,
+# none of which carry a budget) with a >= 5 count guard against a vacuous loop — the
+# pairs-completeness.test.sh self-test-2 lesson, reapplied.
+#
+# THE FIXTURES HERE CONTAIN NO KEY-SHAPED LITERAL and no fixture path contains "secret",
+# "credential", ".env", ".pem", or ".key" — secret-dep-gate.test.sh section D scans this
+# repository's tracked files as its false-positive corpus.
+set -u
+
+SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
+STAGING=$(cd "$SCRIPTS/../.." && pwd)
+REPO=$(cd "$STAGING/.." && pwd)
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+PASS=0; FAIL=0
+TAB=$(printf '\t')
+ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
+bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
+
+DBC="$STAGING/plugin/skills/concept-to-code/scripts/diff-budget-check.sh"
+
+# ==================================================================================================
+# B0. The anchor every B assertion below depends on.
+# ==================================================================================================
+if [ -f "$DBC" ] && [ -r "$DBC" ]; then
+  ok "B0: diff-budget-check.sh exists and is readable at the expected path"
+else
+  bad "B0: $DBC not found or unreadable — every B assertion below is meaningless"
+fi
+
+# --- fixture helper: build a throwaway git repo under $TMP/<name>, baseline-commit, then create
+# the given "<path>:<linecount>" files as new (uncommitted) additions, and print `git diff --stat
+# HEAD`. A fresh repo per call — no state bleed between assertions. ---
+mk_diffstat() {
+  _name="$1"; shift
+  _repo="$TMP/repo_$_name"
+  rm -rf "$_repo"; mkdir -p "$_repo"
+  ( cd "$_repo" && git init -q \
+      && git -c user.name=t -c user.email=t@t.com -c commit.gpgsign=false commit -q -m baseline --allow-empty )
+  for _spec in "$@"; do
+    _f="${_spec%%:*}"; _n="${_spec#*:}"
+    _fdir=$(dirname "$_repo/$_f")
+    mkdir -p "$_fdir"
+    : > "$_repo/$_f"
+    _i=0
+    while [ "$_i" -lt "$_n" ]; do printf 'line %s\n' "$_i" >> "$_repo/$_f"; _i=$((_i+1)); done
+  done
+  ( cd "$_repo" && git add -A >/dev/null 2>&1 && git diff --stat HEAD )
+}
+
+run_dbc() { OUT=$(bash "$DBC" "$@" 2>"$TMP/err" <"$TMP/stat_in"); RC=$?; ERR=$(cat "$TMP/err" 2>/dev/null); }
+
+# ==================================================================================================
+# BT. Reporter trap, restated at the call site (ADR-0052 hard constraint, ADR-0048 §D7 precedent).
+# Never `[ -n "$out" ]` — true even on CLEAN. Never `grep -c ... || echo 0` — the two-line 0\n0 bug.
+# ==================================================================================================
+if [ -f "$DBC" ]; then
+  bt_out=$(printf '' | bash "$DBC" --plan "$TMP/does-not-exist.md" --tasks 1 2>/dev/null); bt_rc=$?
+  if [ "$bt_out" = "CLEAN" ] && [ "$bt_rc" -eq 0 ]; then
+    ok "BT1: a missing --plan file still prints the sentinel CLEAN and exits 0 (fail-open, reporter contract)"
+  else
+    bad "BT1: expected CLEAN/exit 0 on a missing --plan — got out=[$bt_out] rc=$bt_rc"
+  fi
+  if [ -n "$bt_out" ]; then
+    ok "BT2: [ -n \"\$out\" ] is TRUE even on a bare CLEAN — a caller must never use it to decide whether something was found"
+  else
+    bad "BT2: expected \$bt_out to be non-empty (it is the literal string CLEAN)"
+  fi
+fi
+
+# ==================================================================================================
+# BA. Budget parsing + the over/under verdict, correct at the boundary.
+# ==================================================================================================
+cat >"$TMP/ba1-plan.md" <<'EOF'
+# Plan
+
+- [ ] **Task 1 — thing.** Budget: a.py (~10 lines)
+EOF
+mk_diffstat ba1 "a.py:10" >"$TMP/stat_in"
+run_dbc --plan "$TMP/ba1-plan.md" --tasks 1
+if [ "$OUT" = "CLEAN" ] && [ "$RC" -eq 0 ]; then
+  ok "BA1: actual lines == budgeted lines (10 == 10) -> CLEAN, no overshoot at the exact boundary"
+else
+  bad "BA1: expected CLEAN at the exact boundary — got out=[$OUT] rc=$RC"
+fi
+
+mk_diffstat ba2 "a.py:11" >"$TMP/stat_in"
+run_dbc --plan "$TMP/ba1-plan.md" --tasks 1
+if printf '%s\n' "$OUT" | grep -q "^BUDGET${TAB}1${TAB}"; then
+  ok "BA2: actual lines == budget + 1 (11 vs 10) -> a BUDGET line fires, one line past the boundary"
+else
+  bad "BA2: expected a BUDGET line one line past the boundary — got out=[$OUT]"
+fi
+
+if printf '%s\n' "$OUT" | grep -qE "^BUDGET${TAB}1${TAB}files=1/1${TAB}lines=10/11${TAB}margin=1$"; then
+  ok "BA3: the BUDGET line names files=<expected>/<actual>, lines=<expected>/<actual>, and margin=1"
+else
+  bad "BA3: the BUDGET line does not show the expected files=1/1 lines=10/11 margin=1 shape — got out=[$OUT]"
+fi
+
+cat >"$TMP/ba4-plan.md" <<'EOF'
+# Plan
+
+- [ ] **Task 1 — thing.** Budget: a.py (~100 lines)
+- [ ] **Task 2 — other.** Budget: b.py (~50 lines)
+EOF
+mk_diffstat ba4 "a.py:5" "b.py:2" >"$TMP/stat_in"
+run_dbc --plan "$TMP/ba4-plan.md" --tasks 1
+if printf '%s\n' "$OUT" | grep -q "^BUDGET${TAB}1${TAB}"; then
+  ok "BA4: files_actual (2, both globally in-scope) exceeds files_expected (1, Task 1's own declared count) even though lines are far under budget — a files-only overshoot still fires, and b.py is legitimately in-scope (declared by Task 2) so this is NOT the SCOPE case BD tests"
+else
+  bad "BA4: expected a BUDGET line for a files-only overshoot — got out=[$OUT]"
+fi
+
+mk_diffstat ba5 "a.py:5" >"$TMP/stat_in"
+run_dbc --plan "$TMP/ba4-plan.md" --tasks 1
+if [ "$OUT" = "CLEAN" ]; then
+  ok "BA5: files_actual == files_expected (1 == 1) and lines well under -> CLEAN, the files boundary is exact too"
+else
+  bad "BA5: expected CLEAN at the exact files boundary — got out=[$OUT]"
+fi
+
+# ==================================================================================================
+# BB. Absent budget is fully inert (the backward-compatibility hard gate, ADR-0052 §D1).
+# ==================================================================================================
+cat >"$TMP/bb1-plan.md" <<'EOF'
+# Plan
+
+- [ ] **Task 1 — thing.** No budget declared here at all.
+EOF
+mk_diffstat bb1 "z.py:500" "w.py:9" >"$TMP/stat_in"
+run_dbc --plan "$TMP/bb1-plan.md" --tasks 1
+if [ "$OUT" = "CLEAN" ] && [ "$RC" -eq 0 ]; then
+  ok "BB1: a plan with no Budget: line anywhere -> CLEAN regardless of diff size (no BUDGET, no SCOPE)"
+else
+  bad "BB1: expected CLEAN on a fully budget-less plan — got out=[$OUT] rc=$RC"
+fi
+
+bb2_count=0; bb2_bad=0
+for f in "$REPO"/docs/superpowers/plans/*.md; do
+  bb2_count=$((bb2_count + 1))
+  mk_diffstat "bb2_$bb2_count" "some/random/touched/file_$bb2_count.py:37" >"$TMP/stat_in"
+  o=$(bash "$DBC" --plan "$f" --tasks 1 2>"$TMP/bb2err" <"$TMP/stat_in")
+  r=$?
+  e=$(cat "$TMP/bb2err" 2>/dev/null)
+  if [ "$r" -eq 0 ] && [ "$o" = "CLEAN" ] && [ -z "$e" ]; then
+    :
+  else
+    bb2_bad=$((bb2_bad + 1))
+    bad "BB2: $f did NOT pass silently — rc=$r out=[$o] err=[$e]"
+  fi
+done
+if [ "$bb2_bad" -eq 0 ]; then
+  ok "BB2: every plan in the real docs/superpowers/plans/ corpus stays genuinely silent (CLEAN, exit 0, empty stderr)"
+fi
+if [ "$bb2_count" -ge 5 ]; then
+  ok "BB3: the BB2 corpus loop visited $bb2_count files (>= 5) — not a vacuous pass"
+else
+  bad "BB3: the BB2 corpus loop visited only $bb2_count files (< 5) — a glob matching almost nothing would read as full coverage"
+fi
+
+# ==================================================================================================
+# BC. An unparseable budget is treated as absent, never as zero.
+# ==================================================================================================
+cat >"$TMP/bc1-plan.md" <<'EOF'
+# Plan
+
+- [ ] **Task 1 — thing.** Budget: x.py (no number here)
+- [ ] **Task 2 — other.** Budget: y.py (~10 lines)
+EOF
+mk_diffstat bc1 "x.py:500" >"$TMP/stat_in"
+run_dbc --plan "$TMP/bc1-plan.md" --tasks 1
+if ! printf '%s\n' "$OUT" | grep -q '^BUDGET'; then
+  ok "BC1: a malformed Budget: line (no parseable line ceiling) never produces a BUDGET finding, even on a 500-line diff — a naive zero-default would have fired here"
+else
+  bad "BC1: a malformed budget produced a BUDGET line — it must be treated as absent, never as zero (got out=[$OUT])"
+fi
+
+# ==================================================================================================
+# BD. Out-of-scope files are their own finding type, distinct from an overshoot.
+# ==================================================================================================
+cat >"$TMP/bd1-plan.md" <<'EOF'
+# Plan
+
+- [ ] **Task 1 — thing.** Budget: a.py (~1000 lines)
+EOF
+mk_diffstat bd1 "a.py:3" "b.py:3" >"$TMP/stat_in"
+run_dbc --plan "$TMP/bd1-plan.md" --tasks 1
+if printf '%s\n' "$OUT" | grep -q "^SCOPE${TAB}b.py$"; then
+  ok "BD1: b.py, touched but declared by no task in the plan, produces a SCOPE finding"
+else
+  bad "BD1: expected a SCOPE finding for the undeclared file b.py — got out=[$OUT]"
+fi
+if printf '%s\n' "$OUT" | grep -q '^BUDGET'; then
+  bad "BD2: an out-of-scope file must not also be folded into a BUDGET overshoot line (ADR-0052 §D4) — got out=[$OUT]"
+else
+  ok "BD2: no BUDGET line accompanies the SCOPE finding (well under the 1000-line budget) — the two finding types stay separate"
+fi
+if printf '%s\n' "$OUT" | grep -q "^SCOPE${TAB}a.py$"; then
+  bad "BD3: a.py IS declared by Task 1 and must never be reported as out-of-scope"
+else
+  ok "BD3: a.py (declared) produces no SCOPE finding"
+fi
+
+# ==================================================================================================
+# BE. The §D4 exclusions: manifest, step5-report.json, SPEC.md, an explicit plan-level scope:.
+# ==================================================================================================
+cat >"$TMP/be1-plan.md" <<'EOF'
+# Plan
+
+Scope: cross/cutting/*.md
+
+- [ ] **Task 1 — thing.** Budget: a.py (~1000 lines)
+EOF
+mk_diffstat be1 "a.py:3" "SPEC.md:3" "step5-report.json:3" "docs/manifests/2026-01-01-x.manifest.yml:3" "cross/cutting/note.md:3" >"$TMP/stat_in"
+run_dbc --plan "$TMP/be1-plan.md" --tasks 1
+if printf '%s\n' "$OUT" | grep -q '^SCOPE'; then
+  bad "BE1: SPEC.md, step5-report.json, a *.manifest.yml, and a Scope:-matched file must ALL be excluded — got a SCOPE line: out=[$OUT]"
+else
+  ok "BE1: SPEC.md, step5-report.json, the manifest, and the Scope:-declared cross-cutting file are all excluded from the out-of-scope check"
+fi
+
+# ==================================================================================================
+# BF. budget_findings in the step5-report.json schema block (concept-to-code/SKILL.md, Step 5).
+# ==================================================================================================
+CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5="$TMP/cc_step5.txt"
+awk '/^### Step 5 —/{f=1} /^### Step 6 —/{f=0} f' "$CC" >"$STEP5"
+GATES="$TMP/cc_gates.txt"
+awk '/^## 5\. HITL gates/{f=1} /^## 6\. Coexistence invariants/{f=0} f' "$CC" >"$GATES"
+
+if [ -s "$STEP5" ] && [ -s "$GATES" ]; then
+  ok "BF0: both extraction anchors (Step 5, ## 5. HITL gates) are non-empty"
+else
+  bad "BF0: could not extract Step 5 and/or ## 5. HITL gates from $CC — BF/BG assertions below are meaningless"
+fi
+
+if grep -qF '"budget_findings"' "$STEP5"; then
+  ok "BF1: the step5-report.json schema block in Step 5 contains \"budget_findings\""
+else
+  bad "BF1: \"budget_findings\" missing from the Step 5 schema block"
+fi
+
+if grep -F -A6 '"budget_findings"' "$STEP5" | grep -q '"task"' \
+   && grep -F -A6 '"budget_findings"' "$STEP5" | grep -q '"files_expected"' \
+   && grep -F -A6 '"budget_findings"' "$STEP5" | grep -q '"lines_expected"' \
+   && grep -F -A6 '"budget_findings"' "$STEP5" | grep -q '"out_of_scope"'; then
+  ok "BF2: the schema shows task, files_expected, lines_expected and out_of_scope near budget_findings"
+else
+  bad "BF2: the schema does not show the expected record shape near budget_findings"
+fi
+
+if grep -qF 'budget_findings' "$STEP5" && grep -qi 'advisory' "$STEP5" \
+   && grep -qF 'never a failure signal' "$STEP5"; then
+  ok "BF3: Step 5 states budget_findings is advisory and never a failure signal"
+else
+  bad "BF3: Step 5 is missing the budget_findings advisory/never-a-failure-signal statement"
+fi
+
+# ==================================================================================================
+# BG. The §D5 roll-up: a single line when all six advisory arrays are empty, and a top-N cap with a
+# remainder count on budget_findings. This is the point of the feature (plan risk flag 1).
+# ==================================================================================================
+if grep -qi 'all six' "$GATES" || grep -qi 'six advisory' "$GATES"; then
+  ok "BG1: the Gate 5 block names the six-array roll-up explicitly (not a silent count)"
+else
+  bad "BG1: Gate 5 does not name the six-array roll-up (ADR-0052 §D5)"
+fi
+
+if grep -qi 'roll-up' "$GATES" || grep -qi 'rollup' "$GATES"; then
+  ok "BG2: Gate 5 uses the term roll-up for the collapsed all-clear line"
+else
+  bad "BG2: Gate 5 does not mention a roll-up line for the all-clear case"
+fi
+
+if grep -qi 'top' "$GATES" && grep -qi 'remainder' "$GATES" && grep -qF 'budget_findings' "$GATES"; then
+  ok "BG3: Gate 5 states budget_findings is capped at the top N by margin with a remainder count"
+else
+  bad "BG3: Gate 5 is missing the top-N-by-margin / remainder-count statement for budget_findings"
+fi
+
+# Six named arrays must all still be readable from the schema block — a forward guard proving this
+# feature did not silently drop one of the five pre-existing arrays while adding its own.
+BG4_MISSING=""
+for _arr in weakening_findings requirement_coverage checkpoint_reviews tests_written_by suspect_findings budget_findings; do
+  grep -qF "\"$_arr\"" "$STEP5" 2>/dev/null || grep -qF "$_arr" "$STEP5" 2>/dev/null || BG4_MISSING="$BG4_MISSING $_arr"
+done
+if [ -z "$BG4_MISSING" ]; then
+  ok "BG4: all six advisory-schema names are present in the Step 5 schema block (weakening_findings, requirement_coverage, checkpoint_reviews, tests_written_by, suspect_findings, budget_findings)"
+else
+  bad "BG4: missing from the Step 5 schema block:$BG4_MISSING"
+fi
+
+# ==================================================================================================
+# BH. Registration in both CI registries, plus the PAIRS deployment entry (Task 6).
+# ==================================================================================================
+DOCSCI="$REPO/.github/workflows/docs-ci.yml"
+DOCSCI_LOOP=$(grep 'for t in ' "$DOCSCI" 2>/dev/null | head -1)
+if printf '%s' "$DOCSCI_LOOP" | grep -qE '[[:space:]]diff-budget-scope[[:space:];]'; then
+  ok "BH1: docs-ci.yml's shell-tests loop list runs diff-budget-scope"
+else
+  bad "BH1: diff-budget-scope is not in docs-ci.yml's explicit harness list — append it after reward-hack-detectors"
+fi
+
+CI_YML="$REPO/.github/workflows/ci.yml"
+if [ -f "$CI_YML" ] && grep -qE 'tests/\*\.test\.sh|scripts/tests' "$CI_YML"; then
+  ok "BH2: ci.yml discovers *.test.sh via a glob (automatic registration, no per-file edit needed)"
+else
+  bad "BH2: ci.yml does not appear to glob staging/plugin/scripts/tests/*.test.sh — check the workflow"
+fi
+
+SYNCSH="$STAGING/sync-to-claude.sh"
+awk '/^PAIRS="$/{f=1; next} /^"$/{f=0} f' "$SYNCSH" >"$TMP/pairs"
+if grep -qxF 'plugin/skills/concept-to-code/scripts/diff-budget-check.sh|skills/concept-to-code/scripts/diff-budget-check.sh' "$TMP/pairs"; then
+  ok "BH3: PAIRS deploys diff-budget-check.sh to ~/.claude/skills/concept-to-code/scripts/, following spec-coverage.sh's exact registration"
+else
+  bad "BH3: the diff-budget-check.sh PAIRS entry is missing — pairs-completeness.test.sh cannot catch this, its check_complete does not cover plugin/skills/*/scripts/"
+fi
+
+if grep -q 'diff-budget-scope.test' "$TMP/pairs"; then
+  bad "BH4: PAIRS gained an entry for this harness — test files do not deploy (spec-coverage.test.sh precedent, ADR-0048 §D11)"
+else
+  ok "BH4: no PAIRS entry for diff-budget-scope.test.sh (harnesses do not deploy)"
+fi
+
+echo "----"
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
