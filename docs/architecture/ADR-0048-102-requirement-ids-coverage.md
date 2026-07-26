@@ -134,9 +134,9 @@ exclusion is a `RD` assertion, with that sentence as its failure message.
 On failure the output names *which half* was missing:
 
 ```
-UNCOVERED	R-02	plan
-UNCOVERED	R-03	tests
-UNCOVERED	R-04	plan,tests
+UNCOVERED<TAB>R-02<TAB>plan
+UNCOVERED<TAB>R-03<TAB>tests
+UNCOVERED<TAB>R-04<TAB>plan,tests
 ```
 
 TAB-separated, prefix-first, matching `SECRET`/`NEWDEP`/`WEAKENED`.
@@ -149,8 +149,8 @@ spec-coverage.sh --spec <file> --plan <file> [--tests-root <dir>] [--list]
 
 | exit | meaning | stdout |
 | --- | --- | --- |
-| 0 | every declared ID covered, **or** the SPEC declares no IDs | `COVERED	R-NN` lines, or nothing |
-| 1 | at least one ID uncovered | `UNCOVERED	R-NN	plan\|tests\|plan,tests` |
+| 0 | every declared ID covered, **or** the SPEC declares no IDs | `COVERED<TAB>R-NN` lines, or nothing |
+| 1 | at least one ID uncovered | `UNCOVERED<TAB>R-NN<TAB>plan\|tests\|plan,tests` |
 | 2 | invalid invocation, unreadable file | nothing |
 | 3 | structural error in the SPEC or plan | `DUPLICATE` / `MALFORMED` / `ORPHAN` lines |
 
