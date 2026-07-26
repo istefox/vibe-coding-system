@@ -221,6 +221,29 @@ if grep -q '^recovery_baseline_sha:' "$MANIFEST"; then
   esac
 fi
 
+# Invariant 16 (conditional, ADR-0055): if risk present, must be low, high, or null.
+# Absent = valid (retrocompat with every pre-ADR-0055 manifest). Absent/null resolves to the
+# STRICT profile at the resolution site (concept-to-code/SKILL.md § Proportional audit depth),
+# never to "no profile applies" — this feature removes constraints rather than adding one, so
+# inert-when-absent would silently downgrade every existing manifest (ADR-0055 §D2).
+if grep -q '^risk:' "$MANIFEST"; then
+  risk_val="$(grep '^risk:' "$MANIFEST" | sed 's/^risk: *//;s/"//g' | head -1)"
+  case "$risk_val" in
+    low|high|null) ;;
+    *) fail "risk '$risk_val' is not valid (must be: low|high|null)" ;;
+  esac
+fi
+
+# Invariant 17 (conditional, ADR-0055): if task_type present, must be one of the six enum
+# values, or null. Absent = valid, same retrocompat / default-strict note as Invariant 16.
+if grep -q '^task_type:' "$MANIFEST"; then
+  task_type_val="$(grep '^task_type:' "$MANIFEST" | sed 's/^task_type: *//;s/"//g' | head -1)"
+  case "$task_type_val" in
+    boilerplate|glue|novel-algorithm|regulated|legacy-integration|perf-critical|null) ;;
+    *) fail "task_type '$task_type_val' is not valid (must be: boilerplate|glue|novel-algorithm|regulated|legacy-integration|perf-critical|null)" ;;
+  esac
+fi
+
 if [ "$ERRORS" != "0" ]; then
   exit 1
 fi
