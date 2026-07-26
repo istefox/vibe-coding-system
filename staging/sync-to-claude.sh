@@ -62,6 +62,7 @@ plugin/scripts/pre-flight-pattern-enforce.sh|hooks/pre-flight-pattern-enforce.sh
 plugin/scripts/write-scope-enforce.sh|hooks/write-scope-enforce.sh
 plugin/scripts/agent-write-scope.sh|hooks/agent-write-scope.sh
 plugin/scripts/agent-command-scope.sh|hooks/agent-command-scope.sh
+plugin/scripts/test-write-scope.sh|hooks/test-write-scope.sh
 plugin/scripts/db-backup-guardrail.sh|hooks/db-backup-guardrail.sh
 plugin/scripts/approve-test-cmd.sh|hooks/approve-test-cmd.sh
 plugin/scripts/session-context-inject.sh|hooks/session-context-inject.sh
@@ -176,7 +177,7 @@ done
 
 # Preserve executable bit on the shell helpers.
 if [ "$APPLY" -eq 1 ]; then
-  chmod +x "$DEST/hooks/nightly-guard.sh" "$DEST/hooks/publish-feature.sh" \
+  chmod +x "$DEST/hooks/nightly-guard.sh" "$DEST/hooks/publish-feature.sh" "$DEST/hooks/test-write-scope.sh" \
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
     "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
@@ -256,6 +257,27 @@ directly or wrapped in bash -c / python3 -c / awk. Their read-only git grants ar
 subsumed by the interpreters they hold for verification. Inert for every other agent type. It is a
 guardrail against a shortcut, NOT a sandbox — see ADR-0045's threat model before relying on it.
 Until this entry exists the hook is deployed but never invoked.
+NOTE
+fi
+
+if ! grep -q 'test-write-scope' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this PreToolUse entry to ~/.claude/settings.json (alongside the agent-command-scope entry):
+
+  { "matcher": "Edit|Write|MultiEdit",
+    "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/test-write-scope.sh" } ] }
+
+test-write-scope (issue #103, ADR-0049 generator/verifier separation) denies the coder agent any
+Edit/Write/MultiEdit into a path the test-file predicate matches, since test files are now the
+tester stage's responsibility, not the coder's. It reads only the first user entry of the
+dispatched agent's transcript, closing the self-arming defect ADR-0049 found in
+write-scope-enforce.sh (a full-transcript scan can bind on its own grep pattern). Inert for every
+other agent type and for a transcript carrying no scope marker. Guardrail against a shortcut, NOT a
+sandbox — same threat model as agent-command-scope (ADR-0045). Until this entry exists the hook is
+deployed but never invoked.
 NOTE
 fi
 

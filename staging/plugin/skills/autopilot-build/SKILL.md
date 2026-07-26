@@ -188,8 +188,17 @@ fi
 ```bash
 git rev-parse --git-dir 2>/dev/null
 ```
-- exit 0 → dispatch coder with `isolation: worktree`.
+- exit 0 → dispatch coder with `isolation: worktree`, subject to the dirty-tree condition below.
 - exit non-0 → dispatch coder with `isolation: none`. Note in report: "worktree disabled."
+
+**Dirty-tree condition (same as c2c Step 5, "Dirty-tree condition (ADR-0049 §D2)"):**
+```bash
+git diff HEAD --name-only 2>/dev/null
+```
+Non-empty output (that task group's tester stage left uncommitted failing tests; a worktree forks
+from the last commit and cannot see them) → dispatch that group's coder with `isolation: "none"`,
+overriding the default even when the git-dir check above passed. Empty output → worktree stays
+enabled.
 
 **Parallel-conflict scan (advisory, no gate — same as c2c Step 5, "Before dispatch — parallel task conflict scan (GAP E)"):**
 Read the plan. If the same absolute file path appears in multiple unchecked task descriptions,

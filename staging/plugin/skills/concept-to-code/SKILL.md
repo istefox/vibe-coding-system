@@ -490,18 +490,31 @@ On Gate 3 approve: emit "Gate 3 approved ✓ — applying CLAUDE.md and proceedi
   fall back to Agent-tool batch dispatch (see "Fallback — Agent-tool batch dispatch" below).
   Set `step5_mode: "agent_batch"` via bash sed substitution (same as the fallback section below).
 
-**Pre-dispatch: worktree isolation check (run ONCE before any dispatch):**
+**Pre-dispatch: worktree isolation check (the git-dir check runs ONCE before any dispatch; the
+dirty-tree condition below runs per task group, after that group's tester stage and before its
+coder dispatch — see the tester → coder ordering in the dispatch paths below):**
 ```bash
 git rev-parse --git-dir 2>/dev/null
 ```
 The worktree is created from the CWD of the session, not from `project_root` — check the CWD,
 not `project_root`. If the CWD is not inside a git repo the worktree will fail even if
 `project_root` has its own `.git`.
-- exit 0 → CWD is inside a git repo → dispatch coder **with** `isolation: worktree` (default).
+- exit 0 → CWD is inside a git repo → dispatch coder **with** `isolation: worktree` (default),
+  subject to the dirty-tree condition below.
 - exit non-0 → CWD is not a git repo (session started from a parent directory, monorepo, etc.) →
   dispatch coder **with** `isolation: "none"` (explicit override in the `isolation` parameter
   of the `Agent` tool). **Do not re-dispatch with worktree: it will fail again.**
   Note in the report: "worktree disabled — session CWD not inside a git repo".
+
+**Dirty-tree condition (ADR-0049 §D2), stated in `review-triage-fix/SKILL.md:158`'s own idiom —
+a tester that has just written failing tests has, by definition, left uncommitted changes, and a
+worktree forks from the last commit and cannot see them:**
+```bash
+git diff HEAD --name-only 2>/dev/null
+```
+Non-empty output → dispatch that task group's coder **with** `isolation: "none"`, overriding the
+default even when the git-dir check above passed. Empty output (that group's tester wrote
+nothing) → worktree stays enabled — this degrades gracefully, group by group.
 
 **Pre-dispatch: artifact existence check (run before any dispatch):**
 ```bash
@@ -593,7 +606,15 @@ Agent prompt strings in the JS workflow script MUST reference files by path only
 **Before dispatch — parallel task conflict scan (GAP E):**
 Read the plan at `<manifest.artifacts.plan>`. Scan each task description for explicit file-path mentions (lines containing `/` paths or filenames with extensions). If the same file path appears in multiple task descriptions, emit a warning before dispatching:
 > "File conflict risk: `<path>` appears in tasks <N> and <M>. Parallel coders may conflict during worktree merge. Consider batching these tasks sequentially."
-This is advisory only — not a hard gate. The user may proceed; the warning surfaces the risk.
+This stays advisory only when every conflicting group keeps `isolation: worktree` — the worktree
+merge absorbs the risk, and the user may proceed past the warning. **It becomes load-bearing
+(ADR-0049 §D2, negative consequence 1) for any group whose tester wrote something**, because that
+group's coder runs with `isolation: "none"` (the dirty-tree condition above) and shares the main
+tree directly with whatever else is running in parallel. When two or more groups both (a) appear
+in the file-conflict scan above and (b) resolve to `isolation: "none"`, do NOT dispatch them in
+the same `parallel()` batch — sequence them instead, letting one group's coder finish (tests
+green) before the next conflicting group's tester even starts. Groups with no path overlap, or
+whose testers left the tree clean, keep the default parallel dispatch.
 
 Step 5 dispatch prompt (send as a single message to the session):
 ```
@@ -610,9 +631,44 @@ Read project CLAUDE.md at <manifest.artifacts.project_claude_md> (if not null).
 Implement ONLY what is specified in the plan above. Do NOT implement features marked [ ] (planned but not yet started) or re-implement anything marked [x] (already done). Use the roadmap only to understand existing interfaces, naming, and patterns you must stay consistent with.
 [END IF]
 
-Dispatch one coder subagent per task group. Use your Pre-flight Pattern Classifier
-(ADR-0001) for every Edit operation. Auto mode active. No intermediate HITL.
-`.claude/test-cmd` is off-limits — never read, write, or modify it. If the test command needs changing, stop and report it to the orchestrator.
+Build the script with pipeline(), one entry per task group, stages **tester → coder** (extended
+with an optional third reviewer stage below when checkpoint review is on) — the tester runs
+BEFORE the coder so it is briefed from the specification, never from the implementation
+(ADR-0049 §D1: ordering makes the separation a property of the dispatch graph, not a request an
+agent holding `Read` can silently ignore). Use your Pre-flight Pattern Classifier (ADR-0001) for
+every Edit operation. Auto mode active. No intermediate HITL. `.claude/test-cmd` is off-limits —
+never read, write, or modify it. If the test command needs changing, stop and report it to the
+orchestrator.
+
+**Stage 1 — tester.** Pin `agentType: "tester"`, `model: "sonnet"`, `effort: "medium"`
+explicitly on this `agent()` call — the effort table above is documentation, not a binding, and
+an omitted `effort` silently inherits this session's `high` (ADR-0018 addendum; ADR-0049 §D6
+applies the same rule to this new dispatch site). Brief the tester from the SPEC's requirement
+IDs, never from implementation files (none of this group's implementation exists yet):
+```bash
+bash <spec-coverage.sh, resolved exactly as in the Requirement-ID coverage gate below> \
+  --spec <manifest.artifacts.spec> --plan <manifest.artifacts.plan> --list
+```
+- Output lists one or more `R-NN` identifiers → brief the tester with that list: one failing test
+  per requirement ID this task group covers.
+- Else (the SPEC declares no IDs) → brief the tester from the SPEC's Success Criteria section,
+  verbatim.
+- Else (Success Criteria is also absent or empty) → brief the tester from this task group's plan
+  task text.
+The tester writes failing tests only, for this task group, and reports back which requirement
+IDs (or which Success Criteria / plan-task lines, per whichever fallback fired) each test covers.
+
+**Stage 2 — coder.** Pin `agentType: "coder"`, an explicit `model` (per the model-override rule
+above) and an explicit `effort` (per the effort table above). Resolve `isolation` per the
+worktree isolation check above, evaluated for this group after its Stage 1 tester has run. Every
+coder prompt at this stage MUST include, verbatim, ASCII hyphen (ADR-0049 §D3 — a paraphrase or
+an em dash leaves the guard silently inert, issue #87):
+```
+TEST-AUTHORING SCOPE - the tester agent owns test files for this task. Do NOT create or edit tests.
+```
+A coder whose write is denied by `test-write-scope.sh` is reading a consistent story: the tester
+agent owns test files for this task, and the correct response is to report the gap to the
+orchestrator, not to retry the write.
 
 **Pin the model explicitly on every agent() call (no CLI-model inheritance):** in the
 Workflow path a subagent dispatched with `agentType` but **no** `model` inherits the main-loop
@@ -640,13 +696,13 @@ linked, and a mismatch here silently overrides the file.
 
 [IF manifest.step5_review_mode = checkpoint — add this block to dispatch, otherwise omit entirely:]
 Checkpoint review: ON (ADR-0039 D5-D9).
-Build the script with pipeline(), one entry per task, two stages: implement, then review.
+Extend the tester → coder pipeline() above with a third stage: reviewer.
 Do NOT use parallel() as a barrier between the stages — task B must keep implementing while
 task A is under review. Wall-clock is the slowest single-task chain, not sum-of-slowest-per-stage.
-Stage 2 dispatches agentType "reviewer" scoped to the files stage 1 reported for that task.
+Stage 3 dispatches agentType "reviewer" scoped to the files Stage 2 (coder) reported for that task.
 Pass an explicit model AND an explicit effort of "high" (same rules as the coder above).
 It REVIEWS ONLY and fixes nothing.
-Pass each task's BLOCKER and MAJOR findings into the prompt of the next task's stage 1 as
+Pass each task's BLOCKER and MAJOR findings into the prompt of the next task's Stage 2 (coder) as
 "found in task <N>, do not repeat this". MINOR and NIT are recorded and left for Step 6.
 Collect every review into the checkpoint_reviews array of step5-report.json.
 [END IF]
@@ -682,6 +738,35 @@ After the workflow completes:
 Set `step5_mode: "workflow"` in the manifest (via bash sed substitution on the additive
 field — NOT via Edit tool).
 
+#### Generator/verifier separation — tester stage and coder test-write deny (ADR-0049)
+
+Both dispatch paths in this Step (the Workflow pipeline() above and the Agent-tool batch
+fallback below) stage a `tester` agent BEFORE the `coder` agent, per task group (ADR-0049 §D1).
+The tester writes the failing tests from the SPEC's requirement IDs (`spec-coverage.sh --list`,
+falling back to the Success Criteria section and then to plan task text — never from
+implementation files, since none exists yet at this point of the pipeline). Ordering, not an
+instruction to the coder, is what makes the separation real: a tester briefed after the coder
+could Read the implementation at no cost and with no trace, and only ordering removes that.
+
+Enforcement is `test-write-scope.sh`, a `PreToolUse` hook on `Edit|Write|MultiEdit` (registered
+by Task 8 of ADR-0049's plan — inert until an operator wires it into `settings.json`). It denies
+the **coder** agent any create or edit of a test-file-shaped path, but only when the coder's own
+dispatch prompt carries this marker verbatim, ASCII hyphen (never an em dash — issue #87 made a
+typographic substitution silently inert once already):
+```
+TEST-AUTHORING SCOPE - the tester agent owns test files for this task. Do NOT create or edit tests.
+```
+Both dispatch templates below emit it on every coder prompt. A coder whose write is denied is
+reading the same recovery path stated in Stage 2 above: the tester agent owns test files for this
+task — report the gap to the orchestrator instead of retrying the write.
+
+This is a guardrail against a shortcut, not a sandbox (ADR-0041/ADR-0045's distinction, applied
+again here): a coder that writes a test via `Bash` heredoc, or writes test-shaped content to a
+non-test-shaped path, is invisible to this hook. Keying the deny on `agent_type == "coder"` alone
+was rejected (ADR-0049 §D3) — RTF Phase 3, `deep-refactor` and this same skill's Step 6 all
+dispatch fix agents with `agentType: "coder"` to legitimately repair a broken test, and the
+marker, not the agent type, is what distinguishes a Step 5 implementation coder from those.
+
 #### step5-report.json schema and orchestrator read contract
 
 The final workflow subagent writes this file to `<project_root>/.claude/step5-report.json`.
@@ -713,6 +798,9 @@ Schema (JSON):
     "uncovered": [ { "id": "R-02", "missing": "plan" } ],
     "status": "pass | fail | no-ids | unavailable"
   },
+  "tests_written_by": [
+    { "task": 1, "agent": "tester" }
+  ],
   "errors": []
 }
 ```
@@ -735,11 +823,19 @@ is also what every manifest written before ADR-0039 means by omitting the field.
   full RTF cycle sees them anyway. A missing `checkpoint_reviews` key is not malformed — it is
   what a `step5_review_mode: none` run produces.
 - `weakening_findings` non-empty → **failure signal**, same handling as `tasks_failed`; absent means none and is **not** malformed.
-- Contrast: `checkpoint_reviews` is never a failure signal; `weakening_findings` always is —
-  two arrays in one schema with opposite gate semantics (ADR-0047 §D5).
 - `requirement_coverage.uncovered` non-empty → **failure signal**, same handling as
   `tasks_failed`; `requirement_coverage` absent means the gate did not write one and is
   **not malformed** — the malformed check stays `step5_mode` + `tasks_completed`, unchanged.
+- `tests_written_by` is **never** a failure signal (ADR-0049 §D5). It is self-reported by the
+  agents whose separation it describes — the same class of claim ADR-0047 §A3 and ADR-0048 §A7
+  already refuse to trust for their own arrays, and this array carries no better authority.
+  Absent is **not** malformed — it is what a run before this feature, or a run where
+  `test_cmd_placeholder`/`test_cmd_provisional` skipped the tester stage, produces. A `"coder"`
+  entry (an implementation coder wrote a test — either `test-write-scope.sh` denied nothing, or
+  it was never wired) is surfaced at Gate 5 for a human to read; it is a record, never a gate.
+- Contrast, three arrays in one schema with different gate semantics: `checkpoint_reviews` and
+  `tests_written_by` are never a failure signal; `weakening_findings` always is (ADR-0047 §D5,
+  ADR-0049 §D5).
 
 #### Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)
 
@@ -853,8 +949,23 @@ dispatch the coder as a single monolithic block — the dispatch can silently tr
 halfway (context overflow, timeout) without a final report and without running the
 closing gates. Split the dispatch into **batches of 2-3 tasks**:
 
-1. Dispatch coder with batch 1 (tasks 1-N, where N ≤ 3).
-2. Checkpoint between batches: run `verify.sh <root>` and check `git status` yourself
+1. Dispatch `tester` for batch 1 (tasks 1-N, where N ≤ 3), BEFORE this batch's coder
+   (ADR-0049 §D1 — same ordering as the Workflow path's Stage 1). Pin `agentType: "tester"`,
+   `model: "sonnet"`, `effort: "medium"` explicitly (ADR-0049 §D6; the effort table above is
+   documentation, not a binding). Use the **Tester batch dispatch template** below — same brief
+   contract as the Workflow path: SPEC requirement IDs via `spec-coverage.sh --list`, falling
+   back to Success Criteria then to this batch's plan task text, never from implementation files.
+2. Dirty-tree isolation check (ADR-0049 §D2), same idiom as the Workflow path's pre-dispatch
+   check, run now that the tester above may have left uncommitted changes:
+   ```bash
+   git diff HEAD --name-only 2>/dev/null
+   ```
+   Non-empty output → dispatch this batch's coder **with** `isolation: "none"`. Empty output
+   (the tester wrote nothing for this batch) → worktree stays enabled (the default).
+3. Dispatch coder with batch 1 (tasks 1-N, where N ≤ 3), using the isolation resolved in step 2
+   and the **Single batch dispatch template** below, which carries the TEST-AUTHORING SCOPE
+   marker verbatim.
+4. Checkpoint between batches: run `verify.sh <root>` and check `git status` yourself
    as the orchestrator — do NOT trust the coder's report to decide whether to continue
    (it may be truncated or incomplete). Also run the `Anti-test-weakening gate — Step 5 →
    Step 6 (ADR-0047)` block at every batch checkpoint — the same command against the same
@@ -873,10 +984,11 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
    `claude agents --json | jq '.[] | select(.waitingFor != null) | {id, waitingFor}'`
    A non-null `waitingFor` means the coder is blocked on a permission prompt —
    surface it to the user rather than waiting in silence (CC 2.1.162+).
-3. Dispatch coder with batch 2 (tasks N+1…), and so on.
-4. After the last batch: run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)`
+5. Repeat steps 1-3 (tester, then dirty-tree check, then coder) for batch 2 (tasks N+1…), and so
+   on.
+6. After the last batch: run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)`
    block again, and run the `Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)`
-   block once here too — not at the per-batch checkpoint in item 2 above, where an
+   block once here too — not at the per-batch checkpoint in item 4 above, where an
    uncovered ID is still the expected state — then final verification (`verify.sh`,
    `git status`, scope check against the plan) before transitioning to `step_6_review`.
 
@@ -885,14 +997,37 @@ verification after dispatch is mandatory in all cases.
 
 **Coder model override:** if `manifest.coder_model = "opus"` (or legacy `"fable"`), pass `model: "opus"` to every `Agent(subagent_type="coder", ...)` call in this dispatch. If `sonnet` or null, omit the `model` parameter (global coder.md applies).
 
-**Single batch dispatch template:**
+**Tester batch dispatch template** (dispatched BEFORE this batch's coder — ADR-0049 §D1; pin
+`agentType: "tester"`, `model: "sonnet"`, `effort: "medium"` explicitly on this `Agent` call,
+ADR-0049 §D6):
+```
+Read plan at <manifest.artifacts.plan> (tasks <FROM>-<TO> only).
+Read SPEC.md at <manifest.artifacts.spec>.
+
+Write failing tests for tasks <FROM>-<TO> only. Brief yourself from the SPEC's requirement IDs:
+run `spec-coverage.sh --spec <manifest.artifacts.spec> --plan <manifest.artifacts.plan> --list`
+(resolved exactly as in the Requirement-ID coverage gate below). If it lists one or more `R-NN`
+IDs, write one failing test per listed ID this batch covers. Else if the SPEC declares no IDs,
+brief from the SPEC's Success Criteria section verbatim. Else, brief from this batch's plan task
+text. Never brief from implementation files — none exists yet for this batch.
+
+Auto mode active. No intermediate HITL.
+Return a report naming the requirement IDs (or Success Criteria / plan-task lines, per whichever
+fallback fired) each test covers.
+```
+
+**Single batch dispatch template** (dispatched AFTER this batch's tester above; MUST carry the
+TEST-AUTHORING SCOPE marker verbatim, ASCII hyphen, ADR-0049 §D3):
 ```
 Read plan at <manifest.artifacts.plan> (tasks <FROM>-<TO> only).
 Read ADR at <manifest.artifacts.adr>.
 Read SPEC.md at <manifest.artifacts.spec>.
 Read project CLAUDE.md at <manifest.artifacts.project_claude_md> (if not null).
 
-Execute tasks <FROM>-<TO> of the plan following TDD (red → green → checkpoint).
+TEST-AUTHORING SCOPE - the tester agent owns test files for this task. Do NOT create or edit tests.
+The red tests for tasks <FROM>-<TO> already exist — the tester agent wrote them before this
+dispatch. Make them green. You may not create or edit test files; if a test needs changing,
+report it to the orchestrator instead of writing or editing it yourself.
 Use your Pre-flight Pattern Classifier (ADR-0001) for every Edit operation.
 
 Auto mode active. No intermediate HITL.
