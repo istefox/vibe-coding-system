@@ -361,6 +361,9 @@ Constraints:
 - Auto mode active, no intermediate HITL.
 - Anchor-preserving on any harness present in the project.
 - Bash 3.2-clean for any helper script in plan.
+- Every plan task cites the SPEC requirement IDs it satisfies, form
+  `### Task 3 — … (R-02, R-05)` or on a checkbox item; every ID declared by the SPEC must be
+  cited by at least one task; never cite an ID the SPEC does not declare.
 
 [IF manifest.anonymize=true — add this block to dispatch, otherwise omit:]
 Anonymize mode: ON (ADR-0011). Produce ADR and plan concisely and directly.
@@ -670,8 +673,11 @@ After the workflow completes:
    user; do NOT transition to `step_6_review` without user acknowledgment.
 4. Run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)` block once, before
    deciding the transition.
-5. If all tasks passed, `test_result` is `green` or `n/a`, and the gate found no `WEAKENED`
-   line → transition to `step_6_review`. Present Gate 5.
+5. Run the `Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)` block once, before
+   deciding the transition.
+6. If all tasks passed, `test_result` is `green` or `n/a`, the weakening gate found no
+   `WEAKENED` line, and the coverage gate exit code is `0` → transition to `step_6_review`.
+   Present Gate 5.
 
 Set `step5_mode: "workflow"` in the manifest (via bash sed substitution on the additive
 field — NOT via Edit tool).
@@ -702,6 +708,11 @@ Schema (JSON):
     { "file": "tests/test_billing.py", "reason": "deleted-test-file" }
   ],
   "weakening_scan": "ran | unavailable",
+  "requirement_coverage": {
+    "ids_declared": 6,
+    "uncovered": [ { "id": "R-02", "missing": "plan" } ],
+    "status": "pass | fail | no-ids | unavailable"
+  },
   "errors": []
 }
 ```
@@ -726,6 +737,9 @@ is also what every manifest written before ADR-0039 means by omitting the field.
 - `weakening_findings` non-empty → **failure signal**, same handling as `tasks_failed`; absent means none and is **not** malformed.
 - Contrast: `checkpoint_reviews` is never a failure signal; `weakening_findings` always is —
   two arrays in one schema with opposite gate semantics (ADR-0047 §D5).
+- `requirement_coverage.uncovered` non-empty → **failure signal**, same handling as
+  `tasks_failed`; `requirement_coverage` absent means the gate did not write one and is
+  **not malformed** — the malformed check stays `step5_mode` + `tasks_completed`, unchanged.
 
 #### Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)
 
@@ -769,6 +783,69 @@ fi
 - `_wscan` empty (script did not resolve): record `"weakening_scan": "unavailable"` in
   `step5-report.json` and proceed — fail-open, visibly, per ADR-0047 §D2.
 
+#### Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)
+
+Checks that every requirement ID the SPEC declares is cited by a plan task and mentioned by a
+test — the drift ADR-0048 exists to catch, invisible to every gate that only measures whether
+the plan itself was executed.
+
+**Resolution** (skill-helper path shape, `skills/concept-to-code/scripts/`, **not** `hooks/` —
+`~/.claude` has two script locations and a resolution block copied from #100's reporters
+resolves nothing here):
+```bash
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/spec-coverage.sh" ]; then
+  _scov="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/spec-coverage.sh"
+elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/spec-coverage.sh" ]; then
+  _scov="$HOME/.claude/skills/concept-to-code/scripts/spec-coverage.sh"
+else
+  _scov=""     # gate did not run — report it, do not infer a clean result
+fi
+```
+
+**Inputs:** `--spec <manifest.artifacts.spec>`, `--plan <manifest.artifacts.plan>`, and
+`--tests-root <project_root>` — the project root, not a `tests/` guess, since discovery is by
+basename. `--tests-root` is **omitted** when `manifest.test_cmd_placeholder = true` or
+`manifest.test_cmd_provisional = true`: a project that has declared it has no test command, or
+whose tests are still intent, cannot be held to test coverage (ADR-0018's "no test-cmd =
+report-only mode", reused rather than reinvented).
+
+**Invocation and exit-code idiom:**
+```bash
+if [ -n "$_scov" ]; then
+  _troot=""
+  if [ "<manifest.test_cmd_placeholder>" != "true" ] && [ "<manifest.test_cmd_provisional>" != "true" ]; then
+    _troot="<project_root>"
+  fi
+  _out=$(bash "$_scov" --spec "<manifest.artifacts.spec>" --plan "<manifest.artifacts.plan>" ${_troot:+--tests-root "$_troot"} 2>&1)
+  _rc=$?
+fi
+```
+`_rc = 0` → every declared ID covered, or the SPEC declares no IDs. `_rc = 1` → at least one ID
+uncovered, `_out` names the ID and the missing half (`plan`, `tests`, or `plan,tests`). `_rc = 3`
+→ structural error in the SPEC or plan (`DUPLICATE`/`MALFORMED`/`ORPHAN` in `_out`) — the remedy
+is fixing the artifact, not writing a task. `_rc = 2`, or `_scov` empty → treat as unavailable,
+fail-open (see Policy).
+
+**This gate branches on the exit code. The anti-test-weakening gate immediately above must
+never do that — `weakening-scan.sh` always exits 0 and signals through stdout. Two adjacent
+gates, two idioms, on purpose: `spec-coverage.sh` is a checker with an exit-code contract,
+`weakening-scan.sh` is a reporter that never decides policy.**
+
+**Do not copy one block's branching into the other.**
+
+**Cadence:** this gate runs once at the Step 5 exit, not at every batch checkpoint, unlike the
+anti-test-weakening gate above. Mid-run, an uncovered ID is the expected state — a task that has
+not executed yet legitimately leaves the ID it satisfies uncovered, and running this gate per
+batch would fail on every multi-batch chain.
+
+**Policy:**
+- Attended: present the uncovered IDs (`_rc = 1`) or the structural error (`_rc = 3`) and do NOT
+  transition to `step_6_review` without user acknowledgment.
+- Autopilot (`manifest.autopilot = true`): halt — do not transition, do not proceed to Gate 5.
+- `_rc = 2`, or `_scov` empty (script did not resolve): fail-open, visibly. Record
+  `"status": "unavailable"` in `step5-report.json` and proceed.
+
 #### Fallback — Agent-tool batch dispatch (hook_verified = false or workflow unavailable)
 
 **Batch-dispatch policy (≥6 tasks in plan):** if the plan contains ≥6 tasks, do NOT
@@ -798,8 +875,10 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
    surface it to the user rather than waiting in silence (CC 2.1.162+).
 3. Dispatch coder with batch 2 (tasks N+1…), and so on.
 4. After the last batch: run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)`
-   block again, then final verification (`verify.sh`, `git status`, scope check against the
-   plan) before transitioning to `step_6_review`.
+   block again, and run the `Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)`
+   block once here too — not at the per-batch checkpoint in item 2 above, where an
+   uncovered ID is still the expected state — then final verification (`verify.sh`,
+   `git status`, scope check against the plan) before transitioning to `step_6_review`.
 
 For plans with ≤5 tasks monolithic dispatch is acceptable, but the controller-side
 verification after dispatch is mandatory in all cases.

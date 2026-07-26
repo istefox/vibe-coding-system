@@ -91,7 +91,8 @@ Out: <what it explicitly does not>
 <edge cases the issue names or that follow directly from it>
 
 ## Success criteria
-<the issue's acceptance criteria, verbatim where present, as a checklist>
+<the issue's acceptance criteria, verbatim where present, as a checklist, each item prefixed
+with a unique R-NN id starting at R-01 (e.g. `- [ ] R-01 — ...`) (ADR-0048)>
 ```
 
 Emit: `spec-from-issue #<n> · OK · docs/specs/<slug>.spec.md`.
@@ -104,6 +105,9 @@ Emit: `spec-from-issue #<n> · OK · docs/specs/<slug>.spec.md`.
   never prompts.
 - **Never fabricate.** Requirements come only from the issue (and repo files it references).
   Unknowns are `TBD`, not invented. The quality gate blocks synthesis from a thin issue.
+- **IDs are assigned to criteria the issue already states; an ID is never a reason to invent a criterion.**
+  Number the criteria the issue names — do not pad the checklist with additional items just to
+  give every ID a home (ADR-0048).
 - **Read-only on GitHub.** It uses `gh issue view` only. It never edits the issue, pushes, or opens
   a PR.
 - **One SPEC per feature.** Output is `docs/specs/<slug>.spec.md`. The just-in-time copy to

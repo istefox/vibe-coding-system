@@ -11,3 +11,5 @@ Interview them in depth with the AskUserQuestion tool. Cover: technical implemen
 Do not ask obvious questions: dig into the hard points. One question at a time, max 3-4 options per question. Continue until everything is covered.
 
 Then write `SPEC.md` in the current directory with: objectives, scope, stack, architecture, data model, API, UI flows, edge cases, success criteria. No code at this stage.
+
+Number every success-criteria checklist item `R-01`, `R-02`, ... at the start of the item text (ADR-0048).

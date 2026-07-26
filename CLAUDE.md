@@ -819,3 +819,49 @@ Key architectural decisions:
   instruction exists; nothing pins that it is obeyed.
 
 Detail: `docs/architecture/ADR-0047-101-weakening-scan-wiring.md`.
+
+## Decisions from the requirement-ID coverage chain (ADR-0048)
+
+A `spec-coverage.sh` checker (`R-NN` IDs in a SPEC's success criteria, matched against plan tasks
+and discovered tests), wired as a third Step 5 → Step 6 gate beside #100's reporters and #101's
+weakening scan (issue #102). Answers a gap the chain's own history evidenced twice (ADR-0030,
+ADR-0035): a requirement can be written into the SPEC and never decomposed or tested, and every
+existing gate stays green because none of them measures the SPEC against the plan.
+
+Key architectural decisions:
+- **`R-NN` collides with `ADR-NNNN` unless boundary-anchored on both sides.** Measured, not
+  assumed: `grep -rE 'R-[0-9][0-9]'` matches 30+ of the 34 existing SPECs, every one from the
+  letter run in `ADR-0016`, `ADR-0047`, and so on. `(^|[^A-Za-z0-9_])R-[0-9][0-9]([^0-9]|$)`
+  clears the corpus down to two prose lines in this feature's own SPEC.
+- **Backward compatibility is the hard gate, asserted against the real corpus, not a fixture.** A
+  SPEC with no IDs passes silently — exit 0, empty stdout, empty stderr, not "0 IDs OK". Section
+  RE runs the checker over all 34 existing `docs/specs/*.spec.md` plus `SPEC.md` and requires the
+  silent pass on each, with a `>= 30` count guard against a vacuous loop (the
+  `pairs-completeness.test.sh` self-test-2 lesson, reapplied).
+- **It blocks, unlike #100's reporters, and for a different reason than #101's heuristic gate.**
+  #101 blocks on a heuristic (a legitimately deleted test can trigger it); this gate blocks on a
+  mechanical fact — an ID is cited or it is not — so its only false-positive class is "implemented
+  but not cited", which is exactly the drift the feature exists to surface. A report nobody must
+  act on is a report nobody reads, the same ADR-0047 §D7 lesson RTF breaker B already taught this
+  codebase at the same boundary.
+- **Two adjacent gates, two opposite caller idioms, stated at the call site.** `spec-coverage.sh`
+  is a checker — the caller branches on its exit code. `weakening-scan.sh`, four lines above it in
+  the same SKILL.md, is a reporter — it always exits 0 and signals through stdout only. The block
+  carries the literal sentence "Do not copy one block's branching into the other," pinned by an
+  assertion rather than left as prose a reflow can silently drop.
+- **`.md` is never a test file, and the reason is a checker that would pass itself.** Discovery is
+  by basename, narrowed from `weakening-scan.sh`'s own predicate; without the `.md` exclusion,
+  `--tests-root <project-root>` would discover `docs/specs/102-*.spec.md` as a test file for its
+  own IDs, and every SPEC would be trivially self-covered. A checker that always passes is worse
+  than none.
+- **This is an instruction, not an enforcement** (ADR-0041/ADR-0045's distinction, applied again):
+  the gate is prose in a SKILL.md a model is asked to follow. Enforcing the transition in
+  `manifest-transition.sh` was rejected on the same blast-radius ground as ADR-0047 A2. The
+  harness pins that the instruction exists; nothing pins that it is obeyed.
+- **No manifest field, no schema bump.** `step5-report.json` gains one additive
+  `requirement_coverage` object (`ids_declared`, `uncovered`, `status`), the fourth extension of
+  that schema on the same additive terms as `step5_mode`, `checkpoint_reviews`, and
+  `weakening_findings`. `autopilot-build`, `nightly-autopilot`, `project-conductor`, `commit` and
+  `review-triage-fix` are untouched — the c2c gate halts before any of them gets a turn.
+
+Detail: `docs/architecture/ADR-0048-102-requirement-ids-coverage.md`.

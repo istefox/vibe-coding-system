@@ -1,46 +1,48 @@
-# SPEC — Wire the anti-test-weakening detector into every unattended path
+# SPEC — Requirement IDs in SPEC and a coverage check
 
-Source: GitHub issue #101
+Source: GitHub issue #102
 
 ## Objectives
-1. Make the existing anti-test-weakening detector run on every path that can produce a commit, not only inside the human-invoked review cycle.
-2. Make a weakening finding **blocking** on unattended paths rather than a silent note.
-3. Record findings in the machine-readable reports the orchestrator already reads.
+1. Give every generated SPEC stable, enumerated requirement identifiers.
+2. Make the plan cite the identifiers each task satisfies.
+3. Assert mechanically that no requirement was silently dropped between SPEC, plan and tests.
 
 ## Scope
-In: new call sites for `weakening-scan.sh` in `concept-to-code` Step 5, `autopilot-build`, `nightly-autopilot`, and `commit` Step 1; an additive `weakening_findings` array in `step5-report.json`; a new test file in both CI registries.
-Out: changing the detector's heuristics — new detectors are a separate feature (issue #105). `review-triage-fix` behaviour and its existing harness must not change.
+In: `R-01 … R-nn` IDs in the success-criteria section of both SPEC generators; plan tasks citing IDs; a new `spec-coverage.sh`; a call at the c2c Step 5 exit; a new test file in both CI registries.
+Out: retrofitting IDs into the existing specs under `docs/specs/`.
 
 ## Stack
-Bash 3.2 + Markdown skill instructions. `weakening-scan.sh` already exists at `staging/plugin/skills/review-triage-fix/scripts/weakening-scan.sh` and takes a unified diff on stdin, emitting `CLEAN` or `WEAKENED<TAB><file><TAB><reason>`.
+Bash 3.2 for the checker; Markdown skill instructions for the generators.
 
 ## Architecture
-- Unchanged: `weakening-scan.sh` itself.
-- Modified: `concept-to-code/SKILL.md` Step 5 — run the scan over the cumulative diff before the transition to `step_6_review`.
-- Modified: `autopilot-build/SKILL.md` and `nightly-autopilot/SKILL.md` — run it at each checkpoint / per-feature loop.
-- Modified: `commit/SKILL.md` Step 1 — run it over the computed file scope, beside the secrets check.
-- Modified: the `step5-report.json` schema block in `concept-to-code/SKILL.md`.
-- New: a test file registered in both CI registries.
+- Modified: `staging/plugin/skills/interview-driver/SKILL.md` (`:13` currently names the SPEC sections with no identifiers).
+- Modified: `staging/plugin/skills/spec-from-issue/SKILL.md`, whose template must emit IDs in Success criteria.
+- Modified: the architect's plan template so each task cites its IDs.
+- New: `staging/plugin/skills/concept-to-code/scripts/spec-coverage.sh`.
+- Modified: `concept-to-code/SKILL.md` Step 5 exit.
+- New: test file in both CI registries.
 
 ## Data model
-`step5-report.json` gains `weakening_findings: [{file, reason}]`. Additive: absent means none, and every report written before this change stays valid.
+A requirement ID is `R-NN` (zero-padded, two digits, unique within one SPEC), appearing at the start of a success-criteria checklist item.
 
 ## API / Interfaces
-The scan is invoked as today: a unified diff on stdin, `CLEAN` or `WEAKENED` lines on stdout, exit 0 always. The **caller** supplies the blocking semantics.
+`spec-coverage.sh --spec <file> --plan <file> [--tests-root <dir>]`
+- exit 0: every ID is covered, or the SPEC declares no IDs (backward compatibility).
+- exit non-zero: prints each uncovered ID and where the coverage was missing (plan or tests).
 
 ## UI flows
-On an unattended path a `WEAKENED` line refuses the step transition and surfaces in the morning report. On the `commit` path it renders in the Step 4 approval gate.
+None. The check runs at the Step 5 exit and its output goes to the orchestrator and the report.
 
 ## Edge cases
-- A diff with no test files must produce `CLEAN` and cost nothing.
-- A legitimate test deletion (a removed feature) is still reported — it surfaces for a human, it is not auto-resolved.
-- `review-triage-fix` already calls the scan; it must not be called twice in one cycle.
-- A non-git or empty diff must not error.
+- A SPEC with no `R-` IDs passes silently — this is the backward-compatibility path and must be tested explicitly.
+- Duplicate IDs in one SPEC are an error, not a silent overwrite.
+- An ID cited by a plan task that does not exist in the SPEC is an error.
+- Test coverage matching is by name or docstring mention, so a test file that does not mention any ID must not fail a SPEC that has none.
 
 ## Success criteria
-- [ ] A diff deleting a test file blocks the c2c Step 5 → Step 6 transition.
-- [ ] A diff adding `@pytest.mark.skip` blocks.
-- [ ] A clean diff advances exactly as today.
-- [ ] `weakening_findings` appears in `step5-report.json` and a report lacking it is still read without error.
-- [ ] The existing `review-triage-fix` harness stays green and that skill is unmodified.
+- [ ] A SPEC with `R-01`,`R-02` and a plan covering only `R-01` fails and names `R-02`.
+- [ ] A SPEC with no `R-` IDs passes silently.
+- [ ] Both generators emit IDs in their Success criteria section.
+- [ ] A duplicate ID is reported as an error.
+- [ ] The check is called at the c2c Step 5 exit.
 - [ ] The new test file is registered in BOTH CI registries.
