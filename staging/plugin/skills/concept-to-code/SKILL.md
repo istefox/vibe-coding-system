@@ -830,6 +830,9 @@ Schema (JSON):
   "weakening_findings": [
     { "file": "tests/test_billing.py", "reason": "deleted-test-file" }
   ],
+  "suspect_findings": [
+    { "file": "tests/test_billing.py", "detector": "zero-assertion-test", "line": 42 }
+  ],
   "weakening_scan": "ran | unavailable",
   "requirement_coverage": {
     "ids_declared": 6,
@@ -861,6 +864,13 @@ is also what every manifest written before ADR-0039 means by omitting the field.
   full RTF cycle sees them anyway. A missing `checkpoint_reviews` key is not malformed — it is
   what a `step5_review_mode: none` run produces.
 - `weakening_findings` non-empty → **failure signal**, same handling as `tasks_failed`; absent means none and is **not** malformed.
+- `suspect_findings` is **never a failure signal** and never blocks the transition to
+  `step_6_review`, in attended mode or under autopilot (ADR-0051 §D2). Each entry is a heuristic
+  over a diff with no type information and no test execution — the same distinction
+  `weakening-scan.sh` itself draws between its `WEAKENED` and `SUSPECT` sentinels (never
+  `grep -q '^WEAKENED'` on a `SUSPECT` line, and never the reverse). Absent means none and is
+  **not** malformed. It is advisory only: presented at Gate 5 with its per-detector breakdown so
+  a human sees it, never acted on automatically (ADR-0051 §D3).
 - `requirement_coverage.uncovered` non-empty → **failure signal**, same handling as
   `tasks_failed`; `requirement_coverage` absent means the gate did not write one and is
   **not malformed** — the malformed check stays `step5_mode` + `tasks_completed`, unchanged.
@@ -871,9 +881,9 @@ is also what every manifest written before ADR-0039 means by omitting the field.
   `test_cmd_placeholder`/`test_cmd_provisional` skipped the tester stage, produces. A `"coder"`
   entry (an implementation coder wrote a test — either `test-write-scope.sh` denied nothing, or
   it was never wired) is surfaced at Gate 5 for a human to read; it is a record, never a gate.
-- Contrast, three arrays in one schema with different gate semantics: `checkpoint_reviews` and
-  `tests_written_by` are never a failure signal; `weakening_findings` always is (ADR-0047 §D5,
-  ADR-0049 §D5).
+- Contrast, four arrays in one schema with different gate semantics: `checkpoint_reviews`,
+  `tests_written_by` and `suspect_findings` are never a failure signal; `weakening_findings`
+  always is (ADR-0047 §D5, ADR-0049 §D5, ADR-0051 §D2).
 
 #### Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)
 
@@ -910,12 +920,32 @@ fi
 - Never `n=$(… | grep -c '^WEAKENED' || echo 0)` — `grep -c` prints `0` **and** exits 1 on no
   match, so `|| echo 0` appends a second line and `n` becomes the two-line string `0\n0`.
 
+**SUSPECT findings (ADR-0051, issue #105) — advisory, non-blocking, extracted from the same
+`$_wk` output.** `weakening-scan.sh` also emits a separate `SUSPECT<TAB><file><TAB><detector><TAB><line>`
+sentinel for four heuristic reward-hacking detectors (`literal-assertion-added` — ships disabled
+by default, see the script header — `zero-assertion-test`, `deleted-public-symbol`,
+`swallowed-error`). `SUSPECT` never matches `^WEAKENED` and this gate must never grep for it as a
+blocking condition — that promotion is exactly what ADR-0051 §D2 rejects:
+```bash
+if [ -n "$_wscan" ]; then
+  _sus=$(printf '%s\n' "$_wk" | grep '^SUSPECT' || true)
+fi
+```
+Record every `SUSPECT` line as a `{file, detector, line}` entry in `step5-report.json`'s
+`suspect_findings` array (empty array if `_sus` is empty). Present the count and a per-detector
+breakdown at Gate 5 (see the Gate 5 block in `## 5. HITL gates`) so a human reviewing the cycle
+sees it — the finding is surfaced, never acted on automatically (ADR-0051 §D3).
+
 **Policy:**
-- Attended: present the findings and do NOT transition to `step_6_review` without user
-  acknowledgment.
-- Autopilot (`manifest.autopilot = true`): halt — do not transition, do not proceed to Gate 5.
+- Attended: present the `WEAKENED` findings and do NOT transition to `step_6_review` without user
+  acknowledgment. `SUSPECT` findings are informational only — they never block this transition,
+  they are simply carried forward into `suspect_findings` and shown at Gate 5.
+- Autopilot (`manifest.autopilot = true`): halt on `WEAKENED` — do not transition, do not proceed
+  to Gate 5. `SUSPECT` findings never halt autopilot either; they still populate
+  `suspect_findings` for the eventual Gate 5 (or the autopilot report) to surface.
 - `_wscan` empty (script did not resolve): record `"weakening_scan": "unavailable"` in
-  `step5-report.json` and proceed — fail-open, visibly, per ADR-0047 §D2.
+  `step5-report.json` and proceed — fail-open, visibly, per ADR-0047 §D2. `suspect_findings` is
+  correspondingly absent (not malformed — the gate did not run).
 
 #### Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)
 
@@ -2036,9 +2066,15 @@ STOP — no further tool calls.
 
 Trigger: post Step 5 (coder complete), `current_step = gate_5_review_decision`.
 
+**Suspect findings (ADR-0051, non-blocking, advisory only).** Read `step5-report.json`'s
+`suspect_findings` array (empty/absent means none). Render a count and a per-detector breakdown
+— e.g. `Suspect findings: 3 (zero-assertion-test: 2, swallowed-error: 1)` — into the question text
+below. These never gated the transition to this point (§D2); this is the human checkpoint where
+they are actually read.
+
 Use `AskUserQuestion`:
 ```
-question: "Gate 5 — Review cycle (Human approval required)\n\nTasks completed: <N>\nFiles modified: <list>\nTests: <green | red | n/a>\nHarness delta: <if relevant>\nAnonymize: <ON if manifest.anonymize=true | OFF (default)>\n\nRun a review-triage-fix cycle? Estimated: 5-10 min.\n\nOnly you can decide whether a review cycle is needed."
+question: "Gate 5 — Review cycle (Human approval required)\n\nTasks completed: <N>\nFiles modified: <list>\nTests: <green | red | n/a>\nHarness delta: <if relevant>\nSuspect findings (advisory, non-blocking): <count> (<per-detector breakdown, or 'none'>)\nAnonymize: <ON if manifest.anonymize=true | OFF (default)>\n\nRun a review-triage-fix cycle? Estimated: 5-10 min.\n\nOnly you can decide whether a review cycle is needed."
 header: "Gate 5 · Review"
 options:
   - label: "Run review-triage-fix"

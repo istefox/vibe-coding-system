@@ -1,43 +1,45 @@
-# SPEC — Recovery-readiness pre-flight for concept-to-code Step 5
+# SPEC — Reward-hacking detectors: literal assertions, deleted symbols, swallowed errors
 
-Source: GitHub issue #104
+Source: GitHub issue #105
+
+Runs after issue #101, which puts `weakening-scan.sh` on every path; this feature adds detectors to a scanner already being called everywhere.
 
 ## Objectives
-1. Refuse to dispatch coders until the work is recoverable.
-2. Record the recovery baseline so a later step can name the rollback target.
+1. Detect tests forced green by a hardcoded expected value.
+2. Detect tests that assert nothing meaningful.
+3. Detect deletion of a public symbol outside the declared task scope.
+4. Detect a swallowed error.
 
 ## Scope
-In: a pre-dispatch assertion block at the top of c2c Step 5; an additive manifest field for the baseline sha; a new test file in both CI registries.
-Out: automatic stashing; automatic branch creation.
+In: four new report-only detector outputs in `weakening-scan.sh`; extension of its existing harness.
+Out: making any of them blocking; auto-fixing anything.
 
 ## Stack
-Markdown skill instructions plus bash 3.2, copying the pattern already used at `deep-refactor/SKILL.md:118` (baseline commit hash) and `:173` (dirty-tree check) rather than inventing a second idiom.
+Bash 3.2 + awk, matching the existing implementation of `weakening-scan.sh`, which is a single awk program over a unified diff.
 
 ## Architecture
-- Modified: `concept-to-code/SKILL.md` Step 5, new pre-dispatch block.
-- Modified: `manifest-init.sh` / the manifest schema — additive `recovery_baseline_sha`.
-- Modified: `manifest-validate.sh` — a conditional invariant so pre-existing manifests stay valid.
-- New: test file in both CI registries.
+Modified: `staging/plugin/skills/review-triage-fix/scripts/weakening-scan.sh` and its harness. Language gating for the error-path detector follows the four stacks declared in `staging/user/rules/`.
 
 ## Data model
-`recovery_baseline_sha: <40-hex|null>` in the manifest. Additive, nullable.
+Four new output lines, same shape as the existing `WEAKENED` line:
+`SUSPECT<TAB><file><TAB>literal-assertion-added|zero-assertion-test|deleted-public-symbol|swallowed-error`
 
 ## API / Interfaces
-Assertions, in order: working tree clean or explicitly stashed; current branch is not the default branch; HEAD sha resolvable and recorded. Failure prints the exact remediation command and refuses dispatch.
+Unchanged: unified diff on stdin, exit 0 always, `CLEAN` when nothing is found. `SUSPECT` is advisory and distinct from `WEAKENED`, so callers can treat the two severities differently.
 
 ## UI flows
-None. In autopilot the refusal is recorded and halts the feature — autopilot bypasses human prompts, not safety checks.
+None.
 
 ## Edge cases
-- A detached HEAD must be treated as a failure with a clear reason.
-- A repo with no commits yet has no HEAD to record — fail with a named reason.
-- The check must run before any dispatch, including on the Workflow path.
-- Autopilot must not be able to skip it.
+- A parameterised test using literal table values must NOT trigger `literal-assertion-added` — this is the documented false-positive corpus and needs an explicit negative fixture.
+- A symbol removal accompanied by a `PATTERN: REMOVE` header with a zero-hit caller check must not fire.
+- A catch block that rethrows, or that logs, must not fire.
+- The existing `CLEAN` contract and `WEAKENED` behaviour must be byte-identical for inputs that contain no new-detector matches.
 
 ## Success criteria
-- [ ] A dirty tree refuses dispatch with a named remediation command.
-- [ ] Being on the default branch refuses dispatch.
-- [ ] A clean feature branch dispatches and the manifest carries the baseline sha.
-- [ ] Autopilot mode still honours the refusal.
-- [ ] A manifest without the field still validates.
-- [ ] The new test file is registered in BOTH CI registries.
+- [ ] Each of the four detectors fires on a positive fixture.
+- [ ] Each stays silent on a negative fixture.
+- [ ] A parameterised test does not trigger `literal-assertion-added`.
+- [ ] Existing `WEAKENED` and `CLEAN` behaviour is unchanged.
+- [ ] Every new assertion has been seen RED before being made green.
+- [ ] Any new test file is registered in BOTH CI registries.
