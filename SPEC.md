@@ -1,46 +1,50 @@
-# SPEC — Agent tool scoping per blueprint section 3
+# SPEC — Secrets and dependency gate: content scan, lockfile check, CI steps
 
-Source: GitHub issue #40
+Source: GitHub issue #100
 
 ## Objectives
-1. Reconcile the agent definitions in `staging/plugin/agents/` with blueprint section 3 where tool scoping drifted without a recorded reason (audit findings 2.19, 2.20, 3.29, 3.30).
-2. Where blueprint and deployed file disagree, this feature's ADR decides which side wins and records why.
+1. Detect secrets by file **content**, not only by filename, before a commit is created.
+2. Detect a newly added dependency that no plan or ADR authorised.
+3. Make both checks runnable in a target project's CI with no agent present.
 
 ## Scope
-In (`staging/plugin/agents/`, refreshed from deployed by issue #29; the defects exist in the deployed copies too — the fix lands in staging and reaches deployment at the next human sync):
-1. `architect.md` (P2): unrestricted Bash and unscoped Write, `permissionMode: plan` dropped. Blueprint 3.1 pins `Bash(git *), Bash(rg *)` plus `permissionMode: plan`; the docs/architecture write scope is prose-only; ADR-0013's pilot recorded an architect editing outside its declared scope. Nothing at the tool layer stops a mutating command today.
-2. `reviewer.md` (P2): unrestricted Bash where blueprint line 674 scopes it to `Bash(git diff*), Bash(git log*)`. The reviewer processes untrusted diff content, and the live allow list pre-approves git add and git commit, so an injected mutating command would not even prompt.
-3. `architect.md` effort pin (P3): deployed says max, blueprint 3.10 pins xhigh, no note records the change.
-4. `researcher.md` (P3): relies on the global context7 plugin tools with no inline mcpServers block, while blueprint 3.8 claims the inline server makes it self-contained.
-
-Default expectation, absent a stronger argument: restore the blueprint frontmatter (scoped Bash for architect and reviewer, effort xhigh, inline mcpServers for researcher), because each widening removed a structural guard without a recorded reason. The alternative on any item is an ADR-recorded deliberate divergence with a compensating control, plus a blueprint deployment note.
-
-Out:
-- Any file under `~/.claude` (deployment at the next human sync).
-- Agents not named (coder, tester, debugger, refactorer, doc-writer) beyond incidental consistency.
+In: a new content-scan script under `staging/plugin/scripts/`; a lockfile/dependency-diff check; wiring both into the `commit` skill Step 1; adding both as steps in `staging/project-templates/ci/ci.yml`; a new test file registered in both CI registries.
+Out: rotating or managing real secrets; integrating a paid or hosted scanner; changing `protect-files.sh`, whose filename-based write block stays as it is.
 
 ## Stack
-Markdown agent definitions (YAML frontmatter), blueprint `docs/vibe-coding-system.md`, ADR under `docs/architecture/`.
+Bash 3.2 (macOS-portable, no assoc arrays, no `mapfile`, no `${v^^}`, no process substitution), consistent with every other script in `staging/plugin/scripts/`. Tests are `*.test.sh` harnesses, offline and hermetic.
 
 ## Architecture
-`staging/plugin/agents/{architect,reviewer,researcher}.md` frontmatter; blueprint section 3 deployment notes where a divergence is kept; this feature's ADR as the decision record.
+- New: `staging/plugin/scripts/secret-scan.sh` — reads a file list or a diff, emits findings as `SECRET<TAB><file>:<line><TAB><rule>`; exit 0 always (reporter), caller decides.
+- New: `staging/plugin/scripts/dependency-scan.sh` — compares dependency manifests/lockfiles in the diff against the authorised package list supplied by the caller.
+- Modified: `staging/plugin/skills/commit/SKILL.md` Step 1, where the filename-based secrets check already runs over `staged ∪ tracked_modified ∪ untracked` (`commit/SKILL.md:70`).
+- Modified: `staging/project-templates/ci/ci.yml`.
+- New: `staging/plugin/scripts/tests/secrets-dep-gate.test.sh`, registered in `.github/workflows/ci.yml` (glob) and `.github/workflows/docs-ci.yml` (explicit list).
 
 ## Data model
-None.
+None. Findings are TAB-separated lines on stdout.
 
 ## API / Interfaces
-Agent frontmatter contract: `tools` scoping entries, `permissionMode`, effort pin, optional inline `mcpServers` block.
+- `secret-scan.sh [--files <list-file> | --diff]` → `SECRET` lines or nothing.
+- `dependency-scan.sh --diff [--allow <file>]` → `NEWDEP<TAB><package><TAB><manifest>` lines or nothing.
+- Both are reporters: exit 0 even when they find something, matching the `weakening-scan.sh` contract already established in this repo.
 
 ## UI flows
-None.
+The `commit` skill Step 4 approval gate renders any finding before the human clicks. A `SECRET` finding stops the commit per the existing invariant guardrail ("NEVER commit .env, secrets, API keys").
 
 ## Edge cases
-- A divergence judged deliberate: ADR records it with a compensating control and the blueprint gains a deployment note instead of a frontmatter revert.
-- Blueprint edits must preserve section numbering and the changes-log conventions.
+- Base64 test fixtures and SHA digests already present in this repo's tests must not trigger — they are the documented false-positive corpus.
+- A file matching the filename rule AND containing a key must be reported once, not twice.
+- A lockfile reordered with no added packages must produce no `NEWDEP`.
+- Binary files must be skipped, not scanned.
+- No dependency manifest in the repo means the dependency check is inert.
 
 ## Success criteria
-- [x] architect and reviewer frontmatter carry scoped Bash entries, or the ADR records the deliberate widening with a compensating control
-- [x] The effort pin matches blueprint 3.10, or a deployment note in the blueprint records the divergence
-- [x] researcher matches blueprint 3.8, or the 3.8 deployment note is corrected to describe plugin-tool reliance
-- [x] Blueprint edits preserve section numbering and the changes-log conventions
-- [x] No file under `~/.claude` modified
+- [ ] A fixture containing a fake AWS secret key is detected and blocks the commit.
+- [ ] A file caught only by the existing filename rule is still caught by that rule.
+- [ ] The false-positive corpus (base64 fixtures, SHA hashes in existing tests) produces no finding.
+- [ ] A lockfile gaining an unauthorised package produces a `NEWDEP` line naming it.
+- [ ] The ci template carries both steps and they run standalone from a plain shell.
+- [ ] `commit` skill invariant guardrails are unchanged.
+- [ ] Every new assertion has been seen RED before being made green.
+- [ ] The new test file is registered in BOTH CI registries.

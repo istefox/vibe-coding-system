@@ -745,3 +745,41 @@ Key architectural decisions:
 - **Historical ADRs and plans not edited in place** (ADR-0034 precedent); living docs updated.
 
 Detail: `docs/architecture/ADR-0040-humanize-en-scope-narrowing.md`.
+
+## Decisions from the secret-scan / dependency-gate chain (ADR-0046)
+
+Content-based secret detection and a dependency-diff check, wired into `commit` Step 1 and the
+project CI template. Closes gap G-06 of `docs/books/INTEGRATION-REPORT-agentic-spec.md`, the first
+of the 21-feature agentic-spec roadmap in `PROJECT.md` Phase 2.
+
+Key architectural decisions:
+- **Detection is prefix- or keyword-anchored, never entropy-based.** Measured, not assumed: the
+  cheap proxy `[A-Za-z0-9+/]{32,}` matches ordinary prose here because `/` is in the base64
+  alphabet, so absolute paths match. Eleven rules, one heuristic (`assigned-secret`) carrying four
+  exclusions. Verified against all 350 tracked files with zero content-rule hits, clearing the
+  seven Actions SHA pins and the 60-hex fake trust hash. That run is test section D.
+- **Exit codes separate "found something" from "did not run":** 0 = scan completed (findings or
+  not), 2 = bad invocation, 3 = awk cannot express the rules. The third exists because every rule
+  uses `{16}` interval syntax and a pre-2019 awk treats the braces literally, making every rule
+  silently inert. This is the ADR-0043 lesson restated: a check reporting nothing must be
+  distinguishable from a check finding nothing.
+- **Reporters, not gates.** Both scripts exit 0 even when they find something; the caller decides
+  whether a finding blocks. Mirrors `weakening-scan.sh`, and is what lets issue #108 later run
+  them fail-closed in CI without modifying them.
+- **`secret-scan.sh` owns the filename rule too, with precedence** — one line per file on a
+  filename match, content scan skipped. That satisfies "reported once, not twice" in the script
+  rather than in skill prose, and stops a real `.env` producing fifty lines. `protect-files.sh` is
+  byte-untouched.
+- **`protect-files.sh` constrains filenames at design time.** It denies any path containing
+  `secrets`, so three paths this feature's SPEC named literally could not be created. All use the
+  singular `secret`. Check new filenames against that deny list before writing a spec.
+
+Known consequences, recorded rather than fixed:
+- The filename rule now fires deterministically on documentation *about* secrets, starting with
+  this feature's own files. Narrowing it was rejected as weakening an existing invariant guardrail.
+- `commit/SKILL.md` has no test coverage and is invoked by `concept-to-code` Step 7, `project-init`
+  and `autopilot-build`; a `SECRET` finding aborting an unattended run is new blocking behaviour on
+  an unattended path.
+- The CI template steps are inert in a generated project until issue #108 copies the scripts in.
+
+Detail: `docs/architecture/ADR-0046-100-secret-scan-dependency-gate.md`.
