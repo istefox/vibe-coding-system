@@ -152,6 +152,83 @@ Reading the result — the scripts report, this step decides:
 to the dependency gate. The secret scan's `--files` union does cover it — the asymmetry is known,
 and the Step 4 excluded-files list is where an untracked manifest becomes visible to the human.
 
+**Test diff (H4, issue #115, ADR-0061 §D1/§D4).** The commit gate must put the actual diff inside
+test files in front of the human, not one line among many in the file list and not a model's
+summary of it — a green suite means the implementation satisfies the tests, so a test the human
+never read is an accept decision the human never made.
+
+Reuses `weakening-scan.sh`'s own `is_test()` regex (`review-triage-fix/scripts/weakening-scan.sh`),
+not `spec-coverage.sh`'s narrower basename-only predicate (ADR-0048 §D3). The two diverge on
+purpose — ADR-0048 §D3 draws the line as a DISCOVERY predicate must not over-match, a DENIAL
+predicate must not under-match — and this is neither: it decides what to **show** a human. The
+dangerous failure here is under-match: a missed test file's diff never reaches this gate at all,
+which produces the exact silent-omission failure §D1 forbids by accident rather than by the
+legitimate "no test files changed" case. The broader predicate's only cost is an occasional false
+positive — a stray non-test file shown under the "Test diff" heading, still visible, never hidden.
+That is why the broader predicate wins here even though it is the one ADR-0048 flagged as
+over-matching `.spec.md` files for spec-coverage.sh's different (discovery) purpose.
+
+```bash
+# is_test_path replicates weakening-scan.sh's is_test() ERE exactly (see prose above for why the
+# broader, over-matching predicate — not spec-coverage.sh's narrower one — is the correct choice
+# for a section that SHOWS a diff to a human rather than gating on it).
+is_test_path() {
+  printf '%s\n' "$1" | grep -qE '(^|/)tests?/|(^|/)spec/|test_[^/]*\.[A-Za-z]+$|_test\.[A-Za-z]+$|\.test\.[A-Za-z]+$|\.spec\.[A-Za-z]+$|Tests?\.[A-Za-z]+$'
+}
+
+test_files=""
+for _f in $staged $tracked_modified $untracked; do
+  [ -n "$_f" ] || continue
+  is_test_path "$_f" && test_files="$test_files
+$_f"
+done
+test_files=$(printf '%s\n' "$test_files" | sed '/^$/d' | sort -u)
+
+# The diff itself, tracked and untracked test files alike — a brand-new, still-untracked test
+# file must not be silently excluded from the one gate that exists to show it (the same
+# tracked-only asymmetry noted above for the dependency gate would otherwise repeat here for
+# exactly the file H4 cares most about).
+test_diff=""
+TEST_DIFF_MAX_LINES=400
+if [ -n "$test_files" ]; then
+  while IFS= read -r _tf; do
+    [ -n "$_tf" ] || continue
+    if git ls-files --error-unmatch -- "$_tf" >/dev/null 2>&1; then
+      _one_diff=$(git diff HEAD -- "$_tf")
+    else
+      _one_diff=$(git diff --no-index -- /dev/null "$_tf" 2>/dev/null)
+    fi
+    [ -n "${_one_diff:-}" ] && test_diff="$test_diff
+$_one_diff"
+  done <<TESTFILES_EOF
+$test_files
+TESTFILES_EOF
+fi
+test_diff=$(printf '%s\n' "$test_diff" | sed '/^$/d')
+
+# Truncation is labelled, never silent (ADR-0061 §D4) — a truncated diff still looks complete
+# unless the label and the command to see the rest are both printed.
+test_diff_truncated=0
+test_diff_total_lines=0
+if [ -n "$test_diff" ]; then
+  test_diff_total_lines=$(printf '%s\n' "$test_diff" | wc -l | tr -d ' ')
+  if [ "$test_diff_total_lines" -gt "$TEST_DIFF_MAX_LINES" ]; then
+    test_diff_truncated=1
+    test_diff=$(printf '%s\n' "$test_diff" | head -n "$TEST_DIFF_MAX_LINES")
+  fi
+fi
+```
+
+- **`test_files` empty → the entire "Test diff" section is omitted from Step 4**, not rendered
+  empty. A section that usually says "none" trains the eye to skip it, and this is the one section
+  that must not be skipped (ADR-0061 §D1, alternative A5 rejected).
+- **`test_diff` is rendered verbatim in Step 4** — the real diff content, never a model-written
+  description of it (ADR-0061 §D4; the same objection ADR-0057 §D3 made to a self-assessed tracer
+  verdict, and ADR-0047 §D-trust made to trusting an agent's own `weakening_findings`).
+- **`test_diff_truncated=1` → the section carries the label and the exact command to see the
+  rest**: `git diff HEAD -- <test_files, space-joined>`. Silent truncation is worse than no gate,
+  because it looks like the whole thing (ADR-0061 §D4).
+
 ### Step 2 — Read context
 
 In priority order:
@@ -266,6 +343,10 @@ question: "Commit — Human approval required\n\n
   \n(say which to add, if any, via 'Stage additional files')\n\n
   Pre-commit findings (<K>):\n<the SECRET, NEWDEP and WEAKENED lines from Step 1, verbatim,
   max 10 lines then '... and K more' — omit this block entirely when K is 0>\n\n
+  [Test diff (<count of test_files>):\n<test_diff, VERBATIM — never a summary>\n<if
+  test_diff_truncated=1: 'truncated to <TEST_DIFF_MAX_LINES> of <test_diff_total_lines> lines —
+  see the rest: git diff HEAD -- <test_files, space-joined>'>\n\n — entire bracketed block OMITTED
+  when test_files is empty, never rendered empty]\n\n
   Approve to execute the commit. Only you can authorize this."
 header: "Commit · Approval"
 options:
@@ -285,6 +366,14 @@ options:
 > no restructuring, no new gate. A `SECRET` line only ever appears here when a human has already
 > been warned in Step 1 and explicitly said to continue; rendering it again at the click is
 > the point.
+
+> **`Test diff` is its own labelled section, distinct from `Pre-commit findings` and from the
+> `Files included` list above it** (ADR-0061 §D1 — H4, issue #115). A test file appearing only as
+> one line in `Files included` is the gap H4 closes; folding it into `Pre-commit findings` would
+> recreate the same gap one level down. **Omitted entirely, not rendered empty, when `test_files`
+> is empty** — see the Step 1 computation above for why an empty section is worse than no section.
+> The content is `test_diff` verbatim — the real diff, never a summary — with the truncation label
+> and command when `test_diff_truncated=1`.
 
 **Empty-scope variant (included-file count == 0 — only untracked files exist, nothing
 tracked-modified or pre-staged):** drop "Approve — execute commit" entirely (never offer an
