@@ -42,3 +42,28 @@ Auto-generated roadmap from issues labeled `prep` (ADR-0023).
 - [x] Agent-level instrumentation metrics  (issue #118)  (completed: 2026-07-26)
 - [x] Licence and provenance scanning  (issue #119)  (completed: 2026-07-26)
 - [x] Accessibility and i18n gates  (issue #120)  (completed: 2026-07-26)
+
+### Phase 3 — publish, deploy, reconcile (Phase 2 was coded, not shipped)
+Phase 2 items above mean "implemented on a branch," not "merged, deployed, or closed."
+Audited 2026-07-27: 21 stacked PRs open (#124→#145, `main ← 100 ← 101 ← ... ← 120`), only the
+bottom PR had CI (workflows trigger on `pull_request: branches: [main]` only); none of the 21
+features exist yet in the deployed `~/.claude` tree; issues #100-120 still open (PR bodies carry
+no closing keyword); stray non-canonical branches/worktrees from parallel agent runs litter the
+repo. This phase is operational (merge/deploy/cleanup), not a new concept-to-code chain per item —
+project-conductor's per-item SPEC→ADR→plan→impl cycle does not apply here.
+
+- [ ] Merge train: PR #124→#145 bottom-up, one at a time. Each merge deletes its head branch,
+  which auto-retargets the next PR's base to `main`; wait for that PR's required checks
+  (`ci`, `markdownlint`, `links`) to go green before merging it. Stop on first red (circuit
+  breaker) and leave the remainder untouched — do not skip ahead.
+- [ ] Close issues #100-120 with a reference to the PR that merged each, since no PR body carries
+  a `Closes #NNN` keyword.
+- [ ] Deploy: run `staging/sync-to-claude.sh` (dry-run diff first, then `--apply`) from `main`
+  once the merge train completes, so the 21 features' hooks/skills/scripts actually go live in
+  `~/.claude` instead of sitting inert in `staging/`.
+- [ ] Debris: report (never auto-delete, per ADR-0062 §D3 and the standing "never delete without
+  explicit confirmation" rule) the non-canonical local branches/worktrees found in the 2026-07-27
+  audit (`local-102-work`, `my-101-work`, five `worktree-agent-*`) so a human can decide whether
+  to remove them.
+- [ ] Final verification: full `staging/plugin/scripts/tests/*.test.sh` harness green on `main`
+  post-merge, docs-ci registry parity holds.
