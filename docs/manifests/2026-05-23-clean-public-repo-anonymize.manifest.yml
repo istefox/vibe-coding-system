@@ -61,3 +61,7 @@ failure:
 
 # Hint for next action (UX)
 next_action: "CHAIN COMPLETED 2026-05-23. 11 task implementati + 2 cicli review-triage-fix (8+1 finding risolti). Polish opzionale residuo: manifest-set-flag.sh exit 2 vs 4 disambiguation (MINOR cosmetica), + report-only by-design (init schema 1.1+anonymize, URL trailing-slash fail-safe)."
+
+# Backfilled 2026-07-26: field added by ADR-0016 after this chain completed.
+# false = Agent-tool fallback dispatch, the documented default and what this chain used.
+hook_verified: false
