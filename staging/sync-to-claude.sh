@@ -87,6 +87,7 @@ plugin/scripts/tests/db-backup-guardrail.sh|hooks/tests/db-backup-guardrail.sh
 plugin/scripts/tests/pre-flight-pattern-enforce.sh|hooks/tests/pre-flight-pattern-enforce.sh
 plugin/scripts/tests/run-hook-tests.sh|hooks/tests/run-hook-tests.sh
 plugin/skills/concept-to-code/SKILL.md|skills/concept-to-code/SKILL.md
+plugin/skills/concept-to-code/scripts/agent-metrics.sh|skills/concept-to-code/scripts/agent-metrics.sh
 plugin/skills/concept-to-code/scripts/agent-notes-harvest.sh|skills/concept-to-code/scripts/agent-notes-harvest.sh
 plugin/skills/concept-to-code/scripts/detect-macos.sh|skills/concept-to-code/scripts/detect-macos.sh
 plugin/skills/concept-to-code/scripts/diff-budget-check.sh|skills/concept-to-code/scripts/diff-budget-check.sh

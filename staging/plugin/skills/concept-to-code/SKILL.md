@@ -771,9 +771,13 @@ If `unchecked = 0`: do NOT dispatch coder. Present to user:
 **Pre-dispatch: anti-test-weakening baseline mark (ADR-0047):**
 ```bash
 _pre5=$(git rev-parse HEAD 2>/dev/null)   # anti-test-weakening gate baseline (ADR-0047)
+_pre5_ts=$(date -u +%s)                   # elapsed_wall_seconds baseline (ADR-0064, issue #118)
 ```
 An empty `_pre5` (no commits yet, or the CWD is not a git repository) makes the later
-`git diff "$_pre5"` empty, which the scan reports as `CLEAN` — never an error.
+`git diff "$_pre5"` empty, which the scan reports as `CLEAN` — never an error. If `_pre5_ts` is
+never recorded (e.g. a resumed session that skipped this block), the Task-level metrics block
+below omits `elapsed_wall_seconds` for the rest of this run rather than measuring from an
+arbitrary later point.
 
 #### Smoke test gate (pre-dispatch, blocks if hook_verified = false)
 
@@ -970,7 +974,10 @@ After the workflow completes:
    deciding the transition.
 6. Run the `Diff budget and scope check — Step 5 checkpoints (ADR-0052)` block once, over the
    cumulative diff and every completed task — it never affects the transition (advisory only).
-7. If all tasks passed, `test_result` is `green` or `n/a`, the weakening gate found no
+7. Run the `Task-level metrics — Step 5 checkpoints (ADR-0064, issue #118)` block once, over the
+   same cumulative diff and every completed task — it never affects the transition and is not
+   surfaced at Gate 5 (metrics, not findings, ADR-0064 §D2).
+8. If all tasks passed, `test_result` is `green` or `n/a`, the weakening gate found no
    `WEAKENED` line, and the coverage gate exit code is `0` → transition to `step_6_review`.
    Present Gate 5.
 
@@ -1047,9 +1054,30 @@ Schema (JSON):
     { "task": "3", "files_expected": 1, "files_actual": 2,
       "lines_expected": 120, "lines_actual": 210, "out_of_scope": ["src/unrelated.py"] }
   ],
+  "task_metrics": [
+    { "task": "3", "test_count_delta": 2, "deleted_lines": 14,
+      "iteration_count": 2, "elapsed_wall_seconds": 187 }
+  ],
   "errors": []
 }
 ```
+
+**`task_metrics` is a METRICS array, not a findings array (ADR-0064 §D2) — it is documented here,
+in its own paragraph, deliberately outside the "six advisory arrays" roll-up described in the Gate
+5 block below.** A finding asserts something is wrong and asks for a decision; a metric is a
+number with no claim attached. `task_metrics` carries the four ADR-0064 D1 instrumentation
+metrics — test-count delta, deleted lines, iteration count, elapsed wall time — computed once per
+Step 5 checkpoint (the same cadence as `budget_findings` immediately above: once after the
+Workflow path completes, once per batch checkpoint in the Agent-tool fallback), tagged with the
+same `task` checkpoint label. It is **not surfaced at Gate 5, not counted in the advisory roll-up,
+and not presented as actionable** — see the "Task-level metrics" block after the Diff budget and
+scope check below for how each field is computed, and the Gate 5 block for the explicit exclusion.
+Every field within an entry is independently **conditional-if-present**: a field absent from an
+entry means that one metric was not measured for that checkpoint, and MUST NOT be read as `0`
+(ADR-0064 §D3 — the same rule ADR-0046's exit codes and ADR-0043's completeness check already
+apply elsewhere in this codebase, here applied to stored data). A `0` in a present field is a real,
+computed zero (e.g. a checkpoint that genuinely deleted no lines). The `task_metrics` array itself
+is absent, as a whole, on any manifest predating this feature — that is not malformed either.
 
 `checkpoint_reviews` is an empty array when `step5_review_mode` is `none` (the default), which
 is also what every manifest written before ADR-0039 means by omitting the field.
@@ -1092,9 +1120,20 @@ is also what every manifest written before ADR-0039 means by omitting the field.
   than on signal (the same reasoning `suspect_findings` already established for a heuristic
   finding at this same boundary). Absent means either the checker did not resolve or the plan
   declares no budgets on the relevant tasks (ADR-0052 §D1) — either way, **not malformed**.
+- `task_metrics` is **never** a failure signal and is **not one of the advisory arrays** —
+  it is a METRICS array (ADR-0064 §D2): no claim is attached to a number, so there is nothing
+  here to gate on. Absent (the whole array, or any single field within an entry) means that
+  metric was not measured for that checkpoint. Never read an absent field as `0` (ADR-0064 §D3):
+  a present field's `0` is a real, computed zero; an absent field is not recorded at all, and a
+  reader collapsing the two would quietly manufacture a well-behaved-looking task out of one that
+  was never measured. Every value computed here comes
+  from `git` or from the orchestrator's own dispatch bookkeeping, never from an agent's report
+  (ADR-0064 §D4) — see the "Task-level metrics" block below for the exact computation of each of
+  the four fields.
 - Contrast, five arrays in one schema with different gate semantics: `checkpoint_reviews`,
   `tests_written_by`, `suspect_findings` and `budget_findings` are never a failure signal;
   `weakening_findings` always is (ADR-0047 §D5, ADR-0049 §D5, ADR-0051 §D2, ADR-0052 §D3).
+  `task_metrics` sits outside this contrast entirely — it is not a finding of any kind.
 
 #### Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)
 
@@ -1284,6 +1323,87 @@ is `CLEAN`.
   checkpoint and proceed — fail-open, visibly, matching the weakening gate's own
   `"weakening_scan": "unavailable"` idiom.
 
+#### Task-level metrics — Step 5 checkpoints (ADR-0064, issue #118)
+
+**These are METRICS, not findings (ADR-0064 §D2).** A finding asserts something is wrong and asks
+for a decision; a metric is a number with no claim attached. This block is not surfaced at Gate 5,
+is not counted in the advisory roll-up below, and is not presented as actionable — it feeds
+`task_metrics` in `step5-report.json` only, for the analysis rut detection and trust scoring will
+eventually need (ADR-0064 §A5: no such detector or threshold exists yet, and building one against
+an empty corpus would mean inventing a threshold rather than measuring one — this feature builds
+the inputs only). Runs at the same checkpoints as the two blocks immediately above (§D2 of both
+ADR-0047 and ADR-0052 — no third checkpoint mechanism): once after the Workflow path completes,
+once per batch checkpoint in the Agent-tool fallback below.
+
+**Every field is computed, never self-reported (ADR-0064 §D4).** None of the four fields is
+requested in any tester or coder dispatch prompt in this Step, and no dispatch template below asks
+an agent to report an iteration count, an elapsed time, a test count, or a line count — each of
+the four is produced independently by the orchestrator from `git` output or from its own dispatch
+bookkeeping.
+
+**Resolution** (skill-helper path shape, `skills/concept-to-code/scripts/`, the same two-location
+pattern `spec-coverage.sh` and `diff-budget-check.sh` above use):
+```bash
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/agent-metrics.sh" ]; then
+  _ametrics="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/agent-metrics.sh"
+elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/agent-metrics.sh" ]; then
+  _ametrics="$HOME/.claude/skills/concept-to-code/scripts/agent-metrics.sh"
+else
+  _ametrics=""     # did not resolve — OMIT test_count_delta and deleted_lines from this
+                    # checkpoint's entry, do NOT invoke the script and default its output to 0
+fi
+```
+
+**`test_count_delta` and `deleted_lines` — from `git`, via `agent-metrics.sh`.** The script reads
+the SAME full unified diff already piped into the anti-test-weakening gate above (`git diff
+"$_pre5"`, not a second git call, not `--stat`/`--numstat`) and always prints two TAB-separated
+lines, `DELETED_LINES` and `TEST_COUNT_DELTA`:
+```bash
+if [ -n "$_ametrics" ]; then
+  _am=$(git diff "$_pre5" 2>/dev/null | bash "$_ametrics" 2>/dev/null)
+  _dl=$(printf '%s\n' "$_am" | awk -F'\t' '$1=="DELETED_LINES"{print $2}')
+  _tcd=$(printf '%s\n' "$_am" | awk -F'\t' '$1=="TEST_COUNT_DELTA"{print $2}')
+fi
+```
+If `_ametrics` is empty, or `_dl`/`_tcd` fail to parse as an integer, OMIT that field from this
+checkpoint's `task_metrics` entry — never write `0` in its place (ADR-0064 §D3). A genuinely
+empty diff (nothing changed since `$_pre5`) is a real, computed zero and IS written as `0` — the
+distinction is between "the script ran and measured zero" and "the script did not run", not
+between "zero" and "nonzero".
+
+`agent-metrics.sh`'s test-file predicate is reused verbatim from `test-write-scope.sh` (ADR-0049
+§D4 — the "broad union minus `.md`" DENIAL predicate), not `spec-coverage.sh`'s narrower DISCOVERY
+predicate in the same directory, even though both already exist and could be reused. ADR-0049 §D4
+records that the two diverge on purpose: a discovery predicate must not over-match (a false
+coverage pass), a denial predicate must not under-match (a missed test path is invisible).
+Counting tests shares the denial predicate's failure direction — a test file this predicate
+silently missed would make a real test-count drop invisible in this metric, which is exactly the
+kind of quietly-manufactured well-behaved-looking task ADR-0064 §D3 already warns against, just
+reached through under-matching instead of zero-defaulting. The narrower discovery predicate was
+rejected for that reason, not reused.
+
+**`iteration_count` and `elapsed_wall_seconds` — from the dispatch loop, no script.** Before the
+first dispatch in this Step, alongside `_pre5=$(git rev-parse HEAD)`, also record
+`_pre5_ts=$(date -u +%s)`. At each checkpoint:
+- `elapsed_wall_seconds` = `$(date -u +%s)` at the checkpoint minus `$_pre5_ts` — cumulative since
+  Step 5 began, the same cumulative-since-`$_pre5` convention `budget_findings` and the weakening
+  gate already use. This measures wall-clock time, not agent effort — it includes queueing, rate
+  limiting, and anything else in the way (ADR-0064 negative consequence, stated here rather than
+  only in the ADR: do not read this figure as effort).
+- `iteration_count` = the cumulative count of agent dispatches issued so far in this Step for the
+  tasks in this checkpoint's `task` label — stage count, not retry count: a task group dispatched
+  as tester → coder is 2, tester → coder → reviewer under `step5_review_mode: checkpoint` is 3.
+  There is no per-task retry loop in this Step to count instead; do not invent one to make this
+  figure mean something it does not measure.
+If `_pre5_ts` was never recorded (e.g. a resumed session that skipped the pre-flight block above),
+OMIT `elapsed_wall_seconds` for every checkpoint in that run rather than measuring from an
+arbitrary later point.
+
+**Record one `task_metrics` entry per checkpoint**, tagged with the same `task` label
+`budget_findings` uses at that same checkpoint (a single task number, or the comma list / range of
+every task dispatched so far), carrying whichever of the four fields were actually computed.
+
 #### Fallback — Agent-tool batch dispatch (hook_verified = false or workflow unavailable)
 
 **Batch-dispatch policy (≥6 tasks in plan):** if the plan contains ≥6 tasks, do NOT
@@ -1314,7 +1434,9 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
    cumulative diff, evaluated at more points, so an unattended run that weakens a test in
    batch 1 halts before burning batches 2..N. Also run the `Diff budget and scope check —
    Step 5 checkpoints (ADR-0052)` block at every batch checkpoint, `--tasks` accumulating
-   every task number dispatched so far — advisory only, never a gate here either.
+   every task number dispatched so far — advisory only, never a gate here either. Also run the
+   `Task-level metrics — Step 5 checkpoints (ADR-0064, issue #118)` block at every batch
+   checkpoint — metrics, not findings; never a gate, never surfaced at Gate 5.
 
    **[IF `manifest.step5_review_mode = checkpoint` (ADR-0039 D5-D9) — otherwise skip:]**
    At this same checkpoint, dispatch the `reviewer` agent scoped to the diff of the batch that
@@ -1336,7 +1458,8 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
    uncovered ID is still the expected state — then final verification (`verify.sh`,
    `git status`, scope check against the plan) before transitioning to `step_6_review`.
    The `Diff budget and scope check — Step 5 checkpoints (ADR-0052)` block already ran at
-   every batch checkpoint in item 4; no separate final pass is needed for it.
+   every batch checkpoint in item 4; no separate final pass is needed for it. Same for the
+   `Task-level metrics — Step 5 checkpoints (ADR-0064, issue #118)` block.
 
 For plans with ≤5 tasks monolithic dispatch is acceptable, but the controller-side
 verification after dispatch is mandatory in all cases.
@@ -2597,6 +2720,11 @@ Gate 5 summary that gets skimmed. So this block's volume tracks signal, not sche
 
 These never gated the transition to this point; this is the human checkpoint where they are
 actually read.
+
+**`task_metrics` is not part of this roll-up and is not rendered at Gate 5 at all (ADR-0064
+§D2, issue #118).** It stays six arrays, not seven — `task_metrics` carries no claim, only a
+number, so there is nothing here for a human to decide. It is written to `step5-report.json` for
+later analysis and read only when someone goes looking.
 
 Use `AskUserQuestion`:
 ```

@@ -1,41 +1,42 @@
-# SPEC — Canonical-mechanism conformance
+# SPEC — Agent-level instrumentation metrics
 
-Source: GitHub issue #117
+Source: GitHub issue #118
 
 ## Objectives
-1. Let a project declare its one true HTTP client, logger, config accessor, DB access layer and error type.
-2. Have the reviewer flag a hand-rolled equivalent.
+1. Record the cheap control metrics the system currently cannot see.
+2. Surface them where the operator already looks.
+3. Avoid building a productivity dashboard.
 
 ## Scope
-In: a `.claude/rules/canonical-mechanisms.md` convention; a first-draft generator in `project-init`; a reviewer checklist item; a new test file in both CI registries.
-Out: per-language lint rules enforcing conformance mechanically — a reviewer-level check is the proportionate first step.
+In: four metrics per task in `step5-report.json` and `nightly-report.json`; a `vibe-status` section; a new test file in both CI registries.
+Out: per-subagent token cost, which is not locally observable (`usage-report.py:11-14`); any ROI or productivity claim.
 
 ## Stack
-Markdown rules file with `paths:` frontmatter (the established `.claude/rules/` convention) + bash detection in `project-init`.
+Markdown skill instructions + the existing JSON report writers + `vibe-status`.
 
 ## Architecture
-- New convention: `.claude/rules/canonical-mechanisms.md`, one line per mechanism, `name → import path or symbol`, with `paths:` frontmatter so it loads only for the relevant stack.
-- Modified: `staging/plugin/skills/project-init/SKILL.md` — generate a first draft by detecting the dominant mechanism in existing code (most-imported HTTP client, logger, config module).
-- Modified: `staging/plugin/agents/reviewer.md` — add the conformance question to the Consistency checklist, severity MINOR.
+- Modified: `concept-to-code/SKILL.md` Step 5 — emit the metrics.
+- Modified: `nightly-autopilot/SKILL.md` — carry them into the morning report.
+- Modified: `staging/plugin/skills/vibe-status/SKILL.md` — render them for the most recent chain.
 - New: test file in both CI registries.
 
 ## Data model
-One `name → symbol` line per mechanism; `#` comments allowed.
+Per task: `test_count_delta`, `deleted_lines`, `iteration_count`, `elapsed_seconds`. All additive; absent means "not recorded".
 
 ## API / Interfaces
-None beyond the file convention. Absent file means the check is inert.
+JSON fields only.
 
 ## UI flows
-None.
+`vibe-status` renders a metrics section when present and omits it entirely when absent.
 
 ## Edge cases
-- A repo with no dominant mechanism (a tie, or a single usage) must produce no draft rather than a wrong one.
-- A repo with no canonical-mechanisms file must behave exactly as today.
-- The reviewer must not flag the canonical mechanism itself as a violation.
+- A report missing the fields must still be read without error — the backward-compatibility path.
+- A chain with no tests has a `test_count_delta` of 0, not null.
+- The ADR must state that the spec declares productivity measurement an open gap and that this instruments for control, not for proving ROI.
 
 ## Success criteria
-- [ ] `project-init` on a repo with a dominant HTTP client emits a draft naming it.
-- [ ] A repo with no dominant mechanism produces no draft.
-- [ ] The reviewer checklist contains the anchor.
-- [ ] A repo with no canonical-mechanisms file behaves exactly as today.
+- [ ] A completed Step 5 writes the four fields.
+- [ ] A report missing them is still read without error.
+- [ ] `vibe-status` renders them when present and omits the section when absent.
+- [ ] No ROI or productivity claim is made anywhere in the output.
 - [ ] The new test file is registered in BOTH CI registries.
