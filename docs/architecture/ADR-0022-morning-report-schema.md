@@ -42,7 +42,11 @@ report is the roll-up a human reads in the morning.
       "test_result": "GREEN | RED | NOT_RUN",
       "pr_url": "<url or null>",
       "ci_status": "green | pending | red | unknown",
-      "guard_halt": "<reason or null>"
+      "guard_halt": "<reason or null>",
+      "test_count_delta": 4,
+      "deleted_lines": 37,
+      "iteration_count": 11,
+      "elapsed_wall_seconds": 942
     }
   ],
   "guard_halts": [
@@ -71,6 +75,13 @@ report is the roll-up a human reads in the morning.
   `gh pr checks`. `unknown` when CI could not be queried.
 - `next_action` is the one-line morning instruction, for example: "Review N open PRs and merge the
   green ones" or "Feature <slug> halted: <reason>. Resume interactively."
+- `test_count_delta`, `deleted_lines`, `iteration_count`, `elapsed_wall_seconds` (ADR-0064, issue
+  #118) are additive, conditional-if-present, **no schema bump**: summed from that feature's own
+  `task_metrics` array in its `step5-report.json`, when that file carries one. These are METRICS,
+  not findings (ADR-0064 §D2) — no morning-report reader branches on them, and they are absent
+  entirely (not `0`) on any feature whose `step5-report.json` predates this feature or carries no
+  `task_metrics` (ADR-0064 §D3 — absent means not recorded, never zero, applied here exactly as it
+  is applied in `step5-report.json` itself).
 - `features_skipped[]` (v2.2, ADR-0060) is read from `<project_root>/.claude/nightly-state/skipped-
   features`, one entry per line. It is **not** the same thing as `guard_halts[]`: a halt stopped
   the whole roadmap, a skip did not — the feature it names simply never started, and every other

@@ -230,6 +230,13 @@ per line, `{feature, reason}` — additive and distinct from `guard_halts[]`: a 
 roadmap, a halt did — §3.3 "Marker contract"), and `spend` (from the `/goal` overlay). Set
 `ended_at` via `date -u`.
 
+Also, per feature, `test_count_delta`, `deleted_lines`, `iteration_count`, `elapsed_wall_seconds`
+(ADR-0064, issue #118) — additive, conditional-if-present, no schema bump: summed from that
+feature's own `task_metrics` array in its `step5-report.json`, when present. These are METRICS,
+not findings (ADR-0064 §D2): nothing in this Phase branches on them, they are never surfaced as
+requiring action, and a feature whose `step5-report.json` carries no `task_metrics` leaves all
+four fields absent on that feature entry — never `0` (ADR-0064 §D3).
+
 Disarm the guard:
 ```bash
 rm -f "$PWD/.claude/nightly-state/active"

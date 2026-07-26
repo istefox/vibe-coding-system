@@ -12,7 +12,7 @@ the tempting simplification and it destroys the dataset the feature exists to bu
 
 ## Task checklist
 
-- [ ] **Task 1 — RED harness.** `staging/plugin/scripts/tests/agent-metrics.test.sh`.
+- [x] **Task 1 — RED harness.** `staging/plugin/scripts/tests/agent-metrics.test.sh`.
   `G`-prefixed labels — grep the existing 40 files to confirm the prefix is unused. Hermetic, bash
   3.2. Sections: **GA** all four metrics appear in the `step5-report.json` and `nightly-report.json`
   schema blocks as **additive, conditional-if-present** fields; **GB** **absent is distinguishable
@@ -27,20 +27,20 @@ the tempting simplification and it destroys the dataset the feature exists to bu
   Every assertion seen RED first. No fixture path may contain `secret`, `credential`, `.env`,
   `.pem`, `.key` — `protect-files.sh` denies any path containing `secrets` (plural).
 
-- [ ] **Task 2 — the four metrics.** Test-count delta and deleted lines from git; iteration count and
+- [x] **Task 2 — the four metrics.** Test-count delta and deleted lines from git; iteration count and
   elapsed wall time from the dispatch loop. Wire into c2c Step 5's report writing.
   Reuse the existing test-file predicate rather than adding a fourth — ADR-0048 records that the
   existing ones diverge on purpose, so pick the one whose error direction fits *counting tests* and
   say why. → GA/GC green.
 
-- [ ] **Task 3 — the read contract.** State in both schema blocks that absent means not recorded and
+- [x] **Task 3 — the read contract.** State in both schema blocks that absent means not recorded and
   must not be read as zero (§D3). Note this is the same rule as ADR-0046's exit codes and ADR-0043's
   completeness check, applied to stored data. → GB green.
 
-- [ ] **Task 4 — keep them out of Gate 5.** Metrics are not findings: no claim attached, no decision
+- [x] **Task 4 — keep them out of Gate 5.** Metrics are not findings: no claim attached, no decision
   requested. Not in the advisory roll-up, not presented as actionable (§D2). → GD/GE/GF green.
 
-- [ ] **Task 5 — registration + full suite.** New test file into **both** CI registries (`ci.yml`
+- [x] **Task 5 — registration + full suite.** New test file into **both** CI registries (`ci.yml`
   glob automatic; `.github/workflows/docs-ci.yml`'s explicit named list needs a manual append after
   `canonical-mechanism`). Then run every `staging/plugin/scripts/tests/*.test.sh` — this touches
   `step5-report.json`'s schema, so `weakening-wiring.test.sh`, `spec-coverage.test.sh`,
