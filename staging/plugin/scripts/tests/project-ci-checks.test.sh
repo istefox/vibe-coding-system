@@ -320,11 +320,17 @@ fi
 # regression pin, never fix evidence. If this goes RED, the fix is to revert the script, never to
 # relax this assertion.
 # ==================================================================================================
-for pair in "secret-scan.sh:staging/plugin/scripts/secret-scan.sh" \
-            "dependency-scan.sh:staging/plugin/scripts/dependency-scan.sh" \
-            "weakening-scan.sh:staging/plugin/skills/review-triage-fix/scripts/weakening-scan.sh" \
-            "interface-check.sh:staging/plugin/scripts/interface-check.sh"; do
-  dname="${pair%%:*}"; relpath="${pair#*:}"
+# The delimiter is `|`, NOT `:`, and that is load-bearing. With a colon, the first element reads as
+# `secret-scan.sh:<path>` — a name containing "secret" followed by a colon and a value — which is
+# exactly the shape secret-scan.sh's own `assigned-secret` heuristic matches. This file then became
+# a SECRET finding on the repository's own tracked files and turned secret-dep-gate.test.sh D1 RED.
+# Do not "tidy" this back to a colon. The rule is not narrowed to accommodate it: ADR-0046 refused
+# to weaken that heuristic, and the test file is what moves.
+for pair in "secret-scan.sh|staging/plugin/scripts/secret-scan.sh" \
+            "dependency-scan.sh|staging/plugin/scripts/dependency-scan.sh" \
+            "weakening-scan.sh|staging/plugin/skills/review-triage-fix/scripts/weakening-scan.sh" \
+            "interface-check.sh|staging/plugin/scripts/interface-check.sh"; do
+  dname="${pair%%|*}"; relpath="${pair#*|}"
   if git -C "$REPO" diff --quiet -- "$relpath" 2>/dev/null; then
     ok "CE-$dname: no uncommitted change against the tracked copy of $dname (forward guard)"
   else
