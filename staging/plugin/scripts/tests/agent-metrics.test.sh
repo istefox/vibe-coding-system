@@ -319,10 +319,16 @@ else
   bad "GD1: Gate 5 is missing the explicit task_metrics exclusion statement"
 fi
 
-if grep -qi 'six arrays' "$GATES" && grep -qF 'not seven' "$GATES"; then
-  ok "GD2: Gate 5 asserts the roll-up stays six arrays, not seven, after this feature"
+# GD2 originally pinned the literal phrase "six arrays ... not seven", which held only while
+# task_metrics was the sole candidate for a seventh array. ADR-0066 (#120) added a real, disclosed
+# seventh advisory-schema finding array (accessibility_i18n_findings) elsewhere in this same
+# schema, so that literal count is no longer true and the phrase correctly moved. What this
+# assertion actually guards — task_metrics itself never inflates the roll-up, because it carries
+# no claim — is unchanged and is what is checked here instead (ADR-0066 SKILL.md changelog note).
+if grep -qF 'task_metrics' "$GATES" && grep -qiE 'carries no claim' "$GATES"; then
+  ok "GD2: Gate 5 states task_metrics's exclusion is semantic (carries no claim), not merely a stale count"
 else
-  bad "GD2: Gate 5 does not state the roll-up count is unchanged at six"
+  bad "GD2: Gate 5 does not state task_metrics carries no claim — the semantic-exclusion guard is missing"
 fi
 
 # Forward guard: the six named advisory arrays are still exactly the six from ADR-0052, task_metrics
