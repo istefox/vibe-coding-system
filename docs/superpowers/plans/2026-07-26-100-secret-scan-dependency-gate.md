@@ -103,9 +103,9 @@ Index of the task sections below, in execution order. The chain's Step 5 pre-dis
 validation counts unchecked `- [ ]` items here; the authoritative task detail is in the
 `## Task N` sections that follow.
 
-- [ ] Task 1 — RED: harness skeleton, sections A/B/C for `secret-scan.sh`
-- [ ] Task 2 — GREEN: implement `staging/plugin/scripts/secret-scan.sh`
-- [ ] Task 3 — RED then GREEN: section D, the repository as the false-positive corpus
+- [x] Task 1 — RED: harness skeleton, sections A/B/C for `secret-scan.sh`
+- [x] Task 2 — GREEN: implement `staging/plugin/scripts/secret-scan.sh`
+- [x] Task 3 — RED then GREEN: section D, the repository as the false-positive corpus
 - [ ] Task 4 — RED: section E for `dependency-scan.sh`
 - [ ] Task 5 — GREEN: implement `staging/plugin/scripts/dependency-scan.sh`
 - [ ] Task 6 — Wire `commit` Step 1, with section F1–F4 seen RED first
