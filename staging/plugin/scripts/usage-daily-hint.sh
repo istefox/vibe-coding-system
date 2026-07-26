@@ -43,6 +43,25 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 SCRIPT="${USAGE_REPORT_SCRIPT:-$HOME/.claude/scripts/usage-report.py}"
 OCCUPANCY_SCRIPT="${CONTEXT_OCCUPANCY_SCRIPT:-$HERE/context-occupancy.sh}"
 
+INPUT=$(cat 2>/dev/null) || INPUT=""
+
+# stop_hook_active guard: this hook's own additionalContext triggers a re-invocation of the Stop
+# event (the runtime lets Claude act on the injected context, which ends in another Stop), and
+# with no guard that re-invocation re-emits additionalContext forever -- the exact loop this field
+# exists to break. Exit silently and immediately, before the usage-report.py / occupancy work, on
+# any re-invocation.
+if [ -n "$INPUT" ] && command -v python3 >/dev/null 2>&1; then
+  ACTIVE=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print('1' if d.get('stop_hook_active') else '')
+except Exception:
+    print('')
+" 2>/dev/null)
+  [ "$ACTIVE" = "1" ] && exit 0
+fi
+
 # capture_with_timeout <secs> <cmd...> — runs a command with a best-effort timeout, printing its
 # stdout. Mirrors v1's fallback ladder (timeout -> gtimeout -> background+kill) so behaviour on a
 # machine with neither binary is unchanged.
@@ -66,8 +85,6 @@ USAGE_LINE=""
 if [ -f "$SCRIPT" ]; then
   USAGE_LINE=$(capture_with_timeout 4 python3 "$SCRIPT" --compact)
 fi
-
-INPUT=$(cat 2>/dev/null) || INPUT=""
 
 PCT=""
 if [ -n "$INPUT" ] && command -v python3 >/dev/null 2>&1; then
