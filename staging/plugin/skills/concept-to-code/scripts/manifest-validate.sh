@@ -244,6 +244,36 @@ if grep -q '^task_type:' "$MANIFEST"; then
   esac
 fi
 
+# Invariant 18 (conditional, ADR-0057): if tracer_bullet_mode present, must be skip or probe.
+# Absent = valid (retrocompat with every pre-ADR-0057 manifest) and means the same thing as 'skip'
+# — this feature ADDS a step, so absent/skip is the inert, pre-feature-equivalent default.
+if grep -q '^tracer_bullet_mode:' "$MANIFEST"; then
+  if ! grep -Eq '^tracer_bullet_mode: (skip|probe)$' "$MANIFEST"; then
+    fail "tracer_bullet_mode present but value is not 'skip' or 'probe'"
+  fi
+fi
+
+# Invariant 19 (conditional, ADR-0057): if tracer_bullet_verdict present, must be null or one of
+# the three computed verdicts. Absent = valid.
+if grep -q '^tracer_bullet_verdict:' "$MANIFEST"; then
+  tbv_val="$(grep '^tracer_bullet_verdict:' "$MANIFEST" | sed 's/^tracer_bullet_verdict: *//;s/"//g' | head -1)"
+  case "$tbv_val" in
+    null|green|amber|red) ;;
+    *) fail "tracer_bullet_verdict '$tbv_val' is not valid (must be: null|green|amber|red)" ;;
+  esac
+fi
+
+# Invariant 20 (conditional, ADR-0057): if tracer_bullet_red_decision present, must be null or one
+# of the three named options from Gate 4.5 (continue anyway / reduce scope / hand-code). Absent =
+# valid.
+if grep -q '^tracer_bullet_red_decision:' "$MANIFEST"; then
+  tbrd_val="$(grep '^tracer_bullet_red_decision:' "$MANIFEST" | sed 's/^tracer_bullet_red_decision: *//;s/"//g' | head -1)"
+  case "$tbrd_val" in
+    null|continue|reduce_scope|hand_code) ;;
+    *) fail "tracer_bullet_red_decision '$tbrd_val' is not valid (must be: null|continue|reduce_scope|hand_code)" ;;
+  esac
+fi
+
 if [ "$ERRORS" != "0" ]; then
   exit 1
 fi

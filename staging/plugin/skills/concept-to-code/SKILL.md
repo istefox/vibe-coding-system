@@ -145,7 +145,9 @@ Behavior:
    > "SCOPE ERROR: manifest project_root (`<project_root>`) is outside this session's working directory (`<CWD>`). This session is scoped to `<CWD>` and must not operate on a different project. Open a new Claude Code session inside `<project_root>` and resume the chain from there."
    Never proceed past this guard on a scope mismatch — not even to read the manifest further.
 2. Read `current_step`. Branch:
-   - `ready_for_implementation` → run TOFU guard (step 2b below), then proceed to Step 5 dispatch coder.
+   - `ready_for_implementation` → run TOFU guard (step 2b below), then evaluate the Step 4.5
+     tracer-bullet probe (§4 Step 4.5) if `manifest.tracer_bullet_mode = probe` (no-op if `skip`,
+     the default), then proceed to Step 5 dispatch coder.
    - Any step before `step_4_session_boundary` → error: "resume not necessary, continue in current session".
    - `completed` or `aborted` → error: "chain terminated, create a new manifest".
    - `failed` → error: "chain in failure state, manual recovery required".
@@ -194,6 +196,13 @@ step_0_init → step_1_interview → gate_1_spec_review
   → step_2_architecture → gate_2_architecture_review
   → step_3_project_memory → gate_3_project_memory_review
   → step_4_session_boundary → ready_for_implementation
+  [OPTIONAL — Step 4.5 tracer-bullet probe, tracer_bullet_mode=probe only (ADR-0057). Inline at
+   ready_for_implementation, no dedicated state (same shape as Gate 2b / Gate 5.05 / Gate 5.06):
+     verdict=green            → ready_for_implementation → step_5_implementation (unchanged pair)
+     verdict=amber            → ready_for_implementation → gate_2_architecture_review (new pair)
+     verdict=red, continue    → ready_for_implementation → step_5_implementation (unchanged pair)
+     verdict=red, reduce scope→ ready_for_implementation → gate_2_architecture_review (new pair)
+     verdict=red, hand-code   → ready_for_implementation → aborted (existing wildcard)]
   [FRESH SESSION]
   → step_5_implementation → step_6_review → gate_5_review_decision
   → step_7_commit → completed
@@ -217,8 +226,14 @@ Terminal states: `completed`, `failed`, `aborted`. Any state can transition to `
 
 Gates 0, 0b–0d are NOT states: they are checks run inside `step_0_init` before the first transition.
 
-Legal transition pairs (48 total — 28 standard + 6 express + 14 hybrid, including Gate 0d routing and direct-close shortcuts):
-- Standard (preserved): all 28 existing pairs unchanged
+Legal transition pairs (49 total — 29 standard + 6 express + 14 hybrid, including Gate 0d routing, Step 4.5 tracer-bullet routing, and direct-close shortcuts):
+- Standard (preserved): all 28 pre-existing pairs unchanged, plus 1 new pair for Step 4.5's
+  amber / "red → reduce scope" route (ADR-0057): `ready_for_implementation→gate_2_architecture_review`.
+  Green and "red → continue anyway" reuse the existing `ready_for_implementation→step_5_implementation`
+  pair; hand-code reuses the existing unconditional any-state-to-`aborted` wildcard. Checked against
+  the ADR-0027 Gates-0c/0d lesson (pairs can be written but structurally unreachable) before assuming
+  new pairs were needed at all — Gate 2b and Gate 5.05/5.06 are already inline sub-gates with no
+  dedicated state, and Step 4.5 follows the same shape, so only this one pair was actually missing.
 - Express (new): `step_0_init→step_e1_plan`, `step_e1_plan→step_e2_execute`, `step_e2_execute→gate_e3_verify`, `gate_e3_verify→step_e4_commit`, `step_e4_commit→completed`, `gate_e3_verify→completed`
 - Hybrid (new): `step_0_init→step_h1_interview`, `step_h1_interview→gate_h1_spec_review`, `gate_h1_spec_review→step_h2_plan`, `gate_h1_spec_review→gate_h1b_brainstorm`, `gate_h1_spec_review→step_h1_interview`, `gate_h1b_brainstorm→step_h2_plan`, `gate_h1b_brainstorm→gate_h1c_macos_ux`, `gate_h1c_macos_ux→step_h2_plan`, `step_h2_plan→step_h3_execute`, `step_h3_execute→gate_h3_verify`, `gate_h3_verify→step_h4_review`, `gate_h3_verify→step_h5_commit`, `step_h4_review→step_h5_commit`, `step_h5_commit→completed`
 
@@ -233,7 +248,7 @@ Helper scripts:
 - `~/.claude/skills/concept-to-code/scripts/manifest-init.sh` — creates manifest at `step_0_init` (schema 1.3, adds `chain_path`, `gate0.chain_path`, `gate0.auto_detect_reason`)
 - `~/.claude/skills/concept-to-code/scripts/manifest-validate.sh` — validates schema 1.0|1.1|1.2|1.3 + state invariants + optional fields
 - `~/.claude/skills/clean-public-repo/scripts/detect-public-remote.sh` — auto-detect public GitHub remote (D1 ADR-0011); output `public|silent`; fail-safe to `silent`. **NB: belongs to the `clean-public-repo` skill, not to `concept-to-code` — use the absolute path.**
-- `~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest> <new-step> [<new-status>]` — performs legal state transitions atomically (48 pairs).
+- `~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest> <new-step> [<new-status>]` — performs legal state transitions atomically (49 pairs).
   **Calling convention — 2-arg form (use for all in-chain transitions):**
   ```bash
   bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh manifest.yml gate_1_spec_review
@@ -547,6 +562,110 @@ asked to follow. Nothing here blocks a dispatch if the resolved profile is ignor
 pins that the fields, this resolution rule, and the floor all exist; nothing pins that a model
 applies the right profile.
 
+### Step 4.5 — Tracer-bullet probe (optional, default skipped; dispatch `coder` agent)
+
+**Trigger:** post Gate 4, at `ready_for_implementation`, before Step 5's dispatch-mode selection —
+reached identically whether Gate 4 was "Implement now" (same session) or a Form B resume after
+`/clear` (§2 Form B). Runs inline, with no dedicated `current_step` state, the same shape as Gate 2b
+(TOFU) and Gate 5.05/5.06 (both inline sub-gates within their enclosing step).
+
+**Optional, off by default (ADR-0057 §D1) — the opposite default direction from ADR-0055 §D2, in
+contrast: that feature REMOVES a constraint and so must default strict; this feature ADDS a step,
+so absent/`skip` must equal the pre-feature behaviour exactly.** Check `manifest.tracer_bullet_mode`:
+
+- **`skip` (default; absent also means skip):** emit nothing extra. Transition
+  `ready_for_implementation → step_5_implementation` exactly as before this feature existed — zero
+  behavior change on every chain that does not opt in. Proceed to Step 5.
+- **`probe`:** run the probe below. There is no dedicated `AskUserQuestion` to opt in — flip it with
+  a manual `sed` before Gate 4, the same idiom as `step5_review_mode` (ADR-0039 §D8), not a new gate:
+  ```bash
+  sed -i.bak 's/^tracer_bullet_mode: skip$/tracer_bullet_mode: probe/' <manifest>
+  ```
+
+**The slice (ADR-0057 §D1, "a judgement call, made by the architect").** The orchestrator never
+invents a slice independently of the approved plan: dispatch the plan's task explicitly headed
+`Tracer-bullet slice` if the architect (Step 2) included one, else the plan's own first task. The
+slice must be **end-to-end**, not a single layer probed deeply — the thinnest journey through every
+layer the feature touches, shallowly, because integration is where feasibility actually fails and a
+deep single-layer slice only tests what the plan already assumed.
+
+**Budget and attempt cap (§D4 — reuses ADR-0052's mechanism, not a second cost control).** Before
+dispatch, write a one-task synthetic plan fragment so `diff-budget-check.sh` can be reused exactly
+as Step 5 already uses it:
+```bash
+cat > "<manifest-dir>/.tracer-bullet-plan.md" <<'EOF'
+# Tracer-bullet probe
+
+- [ ] **Task 1 — tracer-bullet slice.** Budget: <declared-files-from-the-slice-task> (~150 lines)
+EOF
+```
+The hard attempt cap is **2 attempts**. **Exceeding either the budget or the attempt cap is itself
+evidence, not a reason to keep spending** — a slice that will not converge cheaply is an `amber` or
+`red` signal on its own (§D4).
+
+**Dispatch (single coder, model+effort pinned explicitly — ADR-0018 addendum, ADR-0049 §D6):**
+```
+Agent({ agentType: "coder", model: "sonnet", effort: "high",
+        prompt: "TRACER-BULLET PROBE (Step 4.5, ADR-0057). Implement ONLY <slice-task-description>
+from the plan at <plan-path> — the thinnest END-TO-END slice through this feature: touch every
+layer it needs, shallowly, never a single layer probed deeply. Budget: <declared-files> (~150
+lines) — stay inside it; if you cannot, stop and report rather than expanding scope. Hard attempt
+cap: 2 attempts — if the slice does not converge in two attempts, stop and report what failed
+rather than trying a third approach. State explicitly in your report: (1) whether it builds/runs,
+(2) whether its own test passes, (3) how many attempts it took, (4) whether you deviated from the
+plan's stated approach and why, (5) your own recommended verdict (green/amber/red) — this
+recommendation is recorded but is NOT authoritative. Do not commit." })
+```
+
+**The verdict is computed, not asked (§D3 — the assertion that matters most in this file).** Treat
+the coder's report as CONTEXT ONLY. Compute `tracer_bullet_verdict` from these mechanical facts,
+never from the coder's self-assessment:
+
+1. Did the slice build/run at all?
+2. Did its own test pass (if a trusted test-cmd exists; a build-only check otherwise)?
+3. Attempt count, recorded in `tracer_bullet_attempts`.
+4. Did it touch files outside its declared scope? Run:
+   ```bash
+   git diff --stat "$BASELINE_COMMIT" | bash ~/.claude/skills/concept-to-code/scripts/diff-budget-check.sh \
+     --plan "<manifest-dir>/.tracer-bullet-plan.md" --tasks 1
+   ```
+   Parse `BUDGET`/`SCOPE` lines per the reporter contract stated at diff-budget-check.sh's own
+   header — never `[ -n "$out" ]` (true even on `CLEAN`), never a bare `grep -c` fallback.
+
+Derivation:
+- **`red`** — did not build/run, OR its test failed after the attempt cap (2) is reached.
+  Mechanical, not a mood.
+- **`green`** — built/ran, test passed, no `SCOPE` finding, no `BUDGET` overshoot, attempts within
+  the cap.
+- **`amber`** — everything else: passed but with a `SCOPE` finding, a `BUDGET` overshoot, attempts
+  at the cap before it passed, or the coder's own report of a deviation from the plan's stated
+  approach.
+
+Record the coder's own recommendation verbatim in `tracer_bullet_recommendation` (bash sed, on the
+additive field). **The recommendation cannot upgrade a mechanically failing slice to green** — a
+coder reporting "I believe this works" over a nonzero test-cmd exit code still computes to `red`.
+The narrative is context only, never authoritative; record it, never branch on it.
+
+```bash
+sed -i.bak 's/^tracer_bullet_verdict: null$/tracer_bullet_verdict: "<green|amber|red>"/' "<manifest>"
+sed -i.bak 's/^tracer_bullet_recommendation: null$/tracer_bullet_recommendation: "<coder-verdict>"/' "<manifest>"
+sed -i.bak 's/^tracer_bullet_attempts: 0$/tracer_bullet_attempts: <N>/' "<manifest>"
+```
+
+**Routing (all three verdicts, ADR-0057 §D2):**
+- **`green`** — emit "Step 4.5: green ✓ — slice kept as the Step 5 pattern seed, proceeding.". No
+  `AskUserQuestion` — computed, not asked (§D3). On `green`, the slice is the **pattern seed
+  (§D5) and is kept**: do not `git checkout`/revert its files. They stay in the working tree exactly
+  as everything else in Step 5 stays uncommitted until Step 7 — no new commit boundary is
+  introduced here. Transition `ready_for_implementation → step_5_implementation` (the existing,
+  unmodified pair).
+- **`amber`** — emit "Step 4.5: amber — <reason> — returning to Gate 2 for scope reduction ✓".
+  Transition `ready_for_implementation → gate_2_architecture_review`. No `AskUserQuestion` here —
+  Gate 2's own existing block (§5 Gate 2) is what re-presents to the human, which is where the scope
+  is actually revised.
+- **`red`** — emit "Step 4.5: red — <reason>.". Present **Gate 4.5** (§5 Gate 4.5 block) — `red` is
+  the outcome this feature exists for, and the only one that gets a human decision gate.
+
 ### Step 5 — Implementation (dispatch `coder` agent, post-resume)
 
 #### Recovery-readiness pre-flight (ADR-0050, before any dispatch)
@@ -586,6 +705,18 @@ sed -i.bak 's/^recovery_baseline_sha: null$/recovery_baseline_sha: "<BASELINE_CO
 If `manifest.recovery_baseline_sha` is already non-null (a resumed Step 5 run), skip the write — it is written once, at pre-flight, and never rewritten by a later step. A baseline that moves is not a baseline (ADR-0050 §D3).
 
 **Autopilot (`manifest.autopilot = true`) refuses identically — no leniency branch (ADR-0050 §D6).** A dirty tree or a default-branch checkout halts the unattended path exactly as it halts the attended one. There is no `AskUserQuestion` on this path, so the remediation command above is recorded in the report rather than prompted to a terminal nobody is watching.
+
+#### Pattern seed handoff (ADR-0057 §D5, only if Step 4.5 ran and computed `green`)
+
+If `manifest.tracer_bullet_verdict = green`, every coder brief dispatched below — Workflow path and
+Agent-tool fallback alike — for a task touching the same layer(s) the tracer-bullet slice touched
+MUST add one line: `"Follow the pattern already established in <tracer-bullet slice file list>
+(Step 4.5 tracer-bullet probe) — do not re-derive the approach from scratch."` This is the single
+resolution site for that instruction, stated once here so both dispatch branches below honor it
+without a second copy going stale independently — the same convention `#### Proportional audit
+depth` above already uses for its own single resolution site (ADR-0049 §D5 precedent). If
+`tracer_bullet_verdict` is `null`/absent (Step 4.5 skipped or not yet run), this subsection is a
+no-op.
 
 **Dispatch mode selection:**
 - If `manifest.hook_verified = true`: use Workflow dispatch path (below).
@@ -2306,6 +2437,54 @@ Note: `/clear` cannot be triggered automatically from within the skill — it is
 **After the user clicks "Abort chain":**
 Emit: "Gate 4: chain aborted. Manifest left at `step_4_session_boundary` — run `/skill concept-to-code resume <manifest-path>` to continue later."
 STOP — no further tool calls.
+
+---
+
+**Gate 4.5 — Tracer-bullet red decision (conditional, fires only on `tracer_bullet_verdict = red`)**
+
+Trigger: Step 4.5 (§4) computed `red`. Skipped entirely — no `AskUserQuestion`, no text shown — when
+`tracer_bullet_mode = skip` (default) or the computed verdict is `green`/`amber`: those two route
+automatically (§4 Step 4.5), never asked.
+
+`red` is the outcome this feature exists for (ADR-0057 §D2), and the one an agentic chain is
+structurally least likely to reach on its own: the chain is mid-run, the plan is approved, and every
+incentive points at "continue". So this gate names **hand-code as a first-class option**, not a
+buried sub-choice, and records the reason — without that, `red` degrades into a slower `amber`.
+
+Use `AskUserQuestion`:
+```
+question: "Gate 4.5 — Tracer-bullet probe: red (Human decision required)\n\nThe thinnest end-to-end
+  slice did not mechanically pass (build/run failed, or its test failed after 2 attempts).\n\n
+  Coder's own recommendation (recorded, not authoritative): <tracer_bullet_recommendation>\n\n
+  This is the outcome the probe exists to surface. Only you can decide how to proceed."
+header: "Gate 4.5 · Red"
+options:
+  - label: "Continue anyway"
+    description: "Proceed to Step 5 despite the failed probe. Recorded as a deliberate human override."
+  - label: "Reduce scope"
+    description: "Return to Gate 2 to revise the plan/ADR toward a smaller or different approach."
+  - label: "Hand-code (abort)"
+    description: "This class of work is not a good fit for unattended implementation right now. Abort the chain; the reason is recorded in the manifest."
+```
+
+"Continue anyway": set `tracer_bullet_red_decision: continue` (bash sed on the additive field).
+Transition `ready_for_implementation → step_5_implementation` (the existing pair). Emit "Gate 4.5:
+continuing despite red ✓".
+
+"Reduce scope": set `tracer_bullet_red_decision: reduce_scope`. Transition
+`ready_for_implementation → gate_2_architecture_review`. Emit "Gate 4.5: reducing scope — back to
+Gate 2 ✓".
+
+"Hand-code (abort)": set `tracer_bullet_red_decision: hand_code`. Record the reason in
+`tracer_bullet_abort_reason` (bash sed, quote-escaped) — the user's stated reason if they gave one,
+else the coder's own report summarized in one line. Transition to `aborted` (3-arg form:
+`bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest> aborted aborted`).
+Emit "Gate 4.5: hand-code — chain aborted, reason recorded ✓". **STOP — no further tool calls.**
+
+**[Autopilot default is deliberately NOT "Continue anyway" — autopilot must never silently override
+a red probe.** Default is **"Hand-code (abort)"**, with
+`tracer_bullet_abort_reason: "autopilot: red tracer-bullet probe, no human present to decide — halting rather than guessing"`.
+Emit: "Gate 4.5: autopilot — red probe, no unattended override, chain aborted ✓".]**
 
 ---
 

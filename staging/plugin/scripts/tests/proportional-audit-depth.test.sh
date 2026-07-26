@@ -363,10 +363,15 @@ else
   bad "PF2: 'no third field' statement not found in architect.md"
 fi
 
-if grep -q '^# Invariant 18' "$VAL" 2>/dev/null; then
-  bad "PF3: manifest-validate.sh has an Invariant 18 — ADR-0055 adds exactly two fields (risk, task_type), never a third"
+# PF3 originally pinned to the raw invariant number 18 as a proxy for "no third field". That
+# proxy broke on the first unrelated feature to need the next sequential invariant number
+# (issue #111 / ADR-0057's Invariant 18, for tracer_bullet_mode — nothing to do with ADR-0055).
+# Corrected to check what this test actually means: exactly two invariants tagged ADR-0055.
+adr55_invariant_count=$(grep -c '(conditional, ADR-0055)' "$VAL" 2>/dev/null)
+if [ "$adr55_invariant_count" -eq 2 ]; then
+  ok "PF3: manifest-validate.sh has exactly two ADR-0055-tagged invariants (risk, task_type) — no third field introduced"
 else
-  ok "PF3: manifest-validate.sh has no Invariant 18 (no third manifest field introduced)"
+  bad "PF3: manifest-validate.sh has $adr55_invariant_count ADR-0055-tagged invariants, expected exactly 2"
 fi
 
 if grep -qE '^echo "[a-z_]+: null" >> "\$T"$' "$INIT" 2>/dev/null; then

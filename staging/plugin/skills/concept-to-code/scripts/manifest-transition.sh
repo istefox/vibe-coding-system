@@ -47,7 +47,7 @@ fi
 if [ "$new_step" = "failed" ] || [ "$new_step" = "aborted" ]; then
   : # always legal
 else
-  # Build legal transition pairs into temp file (spec §3.3, 48 transitions)
+  # Build legal transition pairs into temp file (spec §3.3, 49 transitions)
   PAIRS="$(mktemp)"
   echo "step_0_init,step_1_interview" > "$PAIRS"
   echo "step_0_init,gate_0d_scaffolding" >> "$PAIRS"
@@ -77,6 +77,12 @@ else
   echo "step_7_commit,completed" >> "$PAIRS"
   echo "step_5_implementation,gate_5_review_decision" >> "$PAIRS"
   echo "step_6_review,completed" >> "$PAIRS"
+  # Tracer-bullet probe, Step 4.5 (ADR-0057). Inline sub-gate at ready_for_implementation — same
+  # shape as Gate 2b (TOFU) and Gate 5.05/5.06, which also have no dedicated current_step state.
+  # green and "red -> continue anyway" reuse ready_for_implementation,step_5_implementation above
+  # unchanged; hand-code reuses the unconditional any-state-to-aborted wildcard below. This is the
+  # ONE new pair the feature actually needs, for amber and "red -> reduce scope" alike:
+  echo "ready_for_implementation,gate_2_architecture_review" >> "$PAIRS"
   # Express path transitions (ADR-0017)
   echo "step_0_init,step_e1_plan" >> "$PAIRS"
   echo "step_e1_plan,step_e2_execute" >> "$PAIRS"
