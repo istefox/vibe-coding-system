@@ -480,6 +480,73 @@ Then IMMEDIATELY call AskUserQuestion with the Gate 3 block (see §5 Gate 3).
 
 On Gate 3 approve: emit "Gate 3 approved ✓ — applying CLAUDE.md and proceeding to Gate 4...". Then `mv CLAUDE.md.proposed CLAUDE.md`. Transition to `step_4_session_boundary`. Present Gate 4.
 
+#### Proportional audit depth — profile resolution (ADR-0055)
+
+**Single resolution site.** This subsection is the only place in the chain that maps
+`manifest.risk` and `manifest.task_type` to an audit profile. Do not restate this mapping at
+another call site — a second copy is exactly how `autopilot-build`'s stale restatement of c2c's
+own isolation check went stale (ADR-0049 §D5). Step 5 and Step 6 below both point back here
+instead of re-deriving the rule.
+
+**Axes and fields (ADR-0055 §D1).** `risk: low|high`. `task_type:
+boilerplate|glue|novel-algorithm|regulated|legacy-integration|perf-critical`. Both additive,
+conditional-if-present in `manifest-validate.sh`, no schema bump — pre-ADR-0055 manifests stay
+valid with no migration.
+
+**Absent means STRICT here, not inert — the opposite default from ADR-0052/0053/0054 (ADR-0055
+§D2).** Those three features *add* a constraint, so an absent field means "no new restriction",
+which is the pre-feature status quo — inert is safe. This feature *removes* constraints: a `low`
+risk `boilerplate` task gets a lighter profile than the chain runs today. If an unset field meant
+"no profile applies", every existing manifest would silently downgrade to the lightest audit the
+moment this merged. So:
+
+- `risk` absent, `null`, or a pre-ADR-0055 manifest (the field does not exist at all) resolves to
+  the **strict** profile.
+- `task_type` absent, `null`, or a pre-ADR-0055 manifest also resolves to the **strict** profile.
+
+**Resolution — `max()` across the two axes, never averaged (ADR-0055 §D3).**
+- risk axis → `strict` unless `risk` is exactly `low` (in which case → `light`).
+- task_type axis → `light` only when `task_type` is exactly `boilerplate` or `glue`; every other
+  value (`regulated`, `perf-critical`, `novel-algorithm`, `legacy-integration`) → `strict`.
+- `profile = strict` if **either** axis resolves to `strict`, else `light`. The strictest axis
+  wins.
+- Worked example: `risk: high` with `task_type: boilerplate` resolves to the **strict** profile —
+  the `high` risk axis alone forces it, regardless of the lighter task_type.
+
+No averaging, no weighted score, no numeric dial anywhere in this resolution. A numeric score
+invites tuning, and tuning a safety profile only ever moves toward "faster" — nobody tunes it back
+stricter after a quiet month. Two buckets, `strict` and `light`, combined by `max()`, full stop.
+
+**The floor (ADR-0055 §D4) — depth only, never existence.** A `light` profile may reduce review
+passes, skip the optional reviewer lens, or shrink checkpoint cadence (see the two bullets below).
+It may **never** remove, skip, or soften any of these four, regardless of the resolved profile:
+
+- `spec-coverage.sh` — Requirement-ID coverage gate, Step 5 → Step 6 (ADR-0048).
+- `weakening-scan.sh` — the weakening scan / Anti-test-weakening gate, Step 5 → Step 6 (ADR-0047).
+- `interface-check.sh` — Interface immutability gate, Step 6 (ADR-0053).
+- the Recovery-readiness pre-flight, Step 5 entry (ADR-0050).
+
+These four run exactly as documented at their own call sites below, unconditionally, with no
+`profile` branch anywhere in their own sections. Otherwise the field becomes a bypass with a
+friendly name: a `task_type: boilerplate` label on a payment change would disable the checks that
+exist for payment changes — and the label is set by the same process being checked.
+
+**What `light` may reduce, concretely:**
+- **Checkpoint cadence (Step 5, ADR-0039):** under `strict`, prefer `step5_review_mode: checkpoint`
+  when the operator has enabled it; under `light`, `step5_review_mode: none` (the default) is
+  sufficient — no per-batch reviewer dispatch is required.
+- **Optional reviewer lens (Step 6 Phase 1, `code-review-checklist`):** the Security, Correctness
+  and Test coverage categories are never skipped at either profile. Under `light`, the Performance
+  category may be abbreviated to a single pass instead of a dedicated deep pass; under `strict`,
+  full depth as configured today (unchanged).
+- **Review passes:** unchanged by this feature at either profile — Step 6's Phase 1/Phase 4 pass
+  structure is untouched; only the per-batch checkpoint cadence above varies.
+
+**Instruction, not enforcement (ADR-0055 consequences).** This subsection is prose a model is
+asked to follow. Nothing here blocks a dispatch if the resolved profile is ignored — the harness
+pins that the fields, this resolution rule, and the floor all exist; nothing pins that a model
+applies the right profile.
+
 ### Step 5 — Implementation (dispatch `coder` agent, post-resume)
 
 #### Recovery-readiness pre-flight (ADR-0050, before any dispatch)
@@ -2065,6 +2132,30 @@ operator creates the file by hand if they want the protection. `interface-check.
 the file exists (ADR-0053 §D2), so a declaration the operator did not knowingly make is a block
 they will not understand. No new manifest gate, no new transition — this rides on Gate 2a's
 existing HITL review.
+
+**Audit-profile proposal (ADR-0055 §D5, only if the architect's report includes a
+`PROPOSED AUDIT PROFILE:` block):** show that block's `risk`/`task_type` values and one-line
+reasons alongside Gate 2a's key decisions. Approving Gate 2a confirms the proposed profile too —
+unlike the protected-interface proposal above, this one IS written by the orchestrator on
+approval, because `risk`/`task_type` are manifest fields the orchestrator already owns (the
+architect's write scope excludes the manifest entirely — see `agent-write-scope.sh`). On
+"Approve", after the CLAUDE.md/Gate-2a bookkeeping above:
+```bash
+sed -i.bak 's/^risk: null$/risk: "<PROPOSED_RISK>"/' "<manifest>"
+sed -i.bak 's/^task_type: null$/task_type: "<PROPOSED_TASK_TYPE>"/' "<manifest>"
+```
+On "Reject and revise": the profile proposal is revised together with the rest of the
+architecture, on the same re-dispatch path as Gate 2a — do not write `risk`/`task_type` before
+the re-approval. If the architect's report has no `PROPOSED AUDIT PROFILE:` block, `risk` and
+`task_type` stay `null`, which resolves to the strict profile (ADR-0055 §D2), never to "no profile
+applies". The operator confirms; nothing here is auto-derived and applied silently (§D5) — see
+`#### Proportional audit depth` above for the resolution rule this sets up.
+
+**[Autopilot default: same as Gate 2a — accept the proposed profile if present (run the two `sed`
+substitutions above), else leave `risk`/`task_type` null (strict). This inherits the existing
+"architecture auto-approved" default rather than adding a new leniency branch — ADR-0055's own
+negative consequence names self-assessed risk as weak evidence, and §D4's floor is the actual
+mitigation, not a stricter autopilot branch here.]**
 
 **Gate 2b — Test-cmd TOFU (only if test-cmd candidate != NONE):**
 
