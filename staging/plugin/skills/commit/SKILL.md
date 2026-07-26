@@ -63,6 +63,12 @@ untracked=$(git ls-files --others --exclude-standard)                # NEVER aut
 - `untracked` non-empty in either case above → always list separately in the Step 4 gate as
   "Excluded — untracked, not staged". Never staged by default, under any circumstance — adding
   one requires the explicit "Stage additional files" path in Step 4.
+- **This untracked list is the authoritative, mechanical signal for debris (ADR-0062 §D2, issue
+  #116).** An agent's own cleanup disposition list (its Output Format "Cleanup" bullet — coder,
+  debugger, refactorer) is a self-report by the party being audited — the same class of evidence
+  ADR-0047 §A3 refused to trust for `weakening_findings` and ADR-0057 §D3 for the tracer verdict —
+  and is never treated as verification here. An agent that forgot to clean something up will also
+  forget to list it; git does not forget.
 - Included set empty **and** `untracked` non-empty (only brand-new files exist, nothing
   tracked-modified or pre-staged) → this is real work, not "nothing to commit": proceed to
   Step 4 with 0 included files and the no-`Approve` gate variant described there, instead of

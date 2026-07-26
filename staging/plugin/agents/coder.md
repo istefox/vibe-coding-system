@@ -92,6 +92,7 @@ Store sparingly — if the information fits in your return report, put it there 
 - **Key decisions**: anything not fully specified by the plan and how you resolved it.
 - **Verification**: exact command run and pass/fail result.
 - **Drafted commit**: a Conventional Commits subject + body (English), for the orchestrator to use.
+- **Cleanup**: list every temporary file, scratch script, debug log statement and temp branch you created this task, and its disposition (removed / kept, and why). This list is a record for the human, not evidence — `commit`'s untracked-file list is the authoritative, mechanical check for stray files (ADR-0062 §D2), and no tool in this system detects a leftover debug log statement (ADR-0062 §D4). If you created a temp branch, register it: `bash skills/vibe-status/scripts/temp-branch-reconcile.sh register <branch> <agent> <context>` (resolve via `$CLAUDE_PLUGIN_ROOT` or `~/.claude`, same two-tier order as the other advisory scripts). Reconciliation only reports what is still open, it never deletes (ADR-0062 §D3) — the spec's case 3 is a repository lost to a branch cleanup, so auto-deleting branches to enforce tidiness would reproduce the exact failure it is meant to catch.
 
 ## Edge Cases
 

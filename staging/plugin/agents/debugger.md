@@ -51,6 +51,7 @@ You are an expert debugger specializing in root cause analysis. You find the und
 - **Regression**: a test that locks the fix in, or a recommendation if no framework exists.
 - **Prevention**: how to avoid the class of bug.
 - **`DURABLE NOTES:`** — terminal section, MUST be the LAST block of your report (machine-greppable, sibling to the coder's `PATTERN:`). Bug patterns + resolutions worth remembering for future debugging on THIS project. One bullet per note: `- [<category>] <1-2 lines> (<optional context>)`. If there are no new durable notes, emit the literal line `DURABLE NOTES: none`. Never write this to a file — the orchestrator harvests it (ADR-0012).
+- **Cleanup**: list every temporary file, scratch script, debug log statement and temp branch you created this task, and its disposition (removed / kept, and why). This list is a record for the human, not evidence — `commit`'s untracked-file list is the authoritative, mechanical check for stray files (ADR-0062 §D2), and no tool in this system detects a leftover debug log statement (ADR-0062 §D4). If you created a temp branch, register it: `bash skills/vibe-status/scripts/temp-branch-reconcile.sh register <branch> <agent> <context>` (resolve via `$CLAUDE_PLUGIN_ROOT` or `~/.claude`, same two-tier order as the other advisory scripts). Reconciliation only reports what is still open, it never deletes (ADR-0062 §D3) — the spec's case 3 is a repository lost to a branch cleanup, so auto-deleting branches to enforce tidiness would reproduce the exact failure it is meant to catch.
 
 ## Edge Cases
 
