@@ -82,6 +82,28 @@ When no architecture file is found and the repo is sparse (< 3 non-hidden files)
 
 Emit one line: `"Stack detected: <STACK>"`.
 
+**Canonical-mechanism detection (ADR-0063, optional):**
+
+```bash
+for cat in http logger config; do
+  bash "$HOME/.claude/skills/project-init/scripts/detect-canonical-mechanism.sh" "<project_root>" "$cat"
+done
+```
+
+Each line of output is `name<TAB>count` for a category with a clear dominant mechanism; a category
+with no output has no dominant mechanism (a tie, or too thin a sample — SPEC edge case) and is
+skipped. Detection is sound here specifically because the property being detected (which mechanism
+is used most) and the property being declared ("this is the canonical mechanism") are the same
+property — that does NOT generalise. Contrast ADR-0055 §A4, which rejected path-based
+auto-derivation of `risk` for the opposite reason: a file's location does not determine its risk.
+
+If at least one category produced a result, build a draft `.claude/rules/canonical-mechanisms.md`
+(flat list, `name → import path or symbol`, `paths:` frontmatter scoped to the detected stack) and
+carry it into Step 4's HITL gate as a proposal. **Never write it without approval** — the same
+propose-not-write-silently contract CLAUDE.md itself uses in this skill (ADR-0063 §D2, ADR-0053
+§D6, ADR-0055 §D5). If no category produced a result, skip the draft entirely and say nothing
+about it in the gate.
+
 ### Step 2 — Ask (max 2 questions)
 
 **If `$ARCH_CONTEXT` is populated:** skip Q2 entirely (description comes from the
@@ -316,7 +338,10 @@ AskUserQuestion:
   question: "project-init — review proposed files\n\n
     === CLAUDE.md ===\n<content>\n\n
     === .claude/context.md ===\n<content>\n\n
-    Approve to write both files."
+    <if a canonical-mechanisms draft exists>
+    === .claude/rules/canonical-mechanisms.md (proposed) ===\n<content>\n\n
+    </if>
+    Approve to write."
   header: "project-init · Approval"
   options:
     - label: "Approve — write files (Recommended)"
@@ -324,8 +349,11 @@ AskUserQuestion:
     - label: "Abort"
 ```
 
+If a canonical-mechanisms draft exists, the gate shows it as a fourth proposed file exactly like
+CLAUDE.md and context.md — approval covers all files shown, there is no separate gate for it.
+
 On "Edit": accept the corrected content from the Other field, re-show the gate once.
-On "Abort": exit, write nothing.
+On "Abort": exit, write nothing — including the canonical-mechanisms draft.
 
 ### Step 5 — Write
 
@@ -348,11 +376,20 @@ On "Abort": exit, write nothing.
    **Open decisions:** none
    ```
 
-5. Emit apply report:
+5. If a canonical-mechanisms draft was approved at Step 4: create `.claude/rules/` if absent
+   (`mkdir -p "<project_root>/.claude/rules"`) and write
+   `<project_root>/.claude/rules/canonical-mechanisms.md` with the approved content. Never write
+   this file when no draft was proposed, and never write it without the Step 4 approval that
+   covered it (ADR-0063 §D2).
+
+6. Emit apply report:
    ```
    Written:
      CLAUDE.md          (<N> lines, stack: <STACK>, type: <TYPE>)
      .claude/context.md (initial state)
+     <if canonical-mechanisms draft approved>
+     .claude/rules/canonical-mechanisms.md (<N> mechanisms declared)
+     </if>
    <if --update>
      Backup: CLAUDE.md.bak-<date>
    

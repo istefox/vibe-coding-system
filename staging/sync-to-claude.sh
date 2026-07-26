@@ -146,6 +146,7 @@ plugin/skills/macos-ux/SKILL.md|skills/macos-ux/SKILL.md
 plugin/skills/macos-ux/references/macos-hig.md|skills/macos-ux/references/macos-hig.md
 plugin/skills/project-init/SKILL.md|skills/project-init/SKILL.md
 plugin/skills/project-init/scripts/detect-stack.sh|skills/project-init/scripts/detect-stack.sh
+plugin/skills/project-init/scripts/detect-canonical-mechanism.sh|skills/project-init/scripts/detect-canonical-mechanism.sh
 plugin/skills/git-repo-init/SKILL.md|skills/git-repo-init/SKILL.md
 plugin/skills/git-repo-init/assets/CLAUDE.template.md|skills/git-repo-init/assets/CLAUDE.template.md
 plugin/skills/git-repo-init/assets/PROJECT_BRIEF.template.md|skills/git-repo-init/assets/PROJECT_BRIEF.template.md

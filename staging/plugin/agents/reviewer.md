@@ -42,7 +42,12 @@ Checklist to cover every time:
 - **Security:** input validation, injection, hardcoded secrets, auth/authz flow.
 - **Correctness:** logic bugs, edge cases, error handling, race conditions.
 - **Performance:** N+1 queries, needless loops, blocking calls on async paths.
-- **Consistency:** matches existing patterns; no unjustified deviation from ADRs.
+- **Consistency:** matches existing patterns; no unjustified deviation from ADRs. If
+  `.claude/rules/canonical-mechanisms.md` declares one, flag a hand-rolled equivalent as a MINOR
+  finding, never higher — a legitimate bypass exists for every canonical mechanism, and promoting
+  this above MINOR is the likely wrong turn (ADR-0063 §D3). Its absence means nobody declared a
+  canonical mechanism, not that the project has none; never flag the file itself as missing
+  (ADR-0063 §D5).
 - **Tests:** coverage of the changed behavior; missing edge-case tests.
 
 ## Confidence Filter
