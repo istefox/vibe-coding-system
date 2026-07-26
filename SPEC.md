@@ -1,42 +1,42 @@
-# SPEC — Tracer-bullet probe step
+# SPEC — Context-occupancy instrumentation and PreCompact guard
 
-Source: GitHub issue #111
+Source: GitHub issue #112
 
 ## Objectives
-1. Prove a thin end-to-end path before paying for a full implementation step.
-2. Make "the agent cannot do this class of work" a first-class, early outcome.
-3. Seed the implementation patterns the later slices follow.
+1. Stop auto-compaction from firing in the middle of a chain step.
+2. Make context occupancy visible.
 
 ## Scope
-In: an optional Step 4.5 in c2c; a gate on a `red` outcome; an additive manifest field; a new test file in both CI registries.
-Out: automatic slice-selection heuristics beyond "the first task in the plan that crosses all layers".
+In: a `PreCompact` hook; an occupancy line in the Stop hint; a blueprint note recording the 50% finding; a new test file in both CI registries.
+Out: changing the autocompact threshold; per-subagent occupancy, which is not locally observable (`usage-report.py:11-14`).
 
 ## Stack
-Markdown skill instructions + manifest field.
+Bash 3.2 hook + the existing `usage-daily-hint.sh`.
 
 ## Architecture
-- Modified: `concept-to-code/SKILL.md` — new Step 4.5 and a new gate, placed between the session boundary and Step 5.
-- Modified: manifest schema — additive `tracer_outcome` and the established patterns.
+- New: `staging/plugin/scripts/pre-compact-guard.sh`, wired on `PreCompact`. The event is currently absent from the hooks block in `staging/user/settings.json` entirely.
+- Modified: `usage-daily-hint.sh` — add occupancy alongside the daily usage line.
+- Modified: the blueprint hooks section — record that the documented instruction violation occurred at 50% occupancy, below the configured 70% override, so the setting is a conscious choice rather than an inherited default.
 - New: test file in both CI registries.
 
 ## Data model
-`tracer_outcome: green|amber|red|null`. Additive, nullable.
+None persisted beyond the existing state directory.
 
 ## API / Interfaces
-Outcome semantics: `green` proceed to Step 5 at full scope; `amber` (works but slow or awkward) route back to Gate 2 for scope reduction; `red` halt before Step 5 and offer continue / reduce scope / hand-code, recording the reason.
+The guard refuses to compact while a manifest's `current_step` is in a dispatch state and emits the handoff instruction first. It **fails open** on any internal error, like every other hook here — a wrongly-firing refusal would strand a session.
 
 ## UI flows
-A new gate fires only on `red`. Skipped by default on `express`, offered on `standard`. In autopilot the default is to run the probe and continue on `amber`.
+The refusal message instructs the externalisation sequence before compaction.
 
 ## Edge cases
-- The step must be genuinely optional and absent from `express` runs.
-- A `red` outcome must halt before any Step 5 dispatch is paid for.
-- A pre-existing manifest without the field must still validate.
-- The probe must not commit.
+- No manifest mid-flight → allow, exit 0.
+- Malformed manifest → allow (fail open).
+- Repeated refusal must not loop forever: refuse once, then allow.
+- The hook must be inert in repos with no manifests.
 
 ## Success criteria
-- [ ] The step is absent from `express` runs.
-- [ ] A `red` outcome halts before Step 5 and records why.
-- [ ] The manifest field is additive and old manifests still validate.
-- [ ] The established patterns are passed into the Step 5 coder brief.
+- [ ] With no manifest mid-flight, `PreCompact` allows and exits 0.
+- [ ] With a manifest at a dispatch step, compaction is refused once and the handoff instruction is emitted.
+- [ ] Any internal error allows.
+- [ ] The Stop hint reports occupancy.
 - [ ] The new test file is registered in BOTH CI registries.
