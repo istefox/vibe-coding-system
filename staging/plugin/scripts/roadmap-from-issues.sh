@@ -6,10 +6,16 @@
 # Untrusted-input hardening (ADR-0059 / issue #113): the issue TITLE is the only field this
 # script reads, and it is written verbatim into PROJECT.md, a file every downstream chain step
 # reads as roadmap content. Each title is scanned before it is written; a shape-matched title is
-# SKIPPED (not added to PROJECT.md or the issue-map) with a run-level needs-human note — the same
-# SKIP mechanism spec-from-issue uses for a thin or injection-shaped body (§D3), applied here to
-# the other entry point that reads the same untrusted source. This is a mitigation, not a
-# boundary (§D1) and runs unconditionally regardless of repo visibility (§D5).
+# SKIPPED (not added to PROJECT.md or the issue-map) with a per-feature skip note — the same SKIP
+# mechanism spec-from-issue uses for a thin or injection-shaped body (§D3), applied here to the
+# other entry point that reads the same untrusted source. This is a mitigation, not a boundary
+# (§D1) and runs unconditionally regardless of repo visibility (§D5).
+#
+# The skip note target is `.claude/nightly-state/skipped-features`, a per-feature note distinct
+# from the run-level halt marker nightly-guard.sh reads (ADR-0060 §D3, issue #114): before that
+# fix this script wrote to the run-level marker directly, so one injection-suspect issue title
+# silently halted every other feature in the roadmap. See nightly-guard.sh's own header comment
+# for the full split.
 #
 # Usage: roadmap-from-issues.sh --root <dir> --label <label> [--dry-run]
 #        [--issues-json <file>]   # test hook: read gh JSON from a file instead of calling gh
@@ -87,9 +93,9 @@ while IFS=$(printf '\t') read -r num title; do
   fi
   if printf '%s\n' "$_scan_out" | grep -q '^INJECTION'; then
     _rule=$(printf '%s\n' "$_scan_out" | head -1 | cut -f2)
-    mkdir -p .claude
+    mkdir -p .claude/nightly-state
     printf 'issue #%s "%s" skipped: injection-shaped content detected in title (%s)\n' \
-      "$num" "$title" "$_rule" >> .claude/needs-human
+      "$num" "$title" "$_rule" >> .claude/nightly-state/skipped-features
     skipped=$((skipped+1))
     continue
   fi

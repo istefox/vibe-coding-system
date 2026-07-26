@@ -163,31 +163,39 @@ else
 fi
 
 # ==============================================================================================
-# UC. A detector hit takes the EXISTING SKIP path with a needs-human note — the same mechanism
-# Step 2 already uses for a thin body (ADR-0059 §D3), not a second one. Checked at both entry
-# points named in the plan: spec-from-issue (body) and roadmap-from-issues.sh (title).
+# UC. A detector hit takes the EXISTING SKIP path with a per-feature skip note — the same
+# mechanism Step 2 already uses for a thin body (ADR-0059 §D3), not a second one. Checked at both
+# entry points named in the plan: spec-from-issue (body) and roadmap-from-issues.sh (title).
+#
+# The write target changed from `.claude/needs-human` to `.claude/nightly-state/skipped-features`
+# under ADR-0060 §D3 (issue #114): before that fix, spec-from-issue's thin-issue writer and this
+# same injection-suspect writer (at both entry points) shared the run-level needs-human file, so
+# one thin or suspect issue silently halted every other feature in the roadmap. UC1-UC3 assert the
+# CURRENT, correct mechanism — see nightly-guard.sh's own header comment and
+# nightly-autopilot/SKILL.md §3.3 "Marker contract" for the full split.
 # ==============================================================================================
-if grep -qF '.claude/needs-human' "$STEP15" && grep -qF '[~]' "$STEP15" \
+if grep -qF '.claude/nightly-state/skipped-features' "$STEP15" && grep -qF '[~]' "$STEP15" \
    && grep -qF 'spec-from-issue #<n> · SKIP ·' "$STEP15"; then
-  ok "UC1: Step 1.5's SKIP block reuses the needs-human note, [~] marking, and SKIP emit format"
+  ok "UC1: Step 1.5's SKIP block reuses the per-feature skip note, [~] marking, and SKIP emit format"
 else
-  bad "UC1: Step 1.5's SKIP block does not match Step 2's needs-human/[~]/SKIP mechanism"
+  bad "UC1: Step 1.5's SKIP block does not match Step 2's skipped-features/[~]/SKIP mechanism"
 fi
 
 STEP2="$TMP/sfi_step2.txt"
 awk '/^### Step 2 —/{f=1} /^### Step 3 —/{f=0} f' "$SFI" >"$STEP2"
-if grep -qF '.claude/needs-human' "$STEP2" && grep -qF '[~]' "$STEP2" \
+if grep -qF '.claude/nightly-state/skipped-features' "$STEP2" && grep -qF '[~]' "$STEP2" \
    && grep -qF 'spec-from-issue #<n> · SKIP ·' "$STEP2"; then
-  ok "UC2: Step 2 (the pre-existing thin-body gate) uses the identical needs-human/[~]/SKIP shape"
+  ok "UC2: Step 2 (the pre-existing thin-body gate) uses the identical skipped-features/[~]/SKIP shape"
 else
   bad "UC2: Step 2's own SKIP mechanism does not match what UC1 expects to be reused — bad anchor"
 fi
 
 RFI="$STAGING/plugin/scripts/roadmap-from-issues.sh"
-if grep -qF 'untrusted-input-scan.sh' "$RFI" && grep -qF '.claude/needs-human' "$RFI"; then
-  ok "UC3: roadmap-from-issues.sh (the other entry point, plan Task 4) calls the detector and reuses .claude/needs-human"
+if grep -qF 'untrusted-input-scan.sh' "$RFI" && grep -qF '.claude/nightly-state/skipped-features' "$RFI" \
+   && ! grep -qF '.claude/needs-human' "$RFI"; then
+  ok "UC3: roadmap-from-issues.sh (the other entry point, plan Task 4) calls the detector and reuses the per-feature skip note, not needs-human"
 else
-  bad "UC3: roadmap-from-issues.sh does not call the detector or reuse .claude/needs-human"
+  bad "UC3: roadmap-from-issues.sh does not call the detector or reuse the per-feature skip note (ADR-0060 §D3)"
 fi
 
 if grep -qF "grep -q '^INJECTION'" "$RFI"; then
@@ -241,7 +249,11 @@ fi
 # trip the detector. DO NOT "fix" this by narrowing the rule; ADR-0046 set that precedent when
 # its filename rule fired on its own documentation, and it was not narrowed either.
 # ==============================================================================================
-SPEC_FILE="$REPO/SPEC.md"
+# Pin the STABLE per-feature spec, never the repo-root SPEC.md. That file is a working copy the
+# chain overwrites for whichever feature is currently in flight, so an assertion reading it passes
+# only while #113 happens to be the active feature and goes RED the moment the next chain starts —
+# which is exactly what happened on #114. A regression pin whose subject rotates is not a pin.
+SPEC_FILE="$REPO/docs/specs/113-untrusted-input-hardening-for-issue-driv.spec.md"
 ADR_FILE="$REPO/docs/architecture/ADR-0059-113-untrusted-input-hardening.md"
 
 if [ -f "$SPEC_FILE" ]; then

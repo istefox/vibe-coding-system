@@ -1,6 +1,7 @@
-# ADR-0022 — Morning report schema (v2.1)
+# ADR-0022 — Morning report schema (v2.2)
 
-**Companion to:** ADR-0022 (D9); v2.1 `prep` block added by ADR-0023
+**Companion to:** ADR-0022 (D9); v2.1 `prep` block added by ADR-0023; v2.2 `features_skipped[]`
+added by ADR-0060 (§D3/§D5, issue #114)
 **Extends:** `autopilot-report.json` v1.0 (ADR-0020 D7)
 
 The overnight run writes one run-level report at `<project_root>/.claude/nightly-report.json` on
@@ -17,7 +18,7 @@ report is the roll-up a human reads in the morning.
 
 ```json
 {
-  "schema": "2.1",
+  "schema": "2.2",
   "run_id": "<string, e.g. the launch timestamp or roadmap name>",
   "project_root": "<abs path>",
   "status": "success | partial | aborted",
@@ -47,6 +48,9 @@ report is the roll-up a human reads in the morning.
   "guard_halts": [
     { "feature": "<slug>", "reason": "<halt reason from nightly-guard>" }
   ],
+  "features_skipped": [
+    { "feature": "<slug or issue reference>", "reason": "<skip reason>" }
+  ],
   "spend": { "tokens": 0, "turns": 0, "wall_seconds": 0 },
   "features_done": 0,
   "features_failed": 0,
@@ -67,14 +71,25 @@ report is the roll-up a human reads in the morning.
   `gh pr checks`. `unknown` when CI could not be queried.
 - `next_action` is the one-line morning instruction, for example: "Review N open PRs and merge the
   green ones" or "Feature <slug> halted: <reason>. Resume interactively."
+- `features_skipped[]` (v2.2, ADR-0060) is read from `<project_root>/.claude/nightly-state/skipped-
+  features`, one entry per line. It is **not** the same thing as `guard_halts[]`: a halt stopped
+  the whole roadmap, a skip did not — the feature it names simply never started, and every other
+  pending feature ran normally. `prep.features_skipped_thin[]` (v2.1) and `features_skipped[]`
+  (v2.2) can both be non-empty for the same run: the former is populated during Phase P from the
+  same underlying file, before any per-feature chain has started; the latter is the run-level
+  roll-up taken at the same point Phase 2 reads everything else. Neither implies the other is
+  empty.
 
 ---
 
 ## Relationship to v1.0
 
 v1.0 (`autopilot-report.json`) is single-feature, local-commit-only, and has no publish or CI fields.
-v2.1 adds the `prep` block (ADR-0023: `source`, `issues_label`, `features_generated`,
-`features_skipped_thin[]`, `test_cmd_created`); a run with no prep source leaves it null. v2.0 adds
-the `features[]` array, the per-feature `pr_url` / `ci_status` / `guard_halt`, the
-`guard_halts[]` roll-up, and `spend`. A v1.0 reader ignores the new fields; a v2.0 reader treats a
-missing `features[]` as a single-feature v1.0 report.
+v2.2 adds `features_skipped[]` (ADR-0060 §D3/§D5, issue #114): the per-feature skip roll-up, read
+from `.claude/nightly-state/skipped-features` and kept separate from `guard_halts[]` on purpose — a
+skip did not stop the roadmap, a halt did. v2.1 adds the `prep` block (ADR-0023: `source`,
+`issues_label`, `features_generated`, `features_skipped_thin[]`, `test_cmd_created`); a run with no
+prep source leaves it null. v2.0 adds the `features[]` array, the per-feature `pr_url` /
+`ci_status` / `guard_halt`, the `guard_halts[]` roll-up, and `spend`. A v1.0 reader ignores the new
+fields; a v2.0 reader treats a missing `features[]` as a single-feature v1.0 report; a pre-v2.2
+reader treats a missing `features_skipped[]` as "nothing to add" (additive, empty-list-equivalent).
