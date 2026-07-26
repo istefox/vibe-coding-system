@@ -96,7 +96,13 @@ fi
 
 # The scope line lives in a `user` entry (the dispatch prompt). tostring rather than a structured
 # read, because message.content is a string in some entries and an array in others.
+# ONLY the first `user` entry. The dispatch prompt is structurally first; a tool result can
+# never be. Scanning every entry made the hook self-arm: tool results are `user` entries too, so
+# an agent that Read this file (or c2c's Phase 3 prompt) pulled the literal marker into its own
+# transcript and bound itself to the garbage scope `[^`. Hit live 2026-07-26 by the architect on
+# issue #103; audit log recorded `wanted=.../[^`. Pinned by write-scope-enforce.test.sh.
 SCOPE=$(jq -r 'select(.type=="user") | tostring' "$TRANSCRIPT" 2>/dev/null \
+  | head -1 \
   | grep -o 'you may edit ONLY [^ "\\]*' 2>/dev/null | head -1 | sed 's/^you may edit ONLY //')
 SCOPE="${SCOPE%.}"
 
