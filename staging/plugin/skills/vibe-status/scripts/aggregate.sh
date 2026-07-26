@@ -156,6 +156,17 @@ if [ -n "$TF" ] && [ -f "$TF" ]; then
   fi
 fi
 
+# --- Section 4b: Temp branches (cwd-local, ADR-0062 §D3, issue #116) ---
+# Report-only, same as every other vibe-status section — reconciliation never deletes. See the
+# header comment in temp-branch-reconcile.sh for the reasoning (the spec's case 3 is a repository
+# lost to a branch cleanup) and for why reconciliation lives here rather than in commit/SKILL.md.
+TBR_LINE="(no temp-branch registry)"
+TBR_SCRIPT="$HOME/.claude/skills/vibe-status/scripts/temp-branch-reconcile.sh"
+if [ -f "$PWD/.temp-branches.log" ] && [ -x "$TBR_SCRIPT" ]; then
+  TBR_OUT=$(cd "$PWD" && bash "$TBR_SCRIPT" reconcile 2>/dev/null)
+  [ -n "$TBR_OUT" ] && TBR_LINE="$TBR_OUT"
+fi
+
 # --- Section 5: Skills custom (globale) ---
 SKILL_COUNT=0
 SKILL_NAMES=""
@@ -302,6 +313,8 @@ else
   printf '\n'
 
   printf '## Recent triage cycle\n%s\n\n' "$TRIAGE_LINE"
+
+  printf '## Temp branches\n%s\n\n' "$TBR_LINE"
 
   printf '## Skill custom (%d installed)\n%s\n\n' "$SKILL_COUNT" "$SKILL_NAMES"
 

@@ -38,6 +38,8 @@ Locale (cwd-relative, conditional on existence):
 - ADR: `$PWD/docs/architecture/ADR-*.md`
 - Manifests: `$PWD/docs/manifests/*.yaml`
 - Triage state: `$PWD/.triage-fix-last.json`
+- Temp branches: `$PWD/.temp-branches.log` (registered by coder/debugger/refactorer via
+  `scripts/temp-branch-reconcile.sh register`; reconciliation reports, never deletes — ADR-0062 §D3)
 - Memory head: `~/.claude/projects/<encoded-cwd>/memory/MEMORY.md`
 - Chain history: `~/.claude/projects/<encoded-cwd>/memory/chain-history/*.md` (active chains)
 
