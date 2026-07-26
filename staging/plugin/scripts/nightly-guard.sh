@@ -1,5 +1,5 @@
 #!/bin/bash
-# nightly-guard v1.1 (ADR-0022 D7) — pre-publish fail-safe gate for overnight runs.
+# nightly-guard v1.3 (ADR-0022 D7) — pre-publish fail-safe gate for overnight runs.
 #
 # Two invocation paths, one logic:
 #   1. PreToolUse hook: reads the tool event JSON on stdin. While a nightly run is active it
@@ -18,6 +18,18 @@
 # v1.2 (2026-07-11, audit findings 1.3/2.11/2.12/3.22): +<ref> force-refspecs and --no-verify
 # are forbidden; force flags match only inside the push segment (no false positive on an
 # unrelated `rm -f`); malformed JSON with jq present now fails closed like the jq-less path.
+# v1.3 (2026-07-26, issue #114, ADR-0060 §D3): no logic change here, comment only — this is the
+# marker split. `.claude/needs-human` is a RUN-LEVEL halt: something is wrong with the run (red
+# build, RTF blocker, budget breach, a feature that failed mid-flight leaving unknown state), and
+# once set it blocks every subsequent publish, on purpose. A KNOWN, CONTAINED per-feature problem
+# (a thin issue, a suspected-injection issue, an unprovisioned external dependency) is a different
+# thing and does NOT belong in this file: it now goes to
+# `<root>/.claude/nightly-state/skipped-features` instead, a plain append-only note this script
+# deliberately never reads. Before this fix, `spec-from-issue`'s thin-issue skip and its
+# injection-suspect skip both wrote needs-human, so one thin issue in a twenty-feature roadmap
+# silently halted the other nineteen. If you are about to add a new writer for a per-feature,
+# known-cause skip: it goes to skipped-features, never here. See
+# `nightly-autopilot/SKILL.md` §3.3 "Marker contract" for the full writer list.
 #
 # Bash 3.2 clean: no assoc array, no mapfile, no ${v^^}, no process substitution.
 

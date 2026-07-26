@@ -74,6 +74,13 @@ Record for the report (schema v2.1 `prep` block): `features_generated`, `feature
 `test_cmd_created`. Then fall into Phase 0. Phase 0 still enforces the TOFU-trust and gh-auth wall;
 Phase P grants neither.
 
+**External-dependency check (G13, ADR-0060) is NOT a Phase P step.** It runs later, per feature,
+at that feature's own Gate 2c inside the per-feature chain §3.3 drives — a plan's declared
+dependencies do not exist until that feature's architect has run, which is after this phase. It is
+named here because a BLOCK there reuses this section's skip vocabulary (mark `[~]`, append a
+reason) via the same per-feature `skipped-features` note §3.3 describes, never the run-level
+`needs-human` marker.
+
 ---
 
 ## 2. Phase 0 — Hard pre-flight (read-only, script-level)
@@ -170,32 +177,58 @@ Or stop after <N> turns."
 
 Invoke `Skill(project-conductor, "nightly")`. The conductor (roadmap-autopilot mode) pre-authorizes
 every pending feature, skips the per-feature Step 3 gate, and for each feature:
-implement → review-triage-fix → local commit → `publish-feature.sh` (guard fires) → print the
-`NIGHTLY-PUBLISH` status line → advance to the next `[ ]`.
+architecture (Gate 2, including Gate 2c's G13 external-dependency check — ADR-0060, resolved via
+`~/.claude/hooks/external-dependency-check.sh`, the same script `concept-to-code/SKILL.md` Gate 2c
+calls) → implement → review-triage-fix → local commit → `publish-feature.sh` (guard fires) → print
+the `NIGHTLY-PUBLISH` status line → advance to the next `[ ]`.
 
-Marker contract (read by `nightly-guard`): the conductor writes `build-status` GREEN before each
-publish and, on a feature that fails to reach `completed`, writes a run-level `needs-human` marker.
-`rtf-blocker` is written by the review step (ADR-0020 scope) when review-triage-fix raises a BLOCKER.
-`token-budget` is written by this skill from the `/goal` overlay.
+**Marker contract (read by `nightly-guard`) — two markers, two different scopes, since ADR-0060
+§D3 fixed a pre-existing latent defect (issue #114):**
 
-A Step 5 anti-test-weakening halt (ADR-0047 §D5) means the feature never reaches `completed`, so
-the conductor writes the run-level `needs-human` marker exactly as it does for any other feature
-that fails to complete, and the guard blocks that publish and every subsequent one. The reason is
-recorded in `guard_halts[]` in the morning report. This skill runs no scan of its own — detection
-happens once, inside `concept-to-code` Step 5, and this skill only surfaces the resulting halt.
+- **Run-level `needs-human`** (`<root>/.claude/needs-human`): something is wrong with the *run*.
+  On a feature that fails to reach `completed` for an unknown-state reason — a coder crash, an
+  anti-test-weakening halt (ADR-0047 §D5, below) — the conductor writes this marker, and
+  `nightly-guard` blocks that publish and **every subsequent one**. `rtf-blocker` and
+  `token-budget` are the other two run-level halts (written by the review step and this skill's
+  `/goal` overlay respectively) and behave the same way: once any of the three is set, the guard
+  blocks every subsequent publish, so a HALT stops the whole roadmap rather than skipping one
+  feature. A halted feature keeps its local commit but has no ready PR.
+- **Per-feature `skipped-features`** (`<root>/.claude/nightly-state/skipped-features`,
+  append-only): this *one* feature cannot proceed for a known, contained reason, and the roadmap
+  continues to the next `[ ]`. Three writers: `spec-from-issue`'s thin-issue skip (Step 2),
+  `spec-from-issue`'s injection-suspect skip (Step 1.5, ADR-0059), and Gate 2c's G13
+  unprovisioned-dependency skip (ADR-0060 §D2 — see the "Marker" prose in
+  `concept-to-code/SKILL.md`'s Gate 2c Autopilot-default block; it fires at each feature's own
+  Gate 2c inside the per-feature chain this section drives, not literally inside §1.5 Phase P,
+  since dependencies are not declared until that feature's architect has run — noted here because
+  it is this phase's skip mechanism being reused). `nightly-guard.sh` never reads this file: its
+  presence has no effect on `--check`, by design (see the script's own v1.3 header comment). Every
+  writer also marks the feature `[~]` in PROJECT.md with the same reason. The morning report lists
+  these under `features_skipped[]` (schema v2.2, §4), separate from `guard_halts[]`.
 
-The halt markers (`needs-human`, `rtf-blocker`, `token-budget`) are run-level: once any is set, the
-guard blocks every subsequent publish, so a HALT stops the whole roadmap rather than skipping one
-feature. A halted feature keeps its local commit but has no ready PR.
+Before this ADR (issue #114), both writer classes above shared the run-level `needs-human` file, so
+one thin issue silently halted every other feature in the roadmap — a latent defect, not a design
+choice. If you find prose or a manifest describing a single shared marker, it predates this fix.
+
+A Step 5 anti-test-weakening halt (ADR-0047 §D5) means the feature never reaches `completed` for an
+unknown-state reason — the fix cycle touched something and the outcome cannot be trusted — so it
+stays a **run-level** halt: the conductor writes `needs-human` exactly as it does for any other
+feature that fails to complete, and the guard blocks that publish and every subsequent one. The
+reason is recorded in `guard_halts[]` in the morning report. This skill runs no scan of its own —
+detection happens once, inside `concept-to-code` Step 5, and this skill only surfaces the resulting
+halt.
 
 ---
 
 ## 4. Phase 2 — Morning report and disarm
 
-On every exit path, write `<project_root>/.claude/nightly-report.json` (schema v2.1: v2.0 fields plus
-the Phase P `prep` block) with per-feature
+On every exit path, write `<project_root>/.claude/nightly-report.json` (schema v2.2: v2.1 fields
+plus `features_skipped[]`, ADR-0060) with per-feature
 `status`, `branch`, `commit_sha`, `pr_url`, `ci_status`, `guard_halt`, the `guard_halts[]` roll-up,
-and `spend` (from the `/goal` overlay). Set `ended_at` via `date -u`.
+`features_skipped[]` (read from `<project_root>/.claude/nightly-state/skipped-features`, one entry
+per line, `{feature, reason}` — additive and distinct from `guard_halts[]`: a skip did not stop the
+roadmap, a halt did — §3.3 "Marker contract"), and `spend` (from the `/goal` overlay). Set
+`ended_at` via `date -u`.
 
 Disarm the guard:
 ```bash

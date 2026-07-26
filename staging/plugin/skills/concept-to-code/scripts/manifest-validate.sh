@@ -274,6 +274,21 @@ if grep -q '^tracer_bullet_red_decision:' "$MANIFEST"; then
   esac
 fi
 
+# Invariant 21 (conditional, ADR-0060): if external_dependencies present, must be an empty flow
+# list `[]` or a bracketed flow list of maps `[{...}]`. Absent = valid (retrocompat with every
+# pre-ADR-0060 manifest); a manifest without the field still validates (SPEC edge case) — this
+# feature ADDS a constraint, so absent equals the pre-feature behaviour, same direction as
+# tracer_bullet_mode (Invariant 18), the opposite of risk/task_type (Invariants 16/17). Shallow
+# shape check only, matching every other invariant's grep-based validation style.
+if grep -q '^external_dependencies:' "$MANIFEST"; then
+  ed_val="$(grep '^external_dependencies:' "$MANIFEST" | sed 's/^external_dependencies: *//' | head -1)"
+  case "$ed_val" in
+    '[]') ;;
+    '[{'*'}]') ;;
+    *) fail "external_dependencies '$ed_val' is not '[]' or a bracketed flow list of maps" ;;
+  esac
+fi
+
 if [ "$ERRORS" != "0" ]; then
   exit 1
 fi
