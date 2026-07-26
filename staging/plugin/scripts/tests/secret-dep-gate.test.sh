@@ -311,6 +311,254 @@ echo "---- D2: filename-pattern findings in the corpus (context only, not assert
 printf '%s' "$OUT" | grep "${TAB}filename-pattern\$" | sed 's|^|     |'
 echo "---- D2: end"
 
+# ==============================================================================================
+# E. dependency-scan.sh — a package present in the diff that was not there before (ADR-0046 §D8).
+# Every fixture is a unified diff built here and piped in on stdin. The script never invokes git:
+# the caller supplies the diff, which is what lets issue #108 run this identical script in a
+# target project's CI with no agent present.
+#
+# The load-bearing rule is ADDED MINUS REMOVED, not ADDED. A lockfile reorder emits `+` lines for
+# packages that were already installed and a version bump emits a `+` and a `-` for the same
+# package; both must be silent, or the commit gate cries wolf on every `npm install` that changed
+# nothing. E3/E4/E5 are that rule from three directions.
+# ==============================================================================================
+DEP="$SCRIPTS/dependency-scan.sh"
+DOUT=""; DRC=0
+# run_dep <diff-file> [extra args...]
+run_dep() { _df="$1"; shift; DOUT=$(bash "$DEP" --diff "$@" <"$_df" 2>"$TMP/derr"); DRC=$?; }
+hasdep() { printf '%s' "$DOUT" | grep -q "^NEWDEP${TAB}$1${TAB}$2\$"; }
+# dneg <label> <diff-file> [extra args...] — expects zero findings AND a completed run.
+# The rc check is not decoration: without it every negative assertion in this section would pass
+# while the script is still missing, and the RED half of Task 4 would prove nothing.
+dneg() {
+  _lbl="$1"; _df="$2"; shift 2
+  run_dep "$_df" "$@"
+  if [ "$(cnt "$DOUT")" -eq 0 ] && [ "$DRC" -eq 0 ]; then ok "$_lbl"
+  else bad "$_lbl — expected no finding, rc=$DRC, got: $DOUT"; fi
+}
+
+cat >"$TMP/e1.diff" <<'EOF'
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -5,6 +5,7 @@
+   "dependencies": {
+     "express": "^4.18.0",
++    "left-pad": "^1.3.0"
+   }
+EOF
+run_dep "$TMP/e1.diff"
+hasdep left-pad package.json && ok "E1: npm manifest — an added dependency is reported" \
+  || bad "E1: expected NEWDEP left-pad package.json — got: $DOUT"
+
+# E11a rides on E1's run: a reporter exits 0 even when it found something (ADR-0046 §D2, PF6).
+[ "$DRC" -eq 0 ] && ok "E11a: exit 0 on a run that produced findings (reporter contract)" \
+  || bad "E11a: exit $DRC on a run with findings — must be 0"
+
+cat >"$TMP/e2.diff" <<'EOF'
+diff --git a/package-lock.json b/package-lock.json
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -40,6 +40,10 @@
+     "node_modules/express": {
+       "version": "4.18.0"
+     },
++    "node_modules/left-pad": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz"
++    },
+EOF
+run_dep "$TMP/e2.diff"
+if [ "$(cnt "$DOUT")" -eq 1 ] && hasdep left-pad package-lock.json; then
+  ok "E2: npm lockfile — one NEWDEP for the added node_modules entry"
+else bad "E2: expected exactly one NEWDEP naming left-pad — got: $DOUT"; fi
+
+# E3 — the reorder case. Same package set on both sides, different order: added minus removed is
+# empty. `added` alone would report both packages here.
+cat >"$TMP/e3.diff" <<'EOF'
+diff --git a/package-lock.json b/package-lock.json
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -40,8 +40,8 @@
+-    "node_modules/alpha": {
+-    "node_modules/beta": {
++    "node_modules/beta": {
++    "node_modules/alpha": {
+EOF
+dneg "E3: a lockfile reorder with no new package produces no output" "$TMP/e3.diff"
+
+cat >"$TMP/e4.diff" <<'EOF'
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -5,7 +5,7 @@
+   "dependencies": {
+-    "left-pad": "^1.3.0"
++    "left-pad": "^1.3.1"
+   }
+EOF
+dneg "E4: a version bump is not a new package" "$TMP/e4.diff"
+
+cat >"$TMP/e5.diff" <<'EOF'
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -5,7 +5,6 @@
+   "dependencies": {
+-    "left-pad": "^1.3.0"
+   }
+EOF
+dneg "E5: a removal with no matching addition produces no output" "$TMP/e5.diff"
+
+cat >"$TMP/e6.diff" <<'EOF'
+diff --git a/requirements.txt b/requirements.txt
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,2 +1,3 @@
+ fastapi==0.110.0
++requests==2.31.0
+ uvicorn==0.29.0
+EOF
+run_dep "$TMP/e6.diff"
+hasdep requests requirements.txt && ok "E6: Python — an added pinned requirement is reported" \
+  || bad "E6: expected NEWDEP requests requirements.txt — got: $DOUT"
+
+cat >"$TMP/e7.diff" <<'EOF'
+diff --git a/Package.resolved b/Package.resolved
+--- a/Package.resolved
++++ b/Package.resolved
+@@ -10,6 +10,11 @@
+     {
++      "identity" : "swift-algorithms",
++      "kind" : "remoteSourceControl",
++      "location" : "https://github.com/apple/swift-algorithms.git"
++    },
++    {
+       "identity" : "swift-collections",
+EOF
+run_dep "$TMP/e7.diff"
+hasdep swift-algorithms Package.resolved && ok "E7: Swift — an added Package.resolved identity is reported" \
+  || bad "E7: expected NEWDEP swift-algorithms Package.resolved — got: $DOUT"
+
+# E8 — the allow file. Comment and blank lines are ignored, so a human can annotate it; without
+# that, the first `# authorised by ADR-xxxx` line would silently become a package name.
+printf '# authorised by the plan\n\nleft-pad\n' >"$TMP/allow_e8"
+dneg "E8: --allow suppresses a listed package; comments and blanks are ignored" \
+  "$TMP/e1.diff" --allow "$TMP/allow_e8"
+
+# E9 — the default allow path, resolved from the CURRENT DIRECTORY, not from the script's location.
+mkdir -p "$TMP/e9/.claude"
+printf 'left-pad\n' >"$TMP/e9/.claude/allowed-deps.txt"
+DOUT=$(cd "$TMP/e9" && bash "$DEP" --diff <"$TMP/e1.diff" 2>"$TMP/derr"); DRC=$?
+if [ "$(cnt "$DOUT")" -eq 0 ] && [ "$DRC" -eq 0 ]; then
+  ok "E9: .claude/allowed-deps.txt in the working directory is read when --allow is absent"
+else bad "E9: default allow path not honoured — rc=$DRC, got: $DOUT"; fi
+
+# E10 — the SPEC's inert case. Stated on stderr rather than inferred from silence, which is the
+# same ADR-0043 lesson that put the awk probe in secret-scan.sh: "reported nothing" and "found
+# nothing" must not look alike.
+cat >"$TMP/e10.diff" <<'EOF'
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1,2 +1,3 @@
+ # Project
++A new line of prose.
+EOF
+run_dep "$TMP/e10.diff"
+if [ "$(cnt "$DOUT")" -eq 0 ] && [ "$DRC" -eq 0 ] && grep -q 'inert' "$TMP/derr"; then
+  ok "E10: a diff with no recognised manifest is inert, and says so on stderr"
+else bad "E10: rc=$DRC out=$DOUT err=$(cat "$TMP/derr" 2>/dev/null)"; fi
+
+DOUT=$(bash "$DEP" --nonsense <"$TMP/e1.diff" 2>"$TMP/derr"); DRC=$?
+if [ "$DRC" -eq 2 ] && [ -s "$TMP/derr" ]; then
+  ok "E11b: an unknown flag exits 2 with usage on stderr"
+else bad "E11b: expected exit 2 + stderr, got rc=$DRC err=$(cat "$TMP/derr" 2>/dev/null)"; fi
+
+# E12 — deterministic order. awk's `for (k in arr)` iteration order is unspecified, so without an
+# explicit sort the finding order varies between runs and any downstream assertion is flaky.
+cat >"$TMP/e12.diff" <<'EOF'
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -5,6 +5,9 @@
+   "dependencies": {
++    "zeta": "^1.0.0",
++    "alpha": "^2.0.0",
++    "middle-pkg": "^3.0.0",
+     "express": "^4.18.0"
+   }
+EOF
+E12_WANT=$(printf 'NEWDEP\talpha\tpackage.json\nNEWDEP\tmiddle-pkg\tpackage.json\nNEWDEP\tzeta\tpackage.json')
+run_dep "$TMP/e12.diff"; E12_A="$DOUT"
+run_dep "$TMP/e12.diff"; E12_B="$DOUT"
+if [ "$E12_A" = "$E12_WANT" ] && [ "$E12_B" = "$E12_WANT" ]; then
+  ok "E12: output is sorted and identical across two runs of the same input"
+else bad "E12: expected the sorted triple, got run1: $E12_A"; fi
+
+# ==============================================================================================
+# F. commit/SKILL.md Step 1 wiring (ADR-0046 §D9).
+#
+# THESE ARE THE FIRST ASSERTIONS THIS FILE HAS EVER HAD. Nothing tested commit/SKILL.md before
+# issue #100, which is exactly why the wiring gets pinned here: three skills invoke it
+# (`concept-to-code` Step 7, `project-init`, `autopilot-build --autopilot`), so a silent edit to
+# its Step 1 changes behaviour on an unattended path with nothing to catch it.
+#
+# Static prose anchors, deliberately. The file is instructions for a model, not runnable code, so
+# there is nothing to execute; the assertions pin the phrases a reader must not be able to delete
+# by accident. They will need updating if the prose is reworded — that cost is the point.
+# ==============================================================================================
+COMMITMD="$STAGING/plugin/skills/commit/SKILL.md"
+STEP1="$TMP/commit_step1.txt"
+awk '/^### Step 1 —/{f=1} /^### Step 2 —/{f=0} f' "$COMMITMD" >"$STEP1"
+
+if [ -s "$STEP1" ]; then
+  ok "F0: Step 1 of commit/SKILL.md is extractable (the anchor the F section reads)"
+else
+  bad "F0: could not extract Step 1 from $COMMITMD — every F assertion below is meaningless"
+fi
+
+if grep -q 'secret-scan\.sh' "$STEP1" && grep -q 'dependency-scan\.sh' "$STEP1"; then
+  ok "F1: Step 1 calls both reporters by name"
+else bad "F1: Step 1 does not reference secret-scan.sh and dependency-scan.sh"; fi
+
+# F2 — the resolution order AND the fallback. The fallback is the non-regression floor: on a
+# machine that has not run sync-to-claude.sh the scripts do not exist, and Step 1 must then behave
+# exactly as it did before this feature rather than skipping the filename check as well.
+if grep -q 'CLAUDE_PLUGIN_ROOT' "$STEP1" \
+   && grep -q '\$HOME/\.claude/hooks' "$STEP1" \
+   && grep -qi 'neither resolves' "$STEP1" \
+   && grep -qi 'filename check' "$STEP1"; then
+  ok "F2: Step 1 resolves CLAUDE_PLUGIN_ROOT → \$HOME/.claude/hooks and documents the fallback"
+else bad "F2: missing resolution order or the neither-resolves fallback in Step 1"; fi
+
+# F3 — the unattended policy. `autopilot-build` skips Step 4, so the Step 4 gate cannot be what
+# stops a secret there; Step 1 has to say so itself, in the direction that fails safe.
+if grep -qi 'autopilot' "$STEP1" \
+   && grep -qE 'SECRET.*abort|abort.*SECRET' "$STEP1" \
+   && grep -qE 'NEWDEP.*(proceed|never)' "$STEP1"; then
+  ok "F3: Step 1 states the autopilot policy — SECRET aborts, NEWDEP does not"
+else bad "F3: Step 1 does not state the unattended SECRET-aborts / NEWDEP-proceeds policy"; fi
+
+# F4 — ANTI-WEAKENING PIN, AND AN ALWAYS-PASS FORWARD GUARD. It passes before and after Task 6,
+# so it is never evidence that the wiring works; it is a regression pin. ADR-0046 forbids this
+# feature from narrowing any existing guardrail, and the cheapest way to "fix" a noisy filename
+# rule is to quietly trim one of these four patterns.
+G1='- **NEVER commit `.env`, secrets, API keys** — if `git status` shows suspicious files (`.env`,'
+G2='  `*secret*`, `*credential*`, `*.pem`), stop and warn the user before proceeding.'
+F4OK=1
+# -e is required, not stylistic: the bullet begins with "- ", and `grep -qF "$G1"` reads that as
+# an option and fails on every file. Caught because F4 is supposed to be green on arrival.
+grep -qF -e "$G1" "$COMMITMD" || F4OK=0
+grep -qF -e "$G2" "$COMMITMD" || F4OK=0
+grep -qF '`.env`' "$STEP1"        || F4OK=0
+grep -qF '`*secret*`' "$STEP1"    || F4OK=0
+grep -qF '`*credential*`' "$STEP1" || F4OK=0
+grep -qF '`*.pem`' "$STEP1"       || F4OK=0
+if [ "$F4OK" -eq 1 ]; then
+  ok "F4: the invariant guardrail bullet and Step 1's four filename patterns are intact (forward guard)"
+else bad "F4: a guardrail bullet or a Step 1 filename pattern was weakened — restore it, do not edit this assertion"; fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
