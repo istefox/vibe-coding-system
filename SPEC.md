@@ -1,44 +1,42 @@
-# SPEC — Interface immutability gate
+# SPEC — Run the deterministic checks in the target project CI
 
-Source: GitHub issue #107
+Source: GitHub issue #108
+
+Depends on issues #100, #101 and #105: the scripts must exist standalone before CI can call them.
 
 ## Objectives
-1. Let a project declare a protected public surface.
-2. Report any removal or signature change to that surface in a diff.
-3. Stay completely inert when no declaration exists.
+1. Give a generated target repo real gates in its own CI, with no agent present.
+2. Run those gates **fail-closed** in CI while leaving the hook copies fail-open.
 
 ## Scope
-In: a `.claude/protected-interfaces` file convention; a check script; a call in c2c Step 6; architect population at Gate 2; a new test file in both CI registries.
-Out: language-server-grade signature parsing; multi-version API support.
+In: a `checks` job in `staging/project-templates/ci/ci.yml`; ensuring each check script runs from a plain shell; a new test file in both CI registries.
+Out: changing the fail-open contract of any deployed hook.
 
 ## Stack
-Bash 3.2, diff-driven, no language server.
+GitHub Actions YAML + bash 3.2 scripts driven by `git diff` alone, with no dependency on Claude Code hook payload JSON.
 
 ## Architecture
-- New: `.claude/protected-interfaces` — one entry per line, an exact signature or a path glob, `#` comments allowed.
-- New: check script under `staging/plugin/scripts/`.
-- Modified: `concept-to-code/SKILL.md` Step 6, before the review closes.
-- Modified: the architect's Gate 2 instructions — populate the file when the plan declares a public surface.
+- Modified: `staging/project-templates/ci/ci.yml` — new `checks` job invoking the secret scan, the dependency scan and the weakening/SUSPECT detectors against the PR diff.
+- Possibly modified: the check scripts, to accept a git range in addition to stdin.
 - New: test file in both CI registries.
 
 ## Data model
-One protected entry per line. Blank lines and `#` comments ignored.
+None.
 
 ## API / Interfaces
-`<script> --root <dir> [--diff]` → `PROTECTED<TAB><entry><TAB><file>:<line><TAB>removed|changed` lines. Exit 0 always; the caller decides severity. Absent declaration file → allow-and-exit with no output, the same inert-by-construction design that keeps `write-scope-enforce.sh` harmless outside its one call site.
+Each script must accept a diff source that does not require a hook payload. In CI a finding **fails the job**; blocking is safe there because no agent is mid-task. The ADR must record that this is deliberately a second copy with the opposite failure direction from the hooks, not a replacement for them.
 
 ## UI flows
-Findings surface in the Step 6 review output.
+A red `checks` job on the PR.
 
 ## Edge cases
-- No `.claude/protected-interfaces` → no output, exit 0.
-- An **added** function is never reported: accrete, don't destroy.
-- A moved-but-identical signature should not be reported as removed if the entry is a signature rather than a path.
-- A comment-only or blank-line file behaves as absent.
+- The `ci` job name must remain the required status check — `set-branch-protection.sh` depends on it.
+- The existing single-step template behaviour must still work when the optional checks are absent.
+- A repo with no test files must not fail the weakening detector.
 
 ## Success criteria
-- [ ] With no declaration file, the check produces no output and exits 0.
-- [ ] A removed protected function is reported with `file:line`.
-- [ ] An added function is not reported.
-- [ ] A signature change to a protected entry is reported.
+- [ ] Each check script runs correctly from a plain shell given only a diff or a git range.
+- [ ] The `ci` job name is unchanged and still required on main.
+- [ ] The template works with the checks absent.
+- [ ] A seeded violation fails the `checks` job.
 - [ ] The new test file is registered in BOTH CI registries.
