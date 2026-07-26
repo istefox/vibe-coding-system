@@ -162,6 +162,7 @@ plugin/skills/find-skills/SKILL.md|skills/find-skills/SKILL.md
 plugin/skills/goal-loop/SKILL.md|skills/goal-loop/SKILL.md
 plugin/skills/research-prompt/SKILL.md|skills/research-prompt/SKILL.md
 plugin/skills/claude-md-generator/SKILL.md|skills/claude-md-generator/SKILL.md
+plugin/skills/security-audit/SKILL.md|skills/security-audit/SKILL.md
 "
 
 printf '%s\n' "$PAIRS" | while IFS='|' read -r src dst; do
