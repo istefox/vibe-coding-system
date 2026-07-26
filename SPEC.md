@@ -1,48 +1,48 @@
-# SPEC — Requirement IDs in SPEC and a coverage check
+# SPEC — Generator/verifier separation: dispatch the tester, deny coder test writes
 
-Source: GitHub issue #102
+Source: GitHub issue #103
+
+Depends on issue #102: the tester is briefed from the SPEC's requirement IDs, so those must exist first.
 
 ## Objectives
-1. Give every generated SPEC stable, enumerated requirement identifiers.
-2. Make the plan cite the identifiers each task satisfies.
-3. Assert mechanically that no requirement was silently dropped between SPEC, plan and tests.
+1. Have a different agent write the tests than the one that writes the implementation.
+2. Brief that agent from the specification, never from the implementation.
+3. Enforce the separation mechanically, not by prompt.
 
 ## Scope
-In: `R-01 … R-nn` IDs in the success-criteria section of both SPEC generators; plan tasks citing IDs; a new `spec-coverage.sh`; a call at the c2c Step 5 exit; a new test file in both CI registries.
-Out: retrofitting IDs into the existing specs under `docs/specs/`.
+In: a `tester` dispatch per task group in c2c Step 5 on BOTH dispatch paths; a `PreToolUse` hook denying `coder` writes under test paths; an additive `tests_written_by` field in `step5-report.json`; a new test file in both CI registries.
+Out: changing `refactorer` or `debugger` behaviour; retrofitting chains already completed.
 
 ## Stack
-Bash 3.2 for the checker; Markdown skill instructions for the generators.
+Markdown skill instructions plus a bash 3.2 `PreToolUse` hook, modelled on `write-scope-enforce.sh`, which already resolves the calling subagent's transcript via `.agent_id` and reads a scope marker from the dispatch prompt.
 
 ## Architecture
-- Modified: `staging/plugin/skills/interview-driver/SKILL.md` (`:13` currently names the SPEC sections with no identifiers).
-- Modified: `staging/plugin/skills/spec-from-issue/SKILL.md`, whose template must emit IDs in Success criteria.
-- Modified: the architect's plan template so each task cites its IDs.
-- New: `staging/plugin/skills/concept-to-code/scripts/spec-coverage.sh`.
-- Modified: `concept-to-code/SKILL.md` Step 5 exit.
-- New: test file in both CI registries.
+- Modified: `concept-to-code/SKILL.md` Step 5 — the Workflow path and the Agent-tool batch fallback each gain a tester stage stated independently, so behaviour does not depend on whether `hook_verified` flipped.
+- New: `staging/plugin/scripts/tester-scope-enforce.sh` (name TBD by the architect) — `PreToolUse` on `Edit|Write|MultiEdit`, denies `agent_type: coder` a write whose path matches a test directory or test-file pattern.
+- Modified: the `step5-report.json` schema block.
+- Unchanged: `staging/plugin/agents/tester.md` — the agent already exists and is correctly specified; only the dispatch graph is wrong.
 
 ## Data model
-A requirement ID is `R-NN` (zero-padded, two digits, unique within one SPEC), appearing at the start of a success-criteria checklist item.
+`step5-report.json` gains `tests_written_by: "tester" | "coder" | "none"` per task. Additive.
 
 ## API / Interfaces
-`spec-coverage.sh --spec <file> --plan <file> [--tests-root <dir>]`
-- exit 0: every ID is covered, or the SPEC declares no IDs (backward compatibility).
-- exit non-zero: prints each uncovered ID and where the coverage was missing (plan or tests).
+The hook follows the established contract: reads the hook payload JSON on stdin, emits a deny decision with a reason, exits 0 always, allows on every failure mode, and is inert when no test-scope marker is present in the dispatch.
 
 ## UI flows
-None. The check runs at the Step 5 exit and its output goes to the orchestrator and the report.
+None. A denied write returns a reason to the coder naming the tester as the owner of test files.
 
 ## Edge cases
-- A SPEC with no `R-` IDs passes silently — this is the backward-compatibility path and must be tested explicitly.
-- Duplicate IDs in one SPEC are an error, not a silent overwrite.
-- An ID cited by a plan task that does not exist in the SPEC is an error.
-- Test coverage matching is by name or docstring mention, so a test file that does not mention any ID must not fail a SPEC that has none.
+- The hook must be inert outside Step 5 — an orchestrator turn or another skill writing a test file must not be blocked.
+- A `tester` writing a test file must be allowed.
+- A `coder` writing a non-test file must be allowed.
+- A test-path pattern must cover the conventions already used here: `tests/`, `*_test.*`, `*.test.*`, `*.spec.*`, `test_*`, `*Tests.*`.
+- Pin `model` and `effort` explicitly on the tester dispatch (`sonnet` / `medium`), per the existing Step 5 rule that an omitted value inherits the session rather than the frontmatter.
 
 ## Success criteria
-- [ ] A SPEC with `R-01`,`R-02` and a plan covering only `R-01` fails and names `R-02`.
-- [ ] A SPEC with no `R-` IDs passes silently.
-- [ ] Both generators emit IDs in their Success criteria section.
-- [ ] A duplicate ID is reported as an error.
-- [ ] The check is called at the c2c Step 5 exit.
+- [ ] A Step 5 run dispatches tester before coder per task group, on both dispatch paths.
+- [ ] A simulated `coder` Edit to a test path is denied with a reason naming the tester.
+- [ ] A simulated `tester` Edit to the same path is allowed.
+- [ ] A `coder` Edit to a source path is allowed.
+- [ ] The hook is inert when the dispatch carries no test-scope marker.
+- [ ] `tests_written_by` appears per task and a report lacking it is still read.
 - [ ] The new test file is registered in BOTH CI registries.
