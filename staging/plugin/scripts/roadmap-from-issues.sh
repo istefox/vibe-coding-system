@@ -3,6 +3,14 @@
 # open GitHub issues carrying a label. One issue becomes one roadmap feature. Idempotent: a
 # feature already listed (matched by "(issue #N)") is not duplicated on re-run.
 #
+# Untrusted-input hardening (ADR-0059 / issue #113): the issue TITLE is the only field this
+# script reads, and it is written verbatim into PROJECT.md, a file every downstream chain step
+# reads as roadmap content. Each title is scanned before it is written; a shape-matched title is
+# SKIPPED (not added to PROJECT.md or the issue-map) with a run-level needs-human note — the same
+# SKIP mechanism spec-from-issue uses for a thin or injection-shaped body (§D3), applied here to
+# the other entry point that reads the same untrusted source. This is a mitigation, not a
+# boundary (§D1) and runs unconditionally regardless of repo visibility (§D5).
+#
 # Usage: roadmap-from-issues.sh --root <dir> --label <label> [--dry-run]
 #        [--issues-json <file>]   # test hook: read gh JSON from a file instead of calling gh
 # Bash 3.2 clean.
@@ -21,6 +29,12 @@ done
 [ -d "$ROOT" ] || { echo "roadmap-from-issues: not a dir: $ROOT" >&2; exit 2; }
 [ -n "$LABEL" ] || { echo "roadmap-from-issues: --label required" >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "roadmap-from-issues: jq required" >&2; exit 2; }
+
+# Sibling script, same directory in both the staging tree and the deployed ~/.claude/hooks/ tree
+# (ADR-0059). Resolved before cd "$ROOT" so it works regardless of $0's relativity to the target.
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+SCAN="$SCRIPT_DIR/untrusted-input-scan.sh"
+
 cd "$ROOT"
 
 # slugify: lowercase, non-alnum -> '-', squeeze, trim, max 40 chars.
@@ -58,11 +72,28 @@ if [ ! -f "$PMD" ]; then
 fi
 
 added=0
+skipped=0
 # read TSV lines
 while IFS=$(printf '\t') read -r num title; do
   [ -z "$num" ] && continue
   # skip if this issue is already a feature line
   if grep -q "(issue #$num)" "$PMD" 2>/dev/null; then continue; fi
+
+  # Untrusted-input scan on the title (ADR-0059 §D3/§D5). Always exits 0 (reporter contract); the
+  # caller idiom is grep -q '^INJECTION', never [ -n "$out" ] and never grep -c ... || echo 0.
+  _scan_out="CLEAN"
+  if [ -f "$SCAN" ]; then
+    _scan_out=$(printf '%s\n' "$title" | bash "$SCAN" 2>/dev/null || true)
+  fi
+  if printf '%s\n' "$_scan_out" | grep -q '^INJECTION'; then
+    _rule=$(printf '%s\n' "$_scan_out" | head -1 | cut -f2)
+    mkdir -p .claude
+    printf 'issue #%s "%s" skipped: injection-shaped content detected in title (%s)\n' \
+      "$num" "$title" "$_rule" >> .claude/needs-human
+    skipped=$((skipped+1))
+    continue
+  fi
+
   printf -- '- [ ] %s  (issue #%s)\n' "$title" "$num" >> "$PMD"
   # Slug is prefixed with the issue number so it is unique (two titles can slugify the same)
   # and resolvable by number: project-conductor globs docs/specs/<num>-*.spec.md.
@@ -73,4 +104,4 @@ done <<EOF
 $TSV
 EOF
 
-echo "roadmap-from-issues: $added feature(s) added to $PMD (label $LABEL); map: $MAP"
+echo "roadmap-from-issues: $added feature(s) added to $PMD (label $LABEL); map: $MAP; $skipped skipped (injection-shaped title)"

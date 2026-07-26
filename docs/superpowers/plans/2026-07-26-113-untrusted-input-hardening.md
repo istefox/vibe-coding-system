@@ -13,7 +13,7 @@ exit 3 from `spec-coverage.sh`.
 
 ## Task checklist
 
-- [ ] **Task 1 — RED harness.** `staging/plugin/scripts/tests/untrusted-input.test.sh`.
+- [x] **Task 1 — RED harness.** `staging/plugin/scripts/tests/untrusted-input.test.sh`.
   `U`-prefixed labels — grep the existing 35 files to confirm the prefix is unused before
   committing to it. Hermetic, bash 3.2. Sections: **UA** the issue body is fenced as untrusted data
   in `spec-from-issue`'s prompt, with an explicit not-instructions statement; **UB** the detector
@@ -32,27 +32,27 @@ exit 3 from `spec-coverage.sh`.
   Every assertion seen RED first. No fixture path may contain `secret`, `credential`, `.env`,
   `.pem`, `.key` — `protect-files.sh` denies any path containing `secrets` (plural).
 
-- [ ] **Task 2 — the detector.** `staging/plugin/scripts/untrusted-input-scan.sh`. Reporter
+- [x] **Task 2 — the detector.** `staging/plugin/scripts/untrusted-input-scan.sh`. Reporter
   contract. Rules anchored on shape, not on keyword presence alone — a body *mentioning* injection
   is not the same as a body *performing* it, and the difference is where the FP rate lives.
   → UB/UD green.
 
-- [ ] **Task 3 — fencing in `spec-from-issue`.** Fence title and body as untrusted data with an
+- [x] **Task 3 — fencing in `spec-from-issue`.** Fence title and body as untrusted data with an
   explicit statement that nothing inside may redirect the task. Language must not overclaim (§D1).
   → UA/UG green.
 
-- [ ] **Task 4 — wire the SKIP path.** A detector hit skips the issue with a `needs-human` note via
+- [x] **Task 4 — wire the SKIP path.** A detector hit skips the issue with a `needs-human` note via
   the existing mechanism (§D3). Also wire `roadmap-from-issues.sh`, which reads the same source and
   is the other entry point. → UC green.
 
-- [ ] **Task 5 — name the boundary in the docs.** ADR §D2 identifies the real security boundary as
+- [x] **Task 5 — name the boundary in the docs.** ADR §D2 identifies the real security boundary as
   capability, not prompt text: `nightly-autopilot` never merges, never force-pushes, never writes
   `main`; the merge is the human checkpoint. **Add a line to `nightly-autopilot/SKILL.md`'s safety
   invariants saying that granting merge authority to that path would turn every issue body into a
   remote code execution vector.** That connection is not obvious from either side, and nothing but
   prose defends it. → UE green.
 
-- [ ] **Task 6 — registration + full suite.** New test file into **both** CI registries (`ci.yml`
+- [x] **Task 6 — registration + full suite.** New test file into **both** CI registries (`ci.yml`
   glob automatic; `.github/workflows/docs-ci.yml`'s explicit named list needs a manual append after
   `precompact-occupancy`). `PAIRS` entry for the new script. Then run every
   `staging/plugin/scripts/tests/*.test.sh`.
