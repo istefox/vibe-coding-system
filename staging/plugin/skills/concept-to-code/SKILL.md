@@ -515,6 +515,13 @@ unchecked=$(grep -c '- \[ \]' "<manifest.artifacts.plan>" 2>/dev/null || echo 0)
 If `unchecked = 0`: do NOT dispatch coder. Present to user:
 > "Plan at `<manifest.artifacts.plan>` has no unchecked tasks (`- [ ]`). Architect may have marked all tasks done, or the plan is malformed. Open the plan, verify the task list, and re-invoke Step 5."
 
+**Pre-dispatch: anti-test-weakening baseline mark (ADR-0047):**
+```bash
+_pre5=$(git rev-parse HEAD 2>/dev/null)   # anti-test-weakening gate baseline (ADR-0047)
+```
+An empty `_pre5` (no commits yet, or the CWD is not a git repository) makes the later
+`git diff "$_pre5"` empty, which the scan reports as `CLEAN` — never an error.
+
 #### Smoke test gate (pre-dispatch, blocks if hook_verified = false)
 
 If `manifest.hook_verified = false` or `null` or the field is absent from the manifest:
@@ -661,8 +668,10 @@ After the workflow completes:
 2. If the file is absent → fall back to `git diff + test run` directly (do NOT re-dispatch).
 3. If `tasks_failed` is non-empty OR `test_result` is `red` → failure signal. Present to
    user; do NOT transition to `step_6_review` without user acknowledgment.
-4. If all tasks passed and `test_result` is `green` or `n/a` → transition to `step_6_review`.
-   Present Gate 5.
+4. Run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)` block once, before
+   deciding the transition.
+5. If all tasks passed, `test_result` is `green` or `n/a`, and the gate found no `WEAKENED`
+   line → transition to `step_6_review`. Present Gate 5.
 
 Set `step5_mode: "workflow"` in the manifest (via bash sed substitution on the additive
 field — NOT via Edit tool).
@@ -689,6 +698,10 @@ Schema (JSON):
       "severity_counts": { "BLOCKER": 0, "MAJOR": 1, "MINOR": 2, "NIT": 0 },
       "blocking_findings": ["<one line per BLOCKER/MAJOR, passed to the next task>"] }
   ],
+  "weakening_findings": [
+    { "file": "tests/test_billing.py", "reason": "deleted-test-file" }
+  ],
+  "weakening_scan": "ran | unavailable",
   "errors": []
 }
 ```
@@ -710,6 +723,51 @@ is also what every manifest written before ADR-0039 means by omitting the field.
   the next task during Step 5; they do not block the transition to `step_6_review`, where the
   full RTF cycle sees them anyway. A missing `checkpoint_reviews` key is not malformed — it is
   what a `step5_review_mode: none` run produces.
+- `weakening_findings` non-empty → **failure signal**, same handling as `tasks_failed`; absent means none and is **not** malformed.
+- Contrast: `checkpoint_reviews` is never a failure signal; `weakening_findings` always is —
+  two arrays in one schema with opposite gate semantics (ADR-0047 §D5).
+
+#### Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)
+
+The orchestrator runs this scan itself — do not trust the agent's self-report for this gate.
+This is the same rule `review-triage-fix` Step 3 already applies to CIRCUIT BREAKER B: the
+agent whose work is being examined for test weakening is not the one who gets to report on it.
+
+**Resolution:**
+```bash
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/review-triage-fix/scripts/weakening-scan.sh" ]; then
+  _wscan="$CLAUDE_PLUGIN_ROOT/skills/review-triage-fix/scripts/weakening-scan.sh"
+elif [ -f "$HOME/.claude/skills/review-triage-fix/scripts/weakening-scan.sh" ]; then
+  _wscan="$HOME/.claude/skills/review-triage-fix/scripts/weakening-scan.sh"
+else
+  _wscan=""     # scan did not run — report it, do not infer a clean result
+fi
+```
+
+**Scan and blocking idiom.** The script always exits 0 and prints the sentinel `CLEAN` when it
+finds nothing over the cumulative diff since the pre-dispatch mark, so the caller branches on
+stdout content, never on exit code and never on emptiness:
+```bash
+if [ -n "$_wscan" ]; then
+  _wk=$(git diff "$_pre5" 2>/dev/null | bash "$_wscan" 2>/dev/null)
+  if printf '%s\n' "$_wk" | grep -q '^WEAKENED'; then
+    # blocking path — see policy below
+  fi
+fi
+```
+- `grep -q '^WEAKENED'`, anchored. Never `[ -n "$_wk" ]` — the script prints `CLEAN` when it
+  finds nothing, so the output is never empty and an emptiness test is always true:
+  **never gate on empty output**.
+- Never `n=$(… | grep -c '^WEAKENED' || echo 0)` — `grep -c` prints `0` **and** exits 1 on no
+  match, so `|| echo 0` appends a second line and `n` becomes the two-line string `0\n0`.
+
+**Policy:**
+- Attended: present the findings and do NOT transition to `step_6_review` without user
+  acknowledgment.
+- Autopilot (`manifest.autopilot = true`): halt — do not transition, do not proceed to Gate 5.
+- `_wscan` empty (script did not resolve): record `"weakening_scan": "unavailable"` in
+  `step5-report.json` and proceed — fail-open, visibly, per ADR-0047 §D2.
 
 #### Fallback — Agent-tool batch dispatch (hook_verified = false or workflow unavailable)
 
@@ -721,7 +779,10 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
 1. Dispatch coder with batch 1 (tasks 1-N, where N ≤ 3).
 2. Checkpoint between batches: run `verify.sh <root>` and check `git status` yourself
    as the orchestrator — do NOT trust the coder's report to decide whether to continue
-   (it may be truncated or incomplete).
+   (it may be truncated or incomplete). Also run the `Anti-test-weakening gate — Step 5 →
+   Step 6 (ADR-0047)` block at every batch checkpoint — the same command against the same
+   cumulative diff, evaluated at more points, so an unattended run that weakens a test in
+   batch 1 halts before burning batches 2..N.
 
    **[IF `manifest.step5_review_mode = checkpoint` (ADR-0039 D5-D9) — otherwise skip:]**
    At this same checkpoint, dispatch the `reviewer` agent scoped to the diff of the batch that
@@ -736,8 +797,9 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
    A non-null `waitingFor` means the coder is blocked on a permission prompt —
    surface it to the user rather than waiting in silence (CC 2.1.162+).
 3. Dispatch coder with batch 2 (tasks N+1…), and so on.
-4. After the last batch: final verification (`verify.sh`, `git status`, scope check
-   against the plan) before transitioning to `step_6_review`.
+4. After the last batch: run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)`
+   block again, then final verification (`verify.sh`, `git status`, scope check against the
+   plan) before transitioning to `step_6_review`.
 
 For plans with ≤5 tasks monolithic dispatch is acceptable, but the controller-side
 verification after dispatch is mandatory in all cases.

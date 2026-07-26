@@ -783,3 +783,39 @@ Known consequences, recorded rather than fixed:
 - The CI template steps are inert in a generated project until issue #108 copies the scripts in.
 
 Detail: `docs/architecture/ADR-0046-100-secret-scan-dependency-gate.md`.
+
+## Decisions from the weakening-scan wiring chain (ADR-0047)
+
+Wires the existing `review-triage-fix/scripts/weakening-scan.sh` detector into every path that can
+produce a commit with no human present — `concept-to-code` autopilot, `autopilot-build`,
+`nightly-autopilot` — plus the interactive `commit` Step 1, closing the gap where an agent could
+delete or skip a failing test and still ship a green, unattended commit.
+
+Key architectural decisions:
+- **Invoked in place, never moved or copied** (`review-triage-fix/scripts/weakening-scan.sh`
+  stays byte-identical). Three skills now depend on a fourth skill's private `scripts/` directory —
+  the same cross-skill script dependency `autopilot-build` already has on
+  `concept-to-code/scripts/manifest-*.sh`, and the price of one source of truth: issue #105's new
+  detectors reach all four call sites with no second edit.
+- **The detector's own trap is the caller's problem, and it is written out at every call site.**
+  It always exits 0 and prints the sentinel `CLEAN` on no finding, the reverse of ADR-0046's two
+  reporters. The idiom is `printf '%s\n' "$out" | grep -q '^WEAKENED'`, never `[ -n "$out" ]`
+  (true even on `CLEAN`) and never `grep -c … || echo 0` (two-line `0\n0` on no match — issue #100
+  hit this exact bug; `|| true` is the fix).
+- **Blocking is the caller's job, not the detector's.** The gate lives at the c2c Step 5 → Step 6
+  boundary and the orchestrator runs the scan itself over the cumulative diff — the dispatched
+  agent's `weakening_findings` in `step5-report.json` is a record, never the gate, per the same
+  "do not trust the agent's self-report" rule `review-triage-fix` Step 3 already applies to its own
+  breakers. `autopilot-build` and `nightly-autopilot` inherit the halt by reference; `commit` Step 1
+  gets its own call and is advisory attended, `--autopilot`-abort unattended.
+- **A gap found on the way, not asked for:** `autopilot-build` Step 6's existing circuit breaker
+  only reads test colour, so weakening introduced by the *fix* cycle was flagged by CIRCUIT BREAKER
+  B into a recap nothing reads, then committed anyway. Now a halt, consuming the existing BLOCKER
+  signal rather than running a second scan.
+- **This ships an instruction, not an enforcement** (ADR-0041/ADR-0045's distinction, applied
+  here): every gate is prose in a SKILL.md a model is asked to follow. Enforcing the transition in
+  `manifest-transition.sh` was rejected on blast radius — a 48-pair state machine that touches no
+  git today would gain a new failure mode on every transition. The harness pins that the
+  instruction exists; nothing pins that it is obeyed.
+
+Detail: `docs/architecture/ADR-0047-101-weakening-scan-wiring.md`.

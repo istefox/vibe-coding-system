@@ -178,6 +178,12 @@ publish and, on a feature that fails to reach `completed`, writes a run-level `n
 `rtf-blocker` is written by the review step (ADR-0020 scope) when review-triage-fix raises a BLOCKER.
 `token-budget` is written by this skill from the `/goal` overlay.
 
+A Step 5 anti-test-weakening halt (ADR-0047 §D5) means the feature never reaches `completed`, so
+the conductor writes the run-level `needs-human` marker exactly as it does for any other feature
+that fails to complete, and the guard blocks that publish and every subsequent one. The reason is
+recorded in `guard_halts[]` in the morning report. This skill runs no scan of its own — detection
+happens once, inside `concept-to-code` Step 5, and this skill only surfaces the resulting halt.
+
 The halt markers (`needs-human`, `rtf-blocker`, `token-budget`) are run-level: once any is set, the
 guard blocks every subsequent publish, so a HALT stops the whole roadmap rather than skipping one
 feature. A halted feature keeps its local commit but has no ready PR.

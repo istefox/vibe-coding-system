@@ -204,10 +204,14 @@ emit a warning line before dispatching. Do not stop.
 
 Set `step5_mode` in manifest via bash sed after dispatch completes.
 
-**Circuit breaker — read `.claude/step5-report.json` after dispatch:**
+**Circuit breaker — read `.claude/step5-report.json` after dispatch.** Run the gate from c2c's
+`Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)` block (named by heading, never a line
+range — ADR-0018) as part of this same read:
 - Report absent or malformed → halt, status=partial, abort_reason="step5-report.json missing or malformed".
 - `test_result = RED` → halt, status=partial, abort_reason="tests RED after Step 5".
 - `tasks_failed > 0` → halt, status=partial, abort_reason="N tasks failed in Step 5".
+- `weakening_findings` non-empty, or the gate's own scan prints a `WEAKENED` line → halt,
+  status=partial, abort_reason="test weakening detected in Step 5".
 
 On halt: skip Steps 6 and 7, jump to Phase 2 (morning report).
 
@@ -222,6 +226,10 @@ bash -c "$(cat $project_root/.claude/test-cmd)"
 ```
 - RED → halt, status=partial, abort_reason="tests RED after Step 6 fix cycle".
 - GREEN → continue to Step 7.
+- Any anti-test-weakening BLOCKER in the review-triage-fix recap → halt, status=partial,
+  abort_reason="test weakening flagged by review-triage-fix in Step 6". CIRCUIT BREAKER B
+  flags and never reverts, so without this bullet a weakening introduced by the fix cycle
+  itself would reach the commit unstopped.
 
 Set `step6_mode` in manifest via bash sed after dispatch completes.
 
@@ -273,6 +281,7 @@ partial). Use `date -u +%Y-%m-%dT%H:%M:%SZ` for `ended_at`.
   "tasks_failed": 0,
   "test_result": "GREEN | RED | NOT_RUN",
   "files_modified": [],
+  "weakening_findings": [],
   "commit_sha": null,
   "review_remaining": [],
   "next_action": ""

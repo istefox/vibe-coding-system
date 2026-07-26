@@ -72,10 +72,12 @@ untracked=$(git ls-files --others --exclude-standard)                # NEVER aut
   per the Invariant guardrails — even a file that would never be auto-included by default can
   still be requested explicitly in Step 4, so catch it before that door opens.
 
-**Content scan and dependency gate (ADR-0046).** The filename check above catches a file *named*
-like a secret. It cannot see a key pasted into `src/config.py`, and it says nothing about a
-dependency an agent added to get past a hard problem. Two reporters cover both, over the same
-union set:
+**Content scan, dependency gate and anti-test-weakening scan (ADR-0046, ADR-0047).** The filename
+check above catches a file *named* like a secret. It cannot see a key pasted into `src/config.py`,
+it says nothing about a dependency an agent added to get past a hard problem, and it says nothing
+about a test quietly deleted or skipped to make a red suite look green. Three reporters cover all
+three, over the same union set (`weakening-scan.sh` reuses `git diff HEAD`, the same input already
+computed for the dependency gate):
 
 ```bash
 # Script resolution — plugin install first, ~/.claude deployment second (the order used by
@@ -89,7 +91,17 @@ else
   _scripts=""    # neither resolves — filename check only, no content scan, no dependency gate
 fi
 
-secret_findings=""; dep_findings=""; secret_rc=0; dep_rc=0
+# weakening-scan.sh lives under review-triage-fix/scripts/, not alongside secret-scan.sh/
+# dependency-scan.sh (ADR-0047 §D2) — it is invoked in place, never copied. Same two-tier order.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/skills/review-triage-fix/scripts/weakening-scan.sh" ]; then
+  _wscan="$CLAUDE_PLUGIN_ROOT/skills/review-triage-fix/scripts/weakening-scan.sh"
+elif [ -f "$HOME/.claude/skills/review-triage-fix/scripts/weakening-scan.sh" ]; then
+  _wscan="$HOME/.claude/skills/review-triage-fix/scripts/weakening-scan.sh"
+else
+  _wscan=""    # neither resolves — no weakening scan; SECRET/NEWDEP checks above still apply
+fi
+
+secret_findings=""; dep_findings=""; secret_rc=0; dep_rc=0; weakening_findings=""
 if [ -n "$_scripts" ]; then
   scan_list=$(mktemp)
   printf '%s\n%s\n%s\n' "$staged" "$tracked_modified" "$untracked" \
@@ -97,6 +109,11 @@ if [ -n "$_scripts" ]; then
   secret_findings=$(bash "$_scripts/secret-scan.sh" --files "$scan_list"); secret_rc=$?
   dep_findings=$(git diff HEAD | bash "$_scripts/dependency-scan.sh" --diff); dep_rc=$?
   rm -f "$scan_list"
+fi
+if [ -n "$_wscan" ]; then
+  weakening_findings=$(git diff HEAD | bash "$_wscan")
+  # never gate on empty output — the reporter prints CLEAN on no finding, never nothing; gate on
+  # printf '%s\n' "$weakening_findings" | grep -q '^WEAKENED', never [ -n "$weakening_findings" ].
 fi
 ```
 
@@ -108,13 +125,17 @@ Reading the result — the scripts report, this step decides:
   is rendered verbatim in the Step 4 gate so it is visible at the click.
 - **`NEWDEP` lines never stop anything.** They are advisory: render them in the Step 4
   `Pre-commit findings` block and proceed.
+- **`WEAKENED` lines are advisory in attended mode.** They render in the Step 4 `Pre-commit
+  findings` block and stop nothing here — `review-triage-fix`'s own circuit breaker B is the actual
+  enforcement point; this call is a heads-up at commit time, not a second gate.
 - **Exit code 2 or 3 means the check did NOT run** (bad invocation, or an awk that cannot express
   the rules). Report it as unknown and say so — an empty finding list from a run that never
   happened is not a clean result.
 - **In `--autopilot` mode** (Step 4 is skipped there, so the gate cannot be what catches this): any
-  `SECRET` finding **aborts the commit**, prints the findings, and exits without committing; a
-  `NEWDEP` finding is printed and the commit proceeds. Aborting unattended on a secret is the
-  correct fail direction, consistent with `ADR-0020`'s autonomy boundary.
+  `SECRET` finding **aborts the commit**, prints the findings, and exits without committing; any
+  `WEAKENED` finding **also aborts the commit** the same way, and prints the findings; a `NEWDEP`
+  finding is printed and the commit proceeds. Aborting unattended on a secret or on detected test
+  weakening is the correct fail direction, consistent with `ADR-0020`'s autonomy boundary.
 
 `git diff HEAD` covers tracked changes only, so a brand-new, still-untracked manifest is invisible
 to the dependency gate. The secret scan's `--files` union does cover it — the asymmetry is known,
@@ -232,7 +253,7 @@ question: "Commit — Human approval required\n\n
   Files included (<N>):\n<file-list max 10 lines, then '... and N more'>\n\n
   Excluded — untracked, not staged (<M>):\n<file-list max 10 lines, then '... and M more'>
   \n(say which to add, if any, via 'Stage additional files')\n\n
-  Pre-commit findings (<K>):\n<the SECRET and NEWDEP lines from Step 1, verbatim,
+  Pre-commit findings (<K>):\n<the SECRET, NEWDEP and WEAKENED lines from Step 1, verbatim,
   max 10 lines then '... and K more' — omit this block entirely when K is 0>\n\n
   Approve to execute the commit. Only you can authorize this."
 header: "Commit · Approval"
@@ -248,10 +269,10 @@ options:
 ```
 
 > **`Pre-commit findings` is a named, extensible list, not a two-item block.** It renders whatever
-> Step 1's reporters emitted, one line each, unmodified. Issue #101 appends `WEAKENED` lines from
-> `weakening-scan.sh` to this same block and adds its call beside the other two in Step 1 — no
-> restructuring here, and no new gate. A `SECRET` line only ever appears here when a human has
-> already been warned in Step 1 and explicitly said to continue; rendering it again at the click is
+> Step 1's reporters emitted, one line each, unmodified. Issue #101 (ADR-0047) appended `WEAKENED`
+> lines from `weakening-scan.sh` to this same block and its call beside the other two in Step 1 —
+> no restructuring, no new gate. A `SECRET` line only ever appears here when a human has already
+> been warned in Step 1 and explicitly said to continue; rendering it again at the click is
 > the point.
 
 **Empty-scope variant (included-file count == 0 — only untracked files exist, nothing
