@@ -77,6 +77,8 @@ plugin/scripts/prompt-en-prose-detect.sh|hooks/prompt-en-prose-detect.sh
 plugin/scripts/reset-gate-counter.sh|hooks/reset-gate-counter.sh
 plugin/scripts/usage-daily-hint.sh|hooks/usage-daily-hint.sh
 plugin/scripts/usage-report.py|scripts/usage-report.py
+plugin/scripts/precompact-guard.sh|hooks/precompact-guard.sh
+plugin/scripts/context-occupancy.sh|hooks/context-occupancy.sh
 plugin/scripts/migrate-trust-paths.sh|hooks/migrate-trust-paths.sh
 plugin/scripts/tests/db-backup-guardrail.sh|hooks/tests/db-backup-guardrail.sh
 plugin/scripts/tests/pre-flight-pattern-enforce.sh|hooks/tests/pre-flight-pattern-enforce.sh
@@ -181,7 +183,7 @@ done
 
 # Preserve executable bit on the shell helpers.
 if [ "$APPLY" -eq 1 ]; then
-  chmod +x "$DEST/hooks/nightly-guard.sh" "$DEST/hooks/publish-feature.sh" "$DEST/hooks/test-write-scope.sh" \
+  chmod +x "$DEST/hooks/precompact-guard.sh" "$DEST/hooks/nightly-guard.sh" "$DEST/hooks/publish-feature.sh" "$DEST/hooks/test-write-scope.sh" \
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
     "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
@@ -282,6 +284,28 @@ write-scope-enforce.sh (a full-transcript scan can bind on its own grep pattern)
 other agent type and for a transcript carrying no scope marker. Guardrail against a shortcut, NOT a
 sandbox — same threat model as agent-command-scope (ADR-0045). Until this entry exists the hook is
 deployed but never invoked.
+NOTE
+fi
+
+if ! grep -q 'precompact-guard' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+PreCompact is not currently in the hooks block at all — this adds a NEW event key, not an entry
+alongside an existing one. Add this to ~/.claude/settings.json's top-level "hooks" object:
+
+  "PreCompact": [
+    { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/precompact-guard.sh" } ] }
+  ]
+
+precompact-guard (issue #112, ADR-0058) forces a chain-history handoff write when a manifest's
+current_step is a dispatch state, and refuses the FIRST PreCompact of a compaction cycle so that
+write has landed before compaction proceeds. The refusal is ONE-SHOT BY DESIGN — the second
+PreCompact in the same cycle always proceeds, regardless of manifest state (§D2: an unbounded
+refusal would strand the session instead of protecting it, since PreCompact fires because the
+context window is already full). Fails open on every error. Until this entry exists the hook is
+deployed but never invoked, and the session-preservation half of this feature does nothing.
 NOTE
 fi
 
