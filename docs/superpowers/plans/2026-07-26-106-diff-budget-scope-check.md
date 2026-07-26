@@ -13,7 +13,7 @@ The Gate 5 summary must get *shorter* in the all-clear case, not longer.
 
 ## Task checklist
 
-- [ ] **Task 1 — RED harness.** `staging/plugin/scripts/tests/diff-budget-scope.test.sh`.
+- [x] **Task 1 — RED harness.** `staging/plugin/scripts/tests/diff-budget-scope.test.sh`.
   `B`-prefixed labels, hermetic (`mktemp -d`, throwaway git repos), bash 3.2 (no assoc arrays,
   `mapfile`, `${v^^}`, `<<<`, process substitution). Sections: **BA** a budget on a task line is
   parsed, and the over/under verdict is correct at the boundary; **BB** **absent budget is fully
@@ -29,7 +29,7 @@ The Gate 5 summary must get *shorter* in the all-clear case, not longer.
   Every assertion seen RED first. No fixture path may contain `secret`, `credential`, `.env`,
   `.pem`, `.key`.
 
-- [ ] **Task 2 — the budget parser + checker.**
+- [x] **Task 2 — the budget parser + checker.**
   `staging/plugin/skills/concept-to-code/scripts/diff-budget-check.sh`. **It is a reporter**: always
   exits 0, signals through stdout, prints a `CLEAN` sentinel when there is nothing — matching
   `weakening-scan.sh`, not `spec-coverage.sh`. State the caller idiom in the script header and at
@@ -37,20 +37,20 @@ The Gate 5 summary must get *shorter* in the all-clear case, not longer.
   `grep -c … || echo 0` (two-line `0\n0`; `|| true` is the fix). Lenient parse per §D6.
   → BA/BB/BC green.
 
-- [ ] **Task 3 — out-of-scope detection + exclusions.** Per §D4: a file in no declared task scope is
+- [x] **Task 3 — out-of-scope detection + exclusions.** Per §D4: a file in no declared task scope is
   its own finding type, not folded into the overshoot. → BD/BE green.
 
-- [ ] **Task 4 — plan template.** The architect's plan template gains the optional per-task budget
+- [x] **Task 4 — plan template.** The architect's plan template gains the optional per-task budget
   in the form §D6 describes. Update `staging/plugin/agents/architect.md` so the agent knows to emit
   it. Do **not** retrofit existing plans.
 
-- [ ] **Task 5 — wiring + the §D5 roll-up.** Call the checker at the existing Step 5 checkpoints
+- [x] **Task 5 — wiring + the §D5 roll-up.** Call the checker at the existing Step 5 checkpoints
   (ADR-0039 §D5's `pipeline()` stage, never a barrier). Add `budget_findings` to the
   `step5-report.json` schema and read contract. **Then do the §D5 work on the Gate 5 summary**:
   collapse all six advisory arrays to one line when every one is empty, and cap `budget_findings`
   at the top N by margin with a remainder count. → BF/BG green.
 
-- [ ] **Task 6 — registration + full suite.** New test file into **both** CI registries (`ci.yml`
+- [x] **Task 6 — registration + full suite.** New test file into **both** CI registries (`ci.yml`
   glob automatic; `.github/workflows/docs-ci.yml`'s explicit named list needs a manual append after
   `reward-hack-detectors`). Add the new script to `sync-to-claude.sh` `PAIRS` if the skill's
   `scripts/` are vendored per-file — check how `spec-coverage.sh` was registered and follow it

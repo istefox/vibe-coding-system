@@ -769,7 +769,9 @@ After the workflow completes:
    deciding the transition.
 5. Run the `Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)` block once, before
    deciding the transition.
-6. If all tasks passed, `test_result` is `green` or `n/a`, the weakening gate found no
+6. Run the `Diff budget and scope check — Step 5 checkpoints (ADR-0052)` block once, over the
+   cumulative diff and every completed task — it never affects the transition (advisory only).
+7. If all tasks passed, `test_result` is `green` or `n/a`, the weakening gate found no
    `WEAKENED` line, and the coverage gate exit code is `0` → transition to `step_6_review`.
    Present Gate 5.
 
@@ -842,6 +844,10 @@ Schema (JSON):
   "tests_written_by": [
     { "task": 1, "agent": "tester" }
   ],
+  "budget_findings": [
+    { "task": "3", "files_expected": 1, "files_actual": 2,
+      "lines_expected": 120, "lines_actual": 210, "out_of_scope": ["src/unrelated.py"] }
+  ],
   "errors": []
 }
 ```
@@ -881,9 +887,15 @@ is also what every manifest written before ADR-0039 means by omitting the field.
   `test_cmd_placeholder`/`test_cmd_provisional` skipped the tester stage, produces. A `"coder"`
   entry (an implementation coder wrote a test — either `test-write-scope.sh` denied nothing, or
   it was never wired) is surfaced at Gate 5 for a human to read; it is a record, never a gate.
-- Contrast, four arrays in one schema with different gate semantics: `checkpoint_reviews`,
-  `tests_written_by` and `suspect_findings` are never a failure signal; `weakening_findings`
-  always is (ADR-0047 §D5, ADR-0049 §D5, ADR-0051 §D2).
+- `budget_findings` is advisory only and **never a failure signal** (ADR-0052 §D3). A per-task line-count ceiling is
+  an estimate made before the work by an agent that has not read every file it will touch — it
+  will be wrong regularly and in both directions, so a gate on it would halt on noise more often
+  than on signal (the same reasoning `suspect_findings` already established for a heuristic
+  finding at this same boundary). Absent means either the checker did not resolve or the plan
+  declares no budgets on the relevant tasks (ADR-0052 §D1) — either way, **not malformed**.
+- Contrast, five arrays in one schema with different gate semantics: `checkpoint_reviews`,
+  `tests_written_by`, `suspect_findings` and `budget_findings` are never a failure signal;
+  `weakening_findings` always is (ADR-0047 §D5, ADR-0049 §D5, ADR-0051 §D2, ADR-0052 §D3).
 
 #### Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)
 
@@ -1010,6 +1022,69 @@ batch would fail on every multi-batch chain.
 - `_rc = 2`, or `_scov` empty (script did not resolve): fail-open, visibly. Record
   `"status": "unavailable"` in `step5-report.json` and proceed.
 
+#### Diff budget and scope check — Step 5 checkpoints (ADR-0052)
+
+Compares what a coder's diff actually touched against what the plan said it would, at the same
+checkpoints the anti-test-weakening gate above already visits (§D2 — no new checkpoint
+mechanism). Purely advisory, and inert unless the architect declared a budget: a per-task line
+ceiling is an estimate made before the work by an agent that has not read every file it will
+touch, so it surfaces and never blocks (§D3).
+
+**Resolution** (skill-helper path shape, `skills/concept-to-code/scripts/`, the same two-location
+trap `spec-coverage.sh` above avoids):
+```bash
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/diff-budget-check.sh" ]; then
+  _dbudget="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/diff-budget-check.sh"
+elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/diff-budget-check.sh" ]; then
+  _dbudget="$HOME/.claude/skills/concept-to-code/scripts/diff-budget-check.sh"
+else
+  _dbudget=""     # check did not run — report it, do not infer a clean result
+fi
+```
+
+**Invocation and caller idiom.** `diff-budget-check.sh` is a REPORTER, exactly like
+`weakening-scan.sh` above and unlike `spec-coverage.sh` immediately above this block: it always
+exits 0 and signals through stdout, printing the sentinel `CLEAN` when there is nothing to
+report. **Do not copy `spec-coverage.sh`'s branch-on-exit-code idiom into this block** — that
+sentence has now been written three times in this directory (ADR-0048 §D7, the anti-test-
+weakening gate above, and here).
+```bash
+if [ -n "$_dbudget" ]; then
+  _db=$(git diff --stat "$_pre5" 2>/dev/null \
+        | bash "$_dbudget" --plan "<manifest.artifacts.plan>" --tasks "<comma list of every task number dispatched so far>")
+fi
+```
+- Never `[ -n "$_db" ]` to decide whether something was found — `$_db` is the literal string
+  `CLEAN` on a clean run, never empty.
+- Never `n=$(printf '%s\n' "$_db" | grep -c '^BUDGET' || echo 0)` — `grep -c` prints `0` **and**
+  exits 1 on no match, so `|| echo 0` appends a second line and `n` becomes the two-line string
+  `0\n0`. Use `grep -c '^BUDGET' || true` if a count is needed.
+
+**Cadence, matching the anti-test-weakening gate above (§D2 — no new checkpoint mechanism, reusing
+the same one).** The Workflow dispatch path runs this once, after the whole workflow completes,
+over the cumulative diff since `$_pre5` and every task in `tasks_completed` from
+`step5-report.json` — for the same reason the weakening gate above runs once there rather than per
+pipeline stage: the orchestrator only regains control after the workflow exits. The Agent-tool
+fallback runs it at every batch checkpoint (see step 4 there), `--tasks` accumulating every task
+dispatched so far, against the same cumulative diff the weakening gate already re-scans at that
+point.
+
+**Record every `BUDGET` line's `files=<exp>/<act>` and `lines=<exp>/<act>`, and every `SCOPE`
+line's file, as one entry per checkpoint call** in `step5-report.json`'s `budget_findings` array
+(`{task, files_expected, files_actual, lines_expected, lines_actual, out_of_scope}` — `out_of_scope`
+collects that call's `SCOPE` file names; the plan-level scope check has no single owning task to
+attribute a `SCOPE` finding to, so it rides on the same checkpoint entry). Empty array if `$_db`
+is `CLEAN`.
+
+**Policy:**
+- `budget_findings` is **never a failure signal**, attended or under autopilot (ADR-0052 §D3) —
+  it never blocks the transition to `step_6_review`. Findings are carried into `budget_findings`
+  and folded into the Gate 5 roll-up (ADR-0052 §D5, see the Gate 5 block in `## 5. HITL gates`).
+- `_dbudget` empty (script did not resolve): record no `budget_findings` entries for that
+  checkpoint and proceed — fail-open, visibly, matching the weakening gate's own
+  `"weakening_scan": "unavailable"` idiom.
+
 #### Fallback — Agent-tool batch dispatch (hook_verified = false or workflow unavailable)
 
 **Batch-dispatch policy (≥6 tasks in plan):** if the plan contains ≥6 tasks, do NOT
@@ -1038,7 +1113,9 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
    (it may be truncated or incomplete). Also run the `Anti-test-weakening gate — Step 5 →
    Step 6 (ADR-0047)` block at every batch checkpoint — the same command against the same
    cumulative diff, evaluated at more points, so an unattended run that weakens a test in
-   batch 1 halts before burning batches 2..N.
+   batch 1 halts before burning batches 2..N. Also run the `Diff budget and scope check —
+   Step 5 checkpoints (ADR-0052)` block at every batch checkpoint, `--tasks` accumulating
+   every task number dispatched so far — advisory only, never a gate here either.
 
    **[IF `manifest.step5_review_mode = checkpoint` (ADR-0039 D5-D9) — otherwise skip:]**
    At this same checkpoint, dispatch the `reviewer` agent scoped to the diff of the batch that
@@ -1059,6 +1136,8 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
    block once here too — not at the per-batch checkpoint in item 4 above, where an
    uncovered ID is still the expected state — then final verification (`verify.sh`,
    `git status`, scope check against the plan) before transitioning to `step_6_review`.
+   The `Diff budget and scope check — Step 5 checkpoints (ADR-0052)` block already ran at
+   every batch checkpoint in item 4; no separate final pass is needed for it.
 
 For plans with ≤5 tasks monolithic dispatch is acceptable, but the controller-side
 verification after dispatch is mandatory in all cases.
@@ -2066,15 +2145,39 @@ STOP — no further tool calls.
 
 Trigger: post Step 5 (coder complete), `current_step = gate_5_review_decision`.
 
-**Suspect findings (ADR-0051, non-blocking, advisory only).** Read `step5-report.json`'s
-`suspect_findings` array (empty/absent means none). Render a count and a per-detector breakdown
-— e.g. `Suspect findings: 3 (zero-assertion-test: 2, swallowed-error: 1)` — into the question text
-below. These never gated the transition to this point (§D2); this is the human checkpoint where
-they are actually read.
+**Advisory roll-up (ADR-0052 §D5 — read this before touching the block below).** `step5-report.json`
+carries six advisory-schema arrays: `weakening_findings`, `requirement_coverage` (its `uncovered`
+list), `checkpoint_reviews`, `tests_written_by`, `suspect_findings` and `budget_findings`. Three of
+those arrived in three consecutive features, each individually justified by "blocking would be too
+noisy, so we surface instead" — and their sum is not individually justified the same way (ADR-0052
+§D5). **A report nobody must act on is a report nobody reads** (ADR-0047 §D7), and the way that
+failure actually arrives here is not one unreadable array, it is six readable ones stacked into a
+Gate 5 summary that gets skimmed. So this block's volume tracks signal, not schema size:
+
+- **If all six arrays are empty or absent:** render exactly ONE line — `Advisory findings: none
+  across all six categories (weakening, requirement coverage, checkpoint reviews, tests-written-by,
+  suspect findings, budget).` Do not additionally render six lines each saying "none" — that is the
+  exact failure this roll-up exists to stop.
+- **If at least one array is non-empty:** render ONLY the non-empty ones, each on its own line —
+  never pad the summary with "X: none" lines for the arrays that have nothing. `suspect_findings`
+  renders as before: a count and a per-detector breakdown, e.g. `Suspect findings: 3
+  (zero-assertion-test: 2, swallowed-error: 1)`.
+- **`budget_findings` specifically is capped at the top 5 entries by margin (descending), with a
+  remainder count** — e.g. `Budget findings: 3 shown of 8, by margin descending (5 more not
+  shown).` A per-task enumeration of a 40-task plan is not a summary; the full list still lives in
+  `step5-report.json` for anyone who wants it.
+- `weakening_findings` and `requirement_coverage.uncovered` are structurally near-always empty by
+  the time Gate 5 renders — both are failure signals that block the transition to
+  `gate_5_review_decision` before this point (ADR-0047, ADR-0048). They are still evaluated for the
+  all-six-empty roll-up line above, for the rare case a user pushed through an acknowledged failure
+  signal manually.
+
+These never gated the transition to this point; this is the human checkpoint where they are
+actually read.
 
 Use `AskUserQuestion`:
 ```
-question: "Gate 5 — Review cycle (Human approval required)\n\nTasks completed: <N>\nFiles modified: <list>\nTests: <green | red | n/a>\nHarness delta: <if relevant>\nSuspect findings (advisory, non-blocking): <count> (<per-detector breakdown, or 'none'>)\nAnonymize: <ON if manifest.anonymize=true | OFF (default)>\n\nRun a review-triage-fix cycle? Estimated: 5-10 min.\n\nOnly you can decide whether a review cycle is needed."
+question: "Gate 5 — Review cycle (Human approval required)\n\nTasks completed: <N>\nFiles modified: <list>\nTests: <green | red | n/a>\nHarness delta: <if relevant>\n<the advisory roll-up rendered above>\nAnonymize: <ON if manifest.anonymize=true | OFF (default)>\n\nRun a review-triage-fix cycle? Estimated: 5-10 min.\n\nOnly you can decide whether a review cycle is needed."
 header: "Gate 5 · Review"
 options:
   - label: "Run review-triage-fix"
