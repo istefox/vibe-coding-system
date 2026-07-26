@@ -280,8 +280,9 @@ Riusa esattamente la logica di dispatch di concept-to-code Steps 5-7, con gate a
 "safe default" senza `AskUserQuestion`.
 
 **Circuit breaker:** dopo Step 5 legge `.claude/step5-report.json`. Se `test_result=RED`,
-task falliti, o report mancante: si ferma, scrive un report `partial`, non fa il commit.
-Stesso meccanismo dopo il re-run di Step 6.
+task falliti, report mancante, o `weakening_findings` non vuoto (test indebolito o cancellato,
+ADR-0047): si ferma, scrive un report `partial`, non fa il commit. Stesso meccanismo dopo il
+re-run di Step 6.
 
 Tutti gli hook di sicurezza restano attivi: `stop-gate.sh`, `pre-flight-pattern-enforce.sh`,
 `db-backup-guardrail.sh`. Autopilot sopprime i gate umani, non i guard automatici.

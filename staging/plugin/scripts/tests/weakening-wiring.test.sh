@@ -381,6 +381,69 @@ else
   ok "WE7: nightly-autopilot/SKILL.md does not resolve or invoke weakening-scan.sh (no fourth call site, ADR-0047 §D8)"
 fi
 
+# ==============================================================================================
+# WF. commit/SKILL.md Step 1 / Step 4 — the third reporter alongside SECRET/NEWDEP (ADR-0047 §D2).
+# Same awk range secret-dep-gate.test.sh uses, so both harnesses read the same region.
+# ==============================================================================================
+COMMITMD="$STAGING/plugin/skills/commit/SKILL.md"
+CSTEP1="$TMP/commit_step1.txt"
+awk '/^### Step 1 —/{f=1} /^### Step 2 —/{f=0} f' "$COMMITMD" >"$CSTEP1"
+
+if [ -s "$CSTEP1" ]; then
+  ok "WF0: Step 1 of commit/SKILL.md is extractable (the anchor the WF section reads)"
+else
+  bad "WF0: could not extract Step 1 from $COMMITMD — every WF assertion below is meaningless"
+fi
+
+if grep -qF 'weakening-scan.sh' "$CSTEP1"; then
+  ok "WF1: Step 1 names weakening-scan.sh"
+else
+  bad "WF1: weakening-scan.sh missing from Step 1"
+fi
+
+if grep -qF 'skills/review-triage-fix/scripts/' "$CSTEP1" && grep -qF 'CLAUDE_PLUGIN_ROOT' "$CSTEP1"; then
+  ok "WF2: Step 1 resolves weakening-scan.sh under skills/review-triage-fix/scripts/ and mentions CLAUDE_PLUGIN_ROOT"
+else
+  bad "WF2: Step 1 does not name both skills/review-triage-fix/scripts/ and CLAUDE_PLUGIN_ROOT"
+fi
+
+if grep -qF 'git diff HEAD' "$CSTEP1"; then
+  ok "WF3: Step 1 reuses git diff HEAD as the scan input"
+else
+  bad "WF3: Step 1 does not reuse git diff HEAD as the weakening-scan input"
+fi
+
+if grep -qF 'WEAKENED' "$CSTEP1" && grep -qi 'advisory' "$CSTEP1"; then
+  ok "WF4: Step 1 states the attended policy — WEAKENED lines are advisory and stop nothing"
+else
+  bad "WF4: Step 1 is missing the WEAKENED/advisory statement"
+fi
+
+if grep -qF 'autopilot' "$CSTEP1" && grep -qF 'WEAKENED' "$CSTEP1" && grep -qi 'abort' "$CSTEP1"; then
+  ok "WF5: Step 1 states the --autopilot policy — a WEAKENED finding aborts"
+else
+  bad "WF5: Step 1 is missing the autopilot/WEAKENED/abort policy"
+fi
+
+if grep -qF 'the SECRET, NEWDEP and WEAKENED lines from Step 1, verbatim' "$COMMITMD"; then
+  ok "WF6: Step 4's rendering phrase names all three reporters"
+else
+  bad "WF6: Step 4 does not name SECRET, NEWDEP and WEAKENED in one rendering phrase"
+fi
+
+# WF7 — forward guard, never fix evidence. Duplicates secret-dep-gate F4 on purpose: this feature
+# edits the same Step 1 region and the cheapest way to break #100 is to reflow the block.
+WF7OK=1
+grep -qF '`.env`'         "$CSTEP1" || WF7OK=0
+grep -qF '`*secret*`'     "$CSTEP1" || WF7OK=0
+grep -qF '`*credential*`' "$CSTEP1" || WF7OK=0
+grep -qF '`*.pem`'        "$CSTEP1" || WF7OK=0
+if [ "$WF7OK" -eq 1 ]; then
+  ok "WF7: the four Step 1 filename patterns are intact (forward guard, duplicates secret-dep-gate F4)"
+else
+  bad "WF7: a Step 1 filename pattern was weakened — restore it, do not edit this assertion"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

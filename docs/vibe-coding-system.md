@@ -1269,6 +1269,49 @@ guardrail); and `commit/SKILL.md`, invoked by `concept-to-code` Step 7, `project
 
 Detail: `docs/architecture/ADR-0046-100-secret-scan-dependency-gate.md`.
 
+### Addition 2026-07-26 (issue #101, anti-test-weakening detector wired into the unattended
+paths, ADR-0047)
+
+`review-triage-fix/scripts/weakening-scan.sh` has existed since that skill was built, but it
+fired in exactly one place — `review-triage-fix` Step 3, reached only through `concept-to-code`
+Gate 5, whose autopilot default is "Skip review". On the three paths that can produce a commit
+with no human present, the detector never ran: an agent could delete a failing test to turn the
+suite green and still end up with a pushed branch and an open PR by morning. This wires it into
+every one of them without changing a byte of the detector or the skill it lives in.
+
+- **Invoked in place, not moved, not copied** (sec. 8): every new call site resolves
+  `<skills-root>/review-triage-fix/scripts/weakening-scan.sh` directly. Three skills — `commit`,
+  `concept-to-code`, and by reference `autopilot-build` — now depend on a fourth skill's private
+  `scripts/` directory, the same shape `autopilot-build` already has on
+  `concept-to-code/scripts/manifest-*.sh`. The alternative (moving or copying the script) breaks
+  the one hard constraint this feature was given: `review-triage-fix` stays byte-identical, so
+  issue #105's future detector edits reach all four call sites with no version skew.
+- **The detector always exits 0 and prints the sentinel `CLEAN` on no finding** — the reverse of
+  the ADR-0046 reporters, which print nothing on a clean scan. Every caller uses one idiom:
+  `printf '%s\n' "$out" | grep -q '^WEAKENED'`, never `[ -n "$out" ]` (true even on `CLEAN`,
+  blocking every run) and never `grep -c … || echo 0` (issue #100's own `0\n0` two-line trap;
+  `|| true` is correct).
+- **Blocking is the caller's decision, and the caller is the orchestrator, not the dispatched
+  agent** (sec. 11): the gate sits at the `concept-to-code` Step 5 → Step 6 boundary and the
+  orchestrator runs the scan itself over the cumulative diff since a pre-dispatch mark.
+  `weakening_findings` in `step5-report.json` is a record written by the agent under examination;
+  the orchestrator's own scan is the gate — the same "do not trust the agent's self-report" rule
+  `review-triage-fix` Step 3 already applies to its own circuit breakers. `autopilot-build` and
+  `nightly-autopilot` inherit the halt by reference rather than running a second scan; `commit`
+  Step 1 gets its own call, advisory in attended mode, `--autopilot`-abort unattended.
+- **A gap found while wiring, not in the SPEC:** `autopilot-build` Step 6's circuit breaker only
+  reads test colour, so weakening introduced by the *fix* cycle was flagged by CIRCUIT BREAKER B
+  into a recap nothing reads, then committed regardless. Closed by consuming that existing BLOCKER
+  signal as a fourth halt condition rather than adding a second scan.
+- **This is an instruction, not an enforcement**, the same distinction ADR-0041/ADR-0045 drew for
+  write-scope and command-scope: every gate here is prose in a SKILL.md a model is asked to
+  follow. Enforcing the transition inside `manifest-transition.sh` was considered and rejected on
+  blast radius — a git-unaware, independently-reconciled 48-pair state machine would gain a new
+  failure mode on every transition. The harness pins that the instruction exists, not that a
+  future subagent obeys it.
+
+Detail: `docs/architecture/ADR-0047-101-weakening-scan-wiring.md`.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
