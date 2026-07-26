@@ -1,42 +1,44 @@
-# SPEC — Context-occupancy instrumentation and PreCompact guard
+# SPEC — Untrusted-input hardening for issue-driven design
 
-Source: GitHub issue #112
+Source: GitHub issue #113
 
 ## Objectives
-1. Stop auto-compaction from firing in the middle of a chain step.
-2. Make context occupancy visible.
+1. Treat a GitHub issue body as data, never as instructions to the agent.
+2. Restrict which authors can drive an unattended design run.
+3. Record the residual risk honestly.
 
 ## Scope
-In: a `PreCompact` hook; an occupancy line in the Stop hint; a blueprint note recording the 50% finding; a new test file in both CI registries.
-Out: changing the autocompact threshold; per-subagent occupancy, which is not locally observable (`usage-report.py:11-14`).
+In: prompt fencing for the issue body; an instruction-shaped-line pre-filter; an author allowlist configured in the opt-in marker; a new test file in both CI registries.
+Out: defending against a compromised repo-owner account; sandboxing the agent runtime.
 
 ## Stack
-Bash 3.2 hook + the existing `usage-daily-hint.sh`.
+Markdown skill instructions + bash 3.2 filter + `gh issue view --json author`.
 
 ## Architecture
-- New: `staging/plugin/scripts/pre-compact-guard.sh`, wired on `PreCompact`. The event is currently absent from the hooks block in `staging/user/settings.json` entirely.
-- Modified: `usage-daily-hint.sh` — add occupancy alongside the daily usage line.
-- Modified: the blueprint hooks section — record that the documented instruction violation occurred at 50% occupancy, below the configured 70% override, so the setting is a conscious choice rather than an inherited default.
+- Modified: `spec-from-issue/SKILL.md` — fence the body with an explicit untrusted-content preamble.
+- New: a pre-filter script neutralising instruction-shaped lines (imperative directives aimed at the agent, tool-call syntax, role-switch attempts, "ignore previous instructions" patterns).
+- Modified: `nightly-autopilot/SKILL.md` Phase P — author allowlist check.
+- Modified: `.claude/nightly-autopilot.yml` schema — `prep.allowed_authors`.
 - New: test file in both CI registries.
 
 ## Data model
-None persisted beyond the existing state directory.
+`prep.allowed_authors: [<handle>, ...]`. Absent means repo owner only.
 
 ## API / Interfaces
-The guard refuses to compact while a manifest's `current_step` is in a dispatch state and emits the handoff instruction first. It **fails open** on any internal error, like every other hook here — a wrongly-firing refusal would strand a session.
+The filter is a reporter plus a transform: it returns the neutralised body and a list of what it neutralised, so the generated SPEC can carry a provenance note.
 
 ## UI flows
-The refusal message instructs the externalisation sequence before compaction.
+None; unattended.
 
 ## Edge cases
-- No manifest mid-flight → allow, exit 0.
-- Malformed manifest → allow (fail open).
-- Repeated refusal must not loop forever: refuse once, then allow.
-- The hook must be inert in repos with no manifests.
+- A normal issue body must produce the same SPEC it produces today — this is the regression to protect.
+- A non-allowlisted author is skipped with a `needs-human` note, not processed and not halting the whole roadmap.
+- Code blocks in an issue body are legitimate content and must survive the filter.
+- The ADR must state plainly that this is a mitigation, not a sandbox.
 
 ## Success criteria
-- [ ] With no manifest mid-flight, `PreCompact` allows and exits 0.
-- [ ] With a manifest at a dispatch step, compaction is refused once and the handoff instruction is emitted.
-- [ ] Any internal error allows.
-- [ ] The Stop hint reports occupancy.
+- [ ] An issue from a non-allowlisted handle is skipped with a `needs-human` note.
+- [ ] An injection attempt is neutralised and the neutralisation is visible in the SPEC's provenance note.
+- [ ] A normal issue body produces the same SPEC as today.
+- [ ] A fenced code block in a body is preserved.
 - [ ] The new test file is registered in BOTH CI registries.

@@ -217,6 +217,16 @@ Reconcile CI where possible: for each open PR, `gh pr checks <url>` maps the che
 - **No merge, ever.** No code path calls `gh pr merge`, `--merge`, or enables auto-merge.
 - **No force-push, no main.** Publish targets `feat/<slug>` only; the settings deny list blocks
   force-push; `publish-feature.sh` refuses a slug that resolves to `main`/`master`.
+- **Why "no merge" is load-bearing, not a convenience (ADR-0059 §D2).** Phase P (§1.5) can turn a
+  GitHub issue body into this run's design input, and an issue body is attacker-controllable text.
+  Prompt fencing and the injection scan (ADR-0059 §D1/§D3) are a mitigation, not a boundary — the
+  mechanism reading that text is the same mechanism an attacker is trying to redirect. The actual
+  boundary is that this path cannot merge, force-push, or write `main`; a pushed branch and an open
+  PR are reversible, and the human reviews before either stops being true. **Granting merge
+  authority to this path would turn every issue body into a remote code execution vector**: a
+  malicious issue could get its own code merged to `main` overnight with no human in the loop,
+  using this skill's own commit-and-push privileges to do it. Do not add merge authority here
+  without addressing that first.
 - **Opt-in per repo.** Absent or `publish: false` marker → the skill never pushes; use
   `autopilot-build` for a local-commit-only run.
 - **Guard fails safe.** On any halt condition or internal guard error, the publish is blocked and the
