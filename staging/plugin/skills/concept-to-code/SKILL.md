@@ -482,6 +482,44 @@ On Gate 3 approve: emit "Gate 3 approved ✓ — applying CLAUDE.md and proceedi
 
 ### Step 5 — Implementation (dispatch `coder` agent, post-resume)
 
+#### Recovery-readiness pre-flight (ADR-0050, before any dispatch)
+
+Three assertions, run once, at the very top of Step 5 — before dispatch-mode selection, before the Smoke test gate below (which itself dispatches a workflow coder), and before the tester stage ADR-0049 introduced further down. At Step 5 entry the tree must already be clean, so that everything the tester dirties afterward is provably Step 5's own doing.
+
+**Do not collapse this with ADR-0049 §D2's dirty-tree condition below — they are sequential, not contradictory (ADR-0050 §D4).** This pre-flight guards entry to Step 5, before anything in Step 5 has executed: a dirty tree here is uncommitted human work of unknown provenance, so it refuses to dispatch. ADR-0049 §D2's condition guards each coder dispatch *inside* Step 5, after this pre-flight's own tester stage has deliberately left the tree dirty by design and by this system's own hand: it tolerates the dirty tree and drops to `isolation: "none"`. The invariant that reconciles them: at Step 5 entry the tree is clean; every dirty tree observed after that point was produced by Step 5 itself. Removing either check breaks the other's premise.
+
+**Step 5.0.1 — Working tree clean.**
+```bash
+git status --porcelain
+```
+Non-empty output → refuse to dispatch. Print the literal remediation command: "Recovery-readiness pre-flight: working tree has uncommitted changes. Run `git stash push -u -m 'c2c-step5-preflight'` (or commit) and re-invoke Step 5." Do not proceed to dispatch-mode selection. A deliberately dirty resume now needs an explicit stash (ADR-0050 §D2 negative consequence 2) — that is accepted, not a bug.
+
+**Step 5.0.2 — A feature branch is checked out, not the default branch.**
+```bash
+git symbolic-ref --short HEAD
+```
+Resolve the remote's default branch — do not hardcode `main`:
+```bash
+git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'
+```
+If that prints nothing (no remote, or the local symref cache is missing), fall back to:
+```bash
+git remote show origin 2>/dev/null | sed -n 's/^ *HEAD branch: //p'
+```
+If both are empty, fall back to the literal `main` — documented here, never a silent hardcode. If the checked-out branch equals the resolved default → refuse to dispatch. Print the literal remediation command: "Recovery-readiness pre-flight: HEAD is on `<default>`, the default branch. Run `git checkout -b feat/<slug>` and re-invoke Step 5." Do not proceed to dispatch-mode selection.
+
+**Step 5.0.3 — HEAD sha recorded as the recovery baseline.**
+```bash
+git rev-parse HEAD
+```
+Record as `BASELINE_COMMIT`. Write it once to the manifest via bash sed substitution on the additive field (NOT via Edit tool, NOT via `manifest-set-flag.sh`, which is boolean-only):
+```bash
+sed -i.bak 's/^recovery_baseline_sha: null$/recovery_baseline_sha: "<BASELINE_COMMIT>"/' "<manifest>"
+```
+If `manifest.recovery_baseline_sha` is already non-null (a resumed Step 5 run), skip the write — it is written once, at pre-flight, and never rewritten by a later step. A baseline that moves is not a baseline (ADR-0050 §D3).
+
+**Autopilot (`manifest.autopilot = true`) refuses identically — no leniency branch (ADR-0050 §D6).** A dirty tree or a default-branch checkout halts the unattended path exactly as it halts the attended one. There is no `AskUserQuestion` on this path, so the remediation command above is recorded in the report rather than prompted to a terminal nobody is watching.
+
 **Dispatch mode selection:**
 - If `manifest.hook_verified = true`: use Workflow dispatch path (below).
 - If `manifest.hook_verified = false` or `null` (field absent): present smoke test gate (see

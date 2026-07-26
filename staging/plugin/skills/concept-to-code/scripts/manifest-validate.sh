@@ -203,6 +203,24 @@ if grep -q '^step5_review_mode:' "$MANIFEST"; then
   fi
 fi
 
+# Invariant 15 (conditional, ADR-0050): if recovery_baseline_sha present, must be null or a
+# quoted hex sha string. Absent = valid (retrocompat with every pre-ADR-0050 manifest). Written
+# once at Step 5 pre-flight and never rewritten — this checks shape only, not the "once" rule,
+# which is an instruction to the model, not something a static validator can observe.
+if grep -q '^recovery_baseline_sha:' "$MANIFEST"; then
+  rbs_val="$(grep '^recovery_baseline_sha:' "$MANIFEST" | sed 's/^recovery_baseline_sha: *//' | head -1)"
+  case "$rbs_val" in
+    null) ;;
+    \"*\")
+      rbs_inner="$(printf '%s' "$rbs_val" | sed 's/^"//;s/"$//')"
+      if ! printf '%s' "$rbs_inner" | grep -Eq '^[0-9a-f]{7,64}$'; then
+        fail "recovery_baseline_sha value '$rbs_inner' is not a valid hex sha"
+      fi
+      ;;
+    *) fail "recovery_baseline_sha '$rbs_val' is not null or a quoted hex sha" ;;
+  esac
+fi
+
 if [ "$ERRORS" != "0" ]; then
   exit 1
 fi
