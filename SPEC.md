@@ -1,41 +1,42 @@
-# SPEC — SAST job and a security-audit skill
+# SPEC — Tracer-bullet probe step
 
-Source: GitHub issue #110
+Source: GitHub issue #111
 
 ## Objectives
-1. Run a real static analyser somewhere in the system, instead of relying only on LLM judgement.
-2. Provide the ten-step security audit protocol as an on-demand skill.
-3. Keep every security finding report-only.
+1. Prove a thin end-to-end path before paying for a full implementation step.
+2. Make "the agent cannot do this class of work" a first-class, early outcome.
+3. Seed the implementation patterns the later slices follow.
 
 ## Scope
-In: an opt-in `security-audit` CI job in the project template; a new `security-audit` skill implementing the ten-step protocol; a new test file in both CI registries.
-Out: DAST; a commercial scanner; auto-fixing any security finding.
+In: an optional Step 4.5 in c2c; a gate on a `red` outcome; an additive manifest field; a new test file in both CI registries.
+Out: automatic slice-selection heuristics beyond "the first task in the plan that crosses all layers".
 
 ## Stack
-GitHub Actions + Semgrep default rules for the CI job; Markdown skill instructions for the protocol.
+Markdown skill instructions + manifest field.
 
 ## Architecture
-- Modified: `staging/project-templates/ci/ci.yml` — opt-in job, absent by default in generated repos.
-- New: `staging/plugin/skills/security-audit/SKILL.md`.
-- New: test file in both CI registries asserting the skill's structural anchors and the template job.
+- Modified: `concept-to-code/SKILL.md` — new Step 4.5 and a new gate, placed between the session boundary and Step 5.
+- Modified: manifest schema — additive `tracer_outcome` and the established patterns.
+- New: test file in both CI registries.
 
 ## Data model
-Findings are report-only. High-risk findings are tagged `ACTION REQUIRED — not auto-fixed`.
+`tracer_outcome: green|amber|red|null`. Additive, nullable.
 
 ## API / Interfaces
-The skill's ten steps, in the source order: automated scanners; separate-AI review; human checklist; penetration testing and fuzzing; security-focused unit tests; training-cutoff compensation (name the current OWASP Top 10 by year); logging hygiene; updated tooling; warnings in context; slow down.
+Outcome semantics: `green` proceed to Step 5 at full scope; `amber` (works but slow or awkward) route back to Gate 2 for scope reduction; `red` halt before Step 5 and offer continue / reduce scope / hand-code, recording the reason.
 
 ## UI flows
-On-demand invocation; output is a findings report, never a clearance. The skill must state explicitly that AI review is one input to a security assessment and never security clearance.
+A new gate fires only on `red`. Skipped by default on `express`, offered on `standard`. In autopilot the default is to run the probe and continue on `amber`.
 
 ## Edge cases
-- Semgrep absent must degrade gracefully, not fail the run.
-- The report-only invariant from ADR-0018 must hold regardless of risk level.
-- The opt-in job must be genuinely absent by default.
+- The step must be genuinely optional and absent from `express` runs.
+- A `red` outcome must halt before any Step 5 dispatch is paid for.
+- A pre-existing manifest without the field must still validate.
+- The probe must not commit.
 
 ## Success criteria
-- [ ] The skill's ten steps are present as named, testable anchors.
-- [ ] The report-only invariant is asserted by a test.
-- [ ] The CI job is opt-in and absent by default in generated repos.
-- [ ] The skill states that AI review is never clearance.
+- [ ] The step is absent from `express` runs.
+- [ ] A `red` outcome halts before Step 5 and records why.
+- [ ] The manifest field is additive and old manifests still validate.
+- [ ] The established patterns are passed into the Step 5 coder brief.
 - [ ] The new test file is registered in BOTH CI registries.
