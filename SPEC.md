@@ -1,43 +1,44 @@
-# SPEC — Per-task diff budget and scope check
+# SPEC — Interface immutability gate
 
-Source: GitHub issue #106
+Source: GitHub issue #107
 
 ## Objectives
-1. Give each plan task an optional expected size.
-2. Compare the actual diff against it at each Step 5 checkpoint.
-3. Name files touched outside every declared task scope.
+1. Let a project declare a protected public surface.
+2. Report any removal or signature change to that surface in a diff.
+3. Stay completely inert when no declaration exists.
 
 ## Scope
-In: an additive budget line in the architect's plan template; a checkpoint comparison in c2c Step 5; report output; a new test file in both CI registries.
-Out: blocking on overage; reworking the plan format beyond the additive line.
+In: a `.claude/protected-interfaces` file convention; a check script; a call in c2c Step 6; architect population at Gate 2; a new test file in both CI registries.
+Out: language-server-grade signature parsing; multi-version API support.
 
 ## Stack
-Markdown skill instructions plus bash 3.2 over `git diff --stat`.
+Bash 3.2, diff-driven, no language server.
 
 ## Architecture
-- Modified: the architect's plan template (optional `Budget:` line per task: files touched, approximate +/- lines).
-- Modified: `concept-to-code/SKILL.md` Step 5 checkpoint.
-- Modified: the `step5-report.json` schema — additive `budget_overages`.
+- New: `.claude/protected-interfaces` — one entry per line, an exact signature or a path glob, `#` comments allowed.
+- New: check script under `staging/plugin/scripts/`.
+- Modified: `concept-to-code/SKILL.md` Step 6, before the review closes.
+- Modified: the architect's Gate 2 instructions — populate the file when the plan declares a public surface.
 - New: test file in both CI registries.
 
 ## Data model
-`budget_overages: [{task, declared_files, actual_files, declared_lines, actual_lines, out_of_scope_files[]}]`. Additive.
+One protected entry per line. Blank lines and `#` comments ignored.
 
 ## API / Interfaces
-A reporter: it never blocks. The rationale is stated in the issue — a budget that is wrong more often than the coder would be ignored, which is worse than not having one.
+`<script> --root <dir> [--diff]` → `PROTECTED<TAB><entry><TAB><file>:<line><TAB>removed|changed` lines. Exit 0 always; the caller decides severity. Absent declaration file → allow-and-exit with no output, the same inert-by-construction design that keeps `write-scope-enforce.sh` harmless outside its one call site.
 
 ## UI flows
-Overage surfaces in the orchestrator output and in the report; on unattended paths it reaches the morning report.
+Findings surface in the Step 6 review output.
 
 ## Edge cases
-- A plan with no budget lines produces no output and no error (inert).
-- A task that legitimately touches many files (a rename sweep) will over-report — acceptable, because it does not block.
-- Deleted files count toward files touched.
-- The comparison must be per checkpoint batch, not cumulative across the whole chain.
+- No `.claude/protected-interfaces` → no output, exit 0.
+- An **added** function is never reported: accrete, don't destroy.
+- A moved-but-identical signature should not be reported as removed if the entry is a signature rather than a path.
+- A comment-only or blank-line file behaves as absent.
 
 ## Success criteria
-- [ ] A diff exceeding a declared budget produces a report entry naming the task and the overage.
-- [ ] A plan with no budget produces no output and no error.
-- [ ] A file touched outside all declared scopes is named.
-- [ ] Nothing blocks.
+- [ ] With no declaration file, the check produces no output and exits 0.
+- [ ] A removed protected function is reported with `file:line`.
+- [ ] An added function is not reported.
+- [ ] A signature change to a protected entry is reported.
 - [ ] The new test file is registered in BOTH CI registries.
