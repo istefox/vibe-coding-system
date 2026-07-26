@@ -1058,6 +1058,15 @@ Schema (JSON):
     { "task": "3", "test_count_delta": 2, "deleted_lines": 14,
       "iteration_count": 2, "elapsed_wall_seconds": 187 }
   ],
+  "accessibility_i18n_findings": [
+    { "item": "labels", "status": "pass | fail | not-applicable", "note": "<one line>" },
+    { "item": "contrast", "status": "pass | fail | not-applicable", "note": "<one line>" },
+    { "item": "dynamic-type-or-scaling", "status": "pass | fail | not-applicable", "note": "<one line>" },
+    { "item": "keyboard-or-assistive-tech-reachability", "status": "pass | fail | not-applicable", "note": "<one line>" },
+    { "item": "i18n-unicode-multibyte", "status": "pass | fail | not-applicable", "note": "<one line>" },
+    { "item": "i18n-no-english-centric-examples", "status": "pass | fail | not-applicable", "note": "<one line>" },
+    { "item": "i18n-no-locale-formatting-assumed", "status": "pass | fail | not-applicable", "note": "<one line>" }
+  ],
   "errors": []
 }
 ```
@@ -1078,6 +1087,20 @@ entry means that one metric was not measured for that checkpoint, and MUST NOT b
 apply elsewhere in this codebase, here applied to stored data). A `0` in a present field is a real,
 computed zero (e.g. a checkpoint that genuinely deleted no lines). The `task_metrics` array itself
 is absent, as a whole, on any manifest predating this feature — that is not malformed either.
+
+**`accessibility_i18n_findings` IS a findings array, unlike `task_metrics` immediately above —
+same distinguishing test ADR-0064 §D2 draws for `task_metrics`, opposite answer: a metric is a
+number with no claim attached, and `"labels": "fail"` is a claim about the work (ADR-0066 §D2).**
+It is written by **Gate 5.05**, not Step 5, so it is a *seventh* advisory-schema finding array in
+this same schema — see the Gate 5 roll-up block below for why it is not folded into that block's
+six-array count, and the Gate 5.05 block for where it renders instead. Each entry carries one of
+the seven named checklist items (four accessibility, three i18n — ADR-0066 §D1/§D3) with a
+`pass | fail | not-applicable` status and a one-line note. **It is never a failure signal**
+(ADR-0066 §D2 — the gate records an answer, it does not block, a deliberate and disclosed
+divergence from the SPEC's "gate, not aspiration" wording). The array is absent, as a whole, on
+any chain that touched no UI-shaped file this cycle — the same condition Gate 5.05 already applies
+to `ui-layout-audit` (ADR-0066 §D4), not a second one, and absence here is **not malformed**, it
+is what a CLI-only or docs-only chain produces.
 
 `checkpoint_reviews` is an empty array when `step5_review_mode` is `none` (the default), which
 is also what every manifest written before ADR-0039 means by omitting the field.
@@ -1130,10 +1153,20 @@ is also what every manifest written before ADR-0039 means by omitting the field.
   from `git` or from the orchestrator's own dispatch bookkeeping, never from an agent's report
   (ADR-0064 §D4) — see the "Task-level metrics" block below for the exact computation of each of
   the four fields.
-- Contrast, five arrays in one schema with different gate semantics: `checkpoint_reviews`,
-  `tests_written_by`, `suspect_findings` and `budget_findings` are never a failure signal;
-  `weakening_findings` always is (ADR-0047 §D5, ADR-0049 §D5, ADR-0051 §D2, ADR-0052 §D3).
-  `task_metrics` sits outside this contrast entirely — it is not a finding of any kind.
+- `accessibility_i18n_findings` is **never** a failure signal (ADR-0066 §D2): the gate records an
+  answer, it does not block, a deliberate divergence from the SPEC's "gate, not aspiration"
+  wording — disclosed here rather than resolved in either direction. It IS one of the
+  advisory-schema finding arrays (unlike `task_metrics` immediately above — each entry is a claim,
+  `"contrast": "fail"`, not a bare number), it is just written by Gate 5.05 rather than Step 5, so
+  it is not part of the six-array Gate 5 roll-up computed before Gate 5.05 has run — see that
+  block for the reason. Absent means either no UI-shaped file was touched this cycle (ADR-0066
+  §D4, the inherited Gate 5.05 condition) or the array predates this feature — either way, **not
+  malformed**.
+- Contrast, six arrays in one schema with different gate semantics: `checkpoint_reviews`,
+  `tests_written_by`, `suspect_findings`, `budget_findings` and `accessibility_i18n_findings` are
+  never a failure signal; `weakening_findings` always is (ADR-0047 §D5, ADR-0049 §D5, ADR-0051
+  §D2, ADR-0052 §D3, ADR-0066 §D2). `task_metrics` sits outside this contrast entirely — it is not
+  a finding of any kind.
 
 #### Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)
 
@@ -2692,13 +2725,15 @@ Emit: "Gate 4.5: autopilot — red probe, no unattended override, chain aborted 
 Trigger: post Step 5 (coder complete), `current_step = gate_5_review_decision`.
 
 **Advisory roll-up (ADR-0052 §D5 — read this before touching the block below).** `step5-report.json`
-carries six advisory-schema arrays: `weakening_findings`, `requirement_coverage` (its `uncovered`
-list), `checkpoint_reviews`, `tests_written_by`, `suspect_findings` and `budget_findings`. Three of
-those arrived in three consecutive features, each individually justified by "blocking would be too
-noisy, so we surface instead" — and their sum is not individually justified the same way (ADR-0052
-§D5). **A report nobody must act on is a report nobody reads** (ADR-0047 §D7), and the way that
-failure actually arrives here is not one unreadable array, it is six readable ones stacked into a
-Gate 5 summary that gets skimmed. So this block's volume tracks signal, not schema size:
+carries **this specific roll-up's six** advisory-schema arrays: `weakening_findings`,
+`requirement_coverage` (its `uncovered` list), `checkpoint_reviews`, `tests_written_by`,
+`suspect_findings` and `budget_findings` — a seventh, `accessibility_i18n_findings`, exists in the
+same schema but is not one of these six; see below for why. Three of the six arrived in three
+consecutive features, each individually justified by "blocking would be too noisy, so we surface
+instead" — and their sum is not individually justified the same way (ADR-0052 §D5). **A report
+nobody must act on is a report nobody reads** (ADR-0047 §D7), and the way that failure actually
+arrives here is not one unreadable array, it is six readable ones stacked into a Gate 5 summary
+that gets skimmed. So this block's volume tracks signal, not schema size:
 
 - **If all six arrays are empty or absent:** render exactly ONE line — `Advisory findings: none
   across all six categories (weakening, requirement coverage, checkpoint reviews, tests-written-by,
@@ -2721,10 +2756,21 @@ Gate 5 summary that gets skimmed. So this block's volume tracks signal, not sche
 These never gated the transition to this point; this is the human checkpoint where they are
 actually read.
 
-**`task_metrics` is not part of this roll-up and is not rendered at Gate 5 at all (ADR-0064
-§D2, issue #118).** It stays six arrays, not seven — `task_metrics` carries no claim, only a
-number, so there is nothing here for a human to decide. It is written to `step5-report.json` for
-later analysis and read only when someone goes looking.
+**A seventh advisory-schema finding array exists in the same schema: `accessibility_i18n_findings`
+(ADR-0066).** It is deliberately **not** part of this six-array roll-up, and unlike `task_metrics`
+below, the exclusion here is **structural, not semantic** — it carries a claim about the work
+exactly like the other six (`"labels": "fail"` is an assertion, the same shape as a
+`suspect_findings` entry), but it is written by **Gate 5.05**, which runs strictly *after* this
+`AskUserQuestion` has already rendered, so its data cannot retroactively appear in this text. It
+renders its own one-line summary directly at Gate 5.05 instead, the same precedent Gate 5.06's own
+severity table already set for a sub-gate reporting on itself rather than being folded backward
+into Gate 5. See the Gate 5.05 block below for that render and ADR-0066 §D2 for why it never
+blocks either.
+
+**`task_metrics` is not part of this roll-up and is not rendered at Gate 5, or anywhere else, at
+all (ADR-0064 §D2, issue #118).** Its exclusion IS semantic — `task_metrics` carries no claim,
+only a number, so there is nothing here for a human to decide, at this gate or any other. It is
+written to `step5-report.json` for later analysis and read only when someone goes looking.
 
 Use `AskUserQuestion`:
 ```
@@ -2746,7 +2792,7 @@ options:
 
 ---
 
-**Gate 5.05 — UI layout audit (conditional, auto-run)**
+**Gate 5.05 — UI layout audit + accessibility/i18n checklist (conditional, auto-run)**
 
 Trigger: after Gate 5 (review complete or skipped), before Gate 5.1.
 
@@ -2755,12 +2801,55 @@ Check whether any UI files were modified in this cycle:
 git diff --name-only HEAD | grep -E '\.(swift|html|css|tsx|jsx|vue)$'
 ```
 
-- **Output is empty:** emit "Gate 5.05: no UI files changed — skipping layout audit ✓". Proceed to Gate 5.1.
-- **Output non-empty:** emit "Gate 5.05: UI files detected — running ui-layout-audit...". Invoke `Skill(skill="ui-layout-audit")`. **Immediately after ui-layout-audit returns (do NOT wait for user input), proceed to Gate 5.1.**
+- **Output is empty:** emit "Gate 5.05: no UI files changed — skipping layout audit ✓". No
+  `accessibility_i18n_findings` entry is written this cycle — the checklist below inherits this
+  same UI-file condition rather than adding a second one (ADR-0066 §D4: conditional on UI-bearing
+  chains, inert otherwise). Proceed to Gate 5.1.
+- **Output non-empty:** emit "Gate 5.05: UI files detected — running ui-layout-audit...". Invoke
+  `Skill(skill="ui-layout-audit")`. **Immediately after ui-layout-audit returns (do NOT wait for
+  user input),** walk the accessibility/i18n checklist below and record a result.
 
 No AskUserQuestion — the skill auto-applies P1/P2 fixes and reports P3 as recommendations.
 
-**[Autopilot default: same conditional logic — auto-run if UI files present. Emit: "Gate 5.05: autopilot — ui-layout-audit <ran|skipped> ✓"]**
+**Accessibility/i18n checklist (ADR-0066 §D1/§D3).** Against the same diff `ui-layout-audit` just
+reviewed, assess each of the seven named items below and record `pass`, `fail`, or
+`not-applicable` with a one-line note:
+- `labels` — do interactive elements carry a meaningful accessible label?
+- `contrast` — does foreground/background contrast meet a reasonable legibility bar?
+- `dynamic-type-or-scaling` — does text respect dynamic type / user scaling instead of a fixed size?
+- `keyboard-or-assistive-tech-reachability` — is every interactive element reachable without a
+  pointer (keyboard focus order, VoiceOver/screen-reader labeling, or equivalent)?
+- `i18n-unicode-multibyte` — does the code handle Unicode and multibyte text rather than assuming
+  single-byte ASCII?
+- `i18n-no-english-centric-examples` — are examples and test fixtures free of hardcoded
+  English-centric assumptions?
+- `i18n-no-locale-formatting-assumed` — is date/number/currency formatting not hardcoded to one
+  locale's convention?
+
+Write every item to the `accessibility_i18n_findings` array in `step5-report.json`, then emit a
+one-line summary directly at this gate — e.g. "Gate 5.05: accessibility/i18n — 5 pass, 2 fail
+(labels, contrast) — see step5-report.json for detail ✓". **This records an answer; it does not
+block** (ADR-0066 §D2 — a deliberate divergence from the SPEC's "accessibility is a gate, not an aspiration"
+wording, disclosed here rather than silently resolved in either direction: every item
+above is a model's judgement about its own UI work, the same generator/verifier problem ADR-0049
+exists to fix, and blocking on that self-assessment would gate on noise, not signal). Proceed to
+Gate 5.1 regardless of any `fail` entries — Gate 5's review decision already happened and there is
+no re-review loop here.
+
+**No detector backs this checklist (ADR-0066 §D5).** Contrast ratios need rendering, label
+meaningfulness needs judgement, and "English-centric example" is not a grep pattern — a
+grep-based accessibility checker would produce confident nonsense. This is the model reading the
+diff and recording its own judgement, the same evidence class `checkpoint_reviews` and
+`suspect_findings` already accept at this same boundary.
+
+**Scope, stated once so it does not drift into architecture (ADR-0066 §D3).** The i18n items above
+catch the systematic omission the SPEC describes — assumed ASCII, assumed English — and nothing
+more. **Do not** introduce an i18n framework, a string-catalogue convention, or a locale strategy:
+those are a project's own architectural choice, not something this gate imposes.
+
+**[Autopilot default: same conditional logic — auto-run if UI files present, checklist recorded,
+never blocking. Emit: "Gate 5.05: autopilot — ui-layout-audit <ran|skipped>, accessibility/i18n
+<recorded|skipped> ✓"]**
 
 ---
 

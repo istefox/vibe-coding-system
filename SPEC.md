@@ -1,41 +1,41 @@
-# SPEC — Licence and provenance scanning
+# SPEC — Accessibility and i18n gates
 
-Source: GitHub issue #119
+Source: GitHub issue #120
 
 ## Objectives
-1. Give publishing repos a licence-contamination check.
-2. Add the suspicious-output procedure to the publication audit.
-3. Preserve attribution rather than stripping it.
+1. Turn accessibility from a template instruction into a checked gate result.
+2. Add internationalisation items to the review checklist.
 
 ## Scope
-In: an opt-in licence-scan CI job; new checklist steps in the `clean-public-repo` audit phase; a new test file in both CI registries.
-Out: buying or integrating a commercial licence scanner; legal advice.
+In: an accessibility checklist result at c2c Gate 5.05 for UI-bearing chains; i18n items in `reviewer.md`; a new test file in both CI registries.
+Out: running an automated accessibility auditing tool; WCAG conformance certification.
 
 ## Stack
-GitHub Actions + Markdown skill instructions.
+Markdown skill instructions + agent checklist.
 
 ## Architecture
-- Modified: `staging/project-templates/ci/ci.yml` — opt-in licence-scan job, absent by default.
-- Modified: `staging/plugin/skills/clean-public-repo/SKILL.md` audit phase — the suspicious-output procedure: distinctive comments, author names, unusually large or unusually clean blocks; search a unique string before keeping it.
+- Modified: `concept-to-code/SKILL.md` Gate 5.05, which currently auto-runs the UI layout audit (`concept-to-code/SKILL.md:1745`) — it must now assert a checklist result.
+- Modified: `staging/plugin/agents/reviewer.md` — i18n items.
+- Modified: the `step5-report.json` schema — additive accessibility result.
 - New: test file in both CI registries.
 
 ## Data model
-None.
+`accessibility: [{item, status}]` where item covers labels on interactive elements, contrast, dynamic-type/scaling, keyboard or VoiceOver reachability, and focus order. Additive.
 
 ## API / Interfaces
-Report-only. The existing never-falsify-authorship invariant is preserved and must be asserted by a test: if generated output carries an author name or a known-algorithm reference, it is moved to a proper attribution section, never deleted.
+The gate reports; it does not block an unattended run. A missing item is recorded in `step5-report.json` and in the morning report.
 
 ## UI flows
-Findings appear in the `clean-public-repo` audit report.
+None beyond the gate output.
 
 ## Edge cases
-- The CI job must be absent by default in generated repos.
-- The audit must not regress the anonymisation behaviour already specified in ADR-0011 and ADR-0026.
-- Attribution preservation and tool-trace removal must not conflict: removing a "generated with" trailer is not the same as removing an upstream author credit.
+- A chain touching no UI files must produce no accessibility section — the gate is inert otherwise.
+- The i18n items must cover non-ASCII input handling, hardcoded English user-facing strings where a catalogue exists, and Latin-script assumptions in validation.
+- The gate must not become blocking on the unattended path.
 
 ## Success criteria
-- [ ] The CI job is absent by default and present when opted in.
-- [ ] The `clean-public-repo` audit checklist contains the new anchors.
-- [ ] The never-falsify-authorship invariant is asserted by a test.
-- [ ] Existing anonymisation behaviour is unchanged.
+- [ ] A chain touching no UI files produces no accessibility section.
+- [ ] A chain touching UI files records a checklist result with each item marked.
+- [ ] The reviewer checklist contains the i18n anchors.
+- [ ] Nothing blocks on an unattended path.
 - [ ] The new test file is registered in BOTH CI registries.
