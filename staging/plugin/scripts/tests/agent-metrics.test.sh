@@ -425,7 +425,7 @@ else
   bad "GG1: agent-metrics is not in docs-ci.yml's explicit harness list — append it after canonical-mechanism"
 fi
 
-if printf '%s' "$DOCSCI_LOOP" | grep -qE 'canonical-mechanism agent-metrics;'; then
+if printf '%s' "$DOCSCI_LOOP" | grep -qE 'canonical-mechanism agent-metrics[[:space:];]'; then
   ok "GG1b: agent-metrics is appended immediately after canonical-mechanism, as instructed"
 else
   bad "GG1b: agent-metrics is present but not positioned immediately after canonical-mechanism"

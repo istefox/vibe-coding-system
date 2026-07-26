@@ -157,6 +157,37 @@ The minimal path works with `git` only.
 
 ---
 
+## Suspicious-output check (licence & provenance) — a human procedure, not a script
+
+Distinct from tool-marker detection above: this is about **licence contamination**, not
+attribution markers. AI-generated output can legitimately reproduce a licensed snippet without
+saying so, and open source does not mean public domain (ADR-0065). **No detector script for this
+exists, and none is planned.** Deciding a block of code "looks verbatim" is a judgement about
+distinctiveness that no pattern matcher makes, and confirming a suspicion needs a network search —
+neither is a reproducible CI check (ADR-0065 §D2). It stays a checklist item the human performs
+during this audit, run alongside the detector above rather than replacing it.
+
+**Procedure — for any block that looks verbatim:** distinctive comments, author names, or unusual
+identifiers that read like they came from somewhere else.
+
+1. Pick a short, unique string from the block — an unusual identifier, an exact comment, an error
+   message — not common boilerplate.
+2. Search that string. If it matches a licensed project, read that licence before deciding
+   anything.
+3. **Preserve attribution rather than stripping it.** If the match carries an upstream author name
+   or a known-algorithm reference, move it to a proper attribution section — never delete it.
+   Deleting a found attribution is not cleanup; it is exactly the falsification the §Ethical
+   framing above already refuses.
+4. If the licence is incompatible with this repo's own licence, that is a decision for the human
+   publishing the repo. This skill does not resolve it.
+
+**Not legal advice.** Like the licence-scan CI job (ADR-0065 §D4), this procedure is an input to a
+human decision about licensing, never a determination.
+
+Finding nothing here does not mean the tree is clean or compliant: it means nothing looked verbatim to the human who read it, which is a narrower claim than "no contamination exists".
+
+---
+
 ## Hybrid action
 
 **Principle: report first, remove only on per-category/per-item confirmation.**
