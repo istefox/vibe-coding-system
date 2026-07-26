@@ -21,7 +21,7 @@ Auto-generated roadmap from issues labeled `prep` (ADR-0023).
 - [x] Agent tool scoping per blueprint section 3  (issue #40)  (completed: 2026-07-11)
 
 ### Phase 2 — agentic-spec integration (report: docs/books/INTEGRATION-REPORT-agentic-spec.md)
-- [ ] Secrets and dependency gate: content scan, lockfile check, CI steps  (issue #100)
+- [x] Secrets and dependency gate: content scan, lockfile check, CI steps  (issue #100)  (completed: 2026-07-26)
 - [ ] Wire the anti-test-weakening detector into every unattended path  (issue #101)
 - [ ] Requirement IDs in SPEC and a coverage check  (issue #102)
 - [ ] Generator/verifier separation: dispatch the tester, deny coder test writes  (issue #103)
