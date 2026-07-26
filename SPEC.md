@@ -1,42 +1,41 @@
-# SPEC — Agent-level instrumentation metrics
+# SPEC — Licence and provenance scanning
 
-Source: GitHub issue #118
+Source: GitHub issue #119
 
 ## Objectives
-1. Record the cheap control metrics the system currently cannot see.
-2. Surface them where the operator already looks.
-3. Avoid building a productivity dashboard.
+1. Give publishing repos a licence-contamination check.
+2. Add the suspicious-output procedure to the publication audit.
+3. Preserve attribution rather than stripping it.
 
 ## Scope
-In: four metrics per task in `step5-report.json` and `nightly-report.json`; a `vibe-status` section; a new test file in both CI registries.
-Out: per-subagent token cost, which is not locally observable (`usage-report.py:11-14`); any ROI or productivity claim.
+In: an opt-in licence-scan CI job; new checklist steps in the `clean-public-repo` audit phase; a new test file in both CI registries.
+Out: buying or integrating a commercial licence scanner; legal advice.
 
 ## Stack
-Markdown skill instructions + the existing JSON report writers + `vibe-status`.
+GitHub Actions + Markdown skill instructions.
 
 ## Architecture
-- Modified: `concept-to-code/SKILL.md` Step 5 — emit the metrics.
-- Modified: `nightly-autopilot/SKILL.md` — carry them into the morning report.
-- Modified: `staging/plugin/skills/vibe-status/SKILL.md` — render them for the most recent chain.
+- Modified: `staging/project-templates/ci/ci.yml` — opt-in licence-scan job, absent by default.
+- Modified: `staging/plugin/skills/clean-public-repo/SKILL.md` audit phase — the suspicious-output procedure: distinctive comments, author names, unusually large or unusually clean blocks; search a unique string before keeping it.
 - New: test file in both CI registries.
 
 ## Data model
-Per task: `test_count_delta`, `deleted_lines`, `iteration_count`, `elapsed_seconds`. All additive; absent means "not recorded".
+None.
 
 ## API / Interfaces
-JSON fields only.
+Report-only. The existing never-falsify-authorship invariant is preserved and must be asserted by a test: if generated output carries an author name or a known-algorithm reference, it is moved to a proper attribution section, never deleted.
 
 ## UI flows
-`vibe-status` renders a metrics section when present and omits it entirely when absent.
+Findings appear in the `clean-public-repo` audit report.
 
 ## Edge cases
-- A report missing the fields must still be read without error — the backward-compatibility path.
-- A chain with no tests has a `test_count_delta` of 0, not null.
-- The ADR must state that the spec declares productivity measurement an open gap and that this instruments for control, not for proving ROI.
+- The CI job must be absent by default in generated repos.
+- The audit must not regress the anonymisation behaviour already specified in ADR-0011 and ADR-0026.
+- Attribution preservation and tool-trace removal must not conflict: removing a "generated with" trailer is not the same as removing an upstream author credit.
 
 ## Success criteria
-- [ ] A completed Step 5 writes the four fields.
-- [ ] A report missing them is still read without error.
-- [ ] `vibe-status` renders them when present and omits the section when absent.
-- [ ] No ROI or productivity claim is made anywhere in the output.
+- [ ] The CI job is absent by default and present when opted in.
+- [ ] The `clean-public-repo` audit checklist contains the new anchors.
+- [ ] The never-falsify-authorship invariant is asserted by a test.
+- [ ] Existing anonymisation behaviour is unchanged.
 - [ ] The new test file is registered in BOTH CI registries.
