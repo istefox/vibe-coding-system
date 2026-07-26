@@ -1,45 +1,43 @@
-# SPEC — Reward-hacking detectors: literal assertions, deleted symbols, swallowed errors
+# SPEC — Per-task diff budget and scope check
 
-Source: GitHub issue #105
-
-Runs after issue #101, which puts `weakening-scan.sh` on every path; this feature adds detectors to a scanner already being called everywhere.
+Source: GitHub issue #106
 
 ## Objectives
-1. Detect tests forced green by a hardcoded expected value.
-2. Detect tests that assert nothing meaningful.
-3. Detect deletion of a public symbol outside the declared task scope.
-4. Detect a swallowed error.
+1. Give each plan task an optional expected size.
+2. Compare the actual diff against it at each Step 5 checkpoint.
+3. Name files touched outside every declared task scope.
 
 ## Scope
-In: four new report-only detector outputs in `weakening-scan.sh`; extension of its existing harness.
-Out: making any of them blocking; auto-fixing anything.
+In: an additive budget line in the architect's plan template; a checkpoint comparison in c2c Step 5; report output; a new test file in both CI registries.
+Out: blocking on overage; reworking the plan format beyond the additive line.
 
 ## Stack
-Bash 3.2 + awk, matching the existing implementation of `weakening-scan.sh`, which is a single awk program over a unified diff.
+Markdown skill instructions plus bash 3.2 over `git diff --stat`.
 
 ## Architecture
-Modified: `staging/plugin/skills/review-triage-fix/scripts/weakening-scan.sh` and its harness. Language gating for the error-path detector follows the four stacks declared in `staging/user/rules/`.
+- Modified: the architect's plan template (optional `Budget:` line per task: files touched, approximate +/- lines).
+- Modified: `concept-to-code/SKILL.md` Step 5 checkpoint.
+- Modified: the `step5-report.json` schema — additive `budget_overages`.
+- New: test file in both CI registries.
 
 ## Data model
-Four new output lines, same shape as the existing `WEAKENED` line:
-`SUSPECT<TAB><file><TAB>literal-assertion-added|zero-assertion-test|deleted-public-symbol|swallowed-error`
+`budget_overages: [{task, declared_files, actual_files, declared_lines, actual_lines, out_of_scope_files[]}]`. Additive.
 
 ## API / Interfaces
-Unchanged: unified diff on stdin, exit 0 always, `CLEAN` when nothing is found. `SUSPECT` is advisory and distinct from `WEAKENED`, so callers can treat the two severities differently.
+A reporter: it never blocks. The rationale is stated in the issue — a budget that is wrong more often than the coder would be ignored, which is worse than not having one.
 
 ## UI flows
-None.
+Overage surfaces in the orchestrator output and in the report; on unattended paths it reaches the morning report.
 
 ## Edge cases
-- A parameterised test using literal table values must NOT trigger `literal-assertion-added` — this is the documented false-positive corpus and needs an explicit negative fixture.
-- A symbol removal accompanied by a `PATTERN: REMOVE` header with a zero-hit caller check must not fire.
-- A catch block that rethrows, or that logs, must not fire.
-- The existing `CLEAN` contract and `WEAKENED` behaviour must be byte-identical for inputs that contain no new-detector matches.
+- A plan with no budget lines produces no output and no error (inert).
+- A task that legitimately touches many files (a rename sweep) will over-report — acceptable, because it does not block.
+- Deleted files count toward files touched.
+- The comparison must be per checkpoint batch, not cumulative across the whole chain.
 
 ## Success criteria
-- [ ] Each of the four detectors fires on a positive fixture.
-- [ ] Each stays silent on a negative fixture.
-- [ ] A parameterised test does not trigger `literal-assertion-added`.
-- [ ] Existing `WEAKENED` and `CLEAN` behaviour is unchanged.
-- [ ] Every new assertion has been seen RED before being made green.
-- [ ] Any new test file is registered in BOTH CI registries.
+- [ ] A diff exceeding a declared budget produces a report entry naming the task and the overage.
+- [ ] A plan with no budget produces no output and no error.
+- [ ] A file touched outside all declared scopes is named.
+- [ ] Nothing blocks.
+- [ ] The new test file is registered in BOTH CI registries.
