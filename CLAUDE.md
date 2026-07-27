@@ -878,3 +878,42 @@ Key architectural decisions:
   `review-triage-fix` are untouched — the c2c gate halts before any of them gets a turn.
 
 Detail: `docs/architecture/ADR-0048-102-requirement-ids-coverage.md`.
+
+## Decisions from the interview-driver invocation fix (ADR-0067)
+
+`interview-driver` loses `disable-model-invocation: true`. That flag restricts a skill to user
+invocation, and `concept-to-code` Step 1 / Step H1 dispatch the skill through the Skill tool, so the
+chain's greenfield entry point failed outright with `cannot be used with Skill tool due to
+disable-model-invocation`. Supersedes issue #56 / PR #95 (`4baf9b2`) **in part**, for this one file.
+
+- **The rule already existed and every guard for it was instance-level.** "A skill invoked from a
+  chain must not carry the flag" is recorded in `docs/guida-workflow-orchestrazione.md` §10, cited
+  by ADR-0008 and ADR-0010, and mechanically enforced by negative anchors in `design-brainstorm`
+  and `clean-public-repo`. #56 violated it on a third skill anyway, because nothing checked the
+  **class**. `skill-text-corrections.test.sh` **F6** now derives the chain-invokable skill list from
+  `concept-to-code` §25 at run time and asserts none of them carries the flag, with a count guard
+  against a vacuous derivation. Seen RED against a reintroduced flag.
+- **The chain worked by accident from #29 to #95.** The flag was lost in the issue-#29 staging
+  refresh and the chain quietly came to depend on its absence. #56 correctly restored a documented
+  blueprint default and, in doing so, broke Step 1. The lesson is not "do not restore defaults" —
+  it is that a file's callers are part of its contract, and #56 checked the file against the
+  blueprint without checking it against `concept-to-code` §25, which names this skill as
+  chain-invokable, or against the skill's own `description`, which says the same.
+- **There is no settings-level exemption, verified against the CC 2.1.220 binary.** Frontmatter
+  locks the skill state to on/name-only; `skillOverrides` only ever disables further. The
+  contradiction had to be resolved in one of the two disagreeing files, not in configuration.
+- **Scoped to one skill.** `fastapi-react-vibe`, `goal-loop` and `research-prompt` keep the flag;
+  no chain invokes any of them. `interview-driver` was the only chain-invoked carrier.
+- **Residual risk accepted and bounded:** the model can self-invoke the interview again. No
+  unattended path wants it (`nightly-autopilot` Phase P uses `spec-from-issue` precisely because the
+  interview is interactive, `autopilot-build` starts post-SPEC, c2c autopilot hard-aborts without
+  `SPEC.md`), so a stray invocation costs a turn in an attended session. A dead Step 1 costs the
+  chain's whole greenfield entry.
+- **`skill-text-corrections.test.sh` F5 changed direction, and that is the reusable part.** It
+  banned the literal string `Three staged skills carry that flag` — yesterday's specific wrong
+  wording. Under this ADR the count legitimately returns to three, so the ban would have fired on
+  the *correct* sentence. It is now a positive check of the carrier list against the files. Same
+  family as the ADR-0043 direction lesson: a guard written against one past error does not
+  generalise, ask what it would do when the text changes for a good reason.
+
+Detail: `docs/architecture/ADR-0067-interview-driver-model-invocation.md`.

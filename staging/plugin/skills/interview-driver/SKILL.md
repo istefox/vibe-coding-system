@@ -1,8 +1,9 @@
 ---
 name: interview-driver
 description: This skill should be used when starting a new project or non-trivial feature and a SPEC.md must be produced by interviewing the user in depth with the AskUserQuestion tool. Triggers include "interview me", "let's spec it", "new project from scratch", and invocation from the concept-to-code chain orchestrator (Step 1).
-disable-model-invocation: true
 ---
+<!-- No `disable-model-invocation`, deliberately (ADR-0067): concept-to-code Step 1 / Step H1
+     dispatch this skill through the Skill tool, which that flag blocks outright. -->
 
 The user wants to build: $ARGUMENTS
 
