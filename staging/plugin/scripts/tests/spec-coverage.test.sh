@@ -666,11 +666,18 @@ else
   bad "RI1: interview-driver/SKILL.md does not mention R-01 alongside success criteria (Task 8)"
 fi
 
+# RI2 (inverted 2026-07-27, ADR-0067): this was a forward guard asserting the flag was PRESENT, on
+# the issue-#56 /loop safety rationale. That rationale collided with concept-to-code Step 1, which
+# dispatches this skill through the Skill tool — a flagged skill cannot be invoked that way, so the
+# chain's greenfield entry point failed outright. The flag is now deliberately absent here and here
+# only; fastapi-react-vibe / goal-loop / research-prompt keep theirs. The authoritative pair of
+# assertions lives in skill-text-corrections.test.sh section F (F1 absence, F2 presence); this stays
+# as a second site so a future restore fails in both harnesses rather than silently in one.
 RI2_CLOSE=$(awk 'NR>1 && $0=="---"{print NR; exit}' "$IVD")
 if [ -n "$RI2_CLOSE" ] && sed -n "2,${RI2_CLOSE}p" "$IVD" | grep -qx 'disable-model-invocation: true'; then
-  ok "RI2: forward guard — interview-driver/SKILL.md frontmatter still carries disable-model-invocation: true"
+  bad "RI2: interview-driver/SKILL.md carries disable-model-invocation: true again — that breaks c2c Step 1 (ADR-0067); this is a forward guard, not fix evidence for this feature"
 else
-  bad "RI2: interview-driver/SKILL.md is missing disable-model-invocation: true — the /loop safety design (issue #56) — this is a forward guard, not fix evidence for this feature"
+  ok "RI2: forward guard — interview-driver/SKILL.md frontmatter carries no disable-model-invocation (ADR-0067)"
 fi
 
 if grep -qF 'R-01' "$SFI" && grep -qi 'success criteria' "$SFI"; then

@@ -272,28 +272,43 @@ else
 fi
 
 # =====================================================================================
-# Section F (issue #56) -- disable-model-invocation restored on the two skills that lost it
+# Section F (issue #56, amended by ADR-0067) -- who carries disable-model-invocation
 # =====================================================================================
 # Both skills carried the flag until the #29 staging refresh mirrored deployment wholesale
-# (ADR-0025 Consequences flagged it and left it, being out of that issue's scope). Without it the
-# model may invoke them on its own: interview-driver seizes the turn with AskUserQuestion, and
-# fastapi-react-vibe writes a multi-file scaffold. Blueprint sec. 8's own templates for both skills
-# show the flag, so this restores a documented default rather than inventing one.
-# The flag's other documented effect is a trade-off, not a bug (blueprint changelog 2026-07-09,
-# CC v2.1.196): a scheduled /loop fire does NOT execute a flagged skill, it pastes it as plain text.
-# Neither of these two is a /loop target, so the safety side wins here.
+# (ADR-0025 Consequences flagged it and left it, being out of that issue's scope). #56 restored it
+# on both. ADR-0067 then removed it from interview-driver ALONE, because the flag makes a skill
+# user-invocable only and concept-to-code Step 1 / Step H1 dispatch interview-driver through the
+# Skill tool -- so the restore made the chain's first step permanently unreachable
+# ("cannot be used with Skill tool due to disable-model-invocation"). It had worked before #56 only
+# because the flag was missing. There is no settings-level escape hatch: the frontmatter key locks
+# the skill state to on/name-only, and skillOverrides can only disable further, never re-enable.
+#
+# F1 is therefore an INVERTED assertion, and deliberately so. Do not "restore" the flag on
+# interview-driver: that reintroduces the regression. fastapi-react-vibe keeps it (F2) -- no chain
+# invokes it and it writes a multi-file scaffold unprompted.
+# The flag's other documented effect (blueprint changelog 2026-07-09, CC v2.1.196): a scheduled
+# /loop fire does NOT execute a flagged skill, it pastes it as plain text. Removing it from
+# interview-driver also closes that trap for `/loop … /interview-driver`.
 
-for _pair in "interview-driver" "fastapi-react-vibe"; do
-  _f="$STAGING/plugin/skills/$_pair/SKILL.md"
-  _close=$(awk 'NR>1 && $0=="---"{print NR; exit}' "$_f" 2>/dev/null)
-  if [ -n "$_close" ] && sed -n "2,${_close}p" "$_f" | grep -qx 'disable-model-invocation: true'; then
-    ok "F: $_pair carries disable-model-invocation: true in frontmatter"
-  else
-    bad "F: $_pair should carry disable-model-invocation: true (model can self-invoke it today)"
-  fi
-done
+# F1 (inverted): interview-driver must NOT carry the flag -- the chain has to invoke it.
+_f="$STAGING/plugin/skills/interview-driver/SKILL.md"
+_close=$(awk 'NR>1 && $0=="---"{print NR; exit}' "$_f" 2>/dev/null)
+if [ -n "$_close" ] && sed -n "2,${_close}p" "$_f" | grep -qx 'disable-model-invocation: true'; then
+  bad "F1: interview-driver must NOT carry disable-model-invocation (c2c Step 1 cannot invoke it)"
+else
+  ok "F1: interview-driver carries no disable-model-invocation, so the chain can invoke it"
+fi
 
-# F3: both files still parse as frontmatter after the insertion.
+# F2: fastapi-react-vibe still carries it -- untouched by ADR-0067.
+_f="$STAGING/plugin/skills/fastapi-react-vibe/SKILL.md"
+_close=$(awk 'NR>1 && $0=="---"{print NR; exit}' "$_f" 2>/dev/null)
+if [ -n "$_close" ] && sed -n "2,${_close}p" "$_f" | grep -qx 'disable-model-invocation: true'; then
+  ok "F2: fastapi-react-vibe carries disable-model-invocation: true in frontmatter"
+else
+  bad "F2: fastapi-react-vibe should carry disable-model-invocation: true (model can self-invoke it today)"
+fi
+
+# F3: both files still parse as frontmatter after the edit.
 frontmatter_ok "$STAGING/plugin/skills/interview-driver/SKILL.md" \
   && ok "F3: interview-driver frontmatter still parses" \
   || bad "F3: interview-driver frontmatter should still parse"
@@ -301,13 +316,58 @@ frontmatter_ok "$STAGING/plugin/skills/fastapi-react-vibe/SKILL.md" \
   && ok "F4: fastapi-react-vibe frontmatter still parses" \
   || bad "F4: fastapi-react-vibe frontmatter should still parse"
 
-# F5: the blueprint sentence that names which skills carry the flag must not still name
-# project-bootstrap, retired from staging by ADR-0025. It named three skills, and was wrong about
-# all three: two had lost the flag and one no longer existed.
-if grep -q 'Three staged skills carry that flag' "$STAGING/../docs/vibe-coding-system.md"; then
-  bad "F5: blueprint still claims 'Three staged skills carry that flag' (false on all three)"
+# F5: the blueprint sentence naming the flag carriers must match the files. It has been wrong twice
+# already -- it named project-bootstrap after ADR-0025 retired it, and it named two skills that had
+# lost the flag. Asserted POSITIVELY (the three real carriers present, interview-driver absent)
+# rather than by banning the stale wording: the count in that sentence legitimately returns to
+# "three" under ADR-0067, so a string ban would now fire on the CORRECT sentence.
+_BP="$STAGING/../docs/vibe-coding-system.md"
+_LOOPLINE=$(grep -n 'staged skills carry that flag' "$_BP" | head -1 | cut -d: -f1)
+if [ -n "$_LOOPLINE" ]; then
+  _S=$(sed -n "${_LOOPLINE}p" "$_BP")
+  if printf '%s' "$_S" | grep -qF '`fastapi-react-vibe`' \
+     && printf '%s' "$_S" | grep -qF '`goal-loop`' \
+     && printf '%s' "$_S" | grep -qF '`research-prompt`' \
+     && ! printf '%s' "$_S" | grep -qF '`interview-driver`, `fastapi-react-vibe`'; then
+    ok "F5: blueprint's flag-carrier list matches the files (three carriers, interview-driver out)"
+  else
+    bad "F5: blueprint's flag-carrier list disagrees with the files"
+  fi
 else
-  ok "F5: blueprint's stale flag-carrier claim is corrected"
+  bad "F5: blueprint no longer carries the /loop flag-carrier sentence at all"
+fi
+
+# F6 (ADR-0067, generalising guard): NO skill that concept-to-code declares chain-invokable may
+# carry disable-model-invocation. The rule is not new — docs/guida-workflow-orchestrazione.md §10
+# has carried it as a named troubleshooting entry since the design-brainstorm work, and
+# design-brainstorm/ and clean-public-repo/ both enforce it with their own negative anchors. #56
+# broke it on interview-driver anyway, because nothing checked the class, only the instances.
+# The skill list is DERIVED from c2c §25 rather than hardcoded here, so adding a chain-invoked skill
+# extends the guard automatically.
+_C2C="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+_INVOKABLE_LINE=$(grep -n 'skills invokable inside this chain' "$_C2C" | head -1 | cut -d: -f1)
+_F6_CHECKED=0
+_F6_BAD=""
+if [ -n "$_INVOKABLE_LINE" ]; then
+  # Backticked tokens on that line that are also real staged skill directories. The line also
+  # backticks agent names and gate labels; the directory test filters them out.
+  for _s in $(sed -n "${_INVOKABLE_LINE}p" "$_C2C" | tr '`' '\n' | sed -n 'n;p' | sort -u); do
+    _sf="$STAGING/plugin/skills/$_s/SKILL.md"
+    [ -f "$_sf" ] || continue
+    _F6_CHECKED=$((_F6_CHECKED + 1))
+    _c=$(awk 'NR>1 && $0=="---"{print NR; exit}' "$_sf" 2>/dev/null)
+    if [ -n "$_c" ] && sed -n "2,${_c}p" "$_sf" | grep -qx 'disable-model-invocation: true'; then
+      _F6_BAD="$_F6_BAD $_s"
+    fi
+  done
+fi
+# Count guard: a derived list that silently resolves to nothing reads exactly like full coverage.
+if [ "$_F6_CHECKED" -lt 5 ]; then
+  bad "F6: only $_F6_CHECKED chain-invokable skills resolved from c2c §25 (expected >= 5) — the derivation broke, the guard is vacuous"
+elif [ -n "$_F6_BAD" ]; then
+  bad "F6: chain-invokable skill(s) carry disable-model-invocation, which makes c2c unable to invoke them:$_F6_BAD"
+else
+  ok "F6: none of the $_F6_CHECKED chain-invokable skills carries disable-model-invocation"
 fi
 
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
