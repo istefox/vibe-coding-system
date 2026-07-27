@@ -89,8 +89,8 @@ else
 fi
 
 # =====================================================================================
-# Test 4: broken .py reported, and nothing is left behind. py_compile writes __pycache__ next
-# to the source unless cfile is redirected; a check must not litter the tree it inspects.
+# Test 4: broken .py reported, and nothing is left behind. The builtin compile() produces no
+# bytecode at all; a check must not litter the tree it inspects.
 mkdir -p "$TMP/py"
 printf 'def f(:\n' > "$TMP/py/broken.py"
 run "$TMP/py/broken.py"
@@ -100,6 +100,31 @@ if [ "$RC" -eq 0 ] && [ -n "$C4" ] && [ "$LEFTOVER" -eq 0 ]; then
   ok "4: broken .py reported, no __pycache__ left behind"
 else
   bad "4: .py case failed (rc=$RC ctx-empty=$([ -z "$C4" ] && echo yes || echo no) pycache=$LEFTOVER)"
+fi
+
+# Test 4b: a syntactically valid .py stays silent, and still leaves nothing behind. Test 4 alone
+# cannot see a check that fails on EVERYTHING: it asserts only that a broken file is reported,
+# which a permanently-failing check satisfies for the wrong reason. That is what happened — the
+# previous py_compile/cfile=/dev/null form raised FileExistsError on every .py under Python 3.14
+# (non-regular cfile, py_compile.py:140, before the source is read), and this harness stayed
+# green. A negative case needs its positive twin or it pins nothing.
+printf 'x = 1\n\n\ndef f(a):\n    return a + 1\n' > "$TMP/py/good.py"
+run "$TMP/py/good.py"
+LEFTOVER4B=$(ls -a "$TMP/py" 2>/dev/null | grep -c '__pycache__')
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ] && [ "$LEFTOVER4B" -eq 0 ]; then
+  ok "4b: valid .py stays silent, no __pycache__ left behind"
+else
+  bad "4b: valid .py produced output (rc=$RC out='$OUT' pycache=$LEFTOVER4B)"
+fi
+
+# Test 4c: the encoding cookie is honoured. compile() is fed bytes, not a locale-decoded string,
+# so a PEP 263 declaration still governs how the source is read.
+printf '# -*- coding: utf-8 -*-\ns = "caffè"\n' > "$TMP/py/cookie.py"
+run "$TMP/py/cookie.py"
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
+  ok "4c: .py with a PEP 263 encoding cookie stays silent"
+else
+  bad "4c: encoding-cookie .py produced output (rc=$RC out='$OUT')"
 fi
 
 # =====================================================================================

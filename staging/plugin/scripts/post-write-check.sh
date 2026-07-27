@@ -69,10 +69,14 @@ case "$FILE_PATH" in
     capture "bash -n" bash -n "$FILE_PATH"
     ;;
   *.py)
-    # cfile=/dev/null on purpose: `python3 -m py_compile` would write __pycache__ into the
-    # project tree. A check must not leave anything behind.
-    capture "py_compile" python3 -c \
-      "import py_compile,sys; py_compile.compile(sys.argv[1], cfile='/dev/null', doraise=True)" \
+    # The builtin compile() on purpose, not py_compile: it produces no bytecode at all, so there
+    # is nothing to redirect and nothing left behind in the project tree. py_compile with
+    # cfile=/dev/null used to serve that purpose, but Python 3.14 rejects a non-regular cfile
+    # (FileExistsError from py_compile.py before the source is even read), which made the check
+    # fail on every .py file regardless of content. Bytes input keeps PEP 263 encoding cookies
+    # honoured; a SyntaxError still carries file, line and offset.
+    capture "compile" python3 -c \
+      "import sys; compile(open(sys.argv[1],'rb').read(), sys.argv[1], 'exec')" \
       "$FILE_PATH"
     ;;
   *.json)
