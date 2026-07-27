@@ -52,18 +52,27 @@ no closing keyword); stray non-canonical branches/worktrees from parallel agent 
 repo. This phase is operational (merge/deploy/cleanup), not a new concept-to-code chain per item —
 project-conductor's per-item SPEC→ADR→plan→impl cycle does not apply here.
 
-- [ ] Merge train: PR #124→#145 bottom-up, one at a time. Each merge deletes its head branch,
-  which auto-retargets the next PR's base to `main`; wait for that PR's required checks
-  (`ci`, `markdownlint`, `links`) to go green before merging it. Stop on first red (circuit
-  breaker) and leave the remainder untouched — do not skip ahead.
-- [ ] Close issues #100-120 with a reference to the PR that merged each, since no PR body carries
-  a `Closes #NNN` keyword.
-- [ ] Deploy: run `staging/sync-to-claude.sh` (dry-run diff first, then `--apply`) from `main`
-  once the merge train completes, so the 21 features' hooks/skills/scripts actually go live in
-  `~/.claude` instead of sitting inert in `staging/`.
-- [ ] Debris: report (never auto-delete, per ADR-0062 §D3 and the standing "never delete without
-  explicit confirmation" rule) the non-canonical local branches/worktrees found in the 2026-07-27
-  audit (`local-102-work`, `my-101-work`, five `worktree-agent-*`) so a human can decide whether
-  to remove them.
-- [ ] Final verification: full `staging/plugin/scripts/tests/*.test.sh` harness green on `main`
-  post-merge, docs-ci registry parity holds.
+- [x] Merge train: PR #124→#145 bottom-up  (completed: 2026-07-27). Correction found live: this
+  repo does NOT auto-retarget a stacked PR after its base branch is deleted — it auto-CLOSES the
+  next PR instead, and a closed PR with a deleted base cannot be reopened or re-edited. Fixed by
+  recreating each PR fresh against `main` (the feature branch itself survives; only the PR wrapper
+  was lost). Circuit breaker fired once for real: PR #147 (#102) had a genuine pre-existing
+  `markdownlint` MD010 hard-tab violation in ADR-0048 that had never run CI before (stacked PRs
+  never got CI until this train gave each one a real `main` base) — fixed with `<TAB>` placeholders
+  matching ADR-0046/0047's own convention, then the train resumed.
+- [x] Close issues #100-120  (completed: 2026-07-27). Done inline by the merge-train script per PR.
+- [x] Deploy: `staging/sync-to-claude.sh --apply`  (completed: 2026-07-27). 27 changed + 16 new
+  files. Two hooks needed the documented manual `settings.json` wiring (`test-write-scope.sh` on
+  `PreToolUse Edit|Write|MultiEdit`, `precompact-guard.sh` on the new `PreCompact` key) — added by
+  hand per the sync script's own "MANUAL STEP" output.
+- [x] Debris: reported and removed  (completed: 2026-07-27). All 10 non-canonical
+  branches/worktrees (`local-102-work`, `my-101-work`, 8 `worktree-agent-*`) verified at
+  zero unique commits vs `main` before removal — explicit human confirmation obtained first.
+- [x] Final verification  (completed: 2026-07-27). 43/43 shell-test files green on `main`;
+  docs-ci registry parity confirmed 43/43 (glob vs the explicit `shell-tests` job list).
+- [x] Unplanned: fixed a live Stop-hook infinite loop  (completed: 2026-07-27, PR #166). The #112
+  rewrite of `usage-daily-hint.sh` never checked `stop_hook_active`, so its own
+  `additionalContext` triggered a Stop re-invocation that re-emitted the same context forever —
+  hit live in production immediately after this deploy, 9 consecutive re-invocations before Claude
+  Code's own hard cap forced the turn to end. Fixed in both the deployed copy and this staging
+  source so a future sync does not reintroduce it.
