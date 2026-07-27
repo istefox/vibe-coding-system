@@ -2,6 +2,17 @@
 # usage-daily-hint.sh v2.0 — Stop hook: compact daily usage diff + context occupancy at session
 # end (issue #112; ADR-0058 Task 4 extends the pre-existing v1 usage note with occupancy).
 #
+# UNWIRED 2026-07-27 (found live in production, same night as deploy). additionalContext on a
+# Stop event forces one extra turn ("the conversation continues so Claude can act on the
+# feedback" -- see below): that is how the mechanism works, not a bug the stop_hook_active guard
+# can remove. With this hook wired, EVERY turn in EVERY session pays that extra round-trip,
+# forever, just to surface a usage hint. Decided not worth the permanent cost: removed from the
+# Stop array in settings.json (both here and the deployed copy). The stop_hook_active guard stays
+# in the script (still correct, still needed if this is ever re-wired) but the hook itself is
+# inert until a settings.json entry exists again -- same "deployed but not wired" contract as
+# test-write-scope.sh and precompact-guard.sh, just in the opposite direction (this one WAS wired
+# and got un-wired, not left pending).
+#
 # CHANNEL, VERIFIED BEFORE RELYING ON IT (do not skip this if touching this file again). Per
 # code.claude.com/docs/en/hooks, plain stdout on exit 0 is added to the model's context ONLY for
 # UserPromptSubmit, UserPromptExpansion and SessionStart — every other event's stdout, Stop

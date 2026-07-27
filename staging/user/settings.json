@@ -266,14 +266,6 @@
             "command": "\"$HOME\"/.claude/hooks/stop-gate.sh"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME\"/.claude/hooks/usage-daily-hint.sh"
-          }
-        ]
       }
     ],
     "UserPromptSubmit": [
