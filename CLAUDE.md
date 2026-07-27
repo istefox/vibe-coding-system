@@ -685,8 +685,8 @@ Key architectural decisions:
   SessionStart. Exit-2-with-stderr works but presents as a hook failure, wrong for an advisory
   check. Only the nested envelope is emitted, no dual form (that is a UserPromptSubmit-specific
   hedge from ADR-0034 D4).
-- **Syntax checks only, no external linters at all** (`bash -n`, `py_compile` with
-  `cfile=/dev/null`, `jq empty`, `yaml.safe_load`, `swiftc -parse`). Two linters produced two
+- **Syntax checks only, no external linters at all** (`bash -n`, the builtin `compile()`,
+  `jq empty`, `yaml.safe_load`, `swiftc -parse`). Two linters produced two
   false positives under the ADR's "error severity only" rule: swiftlint fails `let x = 1` on
   `identifier_name`, shellcheck fails `echo ok` on SC2148 (no shebang). A linter's severity
   tracks its configuration, not correctness, so the rule does not hold and the linters are out
@@ -714,6 +714,19 @@ Key architectural decisions:
 - **Both dispatch paths gate on the same field** and state the review-only contract independently,
   pinned by a test. Otherwise a chain would behave differently depending on whether `hook_verified`
   had flipped the Workflow path on.
+
+**Correction 2026-07-27 (Python check, `cfile=/dev/null` retired).** The `.py` check was
+`py_compile.compile(..., cfile='/dev/null')`, chosen so no `__pycache__` landed in the tree. Python
+3.14 raises `FileExistsError` on a non-regular `cfile` (`py_compile.py:140`) **before reading the
+source**, so under a 3.14 interpreter — Homebrew's `python3` is 3.14.6 — the hook reported a defect
+on every `.py` file written, valid or not, in every project (the hook is global in `~/.claude`).
+Replaced by the builtin `compile()` on bytes: no bytecode is produced at all, so there is nothing
+to redirect and no version guard to trip; PEP 263 cookies stay honoured. **The harness stayed green
+throughout**, because its only `.py` case fed a broken file and asserted it was reported — which a
+permanently-failing check satisfies for the wrong reason. Test 4b (valid `.py` stays silent) and 4c
+(encoding cookie) close that; both were seen RED against the old hook. The rule this earns: **a
+negative-case assertion pins nothing without its positive twin** — it cannot distinguish a check
+that works from a check that fails on everything. Same family as the ADR-0043 direction lesson.
 
 Detail: `docs/architecture/ADR-0039-early-coder-feedback.md`.
 

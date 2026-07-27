@@ -1158,8 +1158,8 @@ review (D5-D9) is decided but not implemented.
   plain stdout on exit 0 goes to the debug log for every event except `UserPromptSubmit`,
   `UserPromptExpansion` and `SessionStart`. Exit-2-with-stderr does reach the model but presents as
   a hook failure. Verified against `code.claude.com/docs/en/hooks`.
-- **Syntax checks only, no external linters** (sec. 7): `bash -n`, `py_compile` with
-  `cfile=/dev/null`, `jq empty`, `yaml.safe_load`, `swiftc -parse`. The ADR's original table named
+- **Syntax checks only, no external linters** (sec. 7): `bash -n`, the builtin `compile()`,
+  `jq empty`, `yaml.safe_load`, `swiftc -parse`. The ADR's original table named
   `ruff`, `eslint`, `swiftlint` and `shellcheck` under an "error severity only" rule. Two of them
   produced false positives on correct files (swiftlint: `let x = 1` fails `identifier_name`;
   shellcheck: `echo ok` fails SC2148 for a missing shebang), because a linter's severity tracks
@@ -2345,13 +2345,19 @@ The contract, in four lines:
   `post-md-tells-hint.sh` invisible to the model for its entire life (ADR-0040).
 - **One file, never the project.** No project-wide type check: too slow per write, and mostly noise
   about symbols that do not exist yet on a half-finished tree.
-- **Syntax checks only** (`bash -n`, `py_compile` with `cfile=/dev/null`, `jq empty`,
+- **Syntax checks only** (`bash -n`, the builtin `compile()`, `jq empty`,
   `yaml.safe_load`, `swiftc -parse`). No external linters: under an error-only rule both swiftlint
   and shellcheck flagged correct files (`let x = 1` on `identifier_name`, `echo ok` on SC2148),
   because linter severity tracks configuration rather than correctness. The verdict is therefore
   identical on every machine, independent of what is installed.
+- **The Python check is the builtin `compile()` on bytes, not `py_compile`.** ADR-0039 shipped
+  `py_compile.compile(..., cfile='/dev/null')` to avoid writing `__pycache__` into the tree.
+  Python 3.14 rejects a non-regular `cfile` (`FileExistsError`, `py_compile.py:140`) before it
+  reads the source, so on a 3.14 interpreter the check failed on every `.py` file regardless of
+  content. `compile()` produces no bytecode at all, so there is nothing to redirect and no
+  version-dependent guard to trip; bytes input keeps PEP 263 encoding cookies honoured.
 
-Harness: `staging/plugin/scripts/tests/post-write-check.test.sh`, 14 cases, in both CI workflows.
+Harness: `staging/plugin/scripts/tests/post-write-check.test.sh`, 16 cases, in both CI workflows.
 
 ### 7.4 Advanced hook — verify green tests before Stop (prompt-based)
 
