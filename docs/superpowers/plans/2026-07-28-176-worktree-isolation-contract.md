@@ -291,6 +291,24 @@ All 11 enumerated sites, in one pass. Turns Task 2 sections A and B green.
 
 *Budget: `staging/plugin/skills/concept-to-code/SKILL.md`, `staging/plugin/skills/autopilot-build/SKILL.md`, `staging/plugin/skills/deep-refactor/SKILL.md` (~180 lines)*
 
+**Addendum — added during implementation, operator-approved. Two sites this task's own table did
+not name.**
+
+- [x] **Site 5 was mandatory, not optional.** The conflict-scan's advisory/load-bearing split still
+      contained two literal `isolation: "none"` strings and referenced the dirty-tree block this
+      task deletes, so section A1 could not go green without it. Rewritten to unconditionally
+      advisory. **Task 7 rewrites the same block again**, into the binding form R-10 requires; this
+      was the minimum needed here, not a pre-emption of that task.
+- [x] **`test-write-scope.test.sh` TL1 is a cross-feature contradiction, and the task list never
+      named it.** TL1 (ADR-0049) asserts `autopilot-build`'s Step 5 **restates** the dirty-tree
+      condition. R-11 requires that condition **retired**, and ADR-0068's own header records that it
+      supersedes ADR-0049 §D2 in part. So the assertion's premise was revoked by an approved ADR —
+      it is inverted, not deleted, to keep a forward guard against reintroduction, mirroring B1c.
+      The dispatched coder correctly refused to edit a test file and reported it instead; a tester
+      made the change. **The lesson for the remaining tasks: a plan that retires a contract must
+      grep the whole harness for assertions pinning that contract, not only the source that
+      implements it.**
+
 **Contract change — call sites to update.** `isolation: "none"` disappears from the chain's
 vocabulary. Grep confirms no `.sh` script and no test reads that string as a value today; the only
 consumers are the SKILL.md blocks above and the two doc surfaces in Task 8. `recovery-preflight.test.sh:251-255`
