@@ -662,6 +662,33 @@ the `baseRef` key is already set live and the job is to verify it survived rathe
 
 ---
 
+## Task 10 — Both worktree-identity retrieval methods in the merge-back (R-07, R-09)
+
+**Added during implementation, operator-approved. Task 9's evidence step found this; that is what
+the evidence step is for.** Task 6's merge-back read `$WT`/`$WB` "from the dispatch result (F10)",
+and F10 was measured on the Agent-tool path only. The Workflow path — the one taken whenever
+`hook_verified` is true, so the default in any verified environment — reports no worktree identity
+at all (F19). The instruction was therefore unexecutable on half its call sites, and the failure
+mode was ADR-0068's own defect reappearing: a coder's work orphaned on an unmerged branch.
+
+- [x] **RED.** Section K of `worktree-isolation-contract.test.sh`: both retrieval methods stated;
+      `git worktree list` named for the Workflow path; the F19 identity gap cited so the two are
+      not collapsed back into one; and a **precedence** check that enumeration is presented before
+      the `<runId>-<n>` convention. K4 was labelled **vacuously green** in the file itself and
+      proved separately on fixtures, since with neither method present it passed for the wrong
+      reason.
+- [x] **GREEN.** The merge-back section now states both, with enumeration preferred over run-id
+      derivation — F20 records the naming convention as *observed*, not as a reported contract, and
+      building on it is the class of undocumented assumption this ADR exists to stop.
+- [x] Re-synced to `~/.claude` after the fix; the first sync had shipped the half-correct form.
+
+**The generalisable finding: a fact measured on one dispatch path is not a fact about the chain.**
+F10 was true, correctly recorded, and silently assumed to be universal — the same shape as
+ADR-0016 asserting `isolation: none` without checking it against the tool schema, which is the
+defect this whole ADR was written to correct. It recurred inside the correction.
+
+---
+
 ## Risks
 
 - **R1 — the mechanism is one global settings key with no repository-side enforcement.** It lives in

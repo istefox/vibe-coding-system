@@ -627,6 +627,25 @@ above rather than quietly reinterpreted.
 | F19 | On the WORKFLOW dispatch path the orchestrator receives NO worktree identity: the run journal records only agentId, key, result and type, and the task notification carries no worktree block. Contrast the Agent-tool path, where F10's worktreePath/worktreeBranch are returned with every dispatch. The worktree IS created (F16) — only its identity is unreported. | Inspecting subagents/workflows/<run>/journal.jsonl after a Workflow dispatch |
 | F20 | The Workflow worktree's path and branch follow a derivable convention — .claude/worktrees/<runId>-<n> and worktree-<runId>-<n>, with runId returned by the Workflow tool — but this is an observed naming convention, not a reported contract. | Probe C and the Task 9 evidence run |
 
+**R-03 evidence, Agent-tool path (recorded 2026-07-28, Task 9 — evidence, not an assertion).**
+Gathered from this feature's own implementation run rather than a synthetic demonstration, which
+makes it stronger: roughly a dozen real `coder` and `tester` dispatches, every one of them
+audited. In each case `git -C <worktreePath> rev-parse HEAD` equalled the feature branch's `HEAD`
+at dispatch time — never the default branch's — and each worktree branch merged back cleanly with
+no conflict. The tester → coder visibility property (R-09) was demonstrated end to end: Task 2's
+tester wrote `worktree-isolation-contract.test.sh` in its own worktree, that branch was merged,
+and Task 3's coder then read and executed that file from inside a *later* worktree. Before the
+`baseRef` change this same probe forked from `5518583` with this chain's own ADR absent from the
+worktree (F15), so the contrast is measured on the same repository within the same day.
+
+**R-03 evidence, Workflow path (recorded 2026-07-28, Task 9).** One `agent()` dispatch with
+`opts.isolation: 'worktree'` performing a real edit to this file. The worktree was created at
+`.claude/worktrees/wf_339c4dca-fb6-1` on branch `worktree-wf_339c4dca-fb6-1`, forked from
+`ad2b66c` — the feature branch's `HEAD` — and was located, committed and merged back by
+`git worktree list` enumeration. The orchestrator learned the path only because the agent echoed
+it in prose; nothing in the dispatch result carried it, which is F19 observed in practice rather
+than only in the journal.
+
 **Consequence for §D5 (measured 2026-07-28, Task 9).** The merge-back protocol reads
 `worktreePath` and `worktreeBranch` "from the dispatch result (F10)", and that is true on the
 Agent-tool path only. On the Workflow path the orchestrator must locate the worktree another way,
