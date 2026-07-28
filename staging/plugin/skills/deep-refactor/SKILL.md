@@ -105,15 +105,19 @@ Aborting.
 
 Do not proceed.
 
-### Step 0.2 — isolation:none pre-check
+**Non-git subdirectory refuses too (R-13, ADR-0068 §D10).** Determine the project root (the
+directory containing `.claude/`). If the project root is a **non-git subdirectory** (i.e., `git
+rev-parse --show-toplevel` returns a parent directory that differs from the `.claude/` parent, or
+the `.claude/` directory exists in a path that is a subdirectory of the git root), ABORT
+immediately with:
 
-Determine the project root (the directory containing `.claude/`). If the project root is a
-**non-git subdirectory** (i.e., `git rev-parse --show-toplevel` returns a parent directory that
-differs from the `.claude/` parent, or the `.claude/` directory exists in a path that is a
-subdirectory of the git root), set `ISOLATION_MODE=none` and record it. Fix agents in Phase 2
-MUST be dispatched with `isolation: none` (never `isolation: worktree`) when this flag is set.
-This mirrors the `feedback_coder-worktree-subdirectory` constraint: worktree dispatch on a
-non-git root silently fails.
+```
+deep-refactor requires the project root to be inside a git working tree a worktree can fork from.
+The current project root is a non-git subdirectory. Aborting.
+```
+
+There is no second isolation mode: every fix agent in Phase 2 is dispatched with
+`isolation: worktree`.
 
 ### Step 0.3 — Baseline commit hash
 
@@ -381,7 +385,7 @@ For each dimension D in [dead-code, perf, structure]:
   ```
   Agent: <fix_type>
   model: opus
-  isolation: <none if ISOLATION_MODE=none, else worktree>
+  isolation: worktree
 
   MANDATORY: Emit a PATTERN: pre-flight header before every Edit or Write call, per ADR-0001.
   The pattern-enforce hook is active and will block any Edit without a preceding PATTERN: line

@@ -673,7 +673,7 @@ sed -i.bak 's/^tracer_bullet_attempts: 0$/tracer_bullet_attempts: <N>/' "<manife
 
 Three assertions, run once, at the very top of Step 5 — before dispatch-mode selection, before the Smoke test gate below (which itself dispatches a workflow coder), and before the tester stage ADR-0049 introduced further down. At Step 5 entry the tree must already be clean, so that everything the tester dirties afterward is provably Step 5's own doing.
 
-**Do not collapse this with ADR-0049 §D2's dirty-tree condition below — they are sequential, not contradictory (ADR-0050 §D4).** This pre-flight guards entry to Step 5, before anything in Step 5 has executed: a dirty tree here is uncommitted human work of unknown provenance, so it refuses to dispatch. ADR-0049 §D2's condition guards each coder dispatch *inside* Step 5, after this pre-flight's own tester stage has deliberately left the tree dirty by design and by this system's own hand: it tolerates the dirty tree and drops to `isolation: "none"`. The invariant that reconciles them: at Step 5 entry the tree is clean; every dirty tree observed after that point was produced by Step 5 itself. Removing either check breaks the other's premise.
+**ADR-0050 §D4 — the reconciliation, updated by ADR-0068 §D6.** This pre-flight guards entry to Step 5, before anything in Step 5 has executed: a dirty tree here is uncommitted human work of unknown provenance, so it refuses to dispatch. ADR-0049 §D2's dirty-tree condition, which used to guard each coder dispatch *inside* Step 5 by tolerating a tree the tester stage had deliberately left dirty and dropping isolation to a second, worktree-less mode, is retired: the tester now runs in its own worktree and its output is committed and merged into the feature branch before the coder's worktree is created (ADR-0068 §D6), so the condition it tested for cannot arise. The two conditions were sequential, not contradictory, while both existed; the surviving invariant is narrower and is what replaces them both: at Step 5 entry the tree is clean, and every stage's output is committed and merged before the next stage's worktree is created.
 
 **Step 5.0.1 — Working tree clean.**
 ```bash
@@ -727,31 +727,20 @@ no-op.
   fall back to Agent-tool batch dispatch (see "Fallback — Agent-tool batch dispatch" below).
   Set `step5_mode: "agent_batch"` via bash sed substitution (same as the fallback section below).
 
-**Pre-dispatch: worktree isolation check (the git-dir check runs ONCE before any dispatch; the
-dirty-tree condition below runs per task group, after that group's tester stage and before its
-coder dispatch — see the tester → coder ordering in the dispatch paths below):**
+**Pre-dispatch: worktree isolation check (the git-dir check runs ONCE before any dispatch, before
+dispatch-mode selection and before every stage in every task group below):**
 ```bash
 git rev-parse --git-dir 2>/dev/null
 ```
 The worktree is created from the CWD of the session, not from `project_root` — check the CWD,
 not `project_root`. If the CWD is not inside a git repo the worktree will fail even if
 `project_root` has its own `.git`.
-- exit 0 → CWD is inside a git repo → dispatch coder **with** `isolation: worktree` (default),
-  subject to the dirty-tree condition below.
-- exit non-0 → CWD is not a git repo (session started from a parent directory, monorepo, etc.) →
-  dispatch coder **with** `isolation: "none"` (explicit override in the `isolation` parameter
-  of the `Agent` tool). **Do not re-dispatch with worktree: it will fail again.**
-  Note in the report: "worktree disabled — session CWD not inside a git repo".
-
-**Dirty-tree condition (ADR-0049 §D2), stated in `review-triage-fix/SKILL.md:158`'s own idiom —
-a tester that has just written failing tests has, by definition, left uncommitted changes, and a
-worktree forks from the last commit and cannot see them:**
-```bash
-git diff HEAD --name-only 2>/dev/null
-```
-Non-empty output → dispatch that task group's coder **with** `isolation: "none"`, overriding the
-default even when the git-dir check above passed. Empty output (that group's tester wrote
-nothing) → worktree stays enabled — this degrades gracefully, group by group.
+- exit 0 → CWD is inside a git repo → dispatch coder **with** `isolation: worktree`. There is no
+  second mode (ADR-0068 §D1, §D10).
+- exit non-0 → refuse to dispatch. Print the literal message: "Worktree isolation contract: the
+  session CWD is not inside a git repository. The chain cannot dispatch a modification agent
+  here. Run the chain from inside the repository, or `git init` the project root, and re-invoke
+  Step 5." Do not proceed to dispatch-mode selection.
 
 **Pre-dispatch: artifact existence check (run before any dispatch):**
 ```bash
@@ -847,15 +836,10 @@ Agent prompt strings in the JS workflow script MUST reference files by path only
 **Before dispatch — parallel task conflict scan (GAP E):**
 Read the plan at `<manifest.artifacts.plan>`. Scan each task description for explicit file-path mentions (lines containing `/` paths or filenames with extensions). If the same file path appears in multiple task descriptions, emit a warning before dispatching:
 > "File conflict risk: `<path>` appears in tasks <N> and <M>. Parallel coders may conflict during worktree merge. Consider batching these tasks sequentially."
-This stays advisory only when every conflicting group keeps `isolation: worktree` — the worktree
-merge absorbs the risk, and the user may proceed past the warning. **It becomes load-bearing
-(ADR-0049 §D2, negative consequence 1) for any group whose tester wrote something**, because that
-group's coder runs with `isolation: "none"` (the dirty-tree condition above) and shares the main
-tree directly with whatever else is running in parallel. When two or more groups both (a) appear
-in the file-conflict scan above and (b) resolve to `isolation: "none"`, do NOT dispatch them in
-the same `parallel()` batch — sequence them instead, letting one group's coder finish (tests
-green) before the next conflicting group's tester even starts. Groups with no path overlap, or
-whose testers left the tree clean, keep the default parallel dispatch.
+This stays advisory: every group runs with `isolation: worktree` (ADR-0068 §D1) — there is no
+second, worktree-less mode for a conflicting group to drop into — so the worktree merge absorbs
+the risk, and the user may proceed past the warning. Groups with no path overlap keep the default
+parallel dispatch.
 
 Step 5 dispatch prompt (send as a single message to the session):
 ```
@@ -900,8 +884,8 @@ The tester writes failing tests only, for this task group, and reports back whic
 IDs (or which Success Criteria / plan-task lines, per whichever fallback fired) each test covers.
 
 **Stage 2 — coder.** Pin `agentType: "coder"`, an explicit `model` (per the model-override rule
-above) and an explicit `effort` (per the effort table above). Resolve `isolation` per the
-worktree isolation check above, evaluated for this group after its Stage 1 tester has run. Every
+above), an explicit `effort` (per the effort table above), and `isolation: "worktree"` explicitly
+(ADR-0068 §D1, §D7) — there is no second mode. Every
 coder prompt at this stage MUST include, verbatim, ASCII hyphen (ADR-0049 §D3 — a paraphrase or
 an em dash leaves the guard silently inert, issue #87):
 ```
@@ -1450,17 +1434,12 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
    documentation, not a binding). Use the **Tester batch dispatch template** below — same brief
    contract as the Workflow path: SPEC requirement IDs via `spec-coverage.sh --list`, falling
    back to Success Criteria then to this batch's plan task text, never from implementation files.
-2. Dirty-tree isolation check (ADR-0049 §D2), same idiom as the Workflow path's pre-dispatch
-   check, run now that the tester above may have left uncommitted changes:
-   ```bash
-   git diff HEAD --name-only 2>/dev/null
-   ```
-   Non-empty output → dispatch this batch's coder **with** `isolation: "none"`. Empty output
-   (the tester wrote nothing for this batch) → worktree stays enabled (the default).
-3. Dispatch coder with batch 1 (tasks 1-N, where N ≤ 3), using the isolation resolved in step 2
-   and the **Single batch dispatch template** below, which carries the TEST-AUTHORING SCOPE
-   marker verbatim.
-4. Checkpoint between batches: run `verify.sh <root>` and check `git status` yourself
+2. Dispatch coder with batch 1 (tasks 1-N, where N ≤ 3), pinning `isolation: "worktree"`
+   explicitly (ADR-0068 §D1, §D7 — there is no second mode; the tester's worktree from step 1 is
+   committed and merged into the feature branch before this coder's worktree is created, so it
+   forks from a `HEAD` that already contains the batch's failing tests) and the **Single batch
+   dispatch template** below, which carries the TEST-AUTHORING SCOPE marker verbatim.
+3. Checkpoint between batches: run `verify.sh <root>` and check `git status` yourself
    as the orchestrator — do NOT trust the coder's report to decide whether to continue
    (it may be truncated or incomplete). Also run the `Anti-test-weakening gate — Step 5 →
    Step 6 (ADR-0047)` block at every batch checkpoint — the same command against the same
@@ -1483,15 +1462,15 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
    `claude agents --json | jq '.[] | select(.waitingFor != null) | {id, waitingFor}'`
    A non-null `waitingFor` means the coder is blocked on a permission prompt —
    surface it to the user rather than waiting in silence (CC 2.1.162+).
-5. Repeat steps 1-3 (tester, then dirty-tree check, then coder) for batch 2 (tasks N+1…), and so
+4. Repeat steps 1-2 (tester, then coder) for batch 2 (tasks N+1…), and so
    on.
-6. After the last batch: run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)`
+5. After the last batch: run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)`
    block again, and run the `Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)`
-   block once here too — not at the per-batch checkpoint in item 4 above, where an
+   block once here too — not at the per-batch checkpoint in item 3 above, where an
    uncovered ID is still the expected state — then final verification (`verify.sh`,
    `git status`, scope check against the plan) before transitioning to `step_6_review`.
    The `Diff budget and scope check — Step 5 checkpoints (ADR-0052)` block already ran at
-   every batch checkpoint in item 4; no separate final pass is needed for it. Same for the
+   every batch checkpoint in item 3; no separate final pass is needed for it. Same for the
    `Task-level metrics — Step 5 checkpoints (ADR-0064, issue #118)` block.
 
 For plans with ≤5 tasks monolithic dispatch is acceptable, but the controller-side

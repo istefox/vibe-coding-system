@@ -190,17 +190,13 @@ fi
 ```bash
 git rev-parse --git-dir 2>/dev/null
 ```
-- exit 0 → dispatch coder with `isolation: worktree`, subject to the dirty-tree condition below.
-- exit non-0 → dispatch coder with `isolation: none`. Note in report: "worktree disabled."
-
-**Dirty-tree condition (same as c2c Step 5, "Dirty-tree condition (ADR-0049 §D2)"):**
-```bash
-git diff HEAD --name-only 2>/dev/null
-```
-Non-empty output (that task group's tester stage left uncommitted failing tests; a worktree forks
-from the last commit and cannot see them) → dispatch that group's coder with `isolation: "none"`,
-overriding the default even when the git-dir check above passed. Empty output → worktree stays
-enabled.
+- exit 0 → dispatch coder with `isolation: worktree`. There is no second mode (ADR-0068 §D1,
+  §D10).
+- exit non-0 → refuse to dispatch and write an `aborted` report. Print the literal message:
+  "Worktree isolation contract: the session CWD is not inside a git repository. The chain cannot
+  dispatch a modification agent here. Run the chain from inside the repository, or `git init` the
+  project root, and re-invoke Step 5." Check 8 above already refuses at pre-flight for this same
+  reason, so this arm is redundant in practice and kept for defense in depth.
 
 **Parallel-conflict scan (advisory, no gate — same as c2c Step 5, "Before dispatch — parallel task conflict scan (GAP E)"):**
 Read the plan. If the same absolute file path appears in multiple unchecked task descriptions,
