@@ -671,7 +671,7 @@ sed -i.bak 's/^tracer_bullet_attempts: 0$/tracer_bullet_attempts: <N>/' "<manife
 
 #### Recovery-readiness pre-flight (ADR-0050, before any dispatch)
 
-Three assertions, run once, at the very top of Step 5 — before dispatch-mode selection, before the Smoke test gate below (which itself dispatches a workflow coder), and before the tester stage ADR-0049 introduced further down. At Step 5 entry the tree must already be clean, so that everything the tester dirties afterward is provably Step 5's own doing.
+Four assertions, run once, at the very top of Step 5 — before dispatch-mode selection, before the Smoke test gate below (which itself dispatches a workflow coder), and before the tester stage ADR-0049 introduced further down. At Step 5 entry the tree must already be clean, so that everything the tester dirties afterward is provably Step 5's own doing.
 
 **ADR-0050 §D4 — the reconciliation, updated by ADR-0068 §D6.** This pre-flight guards entry to Step 5, before anything in Step 5 has executed: a dirty tree here is uncommitted human work of unknown provenance, so it refuses to dispatch. ADR-0049 §D2's dirty-tree condition, which used to guard each coder dispatch *inside* Step 5 by tolerating a tree the tester stage had deliberately left dirty and dropping isolation to a second, worktree-less mode, is retired: the tester now runs in its own worktree and its output is committed and merged into the feature branch before the coder's worktree is created (ADR-0068 §D6), so the condition it tested for cannot arise. The two conditions were sequential, not contradictory, while both existed; the surviving invariant is narrower and is what replaces them both: at Step 5 entry the tree is clean, and every stage's output is committed and merged before the next stage's worktree is created.
 
@@ -705,7 +705,13 @@ sed -i.bak 's/^recovery_baseline_sha: null$/recovery_baseline_sha: "<BASELINE_CO
 ```
 If `manifest.recovery_baseline_sha` is already non-null (a resumed Step 5 run), skip the write — it is written once, at pre-flight, and never rewritten by a later step. A baseline that moves is not a baseline (ADR-0050 §D3).
 
-**Autopilot (`manifest.autopilot = true`) refuses identically — no leniency branch (ADR-0050 §D6).** A dirty tree or a default-branch checkout halts the unattended path exactly as it halts the attended one. There is no `AskUserQuestion` on this path, so the remediation command above is recorded in the report rather than prompted to a terminal nobody is watching.
+**Step 5.0.4 — `worktree.baseRef` is `"head"` in the effective `settings.json` (ADR-0068 §D1, R-05).**
+```bash
+python3 -c "import json,os,sys; p=os.path.expanduser('~/.claude/settings.json'); d=json.load(open(p)); sys.exit(0 if d.get('worktree',{}).get('baseRef')=='head' else 1)"
+```
+Non-zero — including a missing or unparseable `settings.json` — counts as **not verified**. **This assertion fails closed**, and that is deliberate: every hook in this repository follows the opposite convention, allow-on-every-failure-mode, so a reader who pattern-matches on that convention will guess this one should fail open too and "fix" it into doing so. It does not, because it is a pre-flight assertion, not a hook, and it sits beside ADR-0050's other three assertions above, which also fail closed. On refusal, print the literal remediation: "Recovery-readiness pre-flight: set "worktree": { "baseRef": "head" } in ~/.claude/settings.json and re-invoke Step 5. Without it every modification agent's worktree forks from the default branch and cannot see this feature branch's commits (ADR-0068 F15)." Do not proceed to dispatch-mode selection. On success, record `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> worktree_baseref_verified true`; on refusal, leave it at the `manifest-init.sh` default of `false`.
+
+**Autopilot (`manifest.autopilot = true`) refuses identically — no leniency branch (ADR-0050 §D6).** A dirty tree, a default-branch checkout, or an unverified `worktree.baseRef` halts the unattended path exactly as it halts the attended one. There is no `AskUserQuestion` on this path, so the remediation command above is recorded in the report rather than prompted to a terminal nobody is watching.
 
 #### Pattern seed handoff (ADR-0057 §D5, only if Step 4.5 ran and computed `green`)
 
