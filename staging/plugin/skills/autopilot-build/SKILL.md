@@ -198,9 +198,16 @@ git rev-parse --git-dir 2>/dev/null
   project root, and re-invoke Step 5." Check 8 above already refuses at pre-flight for this same
   reason, so this arm is redundant in practice and kept for defense in depth.
 
-**Parallel-conflict scan (advisory, no gate — same as c2c Step 5, "Before dispatch — parallel task conflict scan (GAP E)"):**
+**Parallel-conflict scan (binding, same as c2c Step 5, "Before dispatch — parallel task conflict scan (GAP E)"; R-10):**
 Read the plan. If the same absolute file path appears in multiple unchecked task descriptions,
-emit a warning line before dispatching. Do not stop.
+sequence those task groups instead of dispatching them in the same batch — the scan is binding,
+not advisory, because merges are real (ADR-0068 §D5) and a genuine conflict halts the run. Groups
+with no path overlap keep the default parallel dispatch. A merge conflict during Step 5's
+merge-back halts the run exactly as in c2c (see c2c's `#### Merge-back and base-fork audit`
+Conflict halt): report the worktree branch and the conflicting files, preserve the branch, attempt
+no automatic resolution (no rebase, no `-X ours`, no resolver dispatch), and record the halt in
+`autopilot-report.json` rather than prompting — there is no human to prompt here. `nightly-autopilot`
+inherits this same conflict halt unchanged, since it reuses c2c Steps 5–7 verbatim.
 
 **Dispatch:**
 - `hook_verified=true`: Workflow dispatch (ultracode keyword — same prompt as c2c's "Workflow dispatch path — Step 5 implementation (hook_verified = true)" block),

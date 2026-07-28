@@ -844,13 +844,10 @@ were already verified true.]**
 **CONSTRAINT — NO inline source code in the generated workflow script:**
 Agent prompt strings in the JS workflow script MUST reference files by path only — never inline raw source code blocks. Embedding language-specific generics (e.g. `Array<T>`, `Result<T, E>`) or type annotations directly in JS template literals triggers a parse error (`Unexpected token`). If context requires a code snippet, write it to a temp file and pass the path to the agent.
 
-**Before dispatch — parallel task conflict scan (GAP E):**
-Read the plan at `<manifest.artifacts.plan>`. Scan each task description for explicit file-path mentions (lines containing `/` paths or filenames with extensions). If the same file path appears in multiple task descriptions, emit a warning before dispatching:
-> "File conflict risk: `<path>` appears in tasks <N> and <M>. Parallel coders may conflict during worktree merge. Consider batching these tasks sequentially."
-This stays advisory: every group runs with `isolation: worktree` (ADR-0068 §D1) — there is no
-second, worktree-less mode for a conflicting group to drop into — so the worktree merge absorbs
-the risk, and the user may proceed past the warning. Groups with no path overlap keep the default
-parallel dispatch.
+**Before dispatch — parallel task conflict scan (GAP E, R-10, ADR-0068 §D8):**
+Read the plan at `<manifest.artifacts.plan>`. Scan each task description for explicit file-path mentions (lines containing `/` paths or filenames with extensions). The scan is binding now, in every case — merges are real (§D5), so a genuine conflict halts the run (see the Conflict halt below), not merely warns past it. If the same file path appears in multiple task descriptions, those task groups are sequenced instead: dispatched one after another, never in the same `parallel()` batch, so each group's worktree merges into the feature branch before the next group's coder forks from it. Emit before dispatching:
+> "File conflict risk: `<path>` appears in tasks <N> and <M>. Sequencing these task groups instead of dispatching them in the same parallel() batch."
+Groups with no path overlap keep the default parallel dispatch — sequencing is scoped to the conflicting groups only.
 
 Step 5 dispatch prompt (send as a single message to the session):
 ```
@@ -919,7 +916,11 @@ if [ -d "$WT" ] && [ -n "$(git -C "$WT" status --porcelain 2>/dev/null)" ]; then
   [ "$BASE_SHA" = "$PRE" ] || <base-fork halt: report both shas, preserve $WB, stop>
   git -C "$WT" add -A
   git -C "$WT" commit -m "chore(step5): snapshot <stage> worktree (<agent_type>)"
-  git merge --no-edit "$WB" || <conflict halt, Task 7>
+  git merge --no-edit "$WB" || {
+    CONFLICTS=$(git diff --name-only --diff-filter=U)   # capture BEFORE the abort below — it clears the unmerged paths; do not reorder these two lines
+    git merge --abort
+    <conflict halt: report worktree branch $WB and $CONFLICTS, preserve the branch, stop>
+  }
   git worktree remove "$WT" 2>/dev/null || true
 fi
 ```
@@ -941,6 +942,21 @@ false-positive analysis is short enough to state here: the stage protocol serial
 merge → next dispatch, so `HEAD` cannot legitimately move between `$PRE` and the sha the worktree
 reports, and the auto-removed and empty-diff cases are already handled as nothing-to-merge above
 this comparison. A mismatch is therefore always the defect, never a false alarm.
+
+**Conflict halt, and why no automatic resolution is attempted (R-12, ADR-0068 §D8).**
+`git merge --no-edit "$WB"` failing means the just-committed worktree snapshot and the feature
+branch touched the same lines. `$CONFLICTS` is captured with `git diff --name-only
+--diff-filter=U` BEFORE `git merge --abort` runs — the abort clears the unmerged-paths state
+`--diff-filter=U` reports, so capturing it afterward would yield nothing; this is exactly the kind
+of ordering a later edit could "tidy" into breakage, which is why the code comment says so
+directly. The halt reports the worktree branch name (`$WB`) and `$CONFLICTS`, preserves the branch
+(no `git worktree remove`, no branch deletion), and stops. No automatic resolution is attempted:
+no rebase, no `-X ours`, no resolver dispatch — an automatic rebase over agent-authored work can
+produce a syntactically valid, semantically wrong result that no gate in this repository would
+catch. Under autopilot the halt is recorded in `step5-report.json` rather than prompted to a
+human, the same non-interactive behavior ADR-0050's assertions already apply elsewhere on this
+path. This shares the same `if` block as the base-fork halt above; the two halts are distinguished
+by their message, not duplicated as two separate checks.
 
 **Ordering.** This merge-back completes — the tester's worktree is committed and merged into the
 feature branch — before Stage 2 below creates the coder's worktree, so the coder forks from a
