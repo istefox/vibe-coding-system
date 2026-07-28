@@ -844,6 +844,318 @@ else
   bad "I7: autopilot-build/SKILL.md does not mention that nightly-autopilot inherits the conflict halt — Task 7 adds this note"
 fi
 
+# ==============================================================================================
+# Section J (Task 8, R-15, R-16 — R-18 has no assertion here; see note below) — documentation
+# surfaces, forward-recorded corrections, and the CLAUDE.md revision (ADR-0068 §D12).
+#
+# EXPECTED at RED time (Task 8 GREEN not yet run):
+#   J1   RED   — staging/user/rules/parallelization.md:21 is still the single pre-existing line
+#        ("Parallel `coder` sub-agents must use `isolation: worktree`."); it names no
+#        forked-from-HEAD / merge-back / non-git-refusal wording yet.
+#   J1a/J1b GREEN (forward guards, mandatory positive/negative twins) — the predicate itself
+#        passes a fixture stating the contract correctly and rejects one that still names a
+#        fallback.
+#   J2   RED   — docs/GUIDA-USO-IT.md:632-633 still states "la chain usa `isolation: none`
+#        automaticamente" (confirmed the only "none"-bearing isolation line in the file; lines
+#        117, 136, 167 and 275 mention worktree isolation without this claim already).
+#   J2a  GREEN (forward guard, mandatory positive twin).
+#   J3   RED   — docs/SKILLS-AND-AGENTS-GUIDE.md:355-356 still states "isolation falls back to
+#        `none`" verbatim.
+#   J3a  GREEN (forward guard, mandatory positive twin).
+#   J4a/J4b/J4c RED — none of ADR-0016, ADR-0049, ADR-0050 mentions ADR-0068 anywhere yet
+#        (confirmed: ADR-0068 postdates all three), so no dated correction block naming it exists.
+#   J4d/J4e GREEN (forward guards, mandatory positive + negative twins) — the detector fires on a
+#        fixture paragraph combining a date, "ADR-0068" and a correction-ish word, and does NOT
+#        fire on a fixture that merely co-mentions a date and "ADR-0068" without one.
+#   J5-guard0 GREEN (forward guard) — the documentation sweep is non-vacuous (scans a real
+#        double-digit file count).
+#   J5   GREEN already — no real documentation surface under docs/ or staging/user/rules/
+#        currently promises a WorktreeCreate hook (confirmed: the only real mentions under docs/
+#        live in this feature's own excluded ADR-0068 and plan files). This is a forward guard,
+#        not fix evidence — it protects against a FUTURE regression, not a defect Task 8 removes.
+#   J5a/J5b GREEN (forward guards, mandatory positive + negative twins) — the detector fires on a
+#        fixture that promises a hook and stays silent on a fixture that discloses its absence.
+#   J6   RED   — CLAUDE.md's ADR-0068 section (line 921 to EOF) still names `worktree-create.sh`
+#        (line 937: "`worktree-create.sh` ships alongside it...") alongside `worktree.baseRef` —
+#        it describes the refuted two-layer design (ADR-0068 §D12: written at the first pass's
+#        Gate 3, before the probe).
+#   J6a/J6b GREEN (forward guards, mandatory positive + negative twins).
+#
+# R-18 (issue #175 closure reason) has NO assertion in this section: Task 8's own RED checklist
+# item does not name it (only parallelization.md, GUIDA-USO-IT.md, the three ADRs, the
+# WorktreeCreate sweep, and CLAUDE.md are listed), and closing #175 on GitHub is a HITL action the
+# GREEN checklist assigns to the operator, not to a file this harness can inspect. Recorded here so
+# the gap is a disclosed scope boundary, not a silently skipped requirement.
+#
+# EXCLUSION LIST for the J5 "no surface promises a WorktreeCreate hook" sweep, stated once here so
+# it is visible rather than incidental: this feature's own artefacts discuss `WorktreeCreate` at
+# length to explain why no hook exists (a disclosure, not a promise), and would otherwise trip a
+# naive substring sweep on their own explanatory prose —
+#   - docs/architecture/ADR-0068-176-worktree-isolation-contract.md
+#   - docs/superpowers/plans/2026-07-28-176-worktree-isolation-contract.md
+# SPEC.md is out of scope by construction (repo root, not under docs/ or staging/user/rules/), and
+# so is this test file itself (staging/plugin/scripts/tests/, not staging/user/rules/). The sweep
+# is scoped to flag a PROMISE of a hook (an unnegated mention), never any mention of the event
+# name — see hook_promise_hits()'s doc comment for the negation-based distinction.
+# ==============================================================================================
+
+# ------------------------------------------------------------------------------------------------
+# J1 (R-15) — staging/user/rules/parallelization.md states the contract as measured and names no
+# fallback.
+# ------------------------------------------------------------------------------------------------
+PARALLEL_RULES="$STAGING/user/rules/parallelization.md"
+
+contract_stated_no_fallback() {
+  # $1 = file. Exit 0 iff it states the measured worktree contract (forked from HEAD, merge-back,
+  # non-git CWD refused) AND names no fallback ("isolation: none", "falls back", "fallback").
+  grep -qi 'forked from' "$1" 2>/dev/null \
+    && grep -qi 'HEAD' "$1" 2>/dev/null \
+    && grep -qi 'merge' "$1" 2>/dev/null \
+    && grep -qi 'refused' "$1" 2>/dev/null \
+    && ! grep -qiE 'isolation:? *`?"?none|falls back|fallback' "$1" 2>/dev/null
+}
+
+if contract_stated_no_fallback "$PARALLEL_RULES"; then
+  ok "J1: staging/user/rules/parallelization.md states the worktree contract as measured (forked from HEAD, merge-back, non-git refusal) and names no fallback (R-15)"
+else
+  bad "J1: staging/user/rules/parallelization.md does not yet state the measured contract (forked-from-HEAD / merge-back / non-git-refusal wording), or still names a fallback (R-15) — Task 8 GREEN replaces line 21"
+fi
+
+FIXTURE_J1_GOOD="$TMP/fixture-j1-good.md"
+printf 'Parallel modification sub-agents run in a worktree forked from `HEAD`; the orchestrator merges each stage back before the next worktree is created; a non-git CWD is refused, not downgraded.\n' > "$FIXTURE_J1_GOOD"
+if contract_stated_no_fallback "$FIXTURE_J1_GOOD"; then
+  ok "J1a (forward guard): the J1 predicate passes a fixture that correctly states the contract with no fallback"
+else
+  bad "J1a (forward guard): the J1 predicate wrongly failed a fixture that correctly states the contract with no fallback — it can never go green"
+fi
+
+FIXTURE_J1_BAD="$TMP/fixture-j1-bad.md"
+printf 'Parallel modification sub-agents run in a worktree forked from `HEAD`; the orchestrator merges each stage back before the next worktree is created; a non-git CWD is refused, not downgraded. However, isolation falls back to `none` in the legacy subdirectory case.\n' > "$FIXTURE_J1_BAD"
+if contract_stated_no_fallback "$FIXTURE_J1_BAD"; then
+  bad "J1b (forward guard, mandatory positive twin): the J1 predicate wrongly passed a fixture that still names a fallback"
+else
+  ok "J1b (forward guard, mandatory positive twin): the J1 predicate correctly rejects a fixture naming a fallback, even though every other conjunct is satisfied"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# J2 (R-15) — docs/GUIDA-USO-IT.md no longer promises isolation falls back to "none"
+# automatically. Checked as one whole-file predicate, which also covers lines 117, 136, 167 and
+# 275 (they mention worktree isolation without this claim already, and would trip the same
+# predicate if the claim ever migrated there).
+# ------------------------------------------------------------------------------------------------
+GUIDA="$REPO/docs/GUIDA-USO-IT.md"
+
+guida_promises_auto_none() {
+  # $1 = file. Exit 0 iff it still claims isolation automatically falls back to "none". Matches
+  # both the English and Italian wording: "automaticamente" contains "automatic" as a substring.
+  grep -qiE 'isolation:? *`?"?none' "$1" 2>/dev/null && grep -qi 'automatic' "$1" 2>/dev/null
+}
+
+if guida_promises_auto_none "$GUIDA"; then
+  bad "J2: docs/GUIDA-USO-IT.md still promises isolation falls back to 'none' automatically (R-15) — Task 8 GREEN removes the sentence at lines 632-633"
+else
+  ok "J2: docs/GUIDA-USO-IT.md no longer promises isolation falls back to 'none' automatically (R-15)"
+fi
+
+FIXTURE_J2="$TMP/fixture-j2.md"
+printf 'Se il progetto non e una repo git completa, la chain usa `isolation: none` automaticamente.\n' > "$FIXTURE_J2"
+if guida_promises_auto_none "$FIXTURE_J2"; then
+  ok "J2a (forward guard, mandatory positive twin): the J2 detector fires on a fixture repeating the false automatic-fallback claim"
+else
+  bad "J2a (forward guard, mandatory positive twin): the J2 detector did NOT fire on a fixture repeating the false claim — J2 cannot be trusted to catch a regression"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# J3 (R-15, same false-fallback class, not named in the SPEC's Scope but fixed anyway per the
+# plan) — docs/SKILLS-AND-AGENTS-GUIDE.md no longer states "isolation falls back to `none`".
+# ------------------------------------------------------------------------------------------------
+SKILLS_GUIDE="$REPO/docs/SKILLS-AND-AGENTS-GUIDE.md"
+
+if grep -qF 'isolation falls back to `none`' "$SKILLS_GUIDE" 2>/dev/null; then
+  bad "J3: docs/SKILLS-AND-AGENTS-GUIDE.md still states 'isolation falls back to \`none\`' — Task 8 GREEN fixes lines 355-356"
+else
+  ok "J3: docs/SKILLS-AND-AGENTS-GUIDE.md no longer states the false 'isolation falls back to none' claim"
+fi
+
+FIXTURE_J3="$TMP/fixture-j3.md"
+printf 'Runs in `isolation: worktree`. If the project root is not a direct git repo, isolation falls back to `none`.\n' > "$FIXTURE_J3"
+if grep -qF 'isolation falls back to `none`' "$FIXTURE_J3" 2>/dev/null; then
+  ok "J3a (forward guard, mandatory positive twin): the J3 detector fires on a fixture repeating the false claim"
+else
+  bad "J3a (forward guard, mandatory positive twin): the J3 detector did NOT fire on a fixture repeating the false claim — J3 cannot be trusted to catch a regression"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# J4 (R-16) — ADR-0016, ADR-0049 and ADR-0050 each carry a dated correction block naming ADR-0068
+# (ADR-0034 forward-recorded-correction precedent, never an in-place edit of a shipped ADR).
+# ------------------------------------------------------------------------------------------------
+ADR0016="$REPO/docs/architecture/ADR-0016-dynamic-workflows-step5.md"
+ADR0049="$REPO/docs/architecture/ADR-0049-103-generator-verifier-separation.md"
+ADR0050="$REPO/docs/architecture/ADR-0050-104-recovery-readiness-preflight.md"
+
+dated_correction_hits() {
+  # $1 = file. Prints one line per paragraph naming BOTH a YYYY-MM-DD date and "ADR-0068" together
+  # with a correction-ish word (correct|supersed|retir) — an actual forward-recorded correction
+  # block, not an incidental co-mention of a date and ADR-0068 somewhere in the same paragraph.
+  pdir="$TMP/dc-scan"
+  rm -rf "$pdir"; mkdir -p "$pdir"
+  split_paragraphs "$1" "$pdir"
+  for pf in "$pdir"/para-*.txt; do
+    [ -f "$pf" ] || continue
+    if grep -qE '20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]' "$pf" 2>/dev/null \
+       && grep -qF 'ADR-0068' "$pf" 2>/dev/null \
+       && grep -qiE 'correct|supersed|retir' "$pf" 2>/dev/null; then
+      echo "$pf"
+    fi
+  done
+}
+
+if [ -n "$(dated_correction_hits "$ADR0016")" ]; then
+  ok "J4a: ADR-0016 carries a dated correction block naming ADR-0068 (R-16)"
+else
+  bad "J4a: ADR-0016 has no dated correction block naming ADR-0068 yet (R-16) — Task 8 GREEN appends one near § Cross-repo isolation constraint"
+fi
+
+if [ -n "$(dated_correction_hits "$ADR0049")" ]; then
+  ok "J4b: ADR-0049 carries a dated correction block naming ADR-0068 (R-16)"
+else
+  bad "J4b: ADR-0049 has no dated correction block naming ADR-0068 yet (R-16) — Task 8 GREEN appends one near §D2"
+fi
+
+if [ -n "$(dated_correction_hits "$ADR0050")" ]; then
+  ok "J4c: ADR-0050 carries a dated correction block naming ADR-0068 (R-16)"
+else
+  bad "J4c: ADR-0050 has no dated correction block naming ADR-0068 yet (R-16) — Task 8 GREEN appends one near §D4"
+fi
+
+FIXTURE_J4_HIT="$TMP/fixture-j4-hit.md"
+printf '### Correction 2026-07-28 (ADR-0068 supersedes this section)\n\nThis section'"'"'s dirty-tree tolerance is retired by ADR-0068; see its §D2.\n' > "$FIXTURE_J4_HIT"
+if [ -n "$(dated_correction_hits "$FIXTURE_J4_HIT")" ]; then
+  ok "J4d (forward guard, mandatory positive twin): the J4 detector fires on a fixture paragraph that is an actual dated correction block naming ADR-0068"
+else
+  bad "J4d (forward guard, mandatory positive twin): the J4 detector did NOT fire on a fixture dated correction block naming ADR-0068 — J4a/b/c cannot be trusted to go green"
+fi
+
+FIXTURE_J4_MISS="$TMP/fixture-j4-miss.md"
+printf 'On 2026-07-28 the team also discussed ADR-0068 informally in a design review, unrelated to this section.\n' > "$FIXTURE_J4_MISS"
+if [ -z "$(dated_correction_hits "$FIXTURE_J4_MISS")" ]; then
+  ok "J4e (forward guard, negative twin): the J4 detector does NOT fire on a fixture that merely co-mentions a date and ADR-0068 without a correction word"
+else
+  bad "J4e (forward guard, negative twin): the J4 detector wrongly fired on a casual co-mention of a date and ADR-0068 — it cannot distinguish an actual correction block from an incidental reference"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# J5 (R-04, documentation extension) — no documentation surface under docs/ or
+# staging/user/rules/ promises that a WorktreeCreate hook exists or will be wired. See the module
+# docstring above this section for the exclusion list and its reasoning.
+# ------------------------------------------------------------------------------------------------
+hook_promise_hits() {
+  # $1 = file. Prints one line per paragraph mentioning WorktreeCreate WITHOUT a nearby negation
+  # (no/not/never/nothing/does not/n't) — i.e. a paragraph reading as a PROMISE the hook exists or
+  # will be wired, rather than a disclosure that it does not and will not.
+  pdir="$TMP/hp-scan"
+  rm -rf "$pdir"; mkdir -p "$pdir"
+  split_paragraphs "$1" "$pdir"
+  for pf in "$pdir"/para-*.txt; do
+    [ -f "$pf" ] || continue
+    if grep -qi 'worktreecreate' "$pf" 2>/dev/null; then
+      if grep -qiE '(^|[^a-z])(no|not|never|nothing)([^a-z]|$)|does not|n.t([^a-z]|$)' "$pf" 2>/dev/null; then
+        : # negation present nearby — a disclosure, not a promise
+      else
+        echo "$pf"
+      fi
+    fi
+  done
+}
+
+J5_SCANNED=0
+J5_HITS=""
+for f in $(find "$REPO/docs" -name '*.md' \
+             ! -path "*/architecture/ADR-0068-176-worktree-isolation-contract.md" \
+             ! -path "*/superpowers/plans/2026-07-28-176-worktree-isolation-contract.md") \
+          "$STAGING"/user/rules/*.md; do
+  [ -f "$f" ] || continue
+  J5_SCANNED=$((J5_SCANNED + 1))
+  HIT=$(hook_promise_hits "$f")
+  if [ -n "$HIT" ]; then
+    J5_HITS="$J5_HITS $f"
+  fi
+done
+
+if [ "$J5_SCANNED" -ge 20 ]; then
+  ok "J5-guard0 (forward guard): the documentation sweep scanned $J5_SCANNED files under docs/ + staging/user/rules/ — not vacuous"
+else
+  bad "J5-guard0 (forward guard): the documentation sweep scanned only $J5_SCANNED files — too few to trust J5"
+fi
+
+if [ -z "$J5_HITS" ]; then
+  ok "J5: no documentation surface under docs/ or staging/user/rules/ promises a WorktreeCreate hook (R-04), excluding this feature's own ADR-0068 and plan — GREEN already, a forward guard against a future regression, not fix evidence"
+else
+  bad "J5: a documentation surface promises a WorktreeCreate hook with no negation nearby:$J5_HITS"
+fi
+
+FIXTURE_J5_PROMISE="$TMP/fixture-j5-promise.md"
+printf 'Register `worktree-create.sh` as a WorktreeCreate hook in settings.json to scope the base branch per dispatch.\n' > "$FIXTURE_J5_PROMISE"
+if [ -n "$(hook_promise_hits "$FIXTURE_J5_PROMISE")" ]; then
+  ok "J5a (forward guard, mandatory positive twin): the J5 detector fires on a fixture that promises a WorktreeCreate hook"
+else
+  bad "J5a (forward guard, mandatory positive twin): the J5 detector did NOT fire on a fixture promising a WorktreeCreate hook — J5 cannot be trusted to catch a regression"
+fi
+
+FIXTURE_J5_DISCLOSE="$TMP/fixture-j5-disclose.md"
+printf 'No `WorktreeCreate` hook is registered by this system; nothing intercepts worktree creation for any session.\n' > "$FIXTURE_J5_DISCLOSE"
+if [ -z "$(hook_promise_hits "$FIXTURE_J5_DISCLOSE")" ]; then
+  ok "J5b (forward guard, negative twin): the J5 detector does NOT fire on a fixture that discloses the ABSENCE of a WorktreeCreate hook (negation nearby)"
+else
+  bad "J5b (forward guard, negative twin): the J5 detector wrongly fired on a legitimate disclosure fixture — it cannot distinguish a promise from a disclosure"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# J6 (ADR-0068 §D12) — CLAUDE.md's ADR-0068 section (the one place a stale summary would be read
+# by every future session in this project) names worktree.baseRef rather than worktree-create.sh.
+# ------------------------------------------------------------------------------------------------
+CLAUDEMD="$REPO/CLAUDE.md"
+
+block_from_h2_heading() {
+  # $1=file $2=start ere (awk). Prints from the first line matching $2 (inclusive) up to, but not
+  # including, the next line beginning with "## " (a different level-2 heading). Empty output if
+  # $2 matches nothing.
+  awk -v s="$2" '
+    $0 ~ s { f=1; print; next }
+    f && /^## / { exit }
+    f { print }
+  ' "$1" 2>/dev/null
+}
+
+CLAUDE_ADR0068_SECTION=$(block_from_h2_heading "$CLAUDEMD" '^## Decisions from the worktree isolation contract chain')
+
+if printf '%s\n' "$CLAUDE_ADR0068_SECTION" | grep -qF 'worktree.baseRef' \
+   && ! printf '%s\n' "$CLAUDE_ADR0068_SECTION" | grep -qF 'worktree-create.sh'; then
+  ok "J6: CLAUDE.md's ADR-0068 section names worktree.baseRef and no longer names worktree-create.sh (ADR-0068 §D12)"
+else
+  bad "J6: CLAUDE.md's ADR-0068 section still names worktree-create.sh (or lost its worktree.baseRef mention) — ADR-0068 §D12 requires this section REVISED, not appended to, describing the one-layer contract"
+fi
+
+FIXTURE_J6_GOOD="$TMP/fixture-j6-good.md"
+printf '## Decisions from the worktree isolation contract chain (ADR-0068)\n\nOne layer: `worktree.baseRef: "head"`, no hook registered.\n\n## Next section\n\nUnrelated.\n' > "$FIXTURE_J6_GOOD"
+FIXTURE_J6_GOOD_SECTION=$(block_from_h2_heading "$FIXTURE_J6_GOOD" '^## Decisions from the worktree isolation contract chain')
+if printf '%s\n' "$FIXTURE_J6_GOOD_SECTION" | grep -qF 'worktree.baseRef' \
+   && ! printf '%s\n' "$FIXTURE_J6_GOOD_SECTION" | grep -qF 'worktree-create.sh'; then
+  ok "J6a (forward guard, mandatory positive twin): the J6 predicate correctly passes a fixture section naming only worktree.baseRef"
+else
+  bad "J6a (forward guard, mandatory positive twin): the J6 predicate wrongly failed a fixture section naming only worktree.baseRef"
+fi
+
+FIXTURE_J6_BAD="$TMP/fixture-j6-bad.md"
+printf '## Decisions from the worktree isolation contract chain (ADR-0068)\n\nTwo layers: `worktree.baseRef: "head"` plus `worktree-create.sh`.\n\n## Next section\n\nUnrelated.\n' > "$FIXTURE_J6_BAD"
+FIXTURE_J6_BAD_SECTION=$(block_from_h2_heading "$FIXTURE_J6_BAD" '^## Decisions from the worktree isolation contract chain')
+if printf '%s\n' "$FIXTURE_J6_BAD_SECTION" | grep -qF 'worktree.baseRef' \
+   && ! printf '%s\n' "$FIXTURE_J6_BAD_SECTION" | grep -qF 'worktree-create.sh'; then
+  bad "J6b (forward guard, negative twin): the J6 predicate wrongly passed a fixture section that still names worktree-create.sh"
+else
+  ok "J6b (forward guard, negative twin): the J6 predicate correctly rejects a fixture section that still names worktree-create.sh"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
