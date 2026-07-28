@@ -604,9 +604,14 @@ The hard attempt cap is **2 attempts**. **Exceeding either the budget or the att
 evidence, not a reason to keep spending** — a slice that will not converge cheaply is an `amber` or
 `red` signal on its own (§D4).
 
-**Dispatch (single coder, model+effort pinned explicitly — ADR-0018 addendum, ADR-0049 §D6):**
+**Dispatch (single coder, model pinned explicitly — ADR-0018 addendum, ADR-0049 §D6).**
+
+The Agent tool takes no effort-level parameter of any kind — the Workflow-only `opts` field that
+name would suggest exists on the `agent()` call, lowercase, only (ADR-0068 §D7). Do not add one
+here.
+
 ```
-Agent({ agentType: "coder", model: "sonnet", effort: "high",
+Agent({ agentType: "coder", model: "sonnet",
         prompt: "TRACER-BULLET PROBE (Step 4.5, ADR-0057). Implement ONLY <slice-task-description>
 from the plan at <plan-path> — the thinnest END-TO-END slice through this feature: touch every
 layer it needs, shallowly, never a single layer probed deeply. Budget: <declared-files> (~150
@@ -871,10 +876,13 @@ every Edit operation. Auto mode active. No intermediate HITL. `.claude/test-cmd`
 never read, write, or modify it. If the test command needs changing, stop and report it to the
 orchestrator.
 
-**Stage 1 — tester.** Pin `agentType: "tester"`, `model: "sonnet"`, `effort: "medium"`
-explicitly on this `agent()` call — the effort table above is documentation, not a binding, and
-an omitted `effort` silently inherits this session's `high` (ADR-0018 addendum; ADR-0049 §D6
-applies the same rule to this new dispatch site). Brief the tester from the SPEC's requirement
+**Stage 1 — tester.** Pin `agentType: "tester"`, `model: "sonnet"`, `effort: "medium"`, and
+`isolation: "worktree"` explicitly on this `agent()` call — the effort table above is
+documentation, not a binding, and an omitted `effort` silently inherits this session's `high`
+(ADR-0018 addendum; ADR-0049 §D6 applies the same rule to this new dispatch site). `tester` has
+no `isolation` in its own frontmatter (F5), and frontmatter never reaches the Workflow path
+anyway (F4 as corrected by ADR-0068 F16), so an omitted value here means no worktree at all, not
+an inherited default (ADR-0068 §D6, R-09). Brief the tester from the SPEC's requirement
 IDs, never from implementation files (none of this group's implementation exists yet):
 ```bash
 bash <spec-coverage.sh, resolved exactly as in the Requirement-ID coverage gate below> \
@@ -888,6 +896,58 @@ bash <spec-coverage.sh, resolved exactly as in the Requirement-ID coverage gate 
   task text.
 The tester writes failing tests only, for this task group, and reports back which requirement
 IDs (or which Success Criteria / plan-task lines, per whichever fallback fired) each test covers.
+
+#### Merge-back and base-fork audit (ADR-0068 §D5, §D6, §D9)
+
+One resolution site, referenced by both dispatch paths (the Workflow stages above and below,
+Step 6's fix-agent dispatch, and the Agent-tool fallback below) — stated once, the same
+convention as `#### Pattern seed handoff` and `#### Proportional audit depth`. It runs after the
+tester's `agent()` call above returns and before Stage 2 below creates the coder's worktree.
+
+**The orchestrator commits, never the agent.** `coder.md`'s "never commits" instruction is
+untouched by this feature; this snapshot happens only after the dispatch has already returned
+(R-08). `$PRE` = `git rev-parse HEAD` on the feature branch, captured immediately before this
+stage was dispatched. `$WT` = `worktreePath`, `$WB` = `worktreeBranch`, both read from the
+dispatch result alongside the agent's report (F10).
+
+```bash
+# $PRE = git rev-parse HEAD, captured on the feature branch BEFORE this stage was dispatched
+# $WT  = worktreePath, $WB = worktreeBranch, both from the dispatch result (F10)
+[ -d "$WT" ] || { echo "nothing to merge: worktree auto-removed"; }   # F6, not an error
+if [ -d "$WT" ] && [ -n "$(git -C "$WT" status --porcelain 2>/dev/null)" ]; then
+  BASE_SHA=$(git -C "$WT" rev-parse HEAD)      # fork point, captured BEFORE any commit lands
+  [ "$BASE_SHA" = "$PRE" ] || <base-fork halt: report both shas, preserve $WB, stop>
+  git -C "$WT" add -A
+  git -C "$WT" commit -m "chore(step5): snapshot <stage> worktree (<agent_type>)"
+  git merge --no-edit "$WB" || <conflict halt, Task 7>
+  git worktree remove "$WT" 2>/dev/null || true
+fi
+```
+
+Either check in the `if` failing is **"nothing to merge"** — not an error, no forced empty
+commit, and no `worktree_merges` entry (R-14). On a successful merge,
+append one `worktree_merges` entry — `{stage, agent_type, branch, base_sha, merge_result}` — to
+`step5-report.json`; append none when nothing was merged. The array is additive: its absence in
+an older report means the run predates this feature, not that the report is malformed. After a
+successful merge the worktree is pruned; an **unmerged** worktree (halted, or left over from a
+conflict) is reported and preserved, never silently deleted.
+
+**Base-fork halt, and why it is a halt, not a report.** `BASE_SHA != $PRE` means the worktree
+forked from somewhere other than the feature branch — the exact defect this feature exists to
+fix, occurring after the Step 5 pre-flight assertion (R-05) already passed: a mid-run edit to
+`settings.json`, or a future CC build changing the semantics. It halts on the same path as the
+Task 7 conflict halt, naming both shas, rather than merely reporting the mismatch. The
+false-positive analysis is short enough to state here: the stage protocol serialises dispatch →
+merge → next dispatch, so `HEAD` cannot legitimately move between `$PRE` and the sha the worktree
+reports, and the auto-removed and empty-diff cases are already handled as nothing-to-merge above
+this comparison. A mismatch is therefore always the defect, never a false alarm.
+
+**Ordering.** This merge-back completes — the tester's worktree is committed and merged into the
+feature branch — before Stage 2 below creates the coder's worktree, so the coder forks from a
+`HEAD` that already contains this task group's red tests (R-09). `worktree.baseRef: "head"` does
+not make this step redundant: `"head"` means the commit `HEAD` points at, not the working tree,
+and a worktree forks from a commit — the tester's output is uncommitted until this merge lands it
+there (ADR-0068 §D6, §D9).
 
 **Stage 2 — coder.** Pin `agentType: "coder"`, an explicit `model` (per the model-override rule
 above), an explicit `effort` (per the effort table above), and `isolation: "worktree"` explicitly
@@ -1436,15 +1496,19 @@ closing gates. Split the dispatch into **batches of 2-3 tasks**:
 
 1. Dispatch `tester` for batch 1 (tasks 1-N, where N ≤ 3), BEFORE this batch's coder
    (ADR-0049 §D1 — same ordering as the Workflow path's Stage 1). Pin `agentType: "tester"`,
-   `model: "sonnet"`, `effort: "medium"` explicitly (ADR-0049 §D6; the effort table above is
-   documentation, not a binding). Use the **Tester batch dispatch template** below — same brief
-   contract as the Workflow path: SPEC requirement IDs via `spec-coverage.sh --list`, falling
-   back to Success Criteria then to this batch's plan task text, never from implementation files.
-2. Dispatch coder with batch 1 (tasks 1-N, where N ≤ 3), pinning `isolation: "worktree"`
-   explicitly (ADR-0068 §D1, §D7 — there is no second mode; the tester's worktree from step 1 is
-   committed and merged into the feature branch before this coder's worktree is created, so it
-   forks from a `HEAD` that already contains the batch's failing tests) and the **Single batch
-   dispatch template** below, which carries the TEST-AUTHORING SCOPE marker verbatim.
+   `model: "sonnet"`, `effort: "medium"`, and `isolation: "worktree"` explicitly (ADR-0049 §D6;
+   the effort table above is documentation, not a binding; `tester` has no `isolation` in its own
+   frontmatter, F5, so an omitted value here means no worktree at all, ADR-0068 §D6, R-09). Use
+   the **Tester batch dispatch template** below — same brief contract as the Workflow path: SPEC
+   requirement IDs via `spec-coverage.sh --list`, falling back to Success Criteria then to this
+   batch's plan task text, never from implementation files.
+2. Dispatch coder with batch 1 (tasks 1-N, where N ≤ 3). Before this dispatch, run the
+   **Merge-back and base-fork audit** block above to merge this batch's tester worktree into the
+   feature branch (same resolution site, same ordering as the Workflow path's Stage 1 → Stage 2).
+   Pin `isolation: "worktree"` explicitly (ADR-0068 §D1, §D7 — there is no second mode; per the
+   merge-back step just run, this coder forks from a `HEAD` that already contains the batch's
+   failing tests) and use the **Single batch dispatch template** below, which carries the
+   TEST-AUTHORING SCOPE marker verbatim.
 3. Checkpoint between batches: run `verify.sh <root>` and check `git status` yourself
    as the orchestrator — do NOT trust the coder's report to decide whether to continue
    (it may be truncated or incomplete). Also run the `Anti-test-weakening gate — Step 5 →
@@ -1631,7 +1695,7 @@ Phase 3 — Fix in parallel per file group:
       Return: { "fixed": [<id>, ...], "skipped": [<id>, ...],
                 "deferred": [{ "file": "<path>", "needed": "<what change and why>" }],
                 "notes": "<string>" }
-    `, { agentType: group[0].fix_type, model: "opus", effort: FIX_EFFORT[group[0].fix_type] })
+    `, { agentType: group[0].fix_type, model: "opus", effort: FIX_EFFORT[group[0].fix_type], isolation: 'worktree' })
   ));
 
 Phase 4 — Re-review:
