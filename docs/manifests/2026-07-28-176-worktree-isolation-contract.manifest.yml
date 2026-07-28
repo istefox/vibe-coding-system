@@ -6,7 +6,7 @@ mode: "greenfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-07-28T12:06:47+00:00"
-last_updated_at: "2026-07-28T13:50:38+00:00"
+last_updated_at: "2026-07-28T14:24:21+00:00"
 current_step: "ready_for_implementation"
 status: "in_progress"
 
@@ -22,17 +22,17 @@ gate0:
 test_cmd_placeholder: false
 test_cmd_candidate: "for t in staging/plugin/scripts/tests/*.test.sh; do bash \"$t\" || exit 1; done"
 test_cmd_provisional: false
-coder_model: "opus"
+coder_model: "sonnet"
 
 # Autopilot mode (project-conductor): all HITL gates auto-select safe defaults
 autopilot: false
 
 # Dynamic Workflows Step 5 tracking (ADR-0016) — default false; smoke test flips it true per environment
-hook_verified: false
+hook_verified: true
 step5_mode: null
 
 # Recovery-readiness pre-flight (ADR-0050) — HEAD sha recorded once at Step 5 entry
-recovery_baseline_sha: null
+recovery_baseline_sha: "129d5e093e416ca62f9426a440d5656692e61ce7"
 
 # Proportional audit depth (ADR-0055) — risk and task_type axes. Absent/null means STRICT
 # here, not inert (inverts the ADR-0052/0053/0054 pattern) — see concept-to-code/SKILL.md
@@ -94,13 +94,13 @@ hitl_gates:
   - gate: 2
     label: "architecture_review"
     status: "approved"
-    approved_at: "2026-07-28T13:39:13+00:00"
-    notes: "ADR-0068 + plan approved; audit profile high/legacy-integration accepted; TOFU pre-existing"
+    approved_at: "2026-07-28T14:24:20+00:00"
+    notes: "revised ADR-0068 + 10-task plan approved: hook dropped (F13/F14/F17), baseRef head is the sole mechanism, audit record relocated to D5 merge-back, 5 requirement IDs re-scoped via new Task 1b"
   - gate: 3
     label: "project_memory_review"
     status: "approved"
-    approved_at: "2026-07-28T13:41:14+00:00"
-    notes: "CLAUDE.md section appended (64 lines)"
+    approved_at: "2026-07-28T14:24:21+00:00"
+    notes: "not re-presented: CLAUDE.md ADR-0068 section on disk describes the deleted two-layer design; its revision is plan Task 8 under the Gate 2 approval"
   - gate: 5
     label: "review_cycle_decision"
     status: "pending"
