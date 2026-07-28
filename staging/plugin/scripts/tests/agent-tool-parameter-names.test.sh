@@ -52,6 +52,22 @@
 # the ADR-0039 cfile=/dev/null correction: a detector that reports nothing must be distinguishable
 # from a corpus that contains nothing, and a detector must be shown to both fire on a violation
 # and stay silent on the correct form it must never flag.
+#
+# ---------------------------------------------------------------------------------------------
+# Issue #180 part 2 — the rest of the tool-parameter sweep, beyond the Agent tool covered above.
+#
+#   Zone C (Skill tool) — an ALLOWLIST, same reasoning as zone 1. The Skill tool's real schema is
+#   named parameters only (`skill` required, `args` optional) — there is no positional form. Three
+#   sites in this repository call it positionally anyway (`Skill(concept-to-code, "resume
+#   <manifest-path>")` and siblings); five-plus other sites in the SAME repository use the correct
+#   named form, which is the internal-inconsistency evidence this file already uses for zone 1.
+#
+#   Zone D (EnterPlanMode) and Zone E (mcp__github__create_pull_request) are FORWARD GUARDS, not
+#   fix evidence: every real occurrence in the corpus today is already correct (EnterPlanMode is
+#   never called with a parameter; the one create_pull_request instruction block names only
+#   schema-valid fields). Their assertions are currently green and are labelled as such — see the
+#   ADR-0031 "two always-PASS assertions labeled in the plan" precedent, reapplied here so a green
+#   run is never mistaken for evidence that something was fixed.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -180,6 +196,212 @@ def zone2_scan(files):
     return sorted(violations), zone_units
 
 
+# ==================================================================================================
+# Skill-tool zone (issue #180 sweep, part 2). Real schema: named parameters only, `skill` (required)
+# and `args` (optional) — there is NO positional form. Scoped on the literal `Skill(` (capital S,
+# open paren) exactly as zone 1 scopes on literal `Agent({` — the same discrimination that keeps
+# prose mentions of "the `commit` skill" or "**skill**" out of scope, since neither contains the
+# substring `Skill(`.
+#
+# TRUE ALLOWLIST, for the same reason as zone 1: every top-level argument inside the balanced
+# parens is classified as either POSITIONAL (no `name=` prefix at all — the defect this zone
+# exists to catch) or NAMED with a key compared against {skill, args}. Any other key is flagged
+# too, not just an invented one seen today — the ADR-0043 direction lesson, applied a second time
+# in this same file.
+# ==================================================================================================
+ALLOWLIST_SKILL = {"skill", "args"}
+NAMED_ARG_RE = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\s*=')
+
+
+def _find_call_end(text, start_idx):
+    """Return the index of the ')' that closes the '(' consumed just before start_idx,
+    tracking nesting depth and skipping over quoted content (quote-aware, matches zone 1's
+    quote-agnostic-but-safe approach: none of the corpus's argument values contain unescaped
+    parens or commas inside quotes, this only adds robustness for a future one that might)."""
+    depth = 1
+    i = start_idx
+    in_squote = False
+    in_dquote = False
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if in_dquote:
+            if c == '"' and text[i - 1] != '\\':
+                in_dquote = False
+        elif in_squote:
+            if c == "'" and text[i - 1] != '\\':
+                in_squote = False
+        else:
+            if c == '"':
+                in_dquote = True
+            elif c == "'":
+                in_squote = True
+            elif c == '(':
+                depth += 1
+            elif c == ')':
+                depth -= 1
+                if depth == 0:
+                    return i
+        i += 1
+    return -1
+
+
+def _split_top_level(s):
+    """Split on commas at paren/quote depth 0."""
+    parts = []
+    cur = []
+    depth = 0
+    in_squote = False
+    in_dquote = False
+    n = len(s)
+    i = 0
+    while i < n:
+        c = s[i]
+        if in_dquote:
+            cur.append(c)
+            if c == '"' and s[i - 1] != '\\':
+                in_dquote = False
+        elif in_squote:
+            cur.append(c)
+            if c == "'" and s[i - 1] != '\\':
+                in_squote = False
+        else:
+            if c == '"':
+                in_dquote = True
+                cur.append(c)
+            elif c == "'":
+                in_squote = True
+                cur.append(c)
+            elif c == '(':
+                depth += 1
+                cur.append(c)
+            elif c == ')':
+                depth -= 1
+                cur.append(c)
+            elif c == ',' and depth == 0:
+                parts.append(''.join(cur))
+                cur = []
+            else:
+                cur.append(c)
+        i += 1
+    if cur:
+        parts.append(''.join(cur))
+    return parts
+
+
+def skill_scan(files):
+    violations = []
+    call_count = 0
+    for f in files:
+        try:
+            with open(f) as fh:
+                lines = fh.readlines()
+        except Exception:
+            continue
+        for start, para in split_paragraphs(lines):
+            joined = "".join(para).replace('`', '')
+            search_from = 0
+            while True:
+                idx = joined.find("Skill(", search_from)
+                if idx == -1:
+                    break
+                call_count += 1
+                inner_start = idx + len("Skill(")
+                end_idx = _find_call_end(joined, inner_start)
+                if end_idx == -1:
+                    search_from = inner_start
+                    continue
+                inner = joined[inner_start:end_idx]
+                line_no = start + joined[:idx].count("\n")
+                for arg in _split_top_level(inner):
+                    arg_stripped = arg.strip()
+                    if arg_stripped == "":
+                        continue
+                    m = NAMED_ARG_RE.match(arg_stripped)
+                    if not m:
+                        violations.append((f, line_no, "positional"))
+                    else:
+                        key = m.group(1)
+                        if key not in ALLOWLIST_SKILL:
+                            violations.append((f, line_no, key))
+                search_from = end_idx + 1
+    return violations, call_count
+
+
+# ==================================================================================================
+# EnterPlanMode zone. Real schema: takes no parameters at all. Every occurrence in the corpus today
+# is a prose reference ("Call `EnterPlanMode`") with no call syntax whatsoever, so CALLCOUNT is
+# legitimately 0 — this is a forward guard against a future call site that prescribes one, not
+# evidence of a fix (there is nothing to fix today).
+# ==================================================================================================
+ENTERPLANMODE_CALL_RE = re.compile(r'EnterPlanMode\(([^()]*)\)')
+
+
+def enterplanmode_scan(files):
+    violations = []
+    call_count = 0
+    for f in files:
+        try:
+            with open(f) as fh:
+                lines = fh.readlines()
+        except Exception:
+            continue
+        for ln, line in enumerate(lines, start=1):
+            stripped = line.replace('`', '')
+            for m in ENTERPLANMODE_CALL_RE.finditer(stripped):
+                call_count += 1
+                if m.group(1).strip() != "":
+                    violations.append((f, ln, m.group(1).strip()))
+    return violations, call_count
+
+
+# ==================================================================================================
+# mcp__github__create_pull_request zone. Real schema fields: owner, repo, title, head, base, body,
+# draft, reviewers, maintainer_can_modify. A block is identified by a line naming the tool AND
+# ending in ':' (a field list follows) — this discriminates the real instruction block ("proceed
+# with `mcp__github__create_pull_request`:") from a bare cross-reference ("Do NOT attempt
+# `mcp__github__create_pull_request`...") that never ends in a colon and introduces no field list.
+# Fields are the backtick-quoted-word-immediately-followed-by-colon tokens in the block that
+# follows, matching this repo's own SKILL.md bullet convention (`` `title`: subject of... ``).
+# Forward guard, like EnterPlanMode: the one real block is currently valid, so this is currently
+# green and proves nothing was ever broken — the fixture pair proves the detector would catch it.
+# ==================================================================================================
+ALLOWLIST_PR_FIELDS = {
+    "owner", "repo", "title", "head", "base", "body", "draft", "reviewers",
+    "maintainer_can_modify",
+}
+PR_BLOCK_HEADER_RE = re.compile(r'mcp__github__create_pull_request.*:\s*$')
+PR_FIELD_RE = re.compile(r'`([A-Za-z_][A-Za-z0-9_]*)`\s*:')
+PR_BULLET_RE = re.compile(r'^\s*-\s')
+
+
+def mcp_pr_scan(files):
+    violations = []
+    block_count = 0
+    for f in files:
+        try:
+            with open(f) as fh:
+                lines = fh.readlines()
+        except Exception:
+            continue
+        n = len(lines)
+        i = 0
+        while i < n:
+            if PR_BLOCK_HEADER_RE.search(lines[i].rstrip('\n')):
+                block_count += 1
+                j = i + 1
+                while j < n and PR_BULLET_RE.match(lines[j]):
+                    for m in PR_FIELD_RE.finditer(lines[j]):
+                        field = m.group(1)
+                        if field not in ALLOWLIST_PR_FIELDS:
+                            violations.append((f, j + 1, field))
+                    j += 1
+                i = j
+            else:
+                i += 1
+    return violations, block_count
+
+
 def main():
     mode = sys.argv[1]
     files = sys.argv[2:]
@@ -193,8 +415,25 @@ def main():
         for f, ln, k in violations:
             print("VIOLATION\t%s\t%d\t%s" % (f, ln, k))
         print("ZONECOUNT\t%d" % count)
+    elif mode == "skill":
+        violations, count = skill_scan(files)
+        for f, ln, k in violations:
+            print("VIOLATION\t%s\t%d\t%s" % (f, ln, k))
+        print("CALLCOUNT\t%d" % count)
+    elif mode == "enterplanmode":
+        violations, count = enterplanmode_scan(files)
+        for f, ln, k in violations:
+            print("VIOLATION\t%s\t%d\t%s" % (f, ln, k))
+        print("CALLCOUNT\t%d" % count)
+    elif mode == "mcp_pr":
+        violations, count = mcp_pr_scan(files)
+        for f, ln, k in violations:
+            print("VIOLATION\t%s\t%d\t%s" % (f, ln, k))
+        print("BLOCKCOUNT\t%d" % count)
     else:
-        sys.stderr.write("usage: agent_zone_scan.py zone1|zone2 <files...>\n")
+        sys.stderr.write(
+            "usage: agent_zone_scan.py zone1|zone2|skill|enterplanmode|mcp_pr <files...>\n"
+        )
         sys.exit(2)
 
 
@@ -218,14 +457,26 @@ done < "$CORPUS_LIST"
 
 python3 "$SCANNER" zone1 "${CORPUS[@]}" > "$TMP/zone1.out" 2>"$TMP/zone1.err"
 python3 "$SCANNER" zone2 "${CORPUS[@]}" > "$TMP/zone2.out" 2>"$TMP/zone2.err"
+python3 "$SCANNER" skill "${CORPUS[@]}" > "$TMP/skill.out" 2>"$TMP/skill.err"
+python3 "$SCANNER" enterplanmode "${CORPUS[@]}" > "$TMP/epm.out" 2>"$TMP/epm.err"
+python3 "$SCANNER" mcp_pr "${CORPUS[@]}" > "$TMP/mcp.out" 2>"$TMP/mcp.err"
 
 Z1_CALLCOUNT=$(grep '^CALLCOUNT' "$TMP/zone1.out" | cut -f2)
 Z1_VIOLATIONS=$(grep '^VIOLATION' "$TMP/zone1.out")
 Z2_ZONECOUNT=$(grep '^ZONECOUNT' "$TMP/zone2.out" | cut -f2)
 Z2_VIOLATIONS=$(grep '^VIOLATION' "$TMP/zone2.out")
+SKILL_CALLCOUNT=$(grep '^CALLCOUNT' "$TMP/skill.out" | cut -f2)
+SKILL_VIOLATIONS=$(grep '^VIOLATION' "$TMP/skill.out")
+EPM_CALLCOUNT=$(grep '^CALLCOUNT' "$TMP/epm.out" | cut -f2)
+EPM_VIOLATIONS=$(grep '^VIOLATION' "$TMP/epm.out")
+MCP_BLOCKCOUNT=$(grep '^BLOCKCOUNT' "$TMP/mcp.out" | cut -f2)
+MCP_VIOLATIONS=$(grep '^VIOLATION' "$TMP/mcp.out")
 
 case "$Z1_CALLCOUNT" in ''|*[!0-9]*) Z1_CALLCOUNT=0 ;; esac
 case "$Z2_ZONECOUNT" in ''|*[!0-9]*) Z2_ZONECOUNT=0 ;; esac
+case "$SKILL_CALLCOUNT" in ''|*[!0-9]*) SKILL_CALLCOUNT=0 ;; esac
+case "$EPM_CALLCOUNT" in ''|*[!0-9]*) EPM_CALLCOUNT=0 ;; esac
+case "$MCP_BLOCKCOUNT" in ''|*[!0-9]*) MCP_BLOCKCOUNT=0 ;; esac
 
 # ==============================================================================================
 # Section A — Zone 1 (literal `Agent({...})` object-literal calls). ALLOWLIST.
@@ -405,6 +656,184 @@ else
 fi
 
 # ==============================================================================================
+# Section C — Skill tool (literal `Skill(...)` calls). TRUE ALLOWLIST over {skill, args}; a bare
+# positional argument is flagged as "positional", any other named key is flagged by its own name.
+# ==============================================================================================
+if [ "$SKILL_CALLCOUNT" -ge 1 ]; then
+  ok "C0: at least one literal Skill(...) call site was discovered across staging/ (count=$SKILL_CALLCOUNT) — the extractor is not vacuous"
+else
+  bad "C0: zero Skill(...) call sites discovered — the extractor is broken and every section-C assertion below is meaningless"
+fi
+
+SKILL_POSITIONAL=$(printf '%s\n' "$SKILL_VIOLATIONS" | awk -F'\t' '$4=="positional"')
+
+if [ -z "$SKILL_VIOLATIONS" ]; then
+  ok "C1: every Skill(...) call site uses only named parameters (skill=/args=), none positional and no invented key"
+else
+  bad "C1: Skill(...) call site(s) use a positional argument or a key the tool does not accept: $(printf '%s' "$SKILL_VIOLATIONS" | awk -F'\t' '{printf "%s:%s(%s) ", $2, $3, $4}')"
+fi
+
+# C1b: pin the exact known-bad site list (file:line), so the coder has a precise target list
+# rather than only a count. A change to this set (fixed sites disappearing, or a new positional
+# site appearing) must be visible here, not just in the aggregate PASS/FAIL count.
+EXPECTED_POSITIONAL="$TMP/expected-positional.txt"
+cat > "$EXPECTED_POSITIONAL" <<EOF
+$STAGING/plugin/skills/nightly-autopilot/SKILL.md:69
+$STAGING/plugin/skills/nightly-autopilot/SKILL.md:178
+$STAGING/plugin/skills/project-conductor/SKILL.md:167
+EOF
+ACTUAL_POSITIONAL="$TMP/actual-positional.txt"
+printf '%s\n' "$SKILL_POSITIONAL" | awk -F'\t' '{print $2":"$3}' | sort -u > "$ACTUAL_POSITIONAL"
+sort -u "$EXPECTED_POSITIONAL" -o "$EXPECTED_POSITIONAL"
+if diff -q "$EXPECTED_POSITIONAL" "$ACTUAL_POSITIONAL" >/dev/null 2>&1; then
+  ok "C1b: the positional-argument violations are exactly the 3 known-bad sites (nightly-autopilot/SKILL.md:69, :178, project-conductor/SKILL.md:167) — no more, no fewer"
+else
+  bad "C1b: the positional-argument violation set does not match the 3 known-bad sites. expected: $(printf '%s ' $(cat "$EXPECTED_POSITIONAL")) actual: $(printf '%s ' $(cat "$ACTUAL_POSITIONAL"))"
+fi
+
+# C2 (forward guard, mandatory positive twin): a fixture positional Skill(foo, "bar") call must
+# be flagged as "positional".
+FIXTURE_C2="$TMP/fixture-c2.md"
+cat > "$FIXTURE_C2" <<'EOF'
+Dispatch: `Skill(foo, "bar")`.
+EOF
+C2_OUT=$(python3 "$SCANNER" skill "$FIXTURE_C2")
+if printf '%s\n' "$C2_OUT" | grep -q 'VIOLATION.*positional'; then
+  ok "C2 (forward guard): a fixture positional Skill(foo, \"bar\") call is flagged as 'positional'"
+else
+  bad "C2 (forward guard): the fixture positional Skill(foo, \"bar\") call was NOT flagged — the skill-zone detector cannot be trusted"
+fi
+
+# C3 (forward guard, mandatory positive twin — silence proof): a fixture using ONLY the real
+# named form must produce zero violations.
+FIXTURE_C3="$TMP/fixture-c3.md"
+cat > "$FIXTURE_C3" <<'EOF'
+Dispatch: `Skill(skill="foo", args="bar")`.
+EOF
+C3_OUT=$(python3 "$SCANNER" skill "$FIXTURE_C3")
+if printf '%s\n' "$C3_OUT" | grep -q '^VIOLATION'; then
+  bad "C3 (forward guard, silence proof): a fixture Skill(skill=..., args=...) call using ONLY the real named form was wrongly flagged"
+else
+  ok "C3 (forward guard, silence proof): a fixture Skill(skill=\"foo\", args=\"bar\") call is correctly silent"
+fi
+
+# C4 (forward guard, mandatory positive twin, TRUE ALLOWLIST proof): a fixture carrying a
+# never-seen-before named key ('timeout') must ALSO be flagged — proving section C is an allowlist
+# over {skill, args}, not merely a positional-only check.
+FIXTURE_C4="$TMP/fixture-c4.md"
+cat > "$FIXTURE_C4" <<'EOF'
+Dispatch: `Skill(skill="foo", timeout=30)`.
+EOF
+C4_OUT=$(python3 "$SCANNER" skill "$FIXTURE_C4")
+if printf '%s\n' "$C4_OUT" | grep -q 'VIOLATION.*timeout'; then
+  ok "C4 (forward guard, allowlist proof): a fixture Skill(skill=\"foo\", timeout=30) call carrying an INVENTED named key ('timeout') is flagged — section C is a true allowlist over {skill, args}, not a positional-only check"
+else
+  bad "C4 (forward guard): the fixture's invented named key 'timeout' was NOT flagged — section C is only checking for positional form, not proving a true allowlist"
+fi
+
+# C5 (forward guard, mandatory positive twin — discrimination proof): prose mentioning the word
+# "Skill" without the literal call syntax (no open paren, or the many "**skill**"/"the `commit`
+# skill" references) must not be counted or flagged.
+FIXTURE_C5="$TMP/fixture-c5.md"
+cat > "$FIXTURE_C5" <<'EOF'
+Invoke the `commit` skill, not the `Agent` tool. The **skill** here handles the push and PR steps.
+EOF
+C5_OUT=$(python3 "$SCANNER" skill "$FIXTURE_C5")
+C5_COUNT=$(printf '%s\n' "$C5_OUT" | grep '^CALLCOUNT' | cut -f2)
+case "$C5_COUNT" in ''|*[!0-9]*) C5_COUNT=0 ;; esac
+if [ "$C5_COUNT" -eq 0 ] && ! printf '%s\n' "$C5_OUT" | grep -q '^VIOLATION'; then
+  ok "C5 (forward guard, discrimination proof): prose naming 'the \`commit\` skill' and '**skill**' (no literal 'Skill(' call) is neither counted nor flagged"
+else
+  bad "C5 (forward guard, discrimination proof): the skill-zone detector wrongly counted or flagged a prose mention of the word 'skill' with no literal call syntax"
+fi
+
+# ==============================================================================================
+# Section D — EnterPlanMode (forward guard). Real schema: no parameters at all. Every corpus
+# occurrence today is a prose reference with no call syntax, so CALLCOUNT=0 is the correct,
+# currently-green state — not evidence anything was fixed.
+# ==============================================================================================
+if [ -z "$EPM_VIOLATIONS" ]; then
+  ok "D1 (forward guard, currently green — nothing to fix today): no EnterPlanMode(...) call site in the real corpus prescribes a parameter (found $EPM_CALLCOUNT literal call site(s) with parens; the rest are bare prose references with no call syntax at all)"
+else
+  bad "D1: an EnterPlanMode(...) call site prescribes a parameter, which the tool does not accept: $(printf '%s' "$EPM_VIOLATIONS" | awk -F'\t' '{printf "%s:%s(%s) ", $2, $3, $4}')"
+fi
+
+# D2 (forward guard, mandatory positive twin): a fixture EnterPlanMode(foo="bar") call must be
+# flagged, proving the detector would catch a future violation.
+FIXTURE_D2="$TMP/fixture-d2.md"
+cat > "$FIXTURE_D2" <<'EOF'
+Call `EnterPlanMode(foo="bar")` here (fixture).
+EOF
+D2_OUT=$(python3 "$SCANNER" enterplanmode "$FIXTURE_D2")
+if printf '%s\n' "$D2_OUT" | grep -q '^VIOLATION'; then
+  ok "D2 (forward guard): a fixture EnterPlanMode(foo=\"bar\") call is flagged — the tool takes no parameters"
+else
+  bad "D2 (forward guard): the fixture EnterPlanMode(foo=\"bar\") call was NOT flagged — the EnterPlanMode detector cannot be trusted"
+fi
+
+# D3 (forward guard, mandatory positive twin — silence proof): a bare prose reference ("Call
+# `EnterPlanMode`.", no parens at all) must stay silent.
+FIXTURE_D3="$TMP/fixture-d3.md"
+cat > "$FIXTURE_D3" <<'EOF'
+Call `EnterPlanMode`. The plan approval UI is the HITL gate (fixture).
+EOF
+D3_OUT=$(python3 "$SCANNER" enterplanmode "$FIXTURE_D3")
+if printf '%s\n' "$D3_OUT" | grep -q '^VIOLATION'; then
+  bad "D3 (forward guard, silence proof): a bare prose reference to EnterPlanMode (no call syntax) was wrongly flagged"
+else
+  ok "D3 (forward guard, silence proof): a bare prose reference ('Call \`EnterPlanMode\`.', no parens) is correctly silent"
+fi
+
+# ==============================================================================================
+# Section E — mcp__github__create_pull_request (forward guard). Real schema fields: owner, repo,
+# title, head, base, body, draft, reviewers, maintainer_can_modify. The one real instruction block
+# (commit/SKILL.md) names only title/body/base/head, all valid — currently green, not fix evidence.
+# ==============================================================================================
+if [ "$MCP_BLOCKCOUNT" -ge 1 ]; then
+  ok "E0: at least one mcp__github__create_pull_request instruction block was discovered across staging/ (count=$MCP_BLOCKCOUNT) — the extractor is not vacuous"
+else
+  bad "E0: zero mcp__github__create_pull_request instruction blocks discovered — the extractor is broken and every section-E assertion below is meaningless"
+fi
+
+if [ -z "$MCP_VIOLATIONS" ]; then
+  ok "E1 (forward guard, currently green — nothing to fix today): every field named in a real mcp__github__create_pull_request instruction block is one the tool accepts"
+else
+  bad "E1: an mcp__github__create_pull_request instruction block names a field the tool does not accept: $(printf '%s' "$MCP_VIOLATIONS" | awk -F'\t' '{printf "%s:%s(%s) ", $2, $3, $4}')"
+fi
+
+# E2 (forward guard, mandatory positive twin): a fixture block naming an invented field
+# ('assignee') must be flagged.
+FIXTURE_E2="$TMP/fixture-e2.md"
+cat > "$FIXTURE_E2" <<'EOF'
+1. proceed with `mcp__github__create_pull_request`:
+   - `title`: subject of the commit message
+   - `assignee`: the fixture's invented field
+EOF
+E2_OUT=$(python3 "$SCANNER" mcp_pr "$FIXTURE_E2")
+if printf '%s\n' "$E2_OUT" | grep -q 'VIOLATION.*assignee'; then
+  ok "E2 (forward guard): a fixture block naming the invented field 'assignee' is flagged"
+else
+  bad "E2 (forward guard): the fixture block's invented field 'assignee' was NOT flagged — the mcp__github__create_pull_request detector cannot be trusted"
+fi
+
+# E3 (forward guard, mandatory positive twin — silence proof): a fixture block naming only
+# schema-valid fields must stay silent.
+FIXTURE_E3="$TMP/fixture-e3.md"
+cat > "$FIXTURE_E3" <<'EOF'
+1. proceed with `mcp__github__create_pull_request`:
+   - `title`: subject of the commit message
+   - `body`: body of the commit message
+   - `base`: `$default_branch`, `head`: `$branch_name`
+   - `draft`: false
+EOF
+E3_OUT=$(python3 "$SCANNER" mcp_pr "$FIXTURE_E3")
+if printf '%s\n' "$E3_OUT" | grep -q '^VIOLATION'; then
+  bad "E3 (forward guard, silence proof): a fixture block naming only schema-valid fields (title/body/base/head/draft) was wrongly flagged"
+else
+  ok "E3 (forward guard, silence proof): a fixture block naming only schema-valid fields is correctly silent"
+fi
+
+# ==============================================================================================
 # Report — the full flagged-site list from the real corpus, for the coder to work from.
 # ==============================================================================================
 echo "---- flagged sites (zone 1 — literal Agent({...}) calls) ----"
@@ -417,6 +846,27 @@ fi
 echo "---- flagged sites (zone 2 — Agent-tool prose) ----"
 if [ -n "$Z2_VIOLATIONS" ]; then
   printf '%s\n' "$Z2_VIOLATIONS" | awk -F'\t' '{print $2":"$3" -> disallowed key: "$4}'
+else
+  echo "(none)"
+fi
+
+echo "---- flagged sites (section C — Skill(...) calls) ----"
+if [ -n "$SKILL_VIOLATIONS" ]; then
+  printf '%s\n' "$SKILL_VIOLATIONS" | awk -F'\t' '{print $2":"$3" -> "$4}'
+else
+  echo "(none)"
+fi
+
+echo "---- flagged sites (section D — EnterPlanMode) ----"
+if [ -n "$EPM_VIOLATIONS" ]; then
+  printf '%s\n' "$EPM_VIOLATIONS" | awk -F'\t' '{print $2":"$3" -> "$4}'
+else
+  echo "(none)"
+fi
+
+echo "---- flagged sites (section E — mcp__github__create_pull_request) ----"
+if [ -n "$MCP_VIOLATIONS" ]; then
+  printf '%s\n' "$MCP_VIOLATIONS" | awk -F'\t' '{print $2":"$3" -> "$4}'
 else
   echo "(none)"
 fi
