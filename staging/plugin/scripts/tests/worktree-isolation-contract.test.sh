@@ -715,6 +715,135 @@ else
   bad "H7b (forward guard, mandatory positive twin): expected exactly one flagged paragraph in the fixture (the Agent(...) block), got $FIXTURE_H7_HIT_COUNT — the detector cannot be trusted to distinguish Agent-tool calls from Workflow calls"
 fi
 
+# ==============================================================================================
+# Section I (Task 7, R-10, R-12) — binding conflict scan and the conflict halt (ADR-0068 §D8).
+#
+# EXPECTED at RED time (Task 7 GREEN not yet run):
+#   I-guard0 GREEN (forward guard) — the conflict-scan block itself is non-empty, so the absence
+#            checks below (I2) cannot pass merely because the extractor found nothing.
+#   I1      RED   — the scan block states no binding/sequencing language yet ("binding",
+#            "sequenced", "batch" are all absent from the block at the time this section was
+#            written; "parallel" alone IS already present — "Groups with no path overlap keep the
+#            default parallel dispatch" — which is why all four keywords are required together,
+#            not "parallel" alone).
+#   I2      RED   — the scan block still states "This stays advisory: every group runs with
+#            `isolation: worktree`" (confirmed present, ADR-0068 §D8's superseded clause) — R-10
+#            requires this replaced by a binding scan with no such advisory escape.
+#   I2b     GREEN (forward guard, mandatory positive twin) — the same absence detector, applied to
+#            a fixture carrying the literal advisory sentence, correctly flags it. Proves I2 is not
+#            passing because the detector is broken.
+#   I3      RED   — no conflict-halt block naming `git merge --abort` and `--diff-filter=U` exists
+#            anywhere in concept-to-code/SKILL.md yet (confirmed absent by direct grep before this
+#            section was written); Task 6 left the placeholder `<conflict halt, Task 7>` at the
+#            `git merge --no-edit "$WB" ||` line inside `#### Merge-back and base-fork audit`.
+#   I4      RED   — no "no automatic resolution" wording, and no "rebase"/"resolver" mentions,
+#            exist anywhere in the file yet (confirmed absent).
+#   I5      RED   — neither literal (`CONFLICTS=$(git diff --name-only --diff-filter=U)` nor
+#            `git merge --abort`) exists yet, so the capture-before-abort ordering cannot be
+#            asserted true; this is the ordering trap named in the dispatch brief, mirrored on the
+#            H5 idiom (compare line numbers of two located literals).
+#   I6      RED   — autopilot-build/SKILL.md's restated conflict-scan paragraph (the block between
+#            "Parallel-conflict scan" and "Dispatch:") says nothing about a halt yet.
+#   I7      RED   — autopilot-build/SKILL.md does not mention "nightly-autopilot" anywhere yet
+#            (confirmed absent by direct grep), so it cannot yet note that nightly-autopilot
+#            inherits the halt.
+#
+# Task 7's GREEN steps are expected to: (a) rewrite the conflict-scan paragraph from advisory to
+# binding inside `#### Workflow dispatch path — Step 5 implementation`; (b) replace the
+# `<conflict halt, Task 7>` placeholder inside `#### Merge-back and base-fork audit` with the real
+# halt, capturing `$CONFLICTS` BEFORE `git merge --abort` (the abort clears the unmerged paths);
+# (c) add a halt-by-reference plus a nightly-autopilot note to autopilot-build/SKILL.md.
+# ==============================================================================================
+
+# ------------------------------------------------------------------------------------------------
+# I-guard0 / I1 / I2 / I2b — the file-conflict scan block (R-10).
+# ------------------------------------------------------------------------------------------------
+SCAN_BLOCK=$(block_between "$CC" 'conflict scan' 'Step 5 dispatch prompt')
+
+if [ -n "$SCAN_BLOCK" ]; then
+  ok "I-guard0 (forward guard): the parallel task conflict scan block was extracted (non-empty) — I1/I2 are not vacuous"
+else
+  bad "I-guard0 (forward guard): the parallel task conflict scan block could not be extracted — I1/I2 would pass vacuously"
+fi
+
+if printf '%s\n' "$SCAN_BLOCK" | grep -qi 'binding' \
+   && printf '%s\n' "$SCAN_BLOCK" | grep -qi 'sequenced' \
+   && printf '%s\n' "$SCAN_BLOCK" | grep -qi 'parallel' \
+   && printf '%s\n' "$SCAN_BLOCK" | grep -qi 'batch'; then
+  ok "I1: the file-conflict scan states groups naming the same file are sequenced, never dispatched in the same parallel() batch, and the scan is binding (R-10)"
+else
+  bad "I1: the file-conflict scan block does not yet state binding/sequenced/parallel/batch language (R-10) — Task 7 GREEN rewrites GAP E from advisory to binding"
+fi
+
+if printf '%s\n' "$SCAN_BLOCK" | grep -qF 'This stays advisory'; then
+  bad "I2: the scan block still states 'This stays advisory: every group runs with isolation: worktree' — R-10 requires this superseded clause removed"
+else
+  ok "I2: the scan block no longer states the superseded 'This stays advisory' clause (R-10)"
+fi
+
+FIXTURE_I2="$TMP/fixture-i2.md"
+printf 'This stays advisory: every group runs with `isolation: worktree` — no gate here.\n' > "$FIXTURE_I2"
+if grep -qF 'This stays advisory' "$FIXTURE_I2"; then
+  ok "I2b (forward guard, mandatory positive twin): the I2 detector fires on a fixture carrying the superseded advisory sentence"
+else
+  bad "I2b (forward guard, mandatory positive twin): the I2 detector did NOT fire on a fixture carrying the superseded advisory sentence — I2 cannot be trusted to catch a real regression"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# I3 / I4 — the conflict-halt block (R-12). Reuses MB_SECTION (section H), the
+# `#### Merge-back and base-fork audit` block, since ADR-0068 §D8 places the halt on the same
+# `git merge --no-edit "$WB" ||` line Task 6 already wrote there.
+# ------------------------------------------------------------------------------------------------
+if printf '%s\n' "$MB_SECTION" | grep -qF 'git merge --abort' \
+   && printf '%s\n' "$MB_SECTION" | grep -qF -- '--diff-filter=U' \
+   && printf '%s\n' "$MB_SECTION" | grep -qi 'preserve' \
+   && printf '%s\n' "$MB_SECTION" | grep -qi 'branch'; then
+  ok "I3: a conflict-halt block exists naming git merge --abort, --diff-filter=U, and branch preservation (R-12)"
+else
+  bad "I3: no conflict-halt block naming git merge --abort, --diff-filter=U, and branch preservation was found (R-12) — Task 7 GREEN replaces the '<conflict halt, Task 7>' placeholder"
+fi
+
+if printf '%s\n' "$MB_SECTION" | grep -qi 'no automatic resolution' \
+   && printf '%s\n' "$MB_SECTION" | grep -qi 'rebase' \
+   && printf '%s\n' "$MB_SECTION" | grep -qi 'resolver'; then
+  ok "I4: the conflict-halt block states that no automatic resolution is attempted — no rebase, no resolver dispatch (R-12)"
+else
+  bad "I4: the conflict-halt block does not yet state that no automatic resolution is attempted (R-12) — expected mentions of 'no automatic resolution', 'rebase' and 'resolver' all absent (or ADR-0068 §D8's '-X ours' example) from the merge-back block"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# I5 (R-12, ordering trap) — $CONFLICTS is captured BEFORE `git merge --abort`, since the abort
+# clears the unmerged paths `--diff-filter=U` would otherwise report. Positional check on the
+# H5 idiom: compare line numbers of two located literals in the whole file, not the pre-extracted
+# MB_SECTION text (which carries no original line numbers).
+# ------------------------------------------------------------------------------------------------
+CONFLICTS_CAPTURE_LINE=$(grep -nF 'CONFLICTS=$(git diff --name-only --diff-filter=U)' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+MERGE_ABORT_LINE=$(grep -nF 'git merge --abort' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+if [ -n "$CONFLICTS_CAPTURE_LINE" ] && [ -n "$MERGE_ABORT_LINE" ] \
+   && [ "$CONFLICTS_CAPTURE_LINE" -lt "$MERGE_ABORT_LINE" ]; then
+  ok "I5: \$CONFLICTS is captured (git diff --name-only --diff-filter=U) before git merge --abort clears the unmerged paths (R-12, ordering)"
+else
+  bad "I5: no evidence \$CONFLICTS is captured before git merge --abort (R-12, ordering) — expected literal 'CONFLICTS=\$(git diff --name-only --diff-filter=U)' to precede literal 'git merge --abort'"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# I6 / I7 — the halt is restated by reference in autopilot-build/SKILL.md, which also notes that
+# nightly-autopilot inherits it (it reuses c2c Steps 5-7 verbatim).
+# ------------------------------------------------------------------------------------------------
+AB_SCAN_BLOCK=$(block_between "$AB" 'Parallel-conflict scan' 'Dispatch:')
+
+if printf '%s\n' "$AB_SCAN_BLOCK" | grep -qi 'halt'; then
+  ok "I6: autopilot-build/SKILL.md's parallel-conflict scan restates the conflict halt by reference (R-12)"
+else
+  bad "I6: autopilot-build/SKILL.md's parallel-conflict scan paragraph does not mention a halt (R-12) — Task 7 restates the c2c conflict halt by reference here"
+fi
+
+if grep -qi 'nightly-autopilot' "$AB" 2>/dev/null && grep -qi 'inherit' "$AB" 2>/dev/null; then
+  ok "I7: autopilot-build/SKILL.md notes that nightly-autopilot inherits the conflict halt (it reuses c2c Steps 5-7 verbatim)"
+else
+  bad "I7: autopilot-build/SKILL.md does not mention that nightly-autopilot inherits the conflict halt — Task 7 adds this note"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
