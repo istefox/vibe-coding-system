@@ -19,6 +19,37 @@
 # which legitimately survives in review-triage-fix/SKILL.md (ADR-0068 §D9) for an unrelated
 # reason (stale-worktree pre-check, not isolation selection) — section B2 is the positive twin
 # proving that survival is intentional, not an oversight this file failed to notice.
+#
+# Sections C onward (Task 4, R-02/R-04): no `worktree-create.sh` hook exists, and section D
+# forbids registering one. The reason is not a preference — it was measured, and this is the
+# evidence a future proposer must read before reopening the question (ADR-0068 Measured facts
+# annex):
+#
+#   F13 — the `WorktreeCreate` stdin payload carries exactly six fields: `session_id`,
+#   `transcript_path`, `cwd`, `prompt_id`, `hook_event_name`, `name`. There is no `agent_type`
+#   and no `agent_id`, so a registered hook has no field to scope itself on — it cannot tell
+#   which dispatch it is being asked about. (F17: the `session_id`/`transcript_path` in that
+#   payload belong to the *dispatching* session, not the subagent about to run, because the
+#   event fires before the subagent exists — there is no subagent identity to read even in
+#   principle.)
+#
+#   F14 — exit 0 with empty stdout does NOT decline and fall through to default git behaviour.
+#   It aborts the dispatch outright (`WorktreeCreate hook failed: hook succeeded but returned no
+#   worktree path`). A registered hook must return a usable worktree path on every single
+#   invocation or every dispatch on the machine fails.
+#
+#   Together, and combined with the fact that `WorktreeCreate` has no matcher: a hook that
+#   cannot discriminate (F13) and cannot decline (F14) means registering ANY such hook makes it
+#   the owner of every worktree creation on this machine, in every project, chain-related or not.
+#   That is the entire reason sections C and D exist in this file — C declares the one-layer
+#   replacement (`worktree.baseRef: "head"`, a settings key, not a hook); D asserts nothing
+#   registers the event.
+#
+#   These facts are true of CC 2.1.220 and are build-specific, not permanent (the ADR-0016
+#   v2.1.154 lesson: the substrate moves underneath a running system). A future build that adds
+#   an agent discriminator and an abstain state to `WorktreeCreate` reopens this question on its
+#   merits. The answer then is to re-run the probe (ADR-0068 Task 1), not to re-read this
+#   comment as settled.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -151,6 +182,174 @@ if grep -qF 'staging/plugin/scripts/tests/*.test.sh' "$CIYML" 2>/dev/null; then
   ok "CI2: ci.yml still runs the automatic glob over staging/plugin/scripts/tests/*.test.sh (forward guard — no manual edit needed there)"
 else
   bad "CI2: ci.yml no longer uses the automatic *.test.sh glob"
+fi
+
+# ==============================================================================================
+# Section C (R-02) — the mechanism is declared. Parsed with python3 -c, NEVER grep: a grep for
+# "head" would match a comment, a sibling key, or a value under the wrong parent. Task 1b retired
+# `worktree-create.sh` as a premise F13/F14 refuted; this is the one-layer replacement — a
+# settings key, not a hook.
+#
+# EXPECTED at RED time (Task 4 not yet implemented): C1 fails, because
+# staging/user/settings.json:300 still declares "baseRef": "fresh". C1a and C1b are forward
+# guards and are green from the start — they prove the predicate itself is sound, not that the
+# defect is fixed (the cfile=/dev/null lesson, again).
+# ==============================================================================================
+SETTINGS_JSON="$STAGING/user/settings.json"
+
+baseref_predicate() {
+  # $1 = path to a settings.json-shaped file. Exit 0 iff worktree.baseRef == "head".
+  python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+sys.exit(0 if d.get('worktree', {}).get('baseRef') == 'head' else 1)
+" "$1"
+}
+
+if baseref_predicate "$SETTINGS_JSON"; then
+  ok "C1: staging/user/settings.json declares worktree.baseRef == \"head\" (R-02)"
+else
+  bad "C1: staging/user/settings.json does not declare worktree.baseRef == \"head\" (R-02) — still \"fresh\""
+fi
+
+# Positive twin 1: the parse actually finds a 'worktree' object at all. Without this, a predicate
+# that silently defaults a missing key to {} and then compares None != "head" would pass C1 for
+# the wrong reason if the key were ever renamed instead of corrected.
+WORKTREE_OBJ_PRESENT=$(python3 -c "
+import json
+d = json.load(open('$SETTINGS_JSON'))
+print('yes' if isinstance(d.get('worktree'), dict) else 'no')
+" 2>/dev/null)
+if [ "$WORKTREE_OBJ_PRESENT" = "yes" ]; then
+  ok "C1a (forward guard): a 'worktree' object is actually present in settings.json, not a vacuous default"
+else
+  bad "C1a (forward guard): no 'worktree' object found in settings.json — C1 would pass on a None default"
+fi
+
+# Positive twin 2: the same predicate returns non-zero against a fixture declaring "baseRef":
+# "fresh" — proving the predicate can actually fail, not just pass by construction.
+FIXTURE_C="$TMP/fixture-baseref-fresh.json"
+printf '{"worktree": {"baseRef": "fresh"}}\n' > "$FIXTURE_C"
+if baseref_predicate "$FIXTURE_C"; then
+  bad "C1b (forward guard): predicate wrongly passed a fixture declaring baseRef=\"fresh\""
+else
+  ok "C1b (forward guard): predicate correctly rejects a fixture declaring baseRef=\"fresh\""
+fi
+
+# ==============================================================================================
+# Section C2 (R-02) — the deployment path is declared. Static prose anchor: sync-to-claude.sh
+# never edits settings.json (ADR-0025), so the baseRef key reaches the live file only through a
+# MANUAL STEP notice. The notice text itself and its behavioural gating (fires when absent/wrong,
+# suppressed when correct) are Task 5's sync-manual-steps.test.sh assertions, not this file's —
+# this section only pins that the block exists and names the key and its value.
+#
+# EXPECTED at RED time: FAILS. No such block exists yet anywhere in sync-to-claude.sh (Task 5
+# adds it, not Task 4) — disclosed, not fixed, by this dispatch.
+# ==============================================================================================
+SYNCSH="$STAGING/sync-to-claude.sh"
+
+if grep -qF 'MANUAL STEP: settings key' "$SYNCSH" 2>/dev/null \
+   && grep -qF 'baseRef' "$SYNCSH" 2>/dev/null \
+   && grep -qF '"head"' "$SYNCSH" 2>/dev/null; then
+  ok "C2: sync-to-claude.sh has a MANUAL STEP block naming the baseRef settings key and the literal value \"head\""
+else
+  bad "C2: sync-to-claude.sh has no MANUAL STEP block naming the baseRef key and its literal value \"head\" (R-02, R-17 — Task 5 adds this, not Task 4)"
+fi
+
+# ==============================================================================================
+# Section D (R-04) — nothing registers the event. Layer 2 of the original two-layer contract
+# (a WorktreeCreate hook) is deleted (F13/F14): no such hook ships. Detector checks the effective
+# settings.json's hooks object AND sync-to-claude.sh's PAIRS list, since either one could
+# reintroduce the registration.
+#
+# Positive twin is MANDATORY (ADR-0043 direction lesson / ADR-0039 cfile=/dev/null correction): a
+# detector reporting nothing must be distinguishable from a subject that contains nothing. D1c
+# runs the same detector against a fixture that DOES register the hook and must fire there.
+# ==============================================================================================
+worktree_create_registered() {
+  # $1 = path to a settings.json-shaped file. Exit 0 iff a "WorktreeCreate" hook is registered.
+  python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+hooks = d.get('hooks', {})
+sys.exit(0 if 'WorktreeCreate' in hooks else 1)
+" "$1"
+}
+
+if worktree_create_registered "$SETTINGS_JSON"; then
+  bad "D1: staging/user/settings.json's hooks object registers WorktreeCreate — R-04 violated"
+else
+  ok "D1: staging/user/settings.json's hooks object registers no WorktreeCreate hook"
+fi
+
+if grep -qE '\|[^|]*worktree-create' "$SYNCSH" 2>/dev/null; then
+  bad "D1b: sync-to-claude.sh's PAIRS list has an entry whose destination lands a worktree-create hook"
+else
+  ok "D1b: sync-to-claude.sh's PAIRS list has no entry landing a worktree-create hook"
+fi
+
+# Positive twin, mandatory: same detector, run over a fixture that DOES register WorktreeCreate.
+FIXTURE_D="$TMP/fixture-worktreecreate.json"
+cat > "$FIXTURE_D" <<'EOF'
+{"hooks": {"WorktreeCreate": [{"hooks": [{"type": "command", "command": "echo hi"}]}]}}
+EOF
+if worktree_create_registered "$FIXTURE_D"; then
+  ok "D1c (positive twin, mandatory): the detector fires on a fixture that registers WorktreeCreate"
+else
+  bad "D1c (positive twin, mandatory): the detector did NOT fire on a fixture that registers WorktreeCreate — D1/D1b cannot be trusted to catch a real regression"
+fi
+
+# ==============================================================================================
+# Section D2 (R-04) — the retained instrument is labelled. worktree-capture.sh stays in the tree
+# (it is F13's and F17's evidence) but must never be wired: registering it aborts every worktree
+# creation on the machine (F14), and there is no matcher to scope it. Its header must say so, and
+# it must never be deployed.
+#
+# EXPECTED at RED time: D2b FAILS. The current header (as of Task 1) still states the three-
+# exit-state DECLINE contract F14 refuted — it does not yet name it a "measuring instrument" nor
+# state F14's consequence in those words. Task 4's GREEN step rewrites it.
+# ==============================================================================================
+WTCAP="$STAGING/plugin/scripts/worktree-capture.sh"
+
+if [ -f "$WTCAP" ]; then
+  ok "D2a: worktree-capture.sh exists"
+else
+  bad "D2a: worktree-capture.sh is missing — it is F13's and F17's evidence and must be retained"
+fi
+
+if grep -qF 'measuring instrument' "$WTCAP" 2>/dev/null \
+   && grep -qF 'every worktree creation on the machine' "$WTCAP" 2>/dev/null; then
+  ok "D2b: worktree-capture.sh's header names it a measuring instrument and states F14's consequence (every worktree creation on the machine aborts)"
+else
+  bad "D2b: worktree-capture.sh's header does not yet call it a measuring instrument / state F14's abort-everything consequence — it still teaches the refuted decline belief"
+fi
+
+if grep -qE '(^|[[:space:]])plugin/scripts/worktree-capture\.sh\|' "$SYNCSH" 2>/dev/null; then
+  bad "D2c: worktree-capture.sh has a PAIRS entry — it must never deploy to ~/.claude/hooks/ (a file next to a wiring note reads like something to wire)"
+else
+  ok "D2c: worktree-capture.sh has no PAIRS entry (staging-only, like hook-probe-sandbox.sh / hook-probe.sh / hook-probe-verify.sh)"
+fi
+
+# ==============================================================================================
+# Section D3 — the reason is in THIS test file's own header. Self-referential on purpose: the
+# next person to propose re-registering the hook reads the test that forbids it, and the test
+# must carry the evidence (F13, F14), not just the prohibition.
+#
+# EXPECTED at RED time: FAILS. This file's pre-existing Task 2 header (lines 1-21) predates F13/
+# F14 and names neither. Task 4 adds them to the header as part of turning this section green.
+# ==============================================================================================
+THIS_FILE="$0"
+HEADER=$(sed -n '1,60p' "$THIS_FILE" 2>/dev/null)
+if printf '%s' "$HEADER" | grep -q 'F13' && printf '%s' "$HEADER" | grep -q 'F14'; then
+  ok "D3: this test file's own header names F13 and F14 as the reason no WorktreeCreate hook exists"
+else
+  bad "D3: this test file's own header does not name F13 and F14 — the prohibition has no evidence attached to it"
 fi
 
 echo "----"
