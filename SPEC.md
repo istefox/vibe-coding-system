@@ -25,14 +25,14 @@ recorded at issue #176 comment 5103916596; P1–P5 were run during the Step 1 in
 | F1 | The Agent tool's `isolation` enum is exactly `["worktree","remote"]`. Passing `"none"` returns `InputValidationError` and the dispatch **fails** — it is not ignored. | Direct dispatch |
 | F2 | Omitting `isolation` leaves `coder.md:8`'s frontmatter `isolation: worktree` in force. | Direct dispatch |
 | F3 | The worktree forks from the repository's **default branch**, not from `HEAD`, regardless of which branch is checked out when the session starts. | Two dispatches, the second from a session started on the feature branch |
-| F4 | A **workflow**-dispatched agent with `agentType: 'coder'` gets **no worktree at all**: it runs in the main tree, on the checked-out branch. Frontmatter isolation does not apply on that path; isolation there is opt-in via `opts.isolation`. | P1 |
+| F4 | A **workflow**-dispatched agent with `agentType: 'coder'` gets **no worktree at all**: it runs in the main tree, on the checked-out branch. Frontmatter isolation does not apply on that path; isolation there is opt-in via `opts.isolation`. **Wording superseded by ADR-0068 F16:** frontmatter isolation does not reach this path, but a worktree IS created when opts.isolation is passed. | P1 |
 | F5 | `tester` and `reviewer`, which have no `isolation:` frontmatter, run in the main tree on the checked-out branch. | P2 |
 | F6 | A file written by a worktree-isolated agent and left uncommitted never reaches the main tree. The worktree survives the agent's completion, unlocked, with the file untracked inside. A worktree with no changes is auto-removed. | P3 |
 | F7 | Dispatching into a non-git CWD fails hard with: `Cannot create agent worktree: not in a git repository and no WorktreeCreate hooks are configured.` | P4 |
 | F8 | `isolation: "worktree"` passed explicitly to an agent whose frontmatter lacks it (`tester`) works — a worktree is created. Isolation is addable per dispatch. | P5 |
 | F9 | Work **committed** inside a worktree survives on branch `worktree-agent-<id>`, which is visible from the main repository. The main tree is untouched. No merge is automatic, and no skill in this repository performs one. | P5 |
 | F10 | The Agent tool returns `worktreePath` and `worktreeBranch` to the orchestrator alongside the agent's report. | P3, P5 |
-| F11 | `WorktreeCreate` is a documented CC hook event that **replaces default git worktree behavior**. Input: `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `worktree_path`, `branch`, `base`, `agent_id`, `agent_type`. It prints the worktree path on stdout; non-zero exit fails creation. `WorktreeRemove` fires when a subagent finishes, **cannot block**, and its failures are logged in debug mode only. | `code.claude.com/docs/en/hooks` |
+| F11 | `WorktreeCreate` is a documented CC hook event that **replaces default git worktree behavior**. Input: `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `worktree_path`, `branch`, `base`, `agent_id`, `agent_type`. It prints the worktree path on stdout; non-zero exit fails creation. `WorktreeRemove` fires when a subagent finishes, **cannot block**, and its failures are logged in debug mode only. **Superseded by ADR-0068 F13 (measured):** the payload carries none of these fields; the real six are session_id, transcript_path, cwd, prompt_id, hook_event_name, name. | `code.claude.com/docs/en/hooks` |
 | F12 | Neither `WorktreeCreate` nor `WorktreeRemove` is mentioned anywhere in this repository or in the deployed `~/.claude/settings.json`. | `grep -rn` |
 
 ### The contradiction these facts expose
@@ -53,8 +53,7 @@ from the default branch.
   `main`. The design below is unaffected: it forks from `HEAD` and never resolves a default branch.
 - Whether a `WorktreeCreate` hook can serve a non-git CWD in practice (F11 says the mechanism exists
   for "other VCS systems"; nobody here has run one).
-- Whether `opts.isolation: 'worktree'` on the Workflow path routes through `WorktreeCreate` the same
-  way frontmatter isolation does. R-03 exists to measure this before the design depends on it.
+- F16 measured a worktree created on the Workflow path with `baseRef` applying identically.
 
 ## Scope
 
@@ -92,32 +91,31 @@ Every agent the chain dispatches to **modify** files runs in a git worktree that
 
 There is no second mode. `isolation: "none"` does not exist and is never named again.
 
-### Component 1 — `worktree-create.sh` (new hook)
+### Component 1 — `worktree.baseRef: "head"` (the one-layer contract)
 
-A `WorktreeCreate` command hook. Reads the JSON input on stdin, **ignores the supplied `base`**, and
-creates the worktree from `HEAD` of the invoking repository, printing the resulting path on stdout.
+`worktree.baseRef: "head"` is declared in `staging/user/settings.json`, wired to the live
+`~/.claude/settings.json` by a sync MANUAL STEP, and asserted at the Step 5 pre-flight.
 
-- Scoped by `agent_type`: applies to the agent types the chain dispatches for modification. For any
-  other `agent_type` it reproduces CC's default behaviour (create from the supplied `base`), so
-  nothing outside the chain changes.
-- It cannot fail open. `WorktreeCreate` has no advisory mode (F11): a non-zero exit fails creation
-  and therefore the dispatch. The hook must be small, dependency-light, and exit non-zero only when
-  it genuinely cannot produce a usable worktree.
-- It records the resolved base commit, so that the "default branch vs `HEAD`" question stays
-  answerable from a log rather than from another probe.
+No `WorktreeCreate` hook is registered, and none ships. F13 found the hook's payload carries no
+`agent_type` field, so it has no discriminator to scope on; F14 found that exit 0 with empty stdout
+does not decline and fall through to default git behaviour — it aborts the dispatch, so a registered
+hook must return a usable worktree path on every invocation. With no discriminator, no decline path,
+and no matcher, a registered hook would intercept every worktree creation on the machine. Both
+premises the original hook design depended on are refuted by measurement.
 
 ### Component 2 — Step 5 pre-flight assertion
 
-A fourth assertion joins ADR-0050's three (clean tree, feature branch, baseline sha): **the
-`WorktreeCreate` entry is present in the effective `settings.json`**. Absent → refuse to dispatch,
-print the literal remediation command.
+A fourth assertion joins ADR-0050's three (clean tree, feature branch, baseline sha): **`worktree.baseRef`
+is `"head"` in the effective `settings.json`**. Absent, wrong, unreadable or unparseable → refuse to
+dispatch, print the literal remediation command.
 
 This exists because of this repository's own history: `write-scope-enforce.sh` and
 `agent-write-scope.sh` are both deployed by sync and **wired by hand**, inert until a `settings.json`
-entry exists. Here inertness is not neutral — without the hook, CC silently reverts to the default
-base branch and the defect returns with no signal. The assertion is what makes "not installed"
-distinguishable from "installed and working": the ADR-0043 direction lesson, applied to deployment
-rather than to a list.
+entry exists. Here inertness is not neutral — without the key set correctly, CC silently reverts to
+the default base branch and the defect returns with no signal. The paragraph's argument that an
+unwired mechanism must be distinguishable from a working one is unchanged and gets **stronger**: the
+assertion now checks the key that actually governs the behaviour — the ADR-0043 direction lesson,
+applied to deployment rather than to a list.
 
 ### Component 3 — stage boundaries and merge-back
 
@@ -128,7 +126,9 @@ Both dispatch paths adopt the same stage protocol:
    parameter on the Agent-tool path.
 2. On return, the orchestrator reads `worktreePath` and `worktreeBranch` from the dispatch result
    (F10), commits whatever the agent left in the worktree onto that branch, and merges it into the
-   feature branch.
+   feature branch. The orchestrator records the worktree's fork point before committing into it, and
+   halts on a mismatch against the feature branch's `HEAD` at dispatch time (ADR-0068 §D5) — this is
+   where the deleted hook's audit record went.
 3. Only then is the next stage's worktree created, so it forks from a `HEAD` that already contains
    the previous stage's output.
 
@@ -160,7 +160,7 @@ No manifest schema version bump. Additive fields only, conditional-if-present in
 
 | Field | Type | Meaning |
 |---|---|---|
-| `worktree_hook_verified` | bool, default `false` | The Step 5 pre-flight found the `WorktreeCreate` registration |
+| `worktree_baseref_verified` | bool, default `false` | The Step 5 pre-flight found `worktree.baseRef: "head"` |
 | `worktree_merges` | array | One entry per merged stage: `{stage, agent_type, branch, base_sha, merge_result}` |
 
 `step5-report.json` gains one additive array, `worktree_merges`, on the same additive terms as
@@ -169,11 +169,9 @@ is not malformed.
 
 ## API / Interfaces
 
-`worktree-create.sh` — stdin: the `WorktreeCreate` JSON of F11. stdout: the absolute worktree path,
-one line, on success. stderr: diagnostics. Exit 0 = created; non-zero = creation fails and the
-dispatch fails with it. There is no advisory exit code, because the event has no advisory mode. This
-makes it the first hook in this repository that is not allow-on-every-failure-mode, and that
-departure is deliberate and forced by the event's contract.
+The allow-on-every-failure-mode convention is a property of `PreToolUse`-class events, which have an
+allow path; `WorktreeCreate` has none. The one component here that fails closed is a pre-flight
+assertion, not a hook.
 
 ## UI flows
 
@@ -185,8 +183,9 @@ merges the coder branch → the existing Step 5 → Step 6 gates run unchanged o
 **Conflict.** Merge fails → halt, worktree branch preserved, branch name and conflicting paths
 reported, no automatic resolution.
 
-**Hook missing.** Pre-flight assertion 4 fails → no dispatch → remediation printed. Under autopilot,
-recorded in the report rather than prompted, exactly as ADR-0050's other three assertions behave.
+**`baseRef` not set.** Pre-flight assertion 4 fails → no dispatch → remediation printed. Under
+autopilot, recorded in the report rather than prompted, exactly as ADR-0050's other three assertions
+behave.
 
 **Non-git CWD.** Refuse with an actionable message.
 
@@ -204,10 +203,9 @@ recorded in the report rather than prompted, exactly as ADR-0050's other three a
   a directory that no longer exists. The merge step treats this as "nothing to merge", not an error.
 - **Merge of an empty diff.** A stage whose agent changed nothing must not create an empty commit or
   a spurious `worktree_merges` entry.
-- **Duplicate registration.** A `WorktreeCreate` entry already present from another source must not
-  be silently overwritten by the sync step.
-- **Worktree name collision.** Two dispatches whose `agent_id` prefixes collide, or a leftover
-  branch from a previous run bearing the same name.
+- **Worktree branch collision.** Two dispatches whose worktree branch names collide, or a leftover
+  branch from a previous run bearing the same name — a case the merge-back step still meets and must
+  handle, independent of any hook.
 - **Non-default default branch.** The hook must not hardcode `main` anywhere; it forks from `HEAD`
   and never resolves a default branch, which is what makes the unverified item above harmless here.
 
@@ -217,15 +215,24 @@ recorded in the report rather than prompted, exactly as ADR-0050's other three a
       a test asserts every `isolation:` value named in `staging/plugin/skills/*/SKILL.md` and
       `staging/plugin/agents/*.md` is one of `worktree` or `remote`, so the next invented value
       fails CI rather than a live run.
-- [ ] R-02 `worktree-create.sh` exists, reads the `WorktreeCreate` JSON on stdin, ignores the
-      supplied `base`, creates the worktree from `HEAD`, and prints its path on stdout with exit 0.
-- [ ] R-03 A live dispatch confirms that a worktree created under the hook reports the feature
-      branch's `HEAD` commit, not the default branch's, on both the Agent-tool path and the Workflow
-      path — recorded as evidence, not asserted.
-- [ ] R-04 `worktree-create.sh` is scoped by `agent_type`: for an agent type outside the chain's
-      modification set it reproduces the default behaviour, verified by a test.
-- [ ] R-05 The Step 5 pre-flight gains a fourth assertion for the `WorktreeCreate` registration;
-      an absent registration refuses the dispatch and prints the literal remediation command.
+- [ ] R-02 The base-fork mechanism is `worktree.baseRef: "head"`, not a hook:
+      `staging/user/settings.json` declares it, `staging/sync-to-claude.sh` prints a MANUAL
+      STEP for the live `~/.claude/settings.json`, and a test asserts both. `worktree-create.sh`
+      is not written — F13/F14 refuted its premise (ADR-0068 §D1/§D2).
+- [ ] R-03 A live dispatch confirms that a worktree reports the feature branch's `HEAD`
+      commit, not the default branch's, on both the Agent-tool path and the Workflow path —
+      recorded as evidence, not asserted. The base-fork half is already satisfied by F15/F16;
+      the stage-protocol half is recorded at implementation time.
+- [ ] R-04 Nothing this system installs intercepts worktree creation for any session outside
+      the chain: no `WorktreeCreate` registration ships, a test asserts that no file under
+      `staging/` registers the event (with a positive twin proving the detector fires on a
+      fixture that does), and `staging/plugin/scripts/worktree-capture.sh` is retained
+      unregistered with a header stating that registering it aborts every worktree creation
+      on the machine (F14).
+- [ ] R-05 The Step 5 pre-flight gains a fourth assertion: `worktree.baseRef` is `"head"` in
+      the effective `settings.json`. Absent, wrong, unreadable or unparseable → refuse the
+      dispatch and print the literal remediation command. It fails **closed**, like ADR-0050's
+      other three assertions and unlike this repository's hooks.
 - [ ] R-06 Every `coder` dispatch on the Workflow path passes `opts.isolation: 'worktree'`
       explicitly, in both `concept-to-code` Step 5 and Step 6.
 - [ ] R-07 The orchestrator commits and merges each stage's worktree branch into the feature branch
@@ -248,8 +255,10 @@ recorded in the report rather than prompted, exactly as ADR-0050's other three a
       as measured; neither promises behaviour that does not exist.
 - [ ] R-16 ADR-0016, ADR-0049 and ADR-0050 receive forward-recorded corrections (ADR-0034
       precedent), not in-place edits.
-- [ ] R-17 The `WorktreeCreate` registration reaches `~/.claude/settings.json` through the documented
-      sync path, and `PAIRS` covers every new file (ADR-0043).
+- [ ] R-17 The `worktree.baseRef: "head"` change reaches `~/.claude/settings.json` through the
+      documented sync path — a `sync-to-claude.sh` MANUAL STEP, since sync never edits
+      `settings.json` — and `PAIRS` covers every new file that has a deployed counterpart
+      (ADR-0043).
 - [ ] R-18 Issue #175 is closed with the reason recorded: its dirty-tree check is retired by R-11,
       not merely rewritten.
 - [ ] R-19 Every new assertion is seen RED before green, and every new test file is registered in
