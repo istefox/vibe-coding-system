@@ -421,15 +421,24 @@ else
 fi
 
 # ==================================================================================================
-# TL. autopilot-build isolation restatement (§D5). EXPECTED RED until Task 8.
+# TL. autopilot-build isolation restatement (§D5). FORWARD GUARD (ADR-0068 §D1 / R-11).
+#
+# ADR-0049 §D2's dirty-tree isolation-selection condition (checking `git diff HEAD --name-only`
+# and choosing `isolation: "none"` vs `isolation: worktree` accordingly) is retired at every call
+# site by ADR-0068, whose own header records that it supersedes ADR-0049 §D2 in part (R-11:
+# `isolation: worktree` unconditionally, no second mode). TL1 used to assert the restatement was
+# present; that premise was revoked by an approved ADR, so the assertion is inverted here rather
+# than deleted, to stand as a forward guard against the condition being reintroduced — mirroring
+# section B1c of worktree-isolation-contract.test.sh (same file, same retired condition, opposite
+# historical direction).
 # ==================================================================================================
 AB="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 ABSTEP5="$TMP/ab_step5.txt"
 awk '/^#### Step 5 —/{f=1} /^#### Step 6/{f=0} f' "$AB" >"$ABSTEP5" 2>/dev/null
 if grep -qF 'git diff HEAD --name-only' "$ABSTEP5" 2>/dev/null && grep -qi 'isolation.*none\|none.*isolation' "$ABSTEP5" 2>/dev/null; then
-  ok "TL1: autopilot-build/SKILL.md's Step 5 worktree-isolation check restates the dirty-tree condition (ADR-0049 §D2)"
+  bad "TL1: autopilot-build/SKILL.md's Step 5 still restates the dirty-tree isolation condition — ADR-0068 §D1/R-11 requires it retired (supersedes ADR-0049 §D2 in part)"
 else
-  bad "TL1: autopilot-build/SKILL.md does not yet restate the dirty-tree isolation condition — Task 8"
+  ok "TL1: autopilot-build/SKILL.md's Step 5 no longer restates the dirty-tree isolation condition (ADR-0068 §D1 / R-11, supersedes ADR-0049 §D2 in part)"
 fi
 
 echo "----"
