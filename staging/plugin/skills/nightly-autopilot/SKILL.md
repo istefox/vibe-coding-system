@@ -66,7 +66,7 @@ Steps (each is skip-if-present):
    `~/.claude/hooks/roadmap-from-issues.sh --root "$PWD" --label "<issues_label>"` to build
    `PROJECT.md` (one feature per issue) and `docs/specs/_issue-map.tsv`.
 3. **Per-feature SPEC** — for each row in `docs/specs/_issue-map.tsv` whose
-   `docs/specs/<slug>.spec.md` is absent, invoke `Skill(spec-from-issue, "<issue#> --slug <slug>")`.
+   `docs/specs/<slug>.spec.md` is absent, invoke `Skill(skill="spec-from-issue", args="<issue#> --slug <slug>")`.
    A thin or vague issue is SKIPPED (marked `[~]` in PROJECT.md with a `needs-human` note), never
    fabricated.
 
@@ -175,7 +175,7 @@ Or stop after <N> turns."
 
 ### 3.3 Drive project-conductor in roadmap-autopilot
 
-Invoke `Skill(project-conductor, "nightly")`. The conductor (roadmap-autopilot mode) pre-authorizes
+Invoke `Skill(skill="project-conductor", args="nightly")`. The conductor (roadmap-autopilot mode) pre-authorizes
 every pending feature, skips the per-feature Step 3 gate, and for each feature:
 architecture (Gate 2, including Gate 2c's G13 external-dependency check — ADR-0060, resolved via
 `~/.claude/hooks/external-dependency-check.sh`, the same script `concept-to-code/SKILL.md` Gate 2c

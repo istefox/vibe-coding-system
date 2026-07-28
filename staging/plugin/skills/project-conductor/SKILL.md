@@ -164,7 +164,7 @@ Otherwise: find the first `- [ ]` line. Extract `<next-feature>` and `<next-phas
 `_autopilot=true` and go to Step 4. Authorization comes from the per-repo opt-in marker plus the
 single evening launch of `nightly-autopilot`, verified before this skill was invoked; no per-feature
 prompt is shown. If an in-progress manifest is at `step_4_session_boundary`, auto-resume it
-(`Skill(concept-to-code, "resume <manifest-path>")`) instead of prompting. This bypass applies only
+(`Skill(skill="concept-to-code", args="resume <manifest-path>")`) instead of prompting. This bypass applies only
 in `nightly` mode; see the amended invariant below.
 
 **First check — is there an in-progress manifest for `<next-feature>`?**
