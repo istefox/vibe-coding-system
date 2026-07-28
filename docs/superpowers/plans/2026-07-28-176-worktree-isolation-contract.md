@@ -526,6 +526,28 @@ hook was going to produce (ADR-0068 §D5), marked* **NEW** *below.*
 
 *Budget: `staging/plugin/skills/concept-to-code/SKILL.md`, `staging/plugin/skills/autopilot-build/SKILL.md`, `staging/plugin/scripts/tests/worktree-isolation-contract.test.sh` (~280 lines)*
 
+**Addendum — added during implementation, operator-approved.**
+
+- [x] **Section H's `effort` sweep caught a live pre-existing defect, and it is this feature's own
+      failure mode in a different parameter.** Step 4.5's tracer-bullet dispatch (ADR-0057) read
+      `Agent({ agentType: "coder", model: "sonnet", effort: "high", … })`. The Agent tool has no
+      `effort` parameter — `opts.effort` is Workflow-only, already settled in this repo's
+      `CLAUDE.md` — and an unexpected parameter is **rejected outright**, exactly as
+      `isolation: "none"` is. Step 4.5 would have failed on dispatch for anyone who opted into it.
+      Removed, with a forward-guard note citing ADR-0068 §D7. **The general lesson is R-01's, widened:
+      a prescribed parameter the tool does not accept is a live failure waiting for its branch to be
+      taken, and `isolation` was never the only one.** A future issue should sweep every
+      tool-parameter name this repository prescribes against the actual schemas.
+- [x] **`autopilot-build/SKILL.md` needed no edit.** It refers to c2c's Step 5/6 blocks by heading
+      rather than restating them, so the merge-back site and the isolation pins reach it by
+      reference. That is the ADR-0049 §D5 "single resolution site" convention working as intended —
+      and the reason Task 3's `autopilot-build` edits were needed is that those blocks *were*
+      restated there.
+- [x] **The `Agent({...})` blocks use `agentType`, not the Agent tool's real `subagent_type`.**
+      Consistent across the whole file (Gate 5.06 included), so it is the file's own shorthand
+      rather than a defect of this task. Deliberately not changed; recorded here so the sweep above
+      has somewhere to start.
+
 ---
 
 ## Task 7 — Binding conflict scan and the conflict halt (R-10, R-12)
