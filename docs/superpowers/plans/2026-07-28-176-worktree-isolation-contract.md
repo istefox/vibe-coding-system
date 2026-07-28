@@ -188,6 +188,26 @@ paraphrase.
 - [ ] **UI flows — "Hook missing".** Rename to "`baseRef` not set" and restate: pre-flight assertion
       4 fails → no dispatch → remediation printed; under autopilot, recorded in the report.
 
+**Addendum — added by the orchestrator during implementation, operator-approved.** The Task 1b
+dispatch correctly refused to widen its own scope and reported three `WorktreeCreate` references
+left stale by the checklist above, all of which contradict the sections it had just amended in the
+same file. A fourth was found in the same pass. All four are fixed here rather than deferred to
+Task 8, whose scope is other documents:
+
+- [x] **Intro, "The contract, stated once", clause 2.** "created through the project's
+      `WorktreeCreate` hook" → created through CC's own mechanism with `worktree.baseRef: "head"`,
+      citing F13/F14 and ADR-0068 §D1.
+- [x] **Scope, "In." first item.** "The `WorktreeCreate` hook and its registration" → "The
+      `worktree.baseRef: \"head\"` declaration and its sync path".
+- [x] **Edge cases, "Non-default default branch".** "The hook must not hardcode `main`" → nothing in
+      the design hardcodes it; `baseRef: "head"` never resolves a default branch. Notes that the
+      Step 5 pre-flight's own default-branch resolution is ADR-0050's and unchanged.
+- [x] **"What is not verified", second bullet.** The non-git-CWD question rested on F11, which F13
+      supersedes, and on a hook that no longer ships. Marked moot, pointing at R-13's refusal.
+
+Left deliberately: the third "What is not verified" bullet keeps the verbatim replacement text the
+operator approved above, even though it now states a resolved fact inside a list of open ones.
+
 *Budget: `SPEC.md` (~90 lines)*
 
 **Verification for this task, run before Task 2 starts:**

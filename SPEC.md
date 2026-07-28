@@ -51,13 +51,14 @@ from the default branch.
 - Whether the worktree base is the *default branch*, the literal name `main`, or `origin/HEAD`. All
   three coincide in this repository. Separating them needs a repository whose default branch is not
   `main`. The design below is unaffected: it forks from `HEAD` and never resolves a default branch.
-- Whether a `WorktreeCreate` hook can serve a non-git CWD in practice (F11 says the mechanism exists
-  for "other VCS systems"; nobody here has run one).
+- Whether a `WorktreeCreate` hook can serve a non-git CWD in practice. **Moot as of ADR-0068 §D1:**
+  no such hook ships, and F11 — the doc-sourced row this question rested on — is superseded by F13.
+  A non-git CWD is refused outright (R-13).
 - F16 measured a worktree created on the Workflow path with `baseRef` applying identically.
 
 ## Scope
 
-**In.** The `WorktreeCreate` hook and its registration; the Step 5 pre-flight assertion;
+**In.** The `worktree.baseRef: "head"` declaration and its sync path; the Step 5 pre-flight assertion;
 `concept-to-code` Step 5 and Step 6 (both dispatch paths); `autopilot-build`; `review-triage-fix`;
 `deep-refactor`; `nightly-autopilot` (by reference only — it reuses c2c Steps 5–7 verbatim);
 `coder.md`; `staging/user/rules/parallelization.md`; `docs/GUIDA-USO-IT.md`; forward-recorded
@@ -85,7 +86,8 @@ skill and documentation surfaces, the repository's existing `*.test.sh` harness.
 Every agent the chain dispatches to **modify** files runs in a git worktree that:
 
 1. is forked from the currently checked-out `HEAD`, never from the default branch;
-2. is created through the project's `WorktreeCreate` hook, never through CC's default behavior;
+2. is created through CC's own worktree mechanism with `worktree.baseRef: "head"`, not through a
+   `WorktreeCreate` hook — F13 and F14 refuted that hook's premise (ADR-0068 §D1);
 3. returns its work to the feature branch through an orchestrator-driven merge after the dispatch
    returns.
 
@@ -206,8 +208,10 @@ behave.
 - **Worktree branch collision.** Two dispatches whose worktree branch names collide, or a leftover
   branch from a previous run bearing the same name — a case the merge-back step still meets and must
   handle, independent of any hook.
-- **Non-default default branch.** The hook must not hardcode `main` anywhere; it forks from `HEAD`
-  and never resolves a default branch, which is what makes the unverified item above harmless here.
+- **Non-default default branch.** Nothing in this design hardcodes `main` anywhere: `baseRef:
+  "head"` forks from `HEAD` and never resolves a default branch, which is what makes the unverified
+  item above harmless here. The Step 5 pre-flight's own default-branch resolution is ADR-0050's and
+  is unchanged.
 
 ## Success criteria
 
