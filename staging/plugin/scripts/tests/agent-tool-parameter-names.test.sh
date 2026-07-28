@@ -673,22 +673,79 @@ else
   bad "C1: Skill(...) call site(s) use a positional argument or a key the tool does not accept: $(printf '%s' "$SKILL_VIOLATIONS" | awk -F'\t' '{printf "%s:%s(%s) ", $2, $3, $4}')"
 fi
 
-# C1b: pin the exact known-bad site list (file:line), so the coder has a precise target list
-# rather than only a count. A change to this set (fixed sites disappearing, or a new positional
-# site appearing) must be visible here, not just in the aggregate PASS/FAIL count.
-EXPECTED_POSITIONAL="$TMP/expected-positional.txt"
-cat > "$EXPECTED_POSITIONAL" <<EOF
+# C1b (forward guard, named-regression anchor): the 3 sites this feature originally fixed
+# (nightly-autopilot/SKILL.md:69, :178, project-conductor/SKILL.md:167) must not have regressed
+# back to positional form. This is deliberately NOT a re-run of the old pre-fix snapshot — that
+# expected-list-equals-actual-list form can only ever be green before the fix it exists to drive,
+# and dies permanently the day the fix lands (this is the third assertion in this codebase to die
+# exactly that way — see test-write-scope.test.sh TL1, sync-manual-steps.test.sh A3). Distinct job
+# from C1: C1 asserts the aggregate "zero violations anywhere in the corpus" property and would
+# catch a regression at ANY site, named or not, but its failure message alone does not tell you
+# whether a flagged site is a NEW defect or a REGRESSION of a previously-fixed one. C1b pins the
+# three historical site identities by name, so a regression at exactly one of them is reported as
+# what it is — "a site we already fixed once came back" — rather than folded into C1's generic
+# count. A change to this set (one of the three reappearing as positional) must be visible here.
+KNOWN_FIXED_SITES="$TMP/known-fixed-sites.txt"
+cat > "$KNOWN_FIXED_SITES" <<EOF
 $STAGING/plugin/skills/nightly-autopilot/SKILL.md:69
 $STAGING/plugin/skills/nightly-autopilot/SKILL.md:178
 $STAGING/plugin/skills/project-conductor/SKILL.md:167
 EOF
+sort -u "$KNOWN_FIXED_SITES" -o "$KNOWN_FIXED_SITES"
 ACTUAL_POSITIONAL="$TMP/actual-positional.txt"
 printf '%s\n' "$SKILL_POSITIONAL" | awk -F'\t' '{print $2":"$3}' | sort -u > "$ACTUAL_POSITIONAL"
-sort -u "$EXPECTED_POSITIONAL" -o "$EXPECTED_POSITIONAL"
-if diff -q "$EXPECTED_POSITIONAL" "$ACTUAL_POSITIONAL" >/dev/null 2>&1; then
-  ok "C1b: the positional-argument violations are exactly the 3 known-bad sites (nightly-autopilot/SKILL.md:69, :178, project-conductor/SKILL.md:167) — no more, no fewer"
+REGRESSED="$TMP/regressed-sites.txt"
+comm -12 "$KNOWN_FIXED_SITES" "$ACTUAL_POSITIONAL" > "$REGRESSED"
+if [ -s "$REGRESSED" ]; then
+  bad "C1b: a site this feature already fixed has regressed back to positional form: $(printf '%s ' $(cat "$REGRESSED"))"
 else
-  bad "C1b: the positional-argument violation set does not match the 3 known-bad sites. expected: $(printf '%s ' $(cat "$EXPECTED_POSITIONAL")) actual: $(printf '%s ' $(cat "$ACTUAL_POSITIONAL"))"
+  ok "C1b: none of the 3 historically-fixed positional sites (nightly-autopilot/SKILL.md:69, :178, project-conductor/SKILL.md:167) have regressed back to positional form"
+fi
+
+# C1c (forward guard, mandatory positive twin for C1b's OWN logic — reintroduction proof): C2
+# below already proves the underlying skill_scan detector fires on a synthetic one-line fixture,
+# but C1b adds new logic beyond that detector — the KNOWN_FIXED_SITES-vs-ACTUAL_POSITIONAL
+# intersection. That logic needs its own proof, on a SCRATCH COPY of the real corpus file (never
+# the tracked file itself, and never written back into staging/), with the exact historical named
+# form at nightly-autopilot/SKILL.md:69 reintroduced as positional at the same line number. The
+# known-sites list below is scoped to the scratch path on purpose — C1b's real list names the
+# tracked path, which the scratch copy does not share, so reusing it here would compare two lists
+# that can never intersect regardless of content and prove nothing. If C1b's comm-based
+# intersection were broken (e.g. wrong field, unsorted input, wrong site string), this is what
+# would catch it.
+SCRATCH_C1C="$TMP/scratch-nightly-autopilot-SKILL.md"
+cp "$STAGING/plugin/skills/nightly-autopilot/SKILL.md" "$SCRATCH_C1C"
+python3 - "$SCRATCH_C1C" <<'PYEOF'
+import sys
+path = sys.argv[1]
+with open(path) as fh:
+    lines = fh.readlines()
+target = "docs/specs/<slug>.spec.md"
+idx = None
+for i, line in enumerate(lines):
+    if target in line and "Skill(" in line:
+        idx = i
+        break
+assert idx is not None, "could not locate the known site to reintroduce a regression at"
+lines[idx] = lines[idx].replace(
+    'Skill(skill="spec-from-issue", args="<issue#> --slug <slug>")',
+    'Skill(spec-from-issue, "<issue#> --slug <slug>")',
+)
+with open(path, "w") as fh:
+    fh.writelines(lines)
+PYEOF
+KNOWN_FIXED_SITES_SCRATCH="$TMP/known-fixed-sites-scratch.txt"
+LINE_NO_C1C=$(grep -n 'Skill(spec-from-issue' "$SCRATCH_C1C" | head -1 | cut -d: -f1)
+printf '%s:%s\n' "$SCRATCH_C1C" "$LINE_NO_C1C" | sort -u > "$KNOWN_FIXED_SITES_SCRATCH"
+C1C_OUT=$(python3 "$SCANNER" skill "$SCRATCH_C1C")
+C1C_ACTUAL="$TMP/c1c-actual-positional.txt"
+printf '%s\n' "$C1C_OUT" | awk -F'\t' '$4=="positional" {print $2":"$3}' | sort -u > "$C1C_ACTUAL"
+C1C_REGRESSED="$TMP/c1c-regressed.txt"
+comm -12 "$KNOWN_FIXED_SITES_SCRATCH" "$C1C_ACTUAL" > "$C1C_REGRESSED"
+if [ -s "$C1C_REGRESSED" ]; then
+  ok "C1c (forward guard, reintroduction proof): reintroducing the historical positional form at nightly-autopilot/SKILL.md:69's equivalent line on a SCRATCH COPY is caught by C1b's own regression-intersection logic (not just the generic C2 detector)"
+else
+  bad "C1c (forward guard, reintroduction proof): reintroducing the historical positional form on a scratch copy was NOT caught — C1b's intersection logic cannot be trusted even though the underlying detector (C2) works"
 fi
 
 # C2 (forward guard, mandatory positive twin): a fixture positional Skill(foo, "bar") call must
