@@ -1156,6 +1156,178 @@ else
   ok "J6b (forward guard, negative twin): the J6 predicate correctly rejects a fixture section that still names worktree-create.sh"
 fi
 
+# ==============================================================================================
+# Section K (Task 9 evidence gap, R-07/R-09) — the `#### Merge-back and base-fork audit` section
+# states `$WT`/`$WB` as coming "from the dispatch result (F10)" — true on the Agent-tool path
+# only. On the Workflow path the orchestrator receives NO worktree identity at all (F19); the run
+# journal records only agentId, key, result, type, and the task notification carries no worktree
+# block. Task 9's own evidence run confirmed `git worktree list` enumeration reliably locates the
+# Workflow worktree, and that this is preferable to the `.claude/worktrees/<runId>-<n>` naming
+# convention (F20), which the ADR records as an observed convention, not a reported contract.
+#
+# EXPECTED at RED time (this gap is not yet fixed):
+#   K1   RED — the merge-back section does not state BOTH retrieval methods (F10's
+#        worktreePath/worktreeBranch for the Agent-tool path AND `git worktree list` enumeration
+#        for the Workflow path).
+#   K1a  GREEN (forward guard, mandatory positive twin) — a fixture stating both methods passes.
+#   K1b  GREEN (forward guard, mandatory negative twin) — a fixture stating only the F10 method
+#        (today's real content) fails the same predicate.
+#   K2   RED — no mention of `git worktree list` as the Workflow-path mechanism.
+#   K2a  GREEN (forward guard, mandatory positive twin).
+#   K3   RED — no statement that the Workflow path does not report worktree identity, citing F19.
+#   K3a  GREEN (forward guard, mandatory positive twin).
+#   K4-guard0 GREEN (forward guard) — the precedence predicate is exercised on fixtures where the
+#        naming convention IS mentioned, so K4 is not vacuously green merely because today's real
+#        section mentions neither method.
+#   K4   GREEN (today, vacuously true — see K4-guard0 for the non-vacuous form) — the real
+#        section does not present the `<runId>-<n>` naming convention as the primary retrieval
+#        mechanism, because it does not mention it at all yet.
+#   K4a  GREEN (forward guard, mandatory positive twin) — a fixture where `git worktree list` is
+#        stated before, and preferred over, the naming convention passes.
+#   K4b  GREEN (forward guard, mandatory negative twin) — a fixture where the naming convention
+#        is stated as the primary mechanism (before / without `git worktree list`) fails.
+# ==============================================================================================
+
+MB_SECTION_FILE="$TMP/mb-section-k.txt"
+printf '%s\n' "$MB_SECTION" > "$MB_SECTION_FILE"
+
+# ------------------------------------------------------------------------------------------------
+# K1 / K1a / K1b (R-07, R-09) — both retrieval methods are stated: F10's worktreePath/
+# worktreeBranch for the Agent-tool path, AND `git worktree list` enumeration for the Workflow
+# path. Neither alone satisfies the gap Task 9 found.
+# ------------------------------------------------------------------------------------------------
+both_retrieval_methods_stated() {
+  # $1 = file. Exit 0 iff it names the Agent-tool F10 fields AND the Workflow enumeration
+  # mechanism (`git worktree list`).
+  grep -qF 'worktreePath' "$1" 2>/dev/null \
+    && grep -qF 'worktreeBranch' "$1" 2>/dev/null \
+    && grep -qF 'git worktree list' "$1" 2>/dev/null
+}
+
+if both_retrieval_methods_stated "$MB_SECTION_FILE"; then
+  ok "K1: the merge-back section states both retrieval methods — F10's worktreePath/worktreeBranch (Agent-tool) AND git worktree list (Workflow) (R-07, R-09)"
+else
+  bad "K1: the merge-back section does not state both retrieval methods — it names F10's worktreePath/worktreeBranch but not git worktree list enumeration for the Workflow path (R-07, R-09) — the gap Task 9's evidence step found"
+fi
+
+FIXTURE_K1_GOOD="$TMP/fixture-k1-good.md"
+printf 'On the Agent-tool path, $WT/$WB come from worktreePath/worktreeBranch (F10). On the Workflow path, locate the worktree with git worktree list instead.\n' > "$FIXTURE_K1_GOOD"
+if both_retrieval_methods_stated "$FIXTURE_K1_GOOD"; then
+  ok "K1a (forward guard, mandatory positive twin): the K1 predicate passes a fixture stating both retrieval methods"
+else
+  bad "K1a (forward guard, mandatory positive twin): the K1 predicate wrongly failed a fixture stating both retrieval methods — it can never go green"
+fi
+
+FIXTURE_K1_BAD="$TMP/fixture-k1-bad.md"
+printf '$WT = worktreePath, $WB = worktreeBranch, both from the dispatch result (F10).\n' > "$FIXTURE_K1_BAD"
+if both_retrieval_methods_stated "$FIXTURE_K1_BAD"; then
+  bad "K1b (forward guard, mandatory negative twin): the K1 predicate wrongly passed a fixture stating only the F10 method (today's real content) — it cannot distinguish the fixed state from the gap"
+else
+  ok "K1b (forward guard, mandatory negative twin): the K1 predicate correctly rejects a fixture stating only the F10 method, same as today's real section"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# K2 / K2a (R-07, R-09) — `git worktree list` is named as the Workflow-path mechanism, not merely
+# present as an unrelated string.
+# ------------------------------------------------------------------------------------------------
+enumeration_named_for_workflow() {
+  # $1 = file. Exit 0 iff `git worktree list` appears AND the word "Workflow" appears in the same
+  # file (a co-occurrence check; the paragraph-level binding is asserted qualitatively in K1/K3).
+  grep -qF 'git worktree list' "$1" 2>/dev/null && grep -qi 'workflow' "$1" 2>/dev/null
+}
+
+if enumeration_named_for_workflow "$MB_SECTION_FILE"; then
+  ok "K2: the merge-back section names git worktree list as the Workflow-path mechanism"
+else
+  bad "K2: the merge-back section does not name git worktree list as the Workflow-path mechanism — Task 9's evidence step confirmed enumeration reliably locates the Workflow worktree and the section must say so"
+fi
+
+FIXTURE_K2_GOOD="$TMP/fixture-k2-good.md"
+printf 'On the Workflow dispatch path, use git worktree list to locate the worktree.\n' > "$FIXTURE_K2_GOOD"
+if enumeration_named_for_workflow "$FIXTURE_K2_GOOD"; then
+  ok "K2a (forward guard, mandatory positive twin): the K2 predicate passes a fixture naming git worktree list for the Workflow path"
+else
+  bad "K2a (forward guard, mandatory positive twin): the K2 predicate wrongly failed a fixture naming git worktree list for the Workflow path"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# K3 / K3a (R-07, R-09) — the section states that the Workflow path does NOT report worktree
+# identity, citing F19, so a reader does not "simplify" the two retrieval methods back into one.
+# ------------------------------------------------------------------------------------------------
+workflow_identity_gap_cited() {
+  # $1 = file. Exit 0 iff it states the Workflow path reports no worktree identity AND cites F19.
+  grep -qF 'F19' "$1" 2>/dev/null \
+    && grep -qiE 'does not report|no worktree identity|carries no worktree' "$1" 2>/dev/null
+}
+
+if workflow_identity_gap_cited "$MB_SECTION_FILE"; then
+  ok "K3: the merge-back section states the Workflow path reports no worktree identity, citing F19 (R-07, R-09)"
+else
+  bad "K3: the merge-back section does not state that the Workflow path reports no worktree identity, citing F19 (R-07, R-09) — without this a reader can wrongly assume F10's method covers both dispatch paths"
+fi
+
+FIXTURE_K3_GOOD="$TMP/fixture-k3-good.md"
+printf 'On the Workflow path the run journal does not report worktree identity at all (F19); use git worktree list instead.\n' > "$FIXTURE_K3_GOOD"
+if workflow_identity_gap_cited "$FIXTURE_K3_GOOD"; then
+  ok "K3a (forward guard, mandatory positive twin): the K3 predicate passes a fixture citing F19 and stating the identity gap"
+else
+  bad "K3a (forward guard, mandatory positive twin): the K3 predicate wrongly failed a fixture citing F19 and stating the identity gap"
+fi
+
+# ------------------------------------------------------------------------------------------------
+# K4 / K4-guard0 / K4a / K4b (R-07, R-09) — the `<runId>-<n>` naming convention (F20) is not
+# presented as the primary retrieval mechanism. Stated as a PRECEDENCE check, not a ban on
+# mentioning the convention at all: F20 legitimately documents it. The predicate compares line
+# position within a file — whichever of "git worktree list" / the runId convention pattern
+# appears FIRST is treated as the one presented as primary.
+# ------------------------------------------------------------------------------------------------
+convention_not_presented_as_primary() {
+  # $1 = file. Exit 0 (pass) iff:
+  #   - the runId naming-convention pattern is absent (nothing to be primary over — vacuous only
+  #     for the real section today, exercised non-vacuously by K4-guard0/K4a/K4b below), OR
+  #   - `git worktree list` is absent when the convention IS present (nothing to prefer it over,
+  #     which would itself be a K2 failure, not a K4 one), OR
+  #   - `git worktree list`'s first line number is STRICTLY LESS than the convention pattern's
+  #     first line number (enumeration is presented first / primary).
+  # Exit 1 (fail) iff the convention pattern appears at or before git worktree list's first line
+  # (or git worktree list is entirely absent while the convention is present).
+  local f="$1"
+  local conv_line enum_line
+  conv_line=$(grep -nF '<runId>-<n>' "$f" 2>/dev/null | head -1 | cut -d: -f1)
+  [ -z "$conv_line" ] && return 0
+  enum_line=$(grep -nF 'git worktree list' "$f" 2>/dev/null | head -1 | cut -d: -f1)
+  [ -z "$enum_line" ] && return 1
+  [ "$enum_line" -lt "$conv_line" ]
+}
+
+if convention_not_presented_as_primary "$MB_SECTION_FILE"; then
+  ok "K4: the merge-back section does not present the <runId>-<n> naming convention as the primary retrieval mechanism (F20) — today vacuously true, since neither method is mentioned yet; see K4-guard0/K4a/K4b for the non-vacuous form"
+else
+  bad "K4: the merge-back section presents the <runId>-<n> naming convention (F20) as the primary retrieval mechanism, ahead of (or instead of) git worktree list enumeration"
+fi
+
+FIXTURE_K4_GOOD="$TMP/fixture-k4-good.md"
+printf 'Prefer git worktree list to locate the Workflow worktree.\nOnly as a documented fallback, the path follows the .claude/worktrees/<runId>-<n> naming convention (F20).\n' > "$FIXTURE_K4_GOOD"
+if convention_not_presented_as_primary "$FIXTURE_K4_GOOD"; then
+  ok "K4-guard0 (forward guard): the precedence predicate is exercised non-vacuously — a fixture naming BOTH methods, with git worktree list first, passes"
+else
+  bad "K4-guard0 (forward guard): the precedence predicate wrongly failed a fixture where git worktree list is stated before the naming convention — K4 cannot be trusted"
+fi
+
+if convention_not_presented_as_primary "$FIXTURE_K4_GOOD"; then
+  ok "K4a (forward guard, mandatory positive twin): same fixture as K4-guard0 — git worktree list stated first is correctly treated as primary"
+else
+  bad "K4a (forward guard, mandatory positive twin): the K4 predicate wrongly failed a fixture where git worktree list precedes the naming convention"
+fi
+
+FIXTURE_K4_BAD="$TMP/fixture-k4-bad.md"
+printf 'The Workflow worktree follows the .claude/worktrees/<runId>-<n> naming convention (F20). git worktree list also works.\n' > "$FIXTURE_K4_BAD"
+if convention_not_presented_as_primary "$FIXTURE_K4_BAD"; then
+  bad "K4b (forward guard, mandatory negative twin): the K4 predicate wrongly passed a fixture presenting the naming convention (F20) before git worktree list, i.e. as primary"
+else
+  ok "K4b (forward guard, mandatory negative twin): the K4 predicate correctly rejects a fixture presenting the naming convention (F20) as primary, ahead of git worktree list"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
