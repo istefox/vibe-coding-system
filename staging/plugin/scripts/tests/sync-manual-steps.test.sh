@@ -49,14 +49,18 @@ BASEREF_MARK="worktree forks from the default branch and the chain's Step 5 pre-
 # precompact-guard (issue #112, ADR-0058) is a CONTRACT CHANGE to this file, not just an addition:
 # the "yes" fixture below enumerates every wired hook and must include PreCompact too, or A3's
 # all-clear assertion breaks the moment sync-to-claude.sh's new notice exists (this caught
-# ADR-0049 too — see the comment on issue #87 above).
+# ADR-0049 too — see the comment on issue #87 above). worktree.baseRef (issue #176, ADR-0068
+# Task 5) is the same kind of contract change: the "yes" fixture's settings.json must also carry
+# "worktree":{"baseRef":"head"}, or A3 breaks the moment the baseRef notice exists. Whoever adds
+# the next notice: extend build_home's "yes" fixture to represent it as wired too, or A3 rots
+# again.
 
 # build_home <name> <wired:yes|no|nofile> <retired:yes|no> — returns the fixture HOME path.
 # "wired: yes" means every wired hook is present, i.e. genuinely nothing outstanding.
 build_home() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   case "$2" in
-    yes) printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
+    yes) printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     no)  printf '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     nofile) : ;;
   esac
