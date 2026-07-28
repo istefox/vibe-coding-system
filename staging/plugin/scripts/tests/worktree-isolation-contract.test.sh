@@ -12,6 +12,16 @@
 # absent before this section was written); Task 5's GREEN step adds Step 5.0.4 to the former and
 # restates it in the latter's existing Recovery-readiness pre-flight restatement paragraph.
 #
+# Section H (Task 6, R-06/R-07/R-08/R-09/R-14): explicit isolation on the tester stage and on
+# Step 6's fix-agent dispatch, the merge-back block (positioned between the tester and coder stage
+# headings), the base-fork audit (capture-before-commit ordering, halt on mismatch), and a
+# no-effort-on-Agent(...) sweep. Most of section H is RED at the time it was written — see the
+# per-assertion EXPECTED comment immediately above the section for the full RED/GREEN split,
+# including which parts were already satisfied by prior tasks and one pre-existing defect (an
+# `effort` key on a real `Agent(...)` call, ADR-0068 §D7) this section's general sweep found
+# rather than introduced. Task 6's GREEN step turns H1b, H2, H2b, H3, H3b, H4a, H5, H5b and H7
+# green; H1, H1c, H4b, H6, H6b, H6c, H7a and H7b are already green (forward guards or prior work).
+#
 # Task 2's EXPECTED result, seen once and recorded here so a future reader does not mistake a
 # checkpoint for fix evidence: sections A and B are RED (the two bad `isolation: "none"` /
 # `isolation: none` prescriptions and the dirty-tree condition blocks still exist in this
@@ -412,6 +422,297 @@ if grep -qF 'baseRef' "$AB_STEP5" 2>/dev/null \
   ok "G4: autopilot-build restates the baseRef assertion and records the failure in the report rather than prompting (ADR-0050 §D6, no leniency)"
 else
   bad "G4: autopilot-build's Recovery-readiness pre-flight restatement does not yet mention baseRef (R-05, R-17) — Task 5 adds this"
+fi
+
+# ==============================================================================================
+# Section H (Task 6, R-06, R-07, R-08, R-09, R-14) — the stage protocol: explicit isolation on
+# both dispatch paths, tester in a worktree, orchestrator merge-back, and the base-fork audit
+# (ADR-0068 §D5, §D6, §D7, §D9).
+#
+# EXPECTED at RED time (Task 6 GREEN not yet run):
+#   H1   GREEN — Step 5 Stage 2 (Workflow path) already pins isolation: "worktree" (prior task's
+#                work, confirmed present at the time this section was written).
+#   H1b  RED   — Step 6 Phase 3's fix-agent dispatch (agentType is chosen at runtime from
+#                fix_type, which includes "coder") carries no isolation key at all yet.
+#   H1c  GREEN — the Agent-tool fallback's coder dispatch (item 2) already pins isolation:
+#                "worktree" explicitly (same prior work as H1).
+#   H2   RED   — Step 5 Stage 1 (Workflow path) tester dispatch names no isolation value.
+#   H2b  RED   — the Agent-tool fallback's tester dispatch (item 1) names no isolation value.
+#   H3   RED   — no merge-back block exists anywhere naming worktreePath/worktreeBranch.
+#   H3b  RED   — positional: no merge-back heading exists to sit between the tester stage heading
+#                and the coder stage heading (the recovery-preflight.test.sh RE5 idiom: compare
+#                line numbers of two located headings).
+#   H4a  RED   — no "nothing to merge" wording exists for the auto-removed/empty-diff case.
+#   H4b  GREEN (trivially, absence-of-flag) — no --allow-empty flag exists either, since nothing
+#                exists yet. Kept as its own assertion (not folded into H4a) because R-14 is a
+#                positive claim ("nothing to merge") AND a negative one ("no empty commit") —
+#                folding them would let a future implementation satisfy one silently at the
+#                other's expense.
+#   H5   RED   — no base-fork capture-before-commit ordering exists (neither literal is present).
+#   H5b  RED   — no base-fork mismatch halt language exists.
+#   H6   GREEN (forward guard) — agents/coder.md already states "never commit(s)"; unchanged by
+#                this feature, and ADR-0068 §D5 explicitly keeps it that way (R-08).
+#   H6b  GREEN (forward guard) — neither SKILL.md contains an affirmative "instruct the coder to
+#                commit" phrasing today (verified by direct grep before this section was written).
+#   H6c  GREEN (forward guard, mandatory positive twin) — the H6b detector, run against a
+#                synthetic fixture that DOES instruct a coder to commit, correctly flags it.
+#   H7a  GREEN (forward guard) — at least one Agent(...) (Agent-tool, capital A) call block exists
+#                in concept-to-code/SKILL.md; the paragraph-split extractor is not vacuous.
+#   H7   RED   — one existing Agent(...) call (the Step 4.5 tracer-bullet probe dispatch,
+#                concept-to-code/SKILL.md ~line 609) already carries an "effort" key, which the
+#                Agent tool does not accept (ADR-0068 §D7: opts.effort is Workflow-only). This is
+#                a pre-existing defect this dispatch found while writing the general assertion the
+#                plan asked for, not something Task 6 introduces — flagged here, not fixed (tests
+#                only; a tester never edits production code).
+#   H7b  GREEN (forward guard, mandatory positive twin, synthetic fixture) — the same detector,
+#                applied to a fixture pairing a violating Agent(...) block with a correctly-formed
+#                Workflow-style agent(...) block that ALSO carries effort, flags only the former —
+#                proving the check discriminates on call syntax (capital A, literal parenthesis),
+#                not merely on the word "effort" (which would false-positive on every correctly
+#                written Workflow dispatch — the exact trap this section exists to avoid).
+#
+# Task 6's GREEN phase is expected to introduce ONE new heading, chosen here as the acceptance
+# anchor for H3/H3b/H4a/H5/H5b: `#### Merge-back and base-fork audit`. This mirrors the file's
+# existing single-resolution-site convention (`#### Pattern seed handoff`, `#### Proportional
+# audit depth`) — stated once, referenced by both dispatch paths — and it MUST sit, in document
+# order, after `**Stage 1 — tester.**` and before `**Stage 2 — coder.**`, so a reader (and this
+# test) sees the same ordering the runtime enforces (ADR-0068 §D6: the tester's worktree merges
+# before the coder's worktree is created).
+# ==============================================================================================
+
+# ------------------------------------------------------------------------------------------------
+# Shared helpers for section H.
+# ------------------------------------------------------------------------------------------------
+block_between() {
+  # $1=file $2=start ere (awk) $3=end ere (awk); start inclusive, end exclusive.
+  awk -v s="$2" -v e="$3" '$0 ~ s{f=1} $0 ~ e{f=0} f' "$1" 2>/dev/null
+}
+
+block_from_heading() {
+  # $1=file $2=start ere (awk). Prints from the first line matching $2 (inclusive) up to, but not
+  # including, the next line that begins with a markdown ### or #### heading. Empty output if $2
+  # matches nothing (the heading does not exist yet).
+  awk -v s="$2" '
+    $0 ~ s { f=1 }
+    f && /^#{3,4} / && $0 !~ s { exit }
+    f { print }
+  ' "$1" 2>/dev/null
+}
+
+split_paragraphs() {
+  # $1 = source file, $2 = destination dir (must already exist; cleared of prior para-*.txt).
+  # Splits on blank lines (awk paragraph mode, RS="").
+  rm -f "$2"/para-*.txt 2>/dev/null
+  awk -v outdir="$2" 'BEGIN{RS=""} { n++; print > (outdir "/para-" n ".txt") }' "$1" 2>/dev/null
+}
+
+agent_tool_effort_hits() {
+  # $1 = dir already populated by split_paragraphs. Prints the path of every paragraph containing
+  # a capital-A "Agent(" call (the Agent-tool literal call syntax) that also mentions "effort" —
+  # a key the Agent tool does not accept (ADR-0068 §D7). Case-sensitive by construction: lowercase
+  # "agent(" (Workflow) calls are a different mechanism and must never be flagged here.
+  for pf in "$1"/para-*.txt; do
+    [ -f "$pf" ] || continue
+    if grep -qE '(^|[^A-Za-z])Agent\(' "$pf" 2>/dev/null && grep -q 'effort' "$pf" 2>/dev/null; then
+      echo "$pf"
+    fi
+  done
+}
+
+agent_tool_call_count() {
+  # $1 = dir already populated by split_paragraphs. Counts paragraphs containing a capital-A
+  # "Agent(" call, regardless of whether they also carry "effort" — the H7a non-vacuity guard.
+  grep -lE '(^|[^A-Za-z])Agent\(' "$1"/para-*.txt 2>/dev/null | wc -l | tr -d ' '
+}
+
+# ==============================================================================================
+# H1 / H1b / H1c (R-06) — every `coder` dispatch (Workflow Stage 2, Workflow Step 6 Phase 3
+# fix-agent, Agent-tool fallback) pins isolation: "worktree" explicitly.
+# ==============================================================================================
+STAGE2_BLOCK=$(block_between "$CC" '^\*\*Stage 2 — coder\.\*\*' '^\*\*Pin the model explicitly')
+if printf '%s\n' "$STAGE2_BLOCK" | grep -qF 'isolation: "worktree"'; then
+  ok "H1: concept-to-code Step 5 Stage 2 (Workflow path) pins isolation: \"worktree\" on the coder dispatch (R-06)"
+else
+  bad "H1: concept-to-code Step 5 Stage 2 (Workflow path) does not pin isolation: \"worktree\" on the coder dispatch (R-06)"
+fi
+
+PHASE3_BLOCK=$(block_between "$CC" '^Phase 3 — Fix in parallel per file group:' '^Phase 4 — Re-review:')
+if printf '%s\n' "$PHASE3_BLOCK" | grep -q 'isolation'; then
+  ok "H1b: concept-to-code Step 6 Phase 3's fix-agent dispatch pins an isolation value (R-06)"
+else
+  bad "H1b: concept-to-code Step 6 Phase 3's fix-agent dispatch names no isolation value — agentType can resolve to \"coder\" (via fix_type) and R-06 requires isolation: 'worktree' there too"
+fi
+
+FALLBACK_CODER_BLOCK=$(block_between "$CC" '^2\. Dispatch coder with batch 1' '^3\. Checkpoint between batches')
+if printf '%s\n' "$FALLBACK_CODER_BLOCK" | grep -qF 'isolation: "worktree"'; then
+  ok "H1c: the Agent-tool fallback's coder dispatch pins isolation: \"worktree\" explicitly (R-06)"
+else
+  bad "H1c: the Agent-tool fallback's coder dispatch does not pin isolation: \"worktree\" explicitly (R-06)"
+fi
+
+# ==============================================================================================
+# H2 / H2b (R-09) — Step 5 Stage 1's tester dispatch carries an isolation value on both paths.
+# ==============================================================================================
+STAGE1_BLOCK=$(block_between "$CC" '^\*\*Stage 1 — tester\.\*\*' '^\*\*Stage 2 — coder\.\*\*')
+if printf '%s\n' "$STAGE1_BLOCK" | grep -q 'isolation'; then
+  ok "H2: concept-to-code Step 5 Stage 1 (Workflow path) tester dispatch names an isolation value (R-09)"
+else
+  bad "H2: concept-to-code Step 5 Stage 1 (Workflow path) tester dispatch names no isolation value — R-09 requires isolation: \"worktree\" explicitly"
+fi
+
+FALLBACK_TESTER_BLOCK=$(block_between "$CC" '^1\. Dispatch `tester` for batch 1' '^2\. Dispatch coder with batch 1')
+if printf '%s\n' "$FALLBACK_TESTER_BLOCK" | grep -q 'isolation'; then
+  ok "H2b: the Agent-tool fallback's tester dispatch (batch 1) names an isolation value (R-09)"
+else
+  bad "H2b: the Agent-tool fallback's tester dispatch (batch 1) names no isolation value — R-09 requires isolation: \"worktree\" explicitly, same as the coder dispatch immediately below it"
+fi
+
+# ==============================================================================================
+# H3 / H3b (R-07, R-09) — the merge-back block exists, names worktreePath and worktreeBranch, and
+# sits, in document order, between the tester stage heading and the coder stage heading (the
+# recovery-preflight.test.sh RE5 idiom: compare line numbers of two located headings).
+# ==============================================================================================
+MB_HEADING_ERE='^#### Merge-back and base-fork audit'
+MB_SECTION=$(block_from_heading "$CC" "$MB_HEADING_ERE")
+
+if printf '%s\n' "$MB_SECTION" | grep -qF 'worktreePath' && printf '%s\n' "$MB_SECTION" | grep -qF 'worktreeBranch'; then
+  ok "H3: a merge-back block exists naming worktreePath and worktreeBranch (R-07)"
+else
+  bad "H3: no merge-back block naming worktreePath and worktreeBranch was found (R-07) — Task 6 adds a '#### Merge-back and base-fork audit' section"
+fi
+
+STAGE1_HEAD_LINE=$(grep -n '^\*\*Stage 1 — tester\.\*\*' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+MB_HEAD_LINE=$(grep -n "$MB_HEADING_ERE" "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+STAGE2_HEAD_LINE=$(grep -n '^\*\*Stage 2 — coder\.\*\*' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+if [ -n "$STAGE1_HEAD_LINE" ] && [ -n "$MB_HEAD_LINE" ] && [ -n "$STAGE2_HEAD_LINE" ] \
+   && [ "$STAGE1_HEAD_LINE" -lt "$MB_HEAD_LINE" ] && [ "$MB_HEAD_LINE" -lt "$STAGE2_HEAD_LINE" ]; then
+  ok "H3b: the merge-back block sits between the tester stage heading and the coder stage heading (R-07, R-09, RE5 idiom)"
+else
+  bad "H3b: the merge-back block is not positioned between the tester stage heading and the coder stage heading (R-07, R-09) — expected a '#### Merge-back and base-fork audit' heading after '**Stage 1 — tester.**' and before '**Stage 2 — coder.**'"
+fi
+
+# ==============================================================================================
+# H4a / H4b (R-14) — the empty/auto-removed worktree case is "nothing to merge": neither an error
+# nor an empty commit. Two assertions on purpose: a positive claim (the wording exists) and a
+# negative one (no empty-commit escape hatch), so a future implementation cannot satisfy one
+# silently at the other's expense.
+# ==============================================================================================
+if printf '%s\n' "$MB_SECTION" | grep -qF 'nothing to merge'; then
+  ok "H4a: the merge-back block states the empty/auto-removed case as 'nothing to merge' (R-14)"
+else
+  bad "H4a: the merge-back block does not state the empty/auto-removed case as 'nothing to merge' (R-14)"
+fi
+
+if printf '%s\n' "$MB_SECTION" | grep -qF -- '--allow-empty'; then
+  bad "H4b: the merge-back block uses --allow-empty — R-14 requires NO empty commit, not an empty commit with a marker"
+else
+  ok "H4b: the merge-back block does not use --allow-empty (no empty commit is produced, R-14)"
+fi
+
+# ==============================================================================================
+# H5 / H5b (R-07) — the base-fork audit: the fork point is captured with `rev-parse HEAD` BEFORE
+# the snapshot commit lands (ordering), and a mismatch halts (behaviour). Two assertions, because
+# the ordering half is the one that silently rots (ADR-0068 §D5 step 2, "records the fork point
+# before touching anything").
+# ==============================================================================================
+BASE_SHA_LINE=$(grep -nF 'BASE_SHA=$(git -C "$WT" rev-parse HEAD)' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+SNAPSHOT_COMMIT_LINE=$(grep -nF 'git -C "$WT" commit -m "chore(step5): snapshot' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+if [ -n "$BASE_SHA_LINE" ] && [ -n "$SNAPSHOT_COMMIT_LINE" ] && [ "$BASE_SHA_LINE" -lt "$SNAPSHOT_COMMIT_LINE" ]; then
+  ok "H5: the fork point (BASE_SHA = rev-parse HEAD) is captured before the snapshot commit lands (R-07, ordering)"
+else
+  bad "H5: no evidence the fork point is captured before the snapshot commit (R-07, ordering) — expected literal 'BASE_SHA=\$(git -C \"\$WT\" rev-parse HEAD)' to precede literal 'git -C \"\$WT\" commit -m \"chore(step5): snapshot'"
+fi
+
+if printf '%s\n' "$MB_SECTION" | grep -qF 'forked from somewhere other than the feature branch' \
+   && printf '%s\n' "$MB_SECTION" | grep -qi 'halt'; then
+  ok "H5b: a base-fork mismatch halts the chain, with the reason stated (R-07)"
+else
+  bad "H5b: no base-fork mismatch halt was found (R-07) — expected the merge-back block to state that a mismatch means the worktree forked from somewhere other than the feature branch, and to halt"
+fi
+
+# ==============================================================================================
+# H6 / H6b / H6c (R-08) — coder.md's "never commits" instruction is unchanged (forward guard,
+# green from the start — ADR-0068 §D5 keeps it untouched on purpose), and no dispatch prompt in
+# either SKILL.md instructs a coder to commit. Mandatory positive twin (H6c): the same detector
+# fires on a synthetic fixture that DOES instruct a coder to commit.
+# ==============================================================================================
+if grep -qi 'never commit' "$CODER_MD" 2>/dev/null; then
+  ok "H6 (forward guard): agents/coder.md still states its coder 'never commit(s)' (R-08)"
+else
+  bad "H6 (forward guard): agents/coder.md no longer states 'never commit(s)' — R-08 requires this instruction untouched"
+fi
+
+coder_commit_instruction_hits() {
+  # $1 = file. Exit 0 (match) iff an affirmative "instruct the coder to commit" phrasing is
+  # present. Deliberately NOT matching "do not commit" / "never commit" — those are the correct
+  # instruction, and this detector must not flag its own compliance.
+  grep -qiE 'please commit|commit your changes|commit the changes|coder (should|must) commit|have the coder commit|commit this' "$1" 2>/dev/null
+}
+
+if coder_commit_instruction_hits "$CC" || coder_commit_instruction_hits "$AB"; then
+  bad "H6b (forward guard): a dispatch prompt instructs a coder to commit — R-08 forbids this"
+else
+  ok "H6b (forward guard): neither concept-to-code/SKILL.md nor autopilot-build/SKILL.md instructs a coder to commit (R-08)"
+fi
+
+FIXTURE_H6C="$TMP/fixture-h6c.md"
+printf 'Coder brief: implement the change, then please commit your changes and report back.\n' > "$FIXTURE_H6C"
+if coder_commit_instruction_hits "$FIXTURE_H6C"; then
+  ok "H6c (forward guard, mandatory positive twin): the R-08 detector fires on a fixture that DOES instruct a coder to commit"
+else
+  bad "H6c (forward guard, mandatory positive twin): the R-08 detector did NOT fire on a fixture instructing a coder to commit — H6b cannot be trusted to catch a real regression"
+fi
+
+# ==============================================================================================
+# H7a / H7 / H7b — no `Agent(...)` (Agent-tool, capital A) call carries an `effort` key; the Agent
+# tool has no such parameter (ADR-0068 §D7). `agent(...)` (lowercase, Workflow) calls legitimately
+# carry `effort` and MUST NOT be flagged — H7b is the mandatory synthetic positive twin proving the
+# check distinguishes the two, not merely the word "effort".
+# ==============================================================================================
+CC_PARA_DIR="$TMP/paras-cc"
+mkdir -p "$CC_PARA_DIR"
+split_paragraphs "$CC" "$CC_PARA_DIR"
+
+AGENT_TOOL_CALLS=$(agent_tool_call_count "$CC_PARA_DIR")
+case "$AGENT_TOOL_CALLS" in ''|*[!0-9]*) AGENT_TOOL_CALLS=0 ;; esac
+if [ "$AGENT_TOOL_CALLS" -ge 1 ]; then
+  ok "H7a (forward guard): at least one Agent(...) (Agent-tool) call block was found in concept-to-code/SKILL.md (count=$AGENT_TOOL_CALLS) — the extractor is not vacuous"
+else
+  bad "H7a (forward guard): zero Agent(...) call blocks found — the extractor is broken and H7 is meaningless"
+fi
+
+CC_EFFORT_HITS=$(agent_tool_effort_hits "$CC_PARA_DIR")
+
+AB_PARA_DIR="$TMP/paras-ab"
+mkdir -p "$AB_PARA_DIR"
+split_paragraphs "$AB" "$AB_PARA_DIR"
+AB_EFFORT_HITS=$(agent_tool_effort_hits "$AB_PARA_DIR")
+
+if [ -z "$CC_EFFORT_HITS" ] && [ -z "$AB_EFFORT_HITS" ]; then
+  ok "H7: no Agent(...) (Agent-tool) call carries an effort key — the Agent tool has none (ADR-0068 §D7)"
+else
+  bad "H7: at least one Agent(...) (Agent-tool) call carries an effort key, which the Agent tool does not accept (ADR-0068 §D7) — found in: $(printf '%s %s' "$CC_EFFORT_HITS" "$AB_EFFORT_HITS" | tr '\n' ' ')"
+fi
+
+FIXTURE_H7="$TMP/fixture-h7.md"
+cat > "$FIXTURE_H7" <<'EOF'
+Agent({ agentType: "coder", model: "sonnet", effort: "high",
+        prompt: "do the thing" })
+
+agent(`
+  do the thing
+`, { agentType: "coder", model: "sonnet", effort: "high" })
+EOF
+FIXTURE_H7_DIR="$TMP/paras-h7fixture"
+mkdir -p "$FIXTURE_H7_DIR"
+split_paragraphs "$FIXTURE_H7" "$FIXTURE_H7_DIR"
+FIXTURE_H7_HITS=$(agent_tool_effort_hits "$FIXTURE_H7_DIR")
+FIXTURE_H7_HIT_COUNT=$(printf '%s\n' "$FIXTURE_H7_HITS" | grep -c . 2>/dev/null || true)
+case "$FIXTURE_H7_HIT_COUNT" in ''|*[!0-9]*) FIXTURE_H7_HIT_COUNT=0 ;; esac
+if [ "$FIXTURE_H7_HIT_COUNT" -eq 1 ]; then
+  ok "H7b (forward guard, mandatory positive twin): the detector flags exactly the Agent(...) block and not the agent(...) Workflow block, both carrying effort — proving it discriminates on call syntax, not on the word 'effort'"
+else
+  bad "H7b (forward guard, mandatory positive twin): expected exactly one flagged paragraph in the fixture (the Agent(...) block), got $FIXTURE_H7_HIT_COUNT — the detector cannot be trusted to distinguish Agent-tool calls from Workflow calls"
 fi
 
 echo "----"
