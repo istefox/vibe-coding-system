@@ -904,12 +904,34 @@ tester's `agent()` call above returns and before Stage 2 below creates the coder
 **The orchestrator commits, never the agent.** `coder.md`'s "never commits" instruction is
 untouched by this feature; this snapshot happens only after the dispatch has already returned
 (R-08). `$PRE` = `git rev-parse HEAD` on the feature branch, captured immediately before this
-stage was dispatched. `$WT` = `worktreePath`, `$WB` = `worktreeBranch`, both read from the
-dispatch result alongside the agent's report (F10).
+stage was dispatched.
+
+`$WT` and `$WB` are obtained differently depending on dispatch path — there is no single method
+that covers both:
+
+- **Agent-tool path:** `$WT` = `worktreePath`, `$WB` = `worktreeBranch`, both read directly from
+  the dispatch result alongside the agent's report (F10).
+- **Workflow path:** the dispatch result carries no worktree identity at all (F19) — the run
+  journal records only `agentId`, `key`, `result` and `type`, and the task notification carries no
+  worktree block, though the worktree itself IS created (F16). Locate it by enumerating
+  `git worktree list` and selecting the entry that is not the main working tree. Prefer
+  enumeration over deriving the path from the run id: F20 records `.claude/worktrees/<runId>-<n>`
+  (worktree branch `worktree-<runId>-<n>`) only as an observed naming convention, not a reported
+  contract, and relying on it is exactly the class of undocumented assumption this ADR exists to
+  stop. The convention may be noted as a documented fallback, but only subordinate to enumeration,
+  never as the primary mechanism.
+
+Do not collapse these back into one method: the Workflow path does not report worktree identity
+(F19), so assuming F10's fields apply there leaves the coder's work orphaned on an unmerged
+branch — precisely the defect this feature exists to repair, reappearing on the other dispatch
+path.
 
 ```bash
 # $PRE = git rev-parse HEAD, captured on the feature branch BEFORE this stage was dispatched
-# $WT  = worktreePath, $WB = worktreeBranch, both from the dispatch result (F10)
+# $WT / $WB — Agent-tool path: worktreePath / worktreeBranch, from the dispatch result (F10).
+#             Workflow path: no identity is reported (F19) — enumerate `git worktree list` and
+#             select the entry that is not the main working tree instead of deriving the path
+#             from the run id (F20 is an observed convention, not a contract).
 [ -d "$WT" ] || { echo "nothing to merge: worktree auto-removed"; }   # F6, not an error
 if [ -d "$WT" ] && [ -n "$(git -C "$WT" status --porcelain 2>/dev/null)" ]; then
   BASE_SHA=$(git -C "$WT" rev-parse HEAD)      # fork point, captured BEFORE any commit lands
