@@ -114,3 +114,19 @@ prompted.
   exists; nothing pins that it is obeyed.
 - A legitimate resume into a deliberately dirty tree now needs an explicit stash. Accepted: it is
   one command, and the alternative is silence.
+
+## Correction 2026-07-28 (ADR-0068 retires §D4's reconciliation paragraph)
+
+**ADR-0068 (issue #176) supersedes §D4's reconciliation paragraph**, the one that read: "at Step 5
+entry the tree is clean; every dirty tree observed after that point was produced by Step 5 itself."
+That paragraph reconciled this ADR's clean-tree pre-flight against ADR-0049 §D2's dirty-tree
+`isolation: "none"` tolerance. ADR-0068 §D6 retires §D2 outright — the tester now commits and merges
+its own worktree before the coder's worktree is created, so no dirty-tree-by-design condition
+survives for §D4 to reconcile against. A paragraph that reconciles two conditions is moot once one
+of them no longer exists.
+
+This ADR's own pre-flight (the clean-tree entry check, D1–D3, D5, D6) is **untouched**: it guards
+Step 5 entry, a boundary ADR-0068 does not touch, and it remains the condition that makes the
+tester's subsequent worktree-and-merge protocol safe to run against.
+
+See `docs/architecture/ADR-0068-176-worktree-isolation-contract.md` §D5, §D6 for the full account.

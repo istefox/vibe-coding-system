@@ -592,6 +592,30 @@ conditional reminder that disappears once it is done.
 
 ---
 
+## Correction 2026-07-28 (ADR-0068 supersedes the cross-repo isolation constraint)
+
+**ADR-0068 (issue #176) supersedes this ADR's § *Cross-repo isolation constraint* in part.** That
+section recorded `isolation: none` as the fallback for the cross-repo scenario (implementing in
+`~/.claude/`, manifest in a doc repo) without checking it against the Agent tool's schema. It does
+not exist: the tool's `isolation` enum is exactly `worktree` and `remote`, and passing `none`
+returns `InputValidationError` — the dispatch fails outright, it does not fall back to anything.
+
+ADR-0068's probe (F13, F14, F15) replaces the fallback with a refusal: a non-git CWD is refused
+with an actionable message, not downgraded to a second isolation mode, because no second mode
+exists. The base-branch half of the cross-repo constraint (worktrees forking from the default
+branch rather than from `HEAD`) is answered separately by `worktree.baseRef: "head"` (ADR-0068
+§D1), which this ADR never named.
+
+The line at § *Consequences* — "Cross-repo isolation: none required" — carries the same defect
+and is superseded on the same grounds. Neither line is edited in place, per the ADR-0034
+forward-correction precedent this ADR itself already follows for its own addenda; this correction
+block is that precedent applied to text ADR-0068 found, not text this ADR added about ADR-0068.
+
+See `docs/architecture/ADR-0068-176-worktree-isolation-contract.md` §D1, §D10, and the *Measured
+facts annex* (F13–F15) for the full account.
+
+---
+
 ## References
 
 - Dynamic Workflows docs: `https://code.claude.com/docs/en/workflows`

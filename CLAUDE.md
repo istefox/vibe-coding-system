@@ -925,35 +925,43 @@ its output returns (issue #176, closing #175). Isolation is repaired, not remove
 "none"` — a value the Agent tool rejects outright — is deleted from all 11 call sites and never
 named again.
 
-Twelve facts (F1–F12) were measured by live probe on 2026-07-28, CC 2.1.220, before any design. The
-SPEC's table records the probe behind each one. That discipline exists because ADR-0016 asserted
-`isolation: none` as pre-existing fact, never checked it against the tool schema, and ADR-0049 and
-ADR-0050 then built on it.
+Twelve facts (F1–F12) were measured by live probe on 2026-07-28, CC 2.1.220, before any design; the
+same probe then falsified two of the ADR's own first-draft premises (F13, F14), so the contract that
+shipped is smaller than the one first approved at Gate 2. The SPEC's table records the probe behind
+each fact. That discipline exists because ADR-0016 asserted `isolation: none` as pre-existing fact,
+never checked it against the tool schema, and ADR-0049 and ADR-0050 then built on it.
 
 Key architectural decisions:
-- **The base contract is two-layer (§D1).** `worktree.baseRef: "head"` is the native mechanism —
-  docs-verified: *"Subagent worktrees … branch from your repository's default branch unless
-  `worktree.baseRef` is set to `"head"`"*, and `"head"` is documented for exactly this case. Both
-  `~/.claude/settings.json` and `staging/user/settings.json` carried `"fresh"`. `worktree-create.sh`
-  ships alongside it as the only **scopable** mechanism with a per-creation audit record, so an
-  unwired hook degrades to correct-but-unaudited rather than silently back to the defect.
-- **The blueprint had already dismissed the cause.** `docs/vibe-coding-system.md:152` put
-  `worktree.baseRef` out of scope because *"this system doesn't rely on `EnterWorktree`'s implicit
-  base"* — true and irrelevant: subagent worktrees use the same key. A dismissal is a decision, and
-  its premise deserves the same check as an assertion.
-- **A doc-sourced fact in a "Measured facts" table is not a measured fact (§D2).** SPEC F11's
-  `WorktreeCreate` field list (`base`, `branch`, `agent_type`) disagrees with the current schema
-  (`base_branch`, `worktree_branch`, **no** `agent_type`) — the field R-04's scoping depends on.
-  Plan Task 1 is a capture-hook probe filling an annex (F13–F16) left deliberately empty, with
-  written fallbacks. No predicate is guessed.
-- **The hook's fail-safe is DECLINE, not non-zero (§D3).** `WorktreeCreate` has three exit states:
-  `0`+path = created, `0`+**empty stdout** = decline and fall through to default git behaviour,
-  non-zero = abort. So it never exits non-zero on any reachable path. This supersedes the SPEC's own
-  claim that it would be the first hook here that cannot fail open.
-- **Merge-back is orchestrator-driven (§D5), and `coder.md`'s "never commits" is untouched.** The
-  orchestrator snapshots the worktree the coder left behind, after it returns, using the
-  `worktreePath`/`worktreeBranch` the Agent tool already reports. A missing worktree or an empty
-  status is "nothing to merge" — not an error, no empty commit.
+- **The base contract is ONE layer, not two (§D1, revised 2026-07-28).** `worktree.baseRef: "head"`
+  is the native mechanism — docs-verified: *"Subagent worktrees … branch from your repository's
+  default branch unless `worktree.baseRef` is set to `"head"`"*, and `"head"` is documented for
+  exactly this case. Both `~/.claude/settings.json` and `staging/user/settings.json` carried
+  `"fresh"`. The first draft added a second layer, a `WorktreeCreate` hook, for scoped enforcement
+  plus a per-creation audit record. **That layer is deleted** — the probe refuted the two premises
+  it needed.
+- **No hook is registered, and the reason is measured, not stylistic (§D2–§D4).** F13: the payload
+  identifies the *dispatching session* — `session_id`, `transcript_path`, `cwd`, `prompt_id`,
+  `hook_event_name`, `name` — never the agent about to run; no `agent_type`, no `agent_id`, no
+  `base`/`branch` field of any kind. F14: exit 0 with empty stdout does not decline and fall through,
+  it **aborts** the dispatch outright ("hook succeeded but returned no worktree path") — there is no
+  allow path on this event at all. And the event has **no matcher**. The three compound: a
+  registered hook cannot scope itself to this chain's four agent types and cannot decline for
+  anyone else, so registering one means **owning every worktree creation on the machine** — every
+  `--worktree` session, every background session, in every project. That blast radius is
+  categorically different from this repository's existing hand-wired `PreToolUse`/`PreCompact`
+  hooks, none of which can do that much damage wired wrong.
+- **The audit record the hook would have carried moves into the orchestrator's merge-back (§D5), and
+  is stronger there.** The hook could only log the base it *intended* to use, from inside the
+  mechanism being audited, at creation time. The orchestrator instead reads
+  `git -C "$worktreePath" rev-parse HEAD` after the dispatch returns and compares it against the
+  feature branch's `HEAD` as it stood at dispatch time — observed evidence of what the worktree
+  *actually* forked from, from outside it, after the fact. A mismatch halts, on the same path as a
+  merge conflict.
+- **The probe instrument is retained, unregistered, and must never be wired (§D2).**
+  `staging/plugin/scripts/worktree-capture.sh` is the re-measurement tool that produced F13–F16; it
+  carries no `PAIRS` entry and is not deployed, on the same terms as this repository's other
+  probe-only scripts. Its header states in its first lines that registering it aborts every worktree
+  creation on the machine, because it always returns no path.
 - **The tester runs in a worktree too and merges first (§D6)**, so the coder forks from a `HEAD` that
   already contains the red tests. ADR-0049 §D2's dirty-tree condition is retired as a consequence,
   and ADR-0050 §D4's reconciliation paragraph with it.
@@ -963,16 +971,18 @@ Key architectural decisions:
   only §D5's commit-then-merge protocol does, and RTF has none. R-11's assertion anchors on the
   isolation-selection compound phrase for this reason, never on the bare command string.
 - **Both dispatch paths pass isolation explicitly (§D7).** Frontmatter never reaches the Workflow
-  path (F4), which is why the two behaved oppositely rather than merely inconsistently. The Agent
-  tool has no `effort` parameter; `opts.effort` exists on the Workflow path only.
+  path (F4, corrected by F16), which is why the two behaved oppositely rather than merely
+  inconsistently. The Agent tool has no `effort` parameter; `opts.effort` exists on the Workflow
+  path only.
 
 Known consequences, recorded rather than fixed:
-- `WorktreeCreate` has **no matcher**: it fires on every worktree creation on the machine, including
-  `--worktree` and background sessions. §D4's decline-for-everything-outside-the-modification-set is
-  the only containment.
-- A hook that takes over creation **bypasses `.worktreeinclude`** (docs: copy the files inside the
-  hook). `staging/project-templates/app-fastapi-react/.worktreeinclude` exists, so this is a real
-  regression path for generated projects.
+- **F13–F18 are true of CC 2.1.220 and of nothing else.** ADR-0016's v2.1.154 experience is the
+  precedent: the substrate moves. A future build that adds an agent discriminator and an abstain
+  state to `WorktreeCreate` reopens the two-layer design on its merits — re-run the probe with
+  `worktree-capture.sh` and record the result before treating the question as settled again.
+- `worktree.baseRef: "head"` is user-scope and global: it changes `--worktree` and `EnterWorktree`
+  behaviour for every project on this machine, and it can drift back to `"fresh"` with no signal
+  other than the Step 5 pre-flight assertion and §D5's per-stage base-fork comparison.
 - Both halves of the contract are **wired by hand** — `sync-to-claude.sh` does not edit
   `settings.json`. Same inertness pattern as `write-scope-enforce.sh`, `agent-write-scope.sh`,
   `test-write-scope.sh` and `precompact-guard.sh`.
