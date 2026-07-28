@@ -297,7 +297,7 @@
     ]
   },
   "worktree": {
-    "baseRef": "fresh"
+    "baseRef": "head"
   },
   "enabledPlugins": {
     "claude-code-setup@claude-plugins-official": false,

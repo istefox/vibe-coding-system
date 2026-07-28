@@ -13,6 +13,14 @@
 # Runs are dry-run (no --apply), so the script only reads. ADR-0024 recorded $HOME coupling as
 # the reason several legacy harnesses are CI-dark; this is the pattern that closes that gap
 # without editing the script under test — reusable for the others.
+#
+# Section F (issue #176, ADR-0068 Task 5, R-05/R-17): the baseRef settings-key notice. Unlike the
+# six notices above, which are gated by grep on a hook name, this one is gated on a JSON value
+# (worktree.baseRef == "head" in $DEST/settings.json), so it needs its own fixture shape rather
+# than build_home's hooks-only JSON. EXPECTED at RED time: every F assertion FAILS — no such
+# notice exists in sync-to-claude.sh yet (confirmed absent before this section was written); Task
+# 5 adds it under a NEW heading ("MANUAL STEP: settings key"), distinct from the shared
+# "MANUAL STEP: hook wiring" heading the marks above key off.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -32,6 +40,7 @@ TEST_MARK="alongside the agent-command-scope entry"
 PRECOMPACT_MARK="PreCompact is not currently in the hooks block"
 RETIRED_MARK="MANUAL STEP: retired hook cleanup"
 CLEAR_MARK="no manual steps outstanding"
+BASEREF_MARK="worktree forks from the default branch and the chain's Step 5 pre-flight will refuse to dispatch"
 
 # Two wiring notices now share the "MANUAL STEP: hook wiring" heading (nightly-guard and, since
 # issue #87, write-scope-enforce), so the marks above discriminate on each notice's own body.
@@ -40,14 +49,18 @@ CLEAR_MARK="no manual steps outstanding"
 # precompact-guard (issue #112, ADR-0058) is a CONTRACT CHANGE to this file, not just an addition:
 # the "yes" fixture below enumerates every wired hook and must include PreCompact too, or A3's
 # all-clear assertion breaks the moment sync-to-claude.sh's new notice exists (this caught
-# ADR-0049 too — see the comment on issue #87 above).
+# ADR-0049 too — see the comment on issue #87 above). worktree.baseRef (issue #176, ADR-0068
+# Task 5) is the same kind of contract change: the "yes" fixture's settings.json must also carry
+# "worktree":{"baseRef":"head"}, or A3 breaks the moment the baseRef notice exists. Whoever adds
+# the next notice: extend build_home's "yes" fixture to represent it as wired too, or A3 rots
+# again.
 
 # build_home <name> <wired:yes|no|nofile> <retired:yes|no> — returns the fixture HOME path.
 # "wired: yes" means every wired hook is present, i.e. genuinely nothing outstanding.
 build_home() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   case "$2" in
-    yes) printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
+    yes) printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     no)  printf '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     nofile) : ;;
   esac
@@ -56,6 +69,30 @@ build_home() {
 }
 
 run_sync() { HOME="$1" bash "$SYNC" 2>&1; }
+
+# build_home_br <name> <hooks:yes|no|nofile> <baseref:absent|wrong|correct> — returns the fixture
+# HOME path. Independent of build_home's fixture shape because the baseRef notice is gated on a
+# JSON value, not a hook-name substring; "hooks" here reuses "yes"/"no"'s exact JSON blobs from
+# build_home so the six existing notices behave identically to sections A-E while $3 varies only
+# the "worktree" key. "nofile" (no settings.json at all) ignores $3.
+build_home_br() {
+  _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
+  if [ "$2" = "nofile" ]; then
+    printf '%s' "$_h"
+    return
+  fi
+  case "$3" in
+    absent)  _wt='' ;;
+    wrong)   _wt='"worktree":{"baseRef":"fresh"},' ;;
+    correct) _wt='"worktree":{"baseRef":"head"},' ;;
+  esac
+  case "$2" in
+    yes) _hooks='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}' ;;
+    no)  _hooks='{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}' ;;
+  esac
+  printf '{%s"hooks":%s}\n' "$_wt" "$_hooks" > "$_h/.claude/settings.json"
+  printf '%s' "$_h"
+}
 
 # =====================================================================================
 # A. Wired, no retired file — the real state of this machine on 2026-07-25. Neither notice
@@ -197,6 +234,66 @@ esac
 case "$OUT9" in
   *"$WIRING_MARK"*) ok "E11: wiring PreCompact does not suppress the nightly-guard notice" ;;
   *) bad "E11: nightly-guard notice muted by an unrelated event key being wired" ;;
+esac
+
+
+# =====================================================================================
+# F. baseRef settings-key notice (issue #176, ADR-0068 Task 5, R-05/R-17). Gated on
+# worktree.baseRef == "head" in $DEST/settings.json, not on a hook-name grep.
+
+# F1: absent entirely — all six hooks wired, so the other six notices must stay silent while this
+# one fires alone.
+OUT=$(run_sync "$(build_home_br f1 yes absent)")
+case "$OUT" in
+  *"$BASEREF_MARK"*) ok "F1: baseRef notice printed when worktree.baseRef is absent from settings.json" ;;
+  *) bad "F1: baseRef notice suppressed although worktree.baseRef is absent" ;;
+esac
+case "$OUT" in
+  *"$WIRING_MARK"*) bad "F1b: an unrelated hook-wiring notice leaked into the absent-baseRef case" ;;
+  *) ok "F1b: the six hook-wiring notices stay suppressed when only baseRef is missing" ;;
+esac
+
+# F2: present but WRONG value ("fresh", not "head") — the case that matters most, since it is easy
+# to conflate "key present" with "key correct". Must fire exactly like the absent case.
+OUT=$(run_sync "$(build_home_br f2 yes wrong)")
+case "$OUT" in
+  *"$BASEREF_MARK"*) ok "F2: baseRef notice printed when worktree.baseRef is present but NOT \"head\" (e.g. \"fresh\")" ;;
+  *) bad "F2: baseRef notice suppressed although worktree.baseRef is present with the wrong value — a wrong value is being silently treated as correct" ;;
+esac
+case "$OUT" in
+  *"$WIRING_MARK"*) bad "F2b: an unrelated hook-wiring notice leaked into the wrong-baseRef case" ;;
+  *) ok "F2b: the six hook-wiring notices stay suppressed when only baseRef is wrong" ;;
+esac
+
+# F3: present and correct — suppressed, and the all-clear line fires since nothing is outstanding.
+OUT=$(run_sync "$(build_home_br f3 yes correct)")
+case "$OUT" in
+  *"$BASEREF_MARK"*) bad "F3: baseRef notice printed although worktree.baseRef is already \"head\"" ;;
+  *) ok "F3: baseRef notice suppressed once worktree.baseRef is \"head\"" ;;
+esac
+case "$OUT" in
+  *"$CLEAR_MARK"*) ok "F3b: all-clear line prints once baseRef is correct and all six hooks are wired" ;;
+  *) bad "F3b: no all-clear line although baseRef is correct and all six hooks are wired — the CLEAR_MARK condition doesn't yet account for baseRef" ;;
+esac
+
+# F4: independence, reverse direction — hooks NOT wired, baseRef correct. Proves fixing baseRef
+# does not mute the six hook-wiring notices, and an unwired hook does not force the baseRef notice.
+OUT=$(run_sync "$(build_home_br f4 no correct)")
+case "$OUT" in
+  *"$BASEREF_MARK"*) bad "F4: baseRef notice printed although worktree.baseRef is \"head\" (should be independent of hook wiring)" ;;
+  *) ok "F4: baseRef notice stays suppressed when correct, even though the six hooks are all unwired" ;;
+esac
+case "$OUT" in
+  *"$WIRING_MARK"*) ok "F4b: the nightly-guard wiring notice still fires independently of a correct baseRef" ;;
+  *) bad "F4b: nightly-guard wiring notice was muted by a correct baseRef value" ;;
+esac
+
+# F5: fail-safe — no settings.json at all. An unconfirmable state must not read as "already
+# correct" (same fail-safe direction as D1-D4 above).
+OUT=$(run_sync "$(build_home_br f5 nofile absent)")
+case "$OUT" in
+  *"$BASEREF_MARK"*) ok "F5: baseRef notice printed when settings.json is missing entirely (fail-safe)" ;;
+  *) bad "F5: missing settings.json silently treated as baseRef-correct" ;;
 esac
 
 echo "----"

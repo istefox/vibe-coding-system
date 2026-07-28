@@ -184,27 +184,30 @@ fi
 
 #### Step 5 — Implementation dispatch
 
-**Recovery-readiness pre-flight (same as c2c Step 5, "Recovery-readiness pre-flight (ADR-0050)" block) — run BEFORE the worktree isolation check below:** working tree clean (`git status --porcelain` empty), a feature branch checked out (not the default branch, resolved via `git symbolic-ref refs/remotes/origin/HEAD` rather than a hardcoded `main`), and HEAD sha recorded once as `recovery_baseline_sha`. Refuses identically to the attended path — no leniency branch for `autopilot: true` (ADR-0050 §D6). On refusal: write an `aborted` report naming the failed assertion and the literal remediation command, do not dispatch — recorded in the report rather than prompted, since there is no `AskUserQuestion` on this path.
+**Recovery-readiness pre-flight (same as c2c Step 5, "Recovery-readiness pre-flight (ADR-0050)" block) — run BEFORE the worktree isolation check below:** working tree clean (`git status --porcelain` empty), a feature branch checked out (not the default branch, resolved via `git symbolic-ref refs/remotes/origin/HEAD` rather than a hardcoded `main`), HEAD sha recorded once as `recovery_baseline_sha`, and Step 5.0.4's `worktree.baseRef == "head"` check (ADR-0068 §D1) against the effective `settings.json` — non-zero, including a missing or unparseable file, is not verified and fails closed like the other three. Refuses identically to the attended path — no leniency branch for `autopilot: true` (ADR-0050 §D6). On refusal: write an `aborted` report naming the failed assertion and the literal remediation command, do not dispatch — recorded in the report rather than prompted, since there is no `AskUserQuestion` on this path.
 
 **Worktree isolation check (same as c2c Step 5, "Pre-dispatch: worktree isolation check"):**
 ```bash
 git rev-parse --git-dir 2>/dev/null
 ```
-- exit 0 → dispatch coder with `isolation: worktree`, subject to the dirty-tree condition below.
-- exit non-0 → dispatch coder with `isolation: none`. Note in report: "worktree disabled."
+- exit 0 → dispatch coder with `isolation: worktree`. There is no second mode (ADR-0068 §D1,
+  §D10).
+- exit non-0 → refuse to dispatch and write an `aborted` report. Print the literal message:
+  "Worktree isolation contract: the session CWD is not inside a git repository. The chain cannot
+  dispatch a modification agent here. Run the chain from inside the repository, or `git init` the
+  project root, and re-invoke Step 5." Check 8 above already refuses at pre-flight for this same
+  reason, so this arm is redundant in practice and kept for defense in depth.
 
-**Dirty-tree condition (same as c2c Step 5, "Dirty-tree condition (ADR-0049 §D2)"):**
-```bash
-git diff HEAD --name-only 2>/dev/null
-```
-Non-empty output (that task group's tester stage left uncommitted failing tests; a worktree forks
-from the last commit and cannot see them) → dispatch that group's coder with `isolation: "none"`,
-overriding the default even when the git-dir check above passed. Empty output → worktree stays
-enabled.
-
-**Parallel-conflict scan (advisory, no gate — same as c2c Step 5, "Before dispatch — parallel task conflict scan (GAP E)"):**
+**Parallel-conflict scan (binding, same as c2c Step 5, "Before dispatch — parallel task conflict scan (GAP E)"; R-10):**
 Read the plan. If the same absolute file path appears in multiple unchecked task descriptions,
-emit a warning line before dispatching. Do not stop.
+sequence those task groups instead of dispatching them in the same batch — the scan is binding,
+not advisory, because merges are real (ADR-0068 §D5) and a genuine conflict halts the run. Groups
+with no path overlap keep the default parallel dispatch. A merge conflict during Step 5's
+merge-back halts the run exactly as in c2c (see c2c's `#### Merge-back and base-fork audit`
+Conflict halt): report the worktree branch and the conflicting files, preserve the branch, attempt
+no automatic resolution (no rebase, no `-X ours`, no resolver dispatch), and record the halt in
+`autopilot-report.json` rather than prompting — there is no human to prompt here. `nightly-autopilot`
+inherits this same conflict halt unchanged, since it reuses c2c Steps 5–7 verbatim.
 
 **Dispatch:**
 - `hook_verified=true`: Workflow dispatch (ultracode keyword — same prompt as c2c's "Workflow dispatch path — Step 5 implementation (hook_verified = true)" block),

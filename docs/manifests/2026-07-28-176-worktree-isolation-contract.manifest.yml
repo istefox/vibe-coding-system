@@ -1,0 +1,124 @@
+manifest_schema_version: "1.3"
+topic: "176-worktree-isolation-contract"
+topic_full_title: "176-worktree-isolation-contract"
+project_root: "/Users/stefer/Developer/vibe-coding-system"
+mode: "greenfield"
+anonymize: false
+chain_path: "standard"
+created_at: "2026-07-28T12:06:47+00:00"
+last_updated_at: "2026-07-28T20:10:06+00:00"
+current_step: "completed"
+status: "completed"
+
+# Gate 0 routing result (ADR-0017)
+gate0:
+  decision: null
+  chain_path: "standard"
+  auto_detect_reason: "spec_adr_exist=true,file_estimate=541,file_vote=standard,keyword_vote=express -> standard (brownfield forces full chain)"
+  criteria_spec_adr_exist: false
+  decided_at: null
+
+# test-cmd tracking (ADR-0014)
+test_cmd_placeholder: false
+test_cmd_candidate: "for t in staging/plugin/scripts/tests/*.test.sh; do bash \"$t\" || exit 1; done"
+test_cmd_provisional: false
+coder_model: "sonnet"
+
+# Autopilot mode (project-conductor): all HITL gates auto-select safe defaults
+autopilot: false
+
+# Dynamic Workflows Step 5 tracking (ADR-0016) — default false; smoke test flips it true per environment
+hook_verified: true
+step5_mode: "agent_batch"
+
+# Recovery-readiness pre-flight (ADR-0050) — HEAD sha recorded once at Step 5 entry
+recovery_baseline_sha: "129d5e093e416ca62f9426a440d5656692e61ce7"
+
+# Proportional audit depth (ADR-0055) — risk and task_type axes. Absent/null means STRICT
+# here, not inert (inverts the ADR-0052/0053/0054 pattern) — see concept-to-code/SKILL.md
+# section '#### Proportional audit depth' for the resolution rule and the §D4 floor.
+risk: "high"
+task_type: "legacy-integration"
+
+# External dependencies (ADR-0060 G13). Empty list means nobody declared any — NOT that
+# none exist (§D5); the gate is inert on an empty list. This is the OPPOSITE default
+# direction from risk/task_type above: those default to the strict profile on null because
+# they REMOVE a leniency; this feature ADDS a constraint, so absent/empty must equal the
+# pre-feature behaviour (ADR-0055 §D2's rule, applied here per ADR-0060). Populated at Gate
+# 2c from the architect's EXTERNAL DEPENDENCY: lines, confirmed by the operator.
+external_dependencies: []
+
+# Per-task checkpoint review in Step 5 (ADR-0039 D5-D9). Opt-in: 'none' | 'checkpoint'.
+# Flip with: sed -i '' 's/^step5_review_mode: none/step5_review_mode: checkpoint/' <manifest>
+# (not manifest-set-flag.sh — that helper only accepts true|false, same as step5_mode)
+step5_review_mode: none
+
+# Tracer-bullet probe (ADR-0057, Step 4.5, optional, between Gate 4 and Step 5). Absent/skip
+# means skipped — the OPPOSITE default direction from ADR-0055 §D2 (contrast: that feature
+# REMOVES a constraint so it defaults strict; this feature ADDS a step so inert must equal
+# the pre-feature behaviour). Flip with:
+# sed -i '' 's/^tracer_bullet_mode: skip/tracer_bullet_mode: probe/' <manifest>
+tracer_bullet_mode: skip
+tracer_bullet_verdict: null
+tracer_bullet_recommendation: null
+tracer_bullet_attempts: 0
+tracer_bullet_red_decision: null
+tracer_bullet_abort_reason: null
+
+# Scaffolding / repo bootstrap tracking (Gate 0d)
+git_init: true
+git_visibility: "private"
+license: "None"
+xcode_project: false
+initial_commit_push: "push"
+git_remote_url: "https://github.com/istefox/vibe-coding-system.git"
+step6_mode: null
+
+# Artifacts (absolute paths, populated as steps complete)
+artifacts:
+  spec: "/Users/stefer/Developer/vibe-coding-system/SPEC.md"
+  brainstorm: null
+  ux_blueprint: null
+  adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0068-176-worktree-isolation-contract.md"
+  arch: null
+  plan: "/Users/stefer/Developer/vibe-coding-system/docs/superpowers/plans/2026-07-28-176-worktree-isolation-contract.md"
+  project_claude_md: "/Users/stefer/Developer/vibe-coding-system/CLAUDE.md"
+
+# HITL gates audit trail
+hitl_gates:
+  - gate: 1
+    label: "spec_review"
+    status: "approved"
+    approved_at: "2026-07-28T13:17:27+00:00"
+    notes: "spec approved; #175 closure and non-fail-open hook both acknowledged"
+  - gate: 2
+    label: "architecture_review"
+    status: "approved"
+    approved_at: "2026-07-28T14:24:20+00:00"
+    notes: "revised ADR-0068 + 10-task plan approved: hook dropped (F13/F14/F17), baseRef head is the sole mechanism, audit record relocated to D5 merge-back, 5 requirement IDs re-scoped via new Task 1b"
+  - gate: 3
+    label: "project_memory_review"
+    status: "approved"
+    approved_at: "2026-07-28T14:24:21+00:00"
+    notes: "not re-presented: CLAUDE.md ADR-0068 section on disk describes the deleted two-layer design; its revision is plan Task 8 under the Gate 2 approval"
+  - gate: 5
+    label: "review_cycle_decision"
+    status: "approved"
+    approved_at: "2026-07-28T19:59:10+00:00"
+    notes: "review skipped: per-task TDD with RED seen first throughout, every merge independently verified, suite 44/44"
+
+# Session boundary tracking
+session_boundary:
+  pre_step_4_session_id: null
+  fresh_session_started_at: null
+  resumed_at: "2026-07-28T13:50:38+00:00"
+
+# Failure tracking (populated only on status=failed)
+failure:
+  failed_at: null
+  failed_step: null
+  failure_reason: null
+  partial_artifacts: []
+
+# Hint for next action (UX)
+next_action: "Run /skill concept-to-code 176-worktree-isolation-contract to start Step 1 interview"

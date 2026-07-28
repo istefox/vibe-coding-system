@@ -629,8 +629,10 @@ usando descrizioni del ruolo ("debugga questa crash", "scrivi i test per questa 
 
 **Note importanti:**
 
-`coder` ha `isolation: worktree`: opera su una copia git isolata. Se il progetto non è una
-repo git completa (es. sottodirectory), la chain usa `isolation: none` automaticamente.
+`coder` ha `isolation: worktree`: opera su una copia git forkata da `HEAD`
+(`worktree.baseRef: "head"`), che l'orchestratore fa confluire nel branch della feature con un
+merge dopo ogni stage. Se la CWD non è una repo git completa, la chain rifiuta con un messaggio
+azionabile: non esiste una modalità alternativa (ADR-0068).
 
 `debugger` usa opus a effort high anche se gli altri agenti analitici usano sonnet: è
 l'agente dove la qualità del ragionamento ha più impatto (root cause analysis su problemi

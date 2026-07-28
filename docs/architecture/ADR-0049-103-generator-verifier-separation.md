@@ -200,3 +200,24 @@ an audit of `agent-write-scope.sh` and `agent-command-scope.sh` for the same pat
 
 - One new hook, one new test file, both CI registries updated (`ci.yml` glob is automatic;
   `docs-ci.yml`'s explicit list needs the manual append).
+
+## Correction 2026-07-28 (ADR-0068 retires §D2)
+
+**ADR-0068 (issue #176) supersedes §D2 in full and retires the dirty-tree isolation-selection
+condition it added.** §D2's `git diff HEAD --name-only` non-empty check downgraded a task group to
+`isolation: "none"` when the tester had left uncommitted changes — a value the Agent tool's
+`isolation` enum does not accept at all (it is exactly `worktree` and `remote`), so the branch this
+correction fixes was a live dispatch failure waiting for its condition to be met.
+
+ADR-0068 §D6 removes the condition rather than fixing its target value: the tester is now dispatched
+with its own `isolation: "worktree"`, committed, and merged into the feature branch by the
+orchestrator *before* the coder's worktree is created (§D5). The coder therefore forks from a `HEAD`
+that already contains the tester's tests, so the tree the coder would have been forking into dirty
+never arises, and the check §D2 added has nothing left to detect.
+
+`review-triage-fix/SKILL.md:158`'s own `git diff HEAD --name-only` check is a different decision
+(dispatch versus inline, not one isolation value versus another) and is explicitly **not** retired
+by this correction — see ADR-0068 §D9.
+
+See `docs/architecture/ADR-0068-176-worktree-isolation-contract.md` §D5, §D6, §D9 for the full
+account.

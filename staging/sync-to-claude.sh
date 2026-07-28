@@ -315,6 +315,32 @@ deployed but never invoked, and the session-preservation half of this feature do
 NOTE
 fi
 
+# baseRef: gated on the parsed JSON value, not a key-presence grep — a present-but-wrong value
+# ("fresh") must fire exactly like an absent key, so a grep for the key name alone would silently
+# pass the case that matters most (ADR-0068 §D1, issue #176). Fail-safe direction is to print: a
+# missing or unparseable settings.json must not read as "already correct".
+if ! python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+sys.exit(0 if d.get('worktree', {}).get('baseRef') == 'head' else 1)
+" "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: settings key (not auto-applied) ---
+Add this to ~/.claude/settings.json's top-level object (or correct its value if already present):
+
+  "worktree": { "baseRef": "head" }
+
+Native, documented mechanism (code.claude.com/docs/en/worktrees): a subagent worktree forks from
+the default branch unless this key is set to "head" (ADR-0068 §D1). sync-to-claude.sh never edits
+settings.json (ADR-0025), so this key reaches the live file only by hand. Until this key is set, every modification agent's worktree forks from the default branch and the chain's Step 5 pre-flight will refuse to dispatch.
+NOTE
+fi
+
 if [ -f "$DEST/hooks/backup-before-deploy.sh" ]; then
   MANUAL=1
   cat <<'NOTE'
@@ -329,7 +355,7 @@ NOTE
 fi
 
 # Say so explicitly. Printing nothing would be indistinguishable from having skipped the checks.
-[ "$MANUAL" -eq 0 ] && printf '\nno manual steps outstanding (hook wiring present, no retired hook to remove).\n'
+[ "$MANUAL" -eq 0 ] && printf '\nno manual steps outstanding (hook wiring present, worktree.baseRef set to "head", no retired hook to remove).\n'
 
 [ "$APPLY" -eq 0 ] && printf '\n(dry-run — no files written. Re-run with --apply after reviewing.)\n'
 exit 0

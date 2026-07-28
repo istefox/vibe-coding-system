@@ -289,6 +289,31 @@ if grep -q '^external_dependencies:' "$MANIFEST"; then
   esac
 fi
 
+# Invariant 22 (conditional, ADR-0068 §D11): if worktree_baseref_verified present, must be true or
+# false. Absent = valid (retrocompat with every pre-ADR-0068 manifest); Step 5.0.4 sets it true
+# only after confirming worktree.baseRef == "head" in the effective settings.json — this feature
+# ADDS a pre-flight check, so absent/false is the pre-feature-equivalent default, same direction as
+# tracer_bullet_mode (Invariant 18) and external_dependencies (Invariant 21).
+if grep -q '^worktree_baseref_verified:' "$MANIFEST"; then
+  if ! grep -Eq '^worktree_baseref_verified: (true|false)$' "$MANIFEST"; then
+    fail "worktree_baseref_verified present but value is not 'true' or 'false'"
+  fi
+fi
+
+# Invariant 23 (conditional, ADR-0068 §D11): if worktree_merges present, must be an empty flow
+# list '[]' or a bracketed flow list of maps '[{...}]'. Absent = valid (retrocompat with every
+# pre-ADR-0068 manifest). Shallow shape check only, the same style as external_dependencies
+# (Invariant 21) — one entry per merged stage ({stage, agent_type, branch, base_sha,
+# merge_result}), appended by bash sed on the additive field, never via manifest-set-flag.sh.
+if grep -q '^worktree_merges:' "$MANIFEST"; then
+  wm_val="$(grep '^worktree_merges:' "$MANIFEST" | sed 's/^worktree_merges: *//' | head -1)"
+  case "$wm_val" in
+    '[]') ;;
+    '[{'*'}]') ;;
+    *) fail "worktree_merges '$wm_val' is not '[]' or a bracketed flow list of maps" ;;
+  esac
+fi
+
 if [ "$ERRORS" != "0" ]; then
   exit 1
 fi

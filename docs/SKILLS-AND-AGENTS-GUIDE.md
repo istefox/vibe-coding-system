@@ -352,8 +352,10 @@ Emits a `PATTERN:` header before every Edit/Write — one of:
 This is enforced by a hook. If a coder response lacks `PATTERN:` before a file operation,
 the hook blocks it.
 
-Runs in `isolation: worktree` (git worktree per dispatch). If the project root is not a
-direct git repo (subdirectory case), isolation falls back to `none`.
+Runs in `isolation: worktree`: a git worktree forked from `HEAD` (`worktree.baseRef: "head"`),
+merged back into the feature branch by the orchestrator after each stage. If the project root is
+not a direct git repo, the dispatch refuses with an actionable message — there is no fallback
+mode (ADR-0068).
 
 ---
 

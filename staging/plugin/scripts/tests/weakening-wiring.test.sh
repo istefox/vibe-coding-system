@@ -107,6 +107,101 @@ else
   bad "WA5: expected exit 0 on both finding cases — got weak_rc=$weak_rc wa4_rc=$wa4_rc"
 fi
 
+# ------------------------------------------------------------------------------------------
+# WA6-WA9. is_skip_add() unanchored-regex defect. The skip/xfail-added alternation
+# (`xit\(`, `\.skip\(`, ...) has no word-boundary or line-start anchor, so it matches these
+# tokens as a bare substring of unrelated code. Two of the alternatives are demonstrated here
+# against realistic host-language idioms (not fixture-only strings): `xit\(` against Python's
+# `sys.exit(`/`process.exit(` family, and `\.skip\(` against RxJS's `Observable.skip(n)`
+# operator. Every positive twin below stays green before AND after the fix — proof the repair
+# is an anchor, not a deletion of the alternative (which would silently drop real coverage of
+# xit()/.skip() disabled-test directives).
+#
+# The other alternatives in the same regex (`\.only\(`, `xdescribe\(`, `t\.Skip\(`,
+# `@Disabled`, `@Ignore`, `@unittest\.skip`, `@pytest\.mark\.(skip|xfail)`) were checked for a
+# comparably realistic false positive and none was found: `.only(` has no common non-test
+# method of that literal shape; `@Disabled`/`@Ignore`/`@unittest.skip` unanchored-match only
+# variant *forms of the same skip mechanism* (`@DisabledOnOs`, `@unittest.skipIf`), which is
+# still correct classification, not a false positive; `xdescribe(` and `t.Skip(` are specific
+# enough tokens that no unrelated-code collision was found. No assertion added for these —
+# not padding this section with unproven claims.
+# ------------------------------------------------------------------------------------------
+
+# WA6 — RED NOW (the pinned defect). A test file adding an ordinary `sys.exit(0)` call must NOT
+# be classified as a disabled-test directive. It is today, because `xit\(` is unanchored and
+# matches the tail of "sys.exit(0)" as a bare substring.
+cat >"$TMP/wa6.diff" <<'EOF'
+diff --git a/tests/test_backup.py b/tests/test_backup.py
+--- a/tests/test_backup.py
++++ b/tests/test_backup.py
+@@ -1,3 +1,4 @@
+ def test_backup_exits_cleanly():
++    sys.exit(0)
+     assert True
+EOF
+wa6_out=$(bash "$W" <"$TMP/wa6.diff" 2>"$TMP/wa6err")
+if printf '%s\n' "$wa6_out" | grep -q '^WEAKENED' && printf '%s\n' "$wa6_out" | grep -q 'skip/xfail-added'; then
+  bad "WA6: a test file adding sys.exit(0) is misclassified as WEAKENED/skip-xfail-added (xit( is unanchored) — got: $wa6_out"
+else
+  ok "WA6: a test file adding sys.exit(0) does NOT produce a WEAKENED/skip-xfail-added finding"
+fi
+
+# WA7 — positive twin for WA6, mandatory. A genuine Jasmine/Mocha xit() disabled-test directive
+# must still be caught, both before and after the anchoring fix — otherwise "fixing" WA6 by
+# simply deleting the xit( alternative would pass WA6 for the wrong reason.
+cat >"$TMP/wa7.diff" <<'EOF'
+diff --git a/foo.test.js b/foo.test.js
+--- a/foo.test.js
++++ b/foo.test.js
+@@ -1,2 +1,3 @@
+ describe('suite', () => {
++  xit('should do the thing', () => { expect(1).toBe(1); });
+ });
+EOF
+wa7_out=$(bash "$W" <"$TMP/wa7.diff" 2>"$TMP/wa7err")
+if printf '%s\n' "$wa7_out" | grep -q '^WEAKENED' && printf '%s\n' "$wa7_out" | grep -q 'skip/xfail-added'; then
+  ok "WA7: a genuine xit(...) disabled-test directive still produces WEAKENED/skip-xfail-added"
+else
+  bad "WA7: expected a WEAKENED/skip-xfail-added line for a real xit(...) directive — got: $wa7_out"
+fi
+
+# WA8 — RED NOW, same defect class, second alternative. `\.skip\(` is also unanchored and
+# matches RxJS's `Observable.skip(n)` operator (skip the first n emissions), a real operator
+# with no relation to disabling a test — realistic in any test file exercising an RxJS stream.
+cat >"$TMP/wa8.diff" <<'EOF'
+diff --git a/rx.test.ts b/rx.test.ts
+--- a/rx.test.ts
++++ b/rx.test.ts
+@@ -1,2 +1,3 @@
+ it('drops the first values', () => {
++  source$.skip(2).subscribe(x => results.push(x));
+ });
+EOF
+wa8_out=$(bash "$W" <"$TMP/wa8.diff" 2>"$TMP/wa8err")
+if printf '%s\n' "$wa8_out" | grep -q '^WEAKENED' && printf '%s\n' "$wa8_out" | grep -q 'skip/xfail-added'; then
+  bad "WA8: a test file adding the RxJS .skip(n) operator is misclassified as WEAKENED/skip-xfail-added (\\.skip\\( is unanchored) — got: $wa8_out"
+else
+  ok "WA8: a test file adding the RxJS .skip(n) operator does NOT produce a WEAKENED/skip-xfail-added finding"
+fi
+
+# WA9 — positive twin for WA8, mandatory. A genuine Jest/Jasmine `test.skip(...)` disabled-test
+# directive must still be caught, both before and after the anchoring fix.
+cat >"$TMP/wa9.diff" <<'EOF'
+diff --git a/foo.test.js b/foo.test.js
+--- a/foo.test.js
++++ b/foo.test.js
+@@ -1,2 +1,3 @@
+ describe('suite', () => {
++  test.skip('runs later', () => { expect(1).toBe(1); });
+ });
+EOF
+wa9_out=$(bash "$W" <"$TMP/wa9.diff" 2>"$TMP/wa9err")
+if printf '%s\n' "$wa9_out" | grep -q '^WEAKENED' && printf '%s\n' "$wa9_out" | grep -q 'skip/xfail-added'; then
+  ok "WA9: a genuine test.skip(...) disabled-test directive still produces WEAKENED/skip-xfail-added"
+else
+  bad "WA9: expected a WEAKENED/skip-xfail-added line for a real test.skip(...) directive — got: $wa9_out"
+fi
+
 # ==============================================================================================
 # WB. The caller idiom, EXECUTED against the real script (contract evidence, green on arrival).
 # Uses the outputs captured in WA above. §D3 is the rule; this is the proof against the real

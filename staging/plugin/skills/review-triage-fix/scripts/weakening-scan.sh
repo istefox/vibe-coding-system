@@ -66,7 +66,17 @@ function is_test(p){ return (p ~ /(^|\/)tests?\//) || (p ~ /(^|\/)spec\//) \
 
 function is_assert_tok(s){ return s ~ /assert|expect\(|XCTAssert|EXPECT_|ASSERT_|require\.|should|t\.Error|t\.Fatal/ }
 function is_test_def(s){ return s ~ /(def|func|fn)[ \t]+[Tt]est|[ \t]it\(|[ \t]test\(|@Test/ }
-function is_skip_add(s){ return s ~ /@pytest\.mark\.(skip|xfail)|\.skip\(|\.only\(|xit\(|xdescribe\(|t\.Skip\(|@Disabled|@Ignore|@unittest\.skip/ }
+# `xit\(` and `\.skip\(` are token-boundary anchored, not bare substrings (live-defect fix):
+# unanchored, `xit\(` matches the tail of `sys.exit(`/`process.exit(` and `\.skip\(`
+# matches RxJS's `Observable.skip(n)` operator (e.g. `source$.skip(2)`), both ordinary
+# host-language code with no relation to a disabled test. `(^|[^A-Za-z])xit\(` requires the
+# character before "xit(" to not be a letter, which a real xit() call satisfies (preceded by
+# whitespace/punctuation/start-of-line) and "exit(" never does (always preceded by the letter
+# "e"). `(^|[^A-Za-z0-9_$])(test|it)\.skip\(` requires the identifier immediately before
+# ".skip(" to be exactly "test" or "it" (Jest/Jasmine's disabled-test idiom), which excludes an
+# arbitrary longer identifier like "source$" ending in a non-"test"/"it" token. Do not simplify
+# this back to a bare substring match.
+function is_skip_add(s){ return s ~ /@pytest\.mark\.(skip|xfail)|(^|[^A-Za-z0-9_$])(test|it)\.skip\(|\.only\(|(^|[^A-Za-z])xit\(|xdescribe\(|t\.Skip\(|@Disabled|@Ignore|@unittest\.skip/ }
 
 # deleted-public-symbol: an exported function/route/public class signature. pub_name() returns
 # the identifying key (the symbol NAME, not the full line) so a body-only edit — old and new
