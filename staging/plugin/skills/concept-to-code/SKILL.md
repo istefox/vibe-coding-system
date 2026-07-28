@@ -611,7 +611,7 @@ name would suggest exists on the `agent()` call, lowercase, only (ADR-0068 §D7)
 here.
 
 ```
-Agent({ agentType: "coder", model: "sonnet",
+Agent({ subagent_type: "coder", model: "sonnet",
         prompt: "TRACER-BULLET PROBE (Step 4.5, ADR-0057). Implement ONLY <slice-task-description>
 from the plan at <plan-path> — the thinnest END-TO-END slice through this feature: touch every
 layer it needs, shallowly, never a single layer probed deeply. Budget: <declared-files> (~150
@@ -1533,13 +1533,15 @@ halfway (context overflow, timeout) without a final report and without running t
 closing gates. Split the dispatch into **batches of 2-3 tasks**:
 
 1. Dispatch `tester` for batch 1 (tasks 1-N, where N ≤ 3), BEFORE this batch's coder
-   (ADR-0049 §D1 — same ordering as the Workflow path's Stage 1). Pin `agentType: "tester"`,
-   `model: "sonnet"`, `effort: "medium"`, and `isolation: "worktree"` explicitly (ADR-0049 §D6;
-   the effort table above is documentation, not a binding; `tester` has no `isolation` in its own
-   frontmatter, F5, so an omitted value here means no worktree at all, ADR-0068 §D6, R-09). Use
-   the **Tester batch dispatch template** below — same brief contract as the Workflow path: SPEC
-   requirement IDs via `spec-coverage.sh --list`, falling back to Success Criteria then to this
-   batch's plan task text, never from implementation files.
+   (ADR-0049 §D1 — same ordering as the Workflow path's Stage 1). Pin `subagent_type: "tester"`,
+   `model: "sonnet"`, and `isolation: "worktree"` explicitly (ADR-0049 §D6; `tester` has no
+   `isolation` in its own frontmatter, F5, so an omitted value here means no worktree at all,
+   ADR-0068 §D6, R-09). Do not pin `effort` here — the Agent tool has no such parameter at all
+   (ADR-0068 §D7, issue #180); the effort table above documents the Workflow path's per-agent
+   calibration only, not a value to carry over to this dispatch. Use the **Tester batch dispatch
+   template** below — same brief contract as the Workflow path: SPEC requirement IDs via
+   `spec-coverage.sh --list`, falling back to Success Criteria then to this batch's plan task
+   text, never from implementation files.
 2. Dispatch coder with batch 1 (tasks 1-N, where N ≤ 3). Before this dispatch, run the
    **Merge-back and base-fork audit** block above to merge this batch's tester worktree into the
    feature branch (same resolution site, same ordering as the Workflow path's Stage 1 → Stage 2).
@@ -1587,8 +1589,8 @@ verification after dispatch is mandatory in all cases.
 **Coder model override:** if `manifest.coder_model = "opus"` (or legacy `"fable"`), pass `model: "opus"` to every `Agent(subagent_type="coder", ...)` call in this dispatch. If `sonnet` or null, omit the `model` parameter (global coder.md applies).
 
 **Tester batch dispatch template** (dispatched BEFORE this batch's coder — ADR-0049 §D1; pin
-`agentType: "tester"`, `model: "sonnet"`, `effort: "medium"` explicitly on this `Agent` call,
-ADR-0049 §D6):
+`subagent_type: "tester"` and `model: "sonnet"` explicitly on this `Agent` call, ADR-0049 §D6; no
+`effort` pin — the Agent tool has no such parameter, ADR-0068 §D7, issue #180):
 ```
 Read plan at <manifest.artifacts.plan> (tasks <FROM>-<TO> only).
 Read SPEC.md at <manifest.artifacts.spec>.
@@ -2963,10 +2965,10 @@ options:
 
 "Run (errors + types)": emit "Gate 5.06: specialized review active ✓ — dispatching reviewer agents...". Dispatch **in parallel** using the Agent tool:
 ```
-Agent({ agentType: "reviewer",
+Agent({ subagent_type: "reviewer",
         prompt: "SCOPE: silent-failure-hunter — error handling audit.\nReview the following files for: empty or swallowed catch blocks, ignored return values or Result types, optional chaining masking failures, unhandled Promise rejections, broad exception catches that hide root causes, and error objects logged without actionable context.\nReport only — do not edit any file. Output findings grouped by severity: CRITICAL / IMPORTANT / SUGGESTIONS.\nFiles: <modified-file-list-from-manifest>" })
 
-Agent({ agentType: "reviewer",
+Agent({ subagent_type: "reviewer",
         prompt: "SCOPE: type-design-analyzer — structural type quality audit.\nReview the following files for: stringly-typed IDs or enums (String where a newtype/wrapper should be used), missing discriminated unions (raw string/int where a sealed type fits), anemic models (pure DTOs with no invariants or behavior), nullable fields that should never be null, weak encapsulation exposing internal state, and protocol/interface misuse.\nReport only — do not edit any file. Output findings grouped by severity: CRITICAL / IMPORTANT / SUGGESTIONS.\nFiles: <modified-file-list-from-manifest>" })
 ```
 Wait for both agents. Merge the two finding lists, deduplicate by file+location, then present the aggregated result as a single severity table (CRITICAL / IMPORTANT / SUGGESTIONS). Emit "Gate 5.06: specialized review complete ✓". **Proceed immediately to Gate 5.1 — no additional HITL.**
