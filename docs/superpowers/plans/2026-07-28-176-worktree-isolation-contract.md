@@ -434,6 +434,24 @@ actually governs the behaviour, so it cannot pass while the mechanism is wrong.
 
 *Budget: `staging/plugin/skills/concept-to-code/SKILL.md`, `staging/plugin/skills/autopilot-build/SKILL.md`, `staging/plugin/skills/concept-to-code/scripts/manifest-init.sh`, `staging/plugin/skills/concept-to-code/scripts/manifest-validate.sh`, `staging/sync-to-claude.sh`, `staging/plugin/scripts/tests/sync-manual-steps.test.sh` (~180 lines)*
 
+**Addendum — added during implementation, operator-approved.**
+
+- [x] **The invariants are 22 and 23, not 20 and 21.** Those two numbers were already taken by
+      `tracer_bullet_red_decision` and `external_dependencies`, added by features that landed after
+      this plan was drafted. The implementing agent reconciled against the file's actual state
+      rather than the plan text — the correct direction, and the ADR-0028 precedent for a
+      count/number reconciliation.
+- [x] **`sync-manual-steps.test.sh`'s A3 fixture was stale, the same class of finding as Task 3's
+      TL1.** A3 asserts the all-clear line prints "when nothing is outstanding", against a
+      fully-wired fixture that predates the eighth notice this task adds. Adding a notice makes
+      every previously-complete fixture incomplete. The fixture was extended, A3's predicate
+      untouched, and its RED-when-outstanding capability re-proved before the green was accepted.
+      **The file already documented this obligation** in its line-50 comment, from the last time a
+      notice was added (`PreCompact`); that comment now names the `baseRef` key too.
+      **Generalising both findings: adding a check invalidates fixtures that enumerate "all
+      checks", exactly as retiring a contract invalidates assertions that pin it. Grep the harness
+      in both directions.**
+
 ---
 
 ## Task 6 — The stage protocol: explicit isolation on both paths, tester in a worktree, orchestrator merge-back and base-fork audit (R-06, R-07, R-08, R-09, R-14)
