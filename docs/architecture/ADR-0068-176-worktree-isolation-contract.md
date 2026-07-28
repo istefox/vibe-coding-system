@@ -624,6 +624,15 @@ above rather than quietly reinterpreted.
 | F14 | **Exit 0 with empty stdout does NOT decline — it aborts the dispatch.** The error is `WorktreeCreate hook failed: hook succeeded but returned no worktree path`. A registered `WorktreeCreate` hook must return a path on every invocation; there is no fall-through to default git behaviour. | Same dispatch; capture hook returned empty stdout and the agent never started |
 | F15 | **Confirmed, and it is the whole defect.** `baseRef: "fresh"` → worktree `HEAD` = `5518583` (the default branch) and `docs/architecture/ADR-0068-…md` is **absent** inside the worktree. `baseRef: "head"` → worktree `HEAD` = `129d5e0` (session `HEAD`) and the same file **exists**. | Two Agent-tool dispatches, `"fresh"` then `"head"`, reporting `git rev-parse HEAD` and a file-existence check |
 | F16 | The Workflow path **does** create a worktree when `opts.isolation: 'worktree'` is passed explicitly (`.claude/worktrees/wf_<runid>-1`), and `worktree.baseRef` applies to it identically — `HEAD` = `129d5e0`, ADR present. Consistent with §D7/F4: frontmatter never reaches this path, so the value must be passed, and an earlier observation that "the Workflow path never creates a worktree" was made without passing it. | One `agent(prompt, { agentType: 'coder', isolation: 'worktree' })` Workflow dispatch |
+| F19 | On the WORKFLOW dispatch path the orchestrator receives NO worktree identity: the run journal records only agentId, key, result and type, and the task notification carries no worktree block. Contrast the Agent-tool path, where F10's worktreePath/worktreeBranch are returned with every dispatch. The worktree IS created (F16) — only its identity is unreported. | Inspecting subagents/workflows/<run>/journal.jsonl after a Workflow dispatch |
+| F20 | The Workflow worktree's path and branch follow a derivable convention — .claude/worktrees/<runId>-<n> and worktree-<runId>-<n>, with runId returned by the Workflow tool — but this is an observed naming convention, not a reported contract. | Probe C and the Task 9 evidence run |
+
+**Consequence for §D5 (measured 2026-07-28, Task 9).** The merge-back protocol reads
+`worktreePath` and `worktreeBranch` "from the dispatch result (F10)", and that is true on the
+Agent-tool path only. On the Workflow path the orchestrator must locate the worktree another way,
+deriving it from the run id, or enumerating `git worktree list`, and relying on the naming
+convention is exactly the kind of undocumented assumption this ADR exists to stop. This is a gap
+in §D5 as written, found by Task 9's own evidence step.
 
 **Consequences of F13 + F14, together (the two compound, and that is what matters).** R-04's
 scoping predicate has no field to key on — not `agent_type`, not `isolation_mode`, not
