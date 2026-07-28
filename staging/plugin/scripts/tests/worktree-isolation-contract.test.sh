@@ -6,6 +6,12 @@
 # Covers issue #176 / ADR-0068, Task 2 only (R-01, R-11, R-19). This file grows further with
 # Tasks 4, 5, 6, 7 and 8 of the same plan; sections C onward do not exist yet.
 #
+# Section G (Task 5, R-05/R-17): the fourth Step 5 pre-flight assertion (Step 5.0.4,
+# worktree.baseRef == "head"). EXPECTED at RED time: G1-G4 all FAIL. Neither
+# concept-to-code/SKILL.md nor autopilot-build/SKILL.md mentions "baseRef" anywhere yet (confirmed
+# absent before this section was written); Task 5's GREEN step adds Step 5.0.4 to the former and
+# restates it in the latter's existing Recovery-readiness pre-flight restatement paragraph.
+#
 # Task 2's EXPECTED result, seen once and recorded here so a future reader does not mistake a
 # checkpoint for fix evidence: sections A and B are RED (the two bad `isolation: "none"` /
 # `isolation: none` prescriptions and the dirty-tree condition blocks still exist in this
@@ -350,6 +356,62 @@ if printf '%s' "$HEADER" | grep -q 'F13' && printf '%s' "$HEADER" | grep -q 'F14
   ok "D3: this test file's own header names F13 and F14 as the reason no WorktreeCreate hook exists"
 else
   bad "D3: this test file's own header does not name F13 and F14 — the prohibition has no evidence attached to it"
+fi
+
+# ==============================================================================================
+# Section G (R-05, R-17) — Step 5's fourth pre-flight assertion, the settings key that governs
+# it (ADR-0068 §D1), and its restatement on the autopilot path (ADR-0050 §D6, no leniency).
+#
+# EXPECTED at RED time: G1-G4 all FAIL. "baseRef" appears in neither SKILL.md today (verified
+# above by direct grep before this section existed), so every conjunct below is unmet.
+# ==============================================================================================
+CC_STEP5="$TMP/cc-step5.txt"
+awk '/^### Step 5 —/{f=1} /^### Step 6 —/{f=0} f' "$CC" >"$CC_STEP5" 2>/dev/null
+
+# G1: the fourth assertion exists, named Step 5.0.4, and names both the key (worktree.baseRef)
+# and the literal required value ("head"). Three conjuncts so a partial mention (heading added
+# but key/value prose forgotten, or vice versa) still fails.
+if grep -qF 'Step 5.0.4' "$CC_STEP5" 2>/dev/null \
+   && grep -qF 'worktree.baseRef' "$CC_STEP5" 2>/dev/null \
+   && grep -qF '"head"' "$CC_STEP5" 2>/dev/null; then
+  ok "G1: concept-to-code Step 5 has a Step 5.0.4 assertion naming worktree.baseRef and the literal value \"head\""
+else
+  bad "G1: concept-to-code Step 5 is missing Step 5.0.4 / worktree.baseRef / the literal \"head\" value (R-05) — Task 5 adds this"
+fi
+
+# G2: the literal remediation command is present, not just a description of what it should say.
+# Anchored on three distinctive fragments of the plan's own literal sentence — none of these
+# three strings exists anywhere in concept-to-code/SKILL.md today (verified: zero hits pre-Task 5).
+if grep -qF 'Recovery-readiness pre-flight: set' "$CC_STEP5" 2>/dev/null \
+   && grep -qF 're-invoke Step 5' "$CC_STEP5" 2>/dev/null \
+   && grep -qF 'ADR-0068 F15' "$CC_STEP5" 2>/dev/null; then
+  ok "G2: Step 5.0.4 names the literal remediation command citing ADR-0068 F15"
+else
+  bad "G2: Step 5.0.4 is missing the literal remediation command (R-05) — Task 5 adds this"
+fi
+
+# G3: the assertion states explicitly that it fails CLOSED — a missing, unreadable or unparseable
+# settings.json counts as NOT verified. This is the one component in the whole repository that
+# fails closed (ADR-0068 §D3), the opposite of every hook's convention, so it must say so in
+# words a reader who pattern-matches on the hook convention would otherwise miss.
+if grep -qF 'missing or unparseable' "$CC_STEP5" 2>/dev/null \
+   && grep -qF 'fails closed' "$CC_STEP5" 2>/dev/null; then
+  ok "G3: Step 5.0.4 states that a missing/unreadable/unparseable settings.json is NOT verified (fails closed, ADR-0068 §D3)"
+else
+  bad "G3: Step 5.0.4 does not state the fail-closed behaviour for a missing/unparseable settings.json (R-05) — Task 5 adds this"
+fi
+
+# G4: autopilot-build restates the assertion (no leniency branch, ADR-0050 §D6) and records the
+# failure in the report rather than prompting — the same "recorded in the report" phrase already
+# used for the other three assertions (recovery-preflight.test.sh RF3), now co-occurring with a
+# mention of baseRef so this conjunct cannot pass on the pre-existing text alone.
+AB_STEP5="$TMP/ab-step5.txt"
+awk '/^#### Step 5 —/{f=1} /^#### Step 6 —/{f=0} f' "$AB" >"$AB_STEP5" 2>/dev/null
+if grep -qF 'baseRef' "$AB_STEP5" 2>/dev/null \
+   && grep -qF 'recorded in the report' "$AB_STEP5" 2>/dev/null; then
+  ok "G4: autopilot-build restates the baseRef assertion and records the failure in the report rather than prompting (ADR-0050 §D6, no leniency)"
+else
+  bad "G4: autopilot-build's Recovery-readiness pre-flight restatement does not yet mention baseRef (R-05, R-17) — Task 5 adds this"
 fi
 
 echo "----"
