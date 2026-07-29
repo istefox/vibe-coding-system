@@ -75,6 +75,16 @@
 #   That limit is narrowed here as a by-product; hook-verify-workflow.sh itself is
 #   deliberately NOT changed — phase 1 instruments, it does not decide.
 
+#
+# transcript-scan-exempt: reads ASSISTANT entries, not `user` entries, and ALLOWS on a match rather
+#   than deriving a scope from one. Both halves matter. A tool result is a `user` entry, so a file
+#   an agent READS cannot arm this hook at all — the #127 mechanism does not reach it. And because
+#   a match allows, a spurious match is a MISSED CHECK, never the deadlock #127 produced. The
+#   exemption is on DIRECTION, which is the weaker kind: this hook's real exposure is that the
+#   main-session fallback lets the orchestrator's own PATTERN line satisfy the check for a subagent
+#   that declared nothing. That is issue #194, open, instrumented as of phase 1 (`src=` in the
+#   audit log), and NOT closed by this exemption. Do not read this line as "audited and fine".
+
 DIR="${PATTERN_ENFORCE_DIR:-$HOME/.claude/state/pattern-enforce}"
 LOG="$DIR/audit.log"
 DISABLED="$DIR/disabled"

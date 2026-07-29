@@ -19,6 +19,9 @@
 # measurement of anything — override with CONTEXT_OCCUPANCY_WINDOW for testing or a different
 # model tier. It is unrelated to CLAUDE_AUTOCOMPACT_PCT_OVERRIDE, which is a compaction threshold
 # PERCENTAGE, not a token-count denominator; this script never reads that variable.
+#
+# transcript-scan-exempt: reads transcript content, but extracts message.usage token counts only —
+#   a measurement of volume, never a marker, and it decides nothing about the caller.
 set -u
 
 TRANSCRIPT="${1:-}"

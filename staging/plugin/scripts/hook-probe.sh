@@ -32,6 +32,9 @@
 # start and cannot be varied per prompt.
 #
 # Bash 3.2 clean.
+#
+# transcript-scan-exempt: probe-only, never registered. WRITES its own log; does not read a CC
+#   transcript.
 
 set -u
 

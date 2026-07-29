@@ -24,6 +24,10 @@
 #     the guard fails open in silence.
 #
 # Bash 3.2 clean. Read-only: never writes, never mutates a manifest.
+#
+# transcript-scan-exempt: probe-only, never registered. Reads the probe's own log and locates
+#   subagent transcripts to report on them; its output is a report a human reads, not a permission
+#   decision.
 
 set -u
 

@@ -1348,3 +1348,44 @@ layer down. `P4` counted the explanation as the defect: its needle was the old o
 both files legitimately quote while explaining why it was replaced (rule 12).
 
 Detail: `docs/architecture/ADR-0076-195-additive-field-state.md`.
+
+## Decisions from the transcript-scan class guard (ADR-0077)
+
+Closes issue #193, phase 4.2 of the roadmap. #127 fixed one hook and audited three, and every guard
+it left is instance-level — nothing asserted the rule, so a new marker-driven hook reproduces #127
+with the whole harness still green.
+
+**THE RULE — a hook that extracts a marker from a subagent transcript must read only the FIRST
+`user` entry, or declare in its own source why it does not.** Tool results are `user` entries.
+
+- **The derivation is BROAD on purpose** (every `plugin/scripts/*.sh` mentioning `transcript_path`
+  or `.jsonl` — ten files, probes included) and narrowing happens through declared exemptions.
+  Asking which direction the guard runs in settles it: a narrow derivation validates the files it
+  names and is blind to one it omits, which is #127's own failure mode applied to its own guard.
+- **Exemptions live in the hook, never in a list inside the test** — `# transcript-scan-exempt:
+  <reason>`, line-anchored. A filename-keyed list is ADR-0069 PTD's identity waiver: it does not
+  travel on rename and it lets a test author excuse a hook without touching it. T4 requires the
+  reason to be ≥40 chars, Z3 requires a real declaration so a passing mention in prose does not
+  excuse anything, T5 forbids the list in the test.
+- **The two enforcing hooks must COMPLY, not declare** (T2), and must hold no exemption (T3) — a
+  file that was both would let a later edit drop the `head -1` and still pass on a stale waiver.
+- **`pre-flight-pattern-enforce.sh` is exempt on DIRECTION, the weaker kind**, and its declaration
+  says so: it reads `assistant` entries and ALLOWS on match, so a spurious match is a missed check
+  rather than a deadlock — but its real exposure is #194, open, and the last line reads *"Do not
+  read this line as audited and fine"*. A waiver that reads as a clean bill of health is worse than
+  none.
+- **The guard found a defect in its own predicate on the first run.** `compliant()` required
+  `| head -1` on the line AFTER the jq read — `write-scope-enforce.sh`'s shape. `test-write-scope.sh`
+  writes the same pipeline on ONE line and was reported non-compliant. A predicate written against
+  one syntactic shape, one level up from the rule it enforces.
+
+Known consequences: the derivation stops at `plugin/scripts/` — no skill script reads a transcript
+today (measured), so a future one would slip through and T0's count guard would not notice.
+`compliant()` recognises the two shapes that exist; a third (python3, grep) would be a false
+positive needing a predicate extension or an honest exemption. An exemption is a sentence a human
+wrote — T4 checks it is long, nothing checks it is true. T5/Z4/T3 pass before and after.
+
+Seen RED against a reverted tree (both enforcing hooks broken): T1 and both T2 fail naming both
+files, the other nine pass.
+
+Detail: `docs/architecture/ADR-0077-193-transcript-scan-class-guard.md`.
