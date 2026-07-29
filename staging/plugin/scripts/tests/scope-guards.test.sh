@@ -41,9 +41,14 @@ trap 'rm -rf "$TMP"' EXIT
 # Section A -- Finding 2.5 (P2): autopilot-build Check 1 scope guard
 # =====================================================================================
 
+# Anchored on the fence's own `<!-- fence-contract: … -->` marker, not on the heading above it
+# (issue #206). A heading rewrite used to empty this extraction, and an empty script exits 0 — so
+# A3/A4 went GREEN and only A5/A6 failed, with messages that blamed the guard. Measured: rewording
+# the heading took this file from PASS=29 FAIL=0 to PASS=27 FAIL=2, reading as two broken checks
+# rather than as an extraction that found nothing. The marker travels with the fence.
 extract_check1() {
   awk '
-    /^\*\*Check 1 / { grab=1; next }
+    index($0, "fence-contract: autopilot-build-check-1 -->") { grab=1; next }
     grab && /^```bash/ { infence=1; next }
     grab && infence && /^```/ { exit }
     grab && infence { print }
@@ -59,8 +64,17 @@ extract_check1() {
 # ADR-0030 Consequences/Negative and this plan's Risk register). The abort path's own internal
 # `exit 1` still fires first and this appended line is never reached in that case.
 # Caller must `cd` to the desired CWD before calling.
+#
+# An empty extraction is a HARD FAILURE here, not an empty script (issue #206). Without this, the
+# appended `exit 0` below makes every positive assertion in this section pass and only the abort
+# ones fail -- the reader is told the guard is broken when the guard was never read. Exit 97 is
+# outside the fence's own contract (0 pass, 1 abort) so no assertion can mistake it for either.
 run_check1() {
   RAW="$(extract_check1)"
+  if [ -z "$RAW" ]; then
+    echo "EXTRACTION FAILED: no fence-contract: autopilot-build-check-1 marker in $AB_SKILL" >&2
+    return 97
+  fi
   CMD="${RAW//<manifest-path>/$1}"
   printf '%s\nexit 0\n' "$CMD" > "$TMP/check1-cmd.sh"
   bash "$TMP/check1-cmd.sh"
@@ -192,8 +206,7 @@ B6_OUT=$(run_conductor_lookup "$B_ROOT2" "drift")
 
 extract_check6() {
   awk '
-    /^6\. \*\*hook_verified known/ { grab=1; next }
-    grab && /^7\. / { exit }
+    index($0, "fence-contract: nightly-autopilot-check-6 -->") { grab=1; next }
     grab && /^[[:space:]]*```bash/ { infence=1; next }
     grab && infence && /^[[:space:]]*```/ { exit }
     grab && infence { print }
@@ -210,7 +223,12 @@ run_check6() {
   # The fence resolves manifest-field-state.sh through CLAUDE_PLUGIN_ROOT first (issue #195).
   # staging/plugin IS that layout, so this is the documented resolution path, not a test seam:
   # in CI there is no $HOME/.claude and the second tier would leave the gate failing closed.
-  ( cd "$1" && CLAUDE_PLUGIN_ROOT="$STAGING/plugin" bash -c "$(extract_check6)" )
+  _x6="$(extract_check6)"
+  if [ -z "$_x6" ]; then
+    echo "EXTRACTION FAILED: no fence-contract: nightly-autopilot-check-6 marker in $NA_SKILL" >&2
+    return 97
+  fi
+  ( cd "$1" && CLAUDE_PLUGIN_ROOT="$STAGING/plugin" bash -c "$_x6" )
 }
 
 # C1 (static, genuine RED now): check 6 gains a runnable bash fence (today it is prose-only).
@@ -349,7 +367,7 @@ fi
 
 extract_check7() {
   awk '
-    /^\*\*Check 7 / { grab=1; next }
+    index($0, "fence-contract: autopilot-build-check-7 -->") { grab=1; next }
     grab && /^```bash/ { infence=1; next }
     grab && infence && /^```/ { exit }
     grab && infence { print }
@@ -358,7 +376,12 @@ extract_check7() {
 # run_check7 <manifest-file> — check 7 reads $manifest, so bind it and append a trailing exit 0
 # outside the extracted text, for the same reason run_check1 does.
 run_check7() {
-  printf 'manifest=%s\n%s\nexit 0\n' "$1" "$(extract_check7)" > "$TMP/check7-cmd.sh"
+  _x7="$(extract_check7)"
+  if [ -z "$_x7" ]; then
+    echo "EXTRACTION FAILED: no fence-contract: autopilot-build-check-7 marker in $AB_SKILL" >&2
+    return 97
+  fi
+  printf 'manifest=%s\n%s\nexit 0\n' "$1" "$_x7" > "$TMP/check7-cmd.sh"
   CLAUDE_PLUGIN_ROOT="$STAGING/plugin" bash "$TMP/check7-cmd.sh"
 }
 
@@ -383,6 +406,15 @@ _d4=$(run_check7 "$TMP/d/maybe.manifest.yml" 2>&1)
 printf '%s' "$_d4" | grep -q 'maybe' \
   && ok "D4: check 7's abort names the value it rejected" \
   || bad "D4: check 7's abort should quote the rejected value — got: $_d4"
+
+# Z1: assertion-count FLOOR. The hazard issue #206 measured is not a quiet pass, it is a shrunken
+# suite: an extraction that finds nothing removes its dependent assertions from the run, and
+# "PASS=27 FAIL=2" reads as two broken checks rather than as checks that no longer exist. A floor
+# catches that without needing a bump on every added assertion.
+_TOTAL=$((PASS + FAIL))
+[ "$_TOTAL" -ge 29 ] \
+  && ok "Z1: $_TOTAL assertions ran (floor 29) — none silently vanished" \
+  || bad "Z1: only $_TOTAL assertions ran, floor 29 — assertions disappeared, they did not fail"
 
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -298,6 +298,7 @@ fi
 **Trigger:** current branch (`git branch --show-current`, empty string means detached HEAD)
 equals `$default_branch`, or is empty.
 
+<!-- fence-contract: commit-ensure-feature-branch -->
 ```bash
 current_branch=$(git branch --show-current)
 if [ "$current_branch" = "$default_branch" ] || [ -z "$current_branch" ]; then

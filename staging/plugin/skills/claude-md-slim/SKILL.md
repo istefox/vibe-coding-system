@@ -268,6 +268,7 @@ Behavior:
    ```
 
 2. Backup the project CLAUDE.md:
+   <!-- fence-contract: claude-md-slim-backup -->
    ```bash
    BAK="${CLAUDE_MD}.bak-$(date +%Y-%m-%d)"
    if [ -f "$BAK" ]; then

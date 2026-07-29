@@ -782,6 +782,7 @@ If either path is missing on disk: do NOT dispatch coder. Present to user:
 > "Artifact not found: `<missing path>`. Architect may have truncated before writing the file. Re-run architect dispatch (Step 2) or restore the file manually."
 
 **Pre-dispatch: plan structure validation (run after existence check):**
+<!-- fence-contract: concept-to-code-step5-plan-structure -->
 ```bash
 # plan-tasks.sh owns the definition of a plan task (ADR-0069 §D1/§D3, issue #172). Do NOT inline a
 # grep here: the architect is allowed BOTH `### Task 3 — …` headings and `- [ ]` checkbox items
@@ -978,6 +979,7 @@ Do not collapse these back into one method: the Workflow path does not report wo
 branch — precisely the defect this feature exists to repair, reappearing on the other dispatch
 path.
 
+<!-- fence-illustration: carries `<base-fork halt: …>` and `<conflict halt: …>` pseudo-code in place of the halt procedures, so it does not parse as bash and cannot be executed; it specifies a protocol for the orchestrator to follow, not a script to run -->
 ```bash
 # $PRE = git rev-parse HEAD, captured on the feature branch BEFORE this stage was dispatched
 # $WT / $WB — Agent-tool path: worktreePath / worktreeBranch, from the dispatch result (F10).

@@ -120,8 +120,13 @@ printf '# Plan\n\nJust prose, no tasks at all.\n' > "$TMP/plan-none.md"
 # now unrepresentable at these sites rather than merely guarded — PTB3 is what keeps them that way.
 # The repo-wide `|| echo 0` guard (PTD) is unchanged and still covers the class everywhere else.
 # ==================================================================================================
-CC_STEP5=$(extract_fence "$CC" '**Pre-dispatch: plan structure validation')
-AB_BLOCK=$(extract_fence "$AB" '**Check 5 — Plan has tasks:**')
+# Anchored on each fence's own `<!-- fence-contract: … -->` marker rather than on the heading above
+# it (issue #206). Rewording either heading used to empty the extraction; measured, this file went
+# from 43 passed/0 failed to 35 passed/2 failed — one loud failure that also took FIVE dependent
+# assertions out of the run, and a suite reporting fewer assertions does not read as broken. The
+# marker travels with the fence, and Z1 below is the floor that makes a shrunken run visible.
+CC_STEP5=$(extract_fence "$CC" 'fence-contract: concept-to-code-step5-plan-structure -->')
+AB_BLOCK=$(extract_fence "$AB" 'fence-contract: autopilot-build-check-5 -->')
 
 printf '%s\n' "$CC_STEP5" | grep -q 'plan-tasks.sh --count' \
   && ok "PTB1: concept-to-code Step 5 delegates the task count to plan-tasks.sh" \
@@ -446,5 +451,13 @@ EOF
 fi
 
 echo
+# Z1: assertion-count FLOOR. PTC0/PTF0 fail loudly on an empty extraction, but their DEPENDENTS
+# are skipped, and a run reporting fewer assertions than before does not look like a defect. The
+# floor is what makes a vanished assertion visible; lowering it needs a deliberate edit.
+_TOTAL=$((PASS + FAIL))
+[ "$_TOTAL" -ge 43 ] \
+  && ok "Z1: $_TOTAL assertions ran (floor 43) — none silently vanished" \
+  || bad "Z1: only $_TOTAL assertions ran, floor 43 — assertions disappeared, they did not fail"
+
 echo "plan-task-count: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
