@@ -84,6 +84,20 @@ allow_case "C9: the verb only as printed data"      architect 'python3 -c "print
 allow_case "C10: markdownlint"                      architect 'npx --yes markdownlint-cli2 docs/x.md'
 allow_case "C11: git rev-parse in a substitution"   architect 'x=$(git rev-parse HEAD); echo "$x"'
 
+# C12-C15 — the objection, answered a second time (issue #127's sibling audit). The header above
+# says a verb inside quotes is data and never reaches a command position. That was true of the
+# quoting forms section C already covered, and FALSE whenever the search tool is given its COUNT
+# flag: `-c` was anchored on its own, for `bash -c` / `python3 -c`, and grep, rg and every other
+# tool spell "count matches" the same way. `grep -c "git commit -m" f` was denied.
+#
+# It is the #127 class exactly — a guard arming on text ABOUT the thing it guards — reached
+# through the command string instead of through the transcript. A reviewer auditing commit/SKILL.md
+# is doing in-scope work with the one tool it is granted.
+allow_case "C12: grep -c counting a mutating verb"  reviewer  'grep -c "git commit -m" staging/plugin/skills/commit/SKILL.md'
+allow_case "C13: rg -c counting a mutating verb"    architect 'rg -c "git push origin" docs/'
+allow_case "C14: rg -c with the verb and a flag"    reviewer  'rg -c "git add -u" .'
+allow_case "C15: count then a chained command"      reviewer  'grep -c "git commit -m x" f && echo done'
+
 # =====================================================================================
 # D. Inert everywhere else. A hook that reached past its two agents would be found out the first
 # time a coder committed, and switched off.
@@ -144,6 +158,25 @@ if printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason' 2>/
 else
   bad "G: deny reason should tell the agent what to do instead"
 fi
+
+# =====================================================================================
+# H. THE HEADLINE CASE, WHICH ESCAPED (issue #127's sibling audit).
+# ADR-0042 and ADR-0045 both name `bash -c "git commit …"` as the bypass this hook closes. The
+# shipped hook allowed `bash -c "git push"` — because R1's trailing boundary was ([[:space:]]|$)
+# and the character after the verb is the CLOSING QUOTE. Every assertion in section A passes only
+# because each of them happens to carry an argument after the verb: `-m x`, `origin main`, `.`.
+#
+# Found by running the regex over the forms the ADRs quote, not by reading it. Same lesson as
+# ADR-0070's fourth defect: a check nobody has executed on its own documented example is
+# unverified. Section A was green throughout.
+deny_case "H1: bash -c with the verb as the LAST token" architect 'bash -c "git push"'
+deny_case "H2: single-quoted, verb last"                architect "bash -c 'git commit'"
+deny_case "H3: sh -c, verb last"                        reviewer  'sh -c "git clean"'
+deny_case "H4: absolute interpreter path"               architect '/bin/bash -c "git push"'
+# H5 — combined short flags. `-lc` is one argument, so an anchor written as a literal `-c` never
+# saw it. Cheap to cover once the anchor is interpreter-qualified anyway.
+deny_case "H5: bash -lc (combined flags)"               architect 'bash -lc "git push origin"'
+deny_case "H6: an intervening interpreter flag"         reviewer  'python3 -u -c "git commit"'
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"

@@ -100,7 +100,12 @@ fi
 # never be. Scanning every entry made the hook self-arm: tool results are `user` entries too, so
 # an agent that Read this file (or c2c's Phase 3 prompt) pulled the literal marker into its own
 # transcript and bound itself to the garbage scope `[^`. Hit live 2026-07-26 by the architect on
-# issue #103; audit log recorded `wanted=.../[^`. Pinned by write-scope-enforce.test.sh.
+# issue #103; audit log recorded `wanted=.../[^`. Issue #127 records the CLASS: a marker that is
+# both instruction and trigger arms on any transcript that quotes it, so briefing an agent to read
+# a marker-driven hook's source arms that hook against the agent. Pinned by
+# write-scope-enforce.test.sh section E, whose E0 reproduces the live `[^` scope so E1 cannot pass
+# vacuously, and whose E4 anchors this `head -1` by POSITION (the grep stage below ends in a
+# second, unrelated `head -1`, so a substring check pins nothing).
 SCOPE=$(jq -r 'select(.type=="user") | tostring' "$TRANSCRIPT" 2>/dev/null \
   | head -1 \
   | grep -o 'you may edit ONLY [^ "\\]*' 2>/dev/null | head -1 | sed 's/^you may edit ONLY //')

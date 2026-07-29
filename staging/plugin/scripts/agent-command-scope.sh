@@ -20,6 +20,15 @@
 # a COMMAND POSITION: start of string, or after ; && || | ` $( { } or an interpreter's -c and its
 # opening quote. A verb inside quotes is data and never reaches a command position.
 #
+# TWO CORRECTIONS FROM ISSUE #127's SIBLING AUDIT (2026-07-29). The paragraph above says "an
+# INTERPRETER's -c"; the regex said `-c`, unqualified, so it also matched every search tool's
+# COUNT flag and denied `grep -c "git commit -m" f`. The prose was right and the code was not —
+# the same class as #127 itself, a guard arming on text ABOUT the thing it guards, reached through
+# the command string rather than through a transcript. In the other direction, R1's trailing
+# boundary did not accept a closing quote, so `bash -c "git push"` — the form ADR-0042 and ADR-0045
+# both name as THE case this hook closes — was ALLOWED. Section A never caught it because every
+# case there carries an argument after the verb. Both pinned: test sections C12-C15 and H.
+#
 # Contract: exit 0 + empty stdout = allow. exit 0 + {"hookSpecificOutput":{...,"deny"}} = deny.
 # NEVER exits non-zero. Every failure mode allows.
 #
@@ -56,8 +65,22 @@ CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 # left in place, and denying them here would contradict the frontmatter.
 MUTATING='(commit|push|add|reset|checkout|merge|rebase|clean|stash|tag|branch|remote|filter-repo|am|apply|cherry-pick|revert|restore|rm|mv|switch|worktree|submodule|gc|prune|fetch|pull|init|clone)'
 
+# The interpreter forms of a command position: `bash -c "…"`, `sh -c '…'`, `python3 -u -c "…"`,
+# `bash -lc "…"`. Qualified by the interpreter NAME (issue #127 sibling audit) — an anchor written
+# as a bare `-c` also matched every search tool's COUNT flag, so `grep -c "git commit -m" f` was
+# denied. That is the same class as #127 itself: a guard arming on text ABOUT the thing it guards.
+# `-[A-Za-z]*c` covers combined short flags (-lc); the intervening group is restricted to further
+# FLAGS so it cannot swallow an unrelated command in a compound line.
+INTERP_C="(bash|sh|zsh|ksh|dash|python|python3|perl|ruby|node|env)[[:space:]]+(-[^[:space:]]+[[:space:]]+)*-[A-Za-z]*c[[:space:]]*['\"]?"
+
+# What may follow the verb. The closing quote belongs here: `bash -c "git push"` — the form ADR-0042
+# and ADR-0045 both quote as THE case this hook exists to close — escaped a trailing class of
+# ([[:space:]]|$) entirely, and section A stayed green because every case in it carries an argument
+# after the verb. R2_GIT below already accepted a quote; R1 did not.
+TRAIL="([[:space:]]|[\"')\`;&|]|\$)"
+
 # R1 — command position. The anchor alternation is the whole design; see the header.
-R1="(^|[;&|(){}]|&&|\\|\\||\`|\\\$\\(|-c[[:space:]]*['\"]?)[[:space:]]*git[[:space:]]+${MUTATING}([[:space:]]|\$)"
+R1="(^|[;&|(){}]|&&|\\|\\||\`|\\\$\\(|${INTERP_C})[[:space:]]*git[[:space:]]+${MUTATING}${TRAIL}"
 
 # R2 — an interpreter shelling out. Compound on purpose: the exec construct alone is fine
 # (os.system("git log")), the verb alone is fine (print("git commit")), only both together deny.

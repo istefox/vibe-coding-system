@@ -1216,3 +1216,47 @@ Known consequences, recorded rather than fixed:
   matches against a flattened copy of the file. The line-wrap cousin of rule 3.
 
 Detail: `docs/architecture/ADR-0073-177-178-what-the-gates-do-not-see.md`.
+
+## Decisions from the self-arming marker chain (ADR-0074)
+
+Closes issue #127. `write-scope-enforce.sh` bound a fix agent to the scope `[^` because it scanned
+**every** `user` entry and **tool results are `user` entries** — an architect briefed to read the
+hook's own source pulled the literal grep pattern into its transcript and armed the hook against
+itself. Fixed in flight on 2026-07-26 (read only the FIRST `user` entry); this closes the missing
+regression test and the sibling audit the issue asked for.
+
+- **The class, not the instance:** a marker that is both instruction and trigger arms on any
+  transcript that quotes it. The population most exposed is *agents working on the hook system*,
+  because they are the ones told to read these files. No refinement of the marker helps — the
+  dispatch prompt and a file quoting it are byte-identical by construction. Position is the only
+  exact discriminator.
+- **`agent-command-scope.sh` had the same class, reached through the command string, and two
+  defects in opposite directions.** (1) R1's `-c` anchor was unqualified, so every search tool's
+  COUNT flag matched and `grep -c "git commit -m" f` was **denied** — a guard arming on text about
+  the thing it guards. The hook's own header says "an **interpreter's** -c": the prose was right,
+  the regex was not. (2) R1's trailing boundary was `([[:space:]]|$)`, so the closing quote in
+  `bash -c "git push"` escaped it — **the exact form ADR-0042 and ADR-0045 both name as the case
+  this hook exists to close was ALLOWED.** Section A stayed green because every assertion in it
+  carries an argument after the verb. Found by running the regex over the ADRs' own examples, not
+  by reading it (rule 11 again).
+- **`agent-write-scope.sh` is immune, structurally**, and `F1` asserts it — it reads no transcript,
+  so no text an agent causes to be read can change what it enforces. Pinned as an assertion because
+  a future "configurable roots per dispatch" change would remove exactly that property and would
+  look like an improvement.
+- **`test-write-scope.sh` already carried the fix** (ADR-0049 §D9, TB7/TB8). `pre-flight-pattern-
+  enforce.sh` reads assistant entries and ALLOWS on match, so a spurious match is a missed check,
+  never a deadlock. Both audited, neither changed.
+- **E0 is the reason section E means anything:** it runs the pre-fix extraction over the fixture and
+  requires the live incident's own `[^` back. Verified against a reconstructed pre-#127 hook — E1
+  and E4 fail, everything else stays green, which is the shape of the original invisibility. E4
+  anchors `head -1` by POSITION; a first draft grepped the neighbourhood, matched the pipeline's
+  second unrelated `head -1`, and pinned nothing.
+
+Known consequences, recorded rather than fixed:
+- `agent-command-scope.sh` now denies strictly more than it did, on a live guardrail — correct
+  direction, still a behaviour change.
+- The interpreter list is a fixed enumeration; anything outside it takes the `-c` path unguarded.
+- The threat model is unchanged: a guardrail against a shortcut, not a sandbox. E1/E2 still pin
+  the list-form `subprocess.run` and variable-splicing bypasses as expected-ALLOW.
+
+Detail: `docs/architecture/ADR-0074-127-self-arming-marker-class.md`.
