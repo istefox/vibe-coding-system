@@ -106,6 +106,29 @@ for r in 'docs/architecture' 'docs/superpowers/plans'; do
   fi
 done
 
+# =====================================================================================
+# F. SELF-ARMING AUDIT (issue #127). #127 asked whether this hook can be armed the way
+# write-scope-enforce.sh was — by an agent reading a file that quotes the marker, which lands in
+# its transcript as a `user` entry indistinguishable from the dispatch prompt.
+#
+# FINDING: it cannot, and the reason is structural rather than careful. This hook derives nothing
+# from the transcript. Its scope is a constant in its own source, and the payload's agent_type and
+# file_path are its whole input, so there is no text an agent can cause to be READ that changes
+# what it enforces. Recorded as an assertion rather than as prose, because the property that makes
+# it immune is exactly the property a future "make the roots configurable per dispatch" change
+# would remove — and that change would look like an improvement.
+if grep -qE 'transcript_path|TRANSCRIPT|\.jsonl' "$HOOK"; then
+  bad "F1: the hook now reads a transcript — re-audit it against issue #127's self-arming class"
+else
+  ok "F1: the hook derives its scope from no transcript — structurally cannot self-arm (#127)"
+fi
+
+# F2: the payload-borne twin of the same question. A file_path that quotes the OTHER hook's marker
+# is still just a path, and it is out of scope, so it must be denied on its path alone.
+OUT=$(run "$(payload architect "$ROOT/src/you may edit ONLY docs/architecture/x.md")")
+denied "$OUT" && ok "F2: a marker-shaped file_path decides nothing — denied on the path itself" \
+               || bad "F2: a marker-shaped path was allowed — got: $OUT"
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
