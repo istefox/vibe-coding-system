@@ -143,7 +143,7 @@ still understood by the same reader*, and #197 is a consumer of the boundary rul
 #### Phase 4 status (2026-07-29)
 
 Four of five shipped: #194 phase 1 (PR #199), #195 (PR #200, ADR-0076), #193 (PR #201, ADR-0077),
-#197 (PR #202, ADR-0078), #196 (PR #203, ADR-0079).
+plus #197 (PR #202, ADR-0078) and #196 (PR #203, ADR-0079).
 
 **#194 phase 2 is blocked on data, by design.** The `src=` instrumentation deployed at ~20:15 CEST
 and the audit log carries **zero** coder-path rows since — no `coder` subagent has run. The
