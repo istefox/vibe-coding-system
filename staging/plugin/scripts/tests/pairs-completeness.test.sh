@@ -43,17 +43,37 @@ check_pairs() {
 # <name-pattern> may span a directory level (e.g. '*/SKILL.md'), which is why the relative path is
 # derived by stripping the staging prefix rather than by basename — the first version flattened
 # skills/<name>/SKILL.md to skills/SKILL.md and would have reported every skill as uncovered.
+# A fourth argument, when given, names a file of staging-relative paths that are EXEMPT — files
+# that legitimately have no deployed counterpart. Every exemption is DECLARED, never a silent skip,
+# and check_exemptions_live() below asserts each one still exists: an exemption that outlives its
+# subject protects nothing while still hiding whatever takes its place.
 check_complete() {
-  _file="$1"; _dir="$2"; _pat="$3"
+  _file="$1"; _dir="$2"; _pat="$3"; _exempt="${4:-}"
   for _f in "$STAGING/$_dir"/$_pat; do
     [ -f "$_f" ] || continue                       # unexpanded glob when a dir is empty
     _rel="${_f#$STAGING/}"
-    if cut -d'|' -f1 < "$_file" | grep -qxF "$_rel"; then
+    if [ -n "$_exempt" ] && grep -qxF "$_rel" "$_exempt" 2>/dev/null; then
+      PASS=$((PASS+1)); printf 'PASS: exempt from PAIRS by declaration (not deployed): %s\n' "$_rel"
+    elif cut -d'|' -f1 < "$_file" | grep -qxF "$_rel"; then
       PASS=$((PASS+1)); printf 'PASS: covered by PAIRS: %s\n' "$_rel"
     else
       FAIL=$((FAIL+1)); printf 'FAIL: in staging but not in PAIRS (edits will never deploy): %s\n' "$_rel"
     fi
   done
+}
+
+# An exemption list is only meaningful while its subjects exist. Without this, deleting or renaming
+# a probe script leaves a line that silently exempts nothing — and the next file to take that path
+# would inherit the exemption.
+check_exemptions_live() {
+  while IFS= read -r _e; do
+    [ -n "$_e" ] || continue
+    if [ -f "$STAGING/$_e" ]; then
+      PASS=$((PASS+1)); printf 'PASS: exemption has a live subject: %s\n' "$_e"
+    else
+      FAIL=$((FAIL+1)); printf 'FAIL: exemption names a file that no longer exists — delete the line: %s\n' "$_e"
+    fi
+  done < "$1"
 }
 
 tmp=$(mktemp -d)
@@ -106,6 +126,25 @@ check_complete "$tmp/real-pairs" "user/rules" '*.md'
 # selectively by design (ADR-0024 scope), so demanding an entry for each would report intended
 # absences as defects. A skill's SKILL.md is the file that always has to reach the machine.
 check_complete "$tmp/real-pairs" "plugin/skills" '*/SKILL.md'
+
+# Hook scripts. Found missing on 2026-07-29 while syncing the issue #174 fix: three REGISTERED,
+# DEPLOYED hooks (auto-format.sh, chain-memory-capture.sh, protect-files.sh) had no PAIRS entry, so
+# a repo-side edit could never reach ~/.claude. Two of the three happened to be byte-identical with
+# their deployed copies at that moment, which is precisely the condition ADR-0043 names as what
+# keeps this class of gap invisible — the one that differed was carrying an unshipped bug fix.
+#
+# The four exemptions are probe-only tooling with no deployed counterpart and no settings.json
+# registration. worktree-capture.sh is not merely undeployed but MUST NOT be wired: registering it
+# aborts every worktree creation on the machine (ADR-0068 §D2), so an accidental PAIRS entry for it
+# is worse than a missing one.
+cat > "$tmp/scripts-exempt" <<'EOF'
+plugin/scripts/hook-probe.sh
+plugin/scripts/hook-probe-sandbox.sh
+plugin/scripts/hook-probe-verify.sh
+plugin/scripts/worktree-capture.sh
+EOF
+check_complete "$tmp/real-pairs" "plugin/scripts" '*.sh' "$tmp/scripts-exempt"
+check_exemptions_live "$tmp/scripts-exempt"
 
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
