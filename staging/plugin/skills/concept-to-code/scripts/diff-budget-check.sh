@@ -43,7 +43,8 @@
 #
 # EXCLUSIONS (§D4), applied by basename before EITHER computation — files the chain itself
 # writes, never a coder's own work: SPEC.md, step5-report.json, and any *.manifest.yml
-# (docs/manifests/<date>-<slug>.manifest.yml, per manifest-init.sh:45).
+# (docs/manifests/<date>-<slug>.manifest.yml, per manifest-init.sh's
+# `docs/manifests/$today-$slug.manifest.yml` assignment).
 #
 # CHECKPOINT SEMANTICS (§D2). Step 5 has no commit boundary between task groups/batches — nothing
 # is committed until Step 7 — so there is no git-level way to isolate "this batch's diff" from

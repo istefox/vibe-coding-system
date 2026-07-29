@@ -99,6 +99,8 @@ The detector operates with a **fail-safe cascade toward `silent`**:
 5. `gh repo view --json visibility` == `PUBLIC` → `public` + `repo=<owner/repo>`.
 6. `PRIVATE`/`INTERNAL`/error → `silent`.
 
+<!-- xref-exempt: line 1|line 2|foo.py:12|package.json:5 — the first two are stdout positions in this script's own output contract, the last two illustrative paths in the sample detector output further down; neither kind points into a file in this repository. -->
+
 Stdout: `public` (line 1) + `repo=<owner/repo>` (line 2) if public;
 `silent` (line 1) in all other cases. Always exits 0.
 

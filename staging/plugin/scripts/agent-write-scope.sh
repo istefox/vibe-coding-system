@@ -13,7 +13,12 @@
 #
 # TWO ROOTS, NOT ONE. architect.md claimed "docs/architecture/** only", but concept-to-code
 # Step 2 orders the architect to write its plan to docs/superpowers/plans/<date>-<slug>.md
-# (SKILL.md:357) and HARD ABORTs when that path is absent from the report (SKILL.md:409).
+# (its "**Dispatch architect:**" brief) and HARD ABORTs when that path is absent from the report
+# (its "**Validate architect output fields (before populating artifacts):**" table).
+# Both references name a heading, not a line number: the two they used to carry had rotted into
+# a bare code-fence delimiter and a blank line (issue #210), which is the worst shape a stale
+# pointer takes — the reasoning behind a live guardrail becomes unverifiable at exactly the
+# moment someone tries to verify it.
 # Enforcing the file's literal claim would have broken every chain run at Step 2. The agent file
 # has been corrected to match; agent-write-scope.test.sh section E keeps the two in agreement,
 # and B2 is the regression guard for the plan path specifically.

@@ -27,6 +27,8 @@ if [ ! -f "$FILE" ]; then
   exit 1
 fi
 
+# xref-exempt: line 1 — a position inside the rules file being validated at run time, printed in
+# this script's own error message. Not a reference into another file in this repository.
 first=$(sed -n '1p' "$FILE")
 if [ "$first" != "---" ]; then
   printf 'validate-frontmatter: missing opening --- at line 1\n' >&2

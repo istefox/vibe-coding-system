@@ -292,7 +292,7 @@ Context hint: "<topic_full_title> (ADR: <adr_path>) --autopilot"
 The `--autopilot` flag in the commit skill's args:
 - Skips the HITL gate (no `AskUserQuestion`).
 - Commits immediately with the generated Conventional Commits message.
-- Skips push and PR entirely (commit skill SKILL.md line 30: "Step 6 is also skipped in autopilot mode").
+- Skips push and PR entirely (the commit skill's `--autopilot` argument description: "Step 6 (PR) is also skipped in autopilot mode").
 
 After commit completes: capture the commit SHA via `git log -1 --format=%H`.
 

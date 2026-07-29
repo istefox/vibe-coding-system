@@ -42,6 +42,8 @@ Four exhaustive, mutually-exclusive categories:
 
 Examples:
 
+<!-- xref-exempt: test_pricing.py:42|conftest.py:15|test_cli.py:8|markup.py:88 — illustrative paths inside this agent's own PATTERN examples below; they demonstrate the `<path:line>` payload format the header requires, are not references into another file, and cannot rot. -->
+
     PATTERN: ADD | tests/test_pricing.py:42 add failing test for negative markup
     PATTERN: REPLACE | Add: tests/conftest.py:15 new _isolate_user_config autouse | Remove: tests/test_cli.py:8 old no_user_config autouse
     PATTERN: MODIFY | src/pricing/markup.py:88 rename `mrg` to `margin` for clarity

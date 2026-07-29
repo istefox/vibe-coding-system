@@ -294,7 +294,7 @@ the pilot variants against — gating this call the way the `--save` call isn't 
 
 A parallel-dispatch optimization for independent fixes is plausible. The two
 original blockers are now cleared:
-- `~/.claude/agents/coder.md` line 8 has `isolation: worktree` (was missing in v1).
+- `~/.claude/agents/coder.md` frontmatter has `isolation: worktree` (was missing in v1).
 - CC 2.1.161 fixed the bug where workflow agents with `isolation: worktree` were
   blocked from modifying their own files.
 

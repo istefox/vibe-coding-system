@@ -17,7 +17,9 @@
 # recurring." Checked against what project-conductor can actually reach at its Step 5 seam:
 #
 #   - tracer_bullet_verdict is genuinely reachable ACROSS the whole roadmap. manifest-init.sh
-#     (concept-to-code/scripts/manifest-init.sh:125) writes it into each feature's OWN dated
+#     (concept-to-code/scripts/manifest-init.sh, its `tracer_bullet_verdict: null` line — named,
+#     not numbered, because the line number it used to carry pointed at an unrelated field)
+#     writes it into each feature's OWN dated
 #     manifest file under docs/manifests/ — one file per topic-slug, never overwritten by a later
 #     feature. So the TRACER section below globs every manifest and genuinely accumulates this one
 #     signal across features, exactly as ADR-0061 §D2 asks.
