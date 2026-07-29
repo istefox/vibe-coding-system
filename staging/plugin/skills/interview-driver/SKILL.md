@@ -14,3 +14,19 @@ Do not ask obvious questions: dig into the hard points. One question at a time, 
 Then write `SPEC.md` in the current directory with: objectives, scope, stack, architecture, data model, API, UI flows, edge cases, success criteria. No code at this stage.
 
 Number every success-criteria checklist item `R-01`, `R-02`, ... at the start of the item text (ADR-0048).
+
+The word "checklist" is load-bearing and prose alone was not enough — a SPEC written with plain
+bullets passed the coverage gate silently with 17 requirements declared (issue #171). Write the
+section literally like this, matching `spec-from-issue/SKILL.md`'s template:
+
+```markdown
+## Success criteria
+
+- [ ] R-01 — <the first requirement, stated so it can be checked>
+- [ ] R-02 — <the second>
+```
+
+The `- [ ]` marker is what `spec-coverage.sh` reads. `- R-01 — …` declares nothing to it. A SPEC
+that reaches Step 5 in the plain-bullet form is repaired automatically by `spec-normalize-ids.sh`
+(ADR-0072), but the repair exists for SPECs written before this template — not as licence to skip
+it.

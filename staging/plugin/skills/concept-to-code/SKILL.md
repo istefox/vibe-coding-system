@@ -1393,6 +1393,37 @@ uncovered, `_out` names the ID and the missing half (`plan`, `tests`, or `plan,t
 is fixing the artifact, not writing a task. `_rc = 2`, or `_scov` empty → treat as unavailable,
 fail-open (see Policy).
 
+**Self-repair on the one structural error that has a mechanical fix (ADR-0072 §D3, issue #171).**
+Before treating `_rc = 3` as a stop, check whether the cause is the plain-bullet form — requirement
+ids declared as `- R-01 — …` instead of `- [ ] R-01 — …`. It is the only structural error whose
+repair is deterministic: the two lines say the same thing and only the second is one the checker
+reads, so adding the marker changes no content.
+
+```bash
+if [ "$_rc" -eq 3 ] && printf '%s\n' "$_out" | grep -q 'declared as plain bullets'; then
+  _norm="$(dirname "$_scov")/spec-normalize-ids.sh"
+  if [ -f "$_norm" ]; then
+    _diff=$(bash "$_norm" --spec "<manifest.artifacts.spec>" --apply); _nrc=$?
+    if [ "$_nrc" -eq 0 ]; then
+      _out=$(bash "$_scov" --spec "<manifest.artifacts.spec>" --plan "<manifest.artifacts.plan>" ${_troot:+--tests-root "$_troot"} 2>&1)
+      _rc=$?
+    fi
+  fi
+fi
+```
+
+**Apply first, show after — do not gate this.** The edit is mechanical, and ADR-0071's Gate 4.0 has
+already committed the planning artifacts, so `git checkout -- <spec>` reverses it. Stopping a chain
+to ask permission for a checkbox marker is friction with one sensible answer, and on the unattended
+paths it would be a halt with no one to answer. Print the diff `spec-normalize-ids.sh` returned
+under the heading `"Requirement ids: repaired plain-bullet declaration(s) — diff:"`, so the edit is
+visible after the fact rather than invisible.
+
+If the re-run still returns 3, stop as before: the cause was something else, or something the repair
+does not cover. **A bold-wrapped id (`- **R-01** — …`) is one of those** — the checker cannot read it
+in either form, so it is not detected as a near-miss and not repaired (ADR-0072 §D4). Never loop:
+the repair runs at most once per gate invocation.
+
 **This gate branches on the exit code. The anti-test-weakening gate immediately above must
 never do that — `weakening-scan.sh` always exits 0 and signals through stdout. Two adjacent
 gates, two idioms, on purpose: `spec-coverage.sh` is a checker with an exit-code contract,
