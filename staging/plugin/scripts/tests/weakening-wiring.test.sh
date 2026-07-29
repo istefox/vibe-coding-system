@@ -539,6 +539,46 @@ else
   bad "WF7: a Step 1 filename pattern was weakened — restore it, do not edit this assertion"
 fi
 
+# ==================================================================================================
+# WJ. Issue #177 / ADR-0073 §D4 — the in-place blind spot is DOCUMENTED, because it is not detected.
+#
+# An assertion edited in place removes one assert-bearing line and adds one, so assert-removed's
+# count comparison cannot fire. No detector was added: the diff shape is ambiguous by construction,
+# and a rule on `asrt_rm == asrt_add > 0` measured 0-of-2 precision over this repository's last 354
+# commits (both hits were prose containing the word "assertion"). What ships instead is the
+# statement, in the script and at BOTH callers — so these assertions pin prose, deliberately, and
+# they are the deliverable rather than a proxy for one.
+# ==================================================================================================
+WS="$STAGING/plugin/skills/review-triage-fix/scripts/weakening-scan.sh"
+CCM="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+CMT="$STAGING/plugin/skills/commit/SKILL.md"
+
+grep -q 'WHAT `CLEAN` DOES NOT MEAN' "$WS" \
+  && ok "WJ1: weakening-scan.sh's header states what CLEAN does not cover" \
+  || bad "WJ1: the in-place blind spot is not documented in weakening-scan.sh's header"
+
+grep -q 'asrt_rm == asrt_add' "$WS" \
+  && ok "WJ2: the header names the mechanism (the count comparison), not just the symptom" \
+  || bad "WJ2: the header does not explain WHY assert-removed cannot fire in place"
+
+grep -q '0 of 2' "$WS" \
+  && ok "WJ3: the measured precision is recorded, so the no-detector decision rests on a number" \
+  || bad "WJ3: the header does not record the measurement — the decision reads as intuition"
+
+grep -q 'never "no weakening occurred"' "$CCM" \
+  && ok "WJ4: the c2c Step 5 gate block states the CLEAN limit at the call site" \
+  || bad "WJ4: c2c's weakening gate does not state what CLEAN omits — it reads as full coverage"
+
+grep -q 'not evidence that no test was weakened' "$CMT" \
+  && ok "WJ5: the commit skill's Step 1 block states the CLEAN limit" \
+  || bad "WJ5: commit/SKILL.md does not state what CLEAN omits"
+
+# The no-detector decision must not be quietly reversed by a detector that matches ^WEAKENED
+# (ADR-0051's sentinel rule): if one is ever added, it belongs on SUSPECT.
+grep -q 'NO DETECTOR WAS ADDED' "$WS" \
+  && ok "WJ6: the decision itself is recorded in the script, not only in the ADR" \
+  || bad "WJ6: the script does not record that no detector was added — this will be rediscovered as a bug"
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

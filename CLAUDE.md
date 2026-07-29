@@ -1171,3 +1171,48 @@ Known consequences, recorded rather than fixed:
   `RN9` guard the repair's blast radius rather than proving it runs.
 
 Detail: `docs/architecture/ADR-0072-171-spec-id-near-miss-self-repair.md`.
+
+## Decisions from the gate-blind-spot chain (ADR-0073)
+
+Closes issues #178 and #177 together — the same question asked twice at the Step 5 → Step 6
+boundary, with **opposite answers**, decided jointly because deciding either alone would have got
+the other wrong.
+
+- **#178 gets a disclosure, not a gate.** A coder declined three plan-specified Pydantic bounds for
+  a sound reason accepted at Gate 5; it was found because the orchestrator read the diff. Every
+  existing gate measures something adjacent and passes a deviation. `step5-report.json` gains an
+  additive `plan_deviations` array (fifth extension, no version bump), the coder brief asks for a
+  terminal `PLAN DEVIATIONS:` block with an explicit `none` form, and Gate 5 renders it.
+- **The self-report objection does not apply, and the reason is worth keeping.** "Do not trust an
+  agent's self-report" (ADR-0047 §A3) is a rule about **gates**. A disclosure feeding a human
+  decision is the opposite case: a coder that hides a deviation leaves the reviewer exactly where it
+  was before the field existed, so the field can only add information, never remove a check.
+- **The Step 6 reviewer is briefed with the plan** (#178's option 2, yes) — and told a departure is
+  **not automatically a defect**. Without that sentence the lens becomes the conformance gate the
+  ADR rejects, implemented by prompt instead of by code, whose likely first act is blocking a
+  correct deviation. A mechanical conformance gate is rejected structurally: a plan is prose.
+- **#177 gets a sentence, not a detector, and the number is on record.** Measured over 354 commits
+  (89 touching a test): a rule on `asrt_rm == asrt_add > 0` fires **twice**, and **both hits are
+  prose** — a comment containing "assertion", an `ok "…"` message containing "asserts". Precision
+  0 of 2. Secondary to the structural argument: correcting a wrong test and relaxing a right one
+  produce **byte-identical diffs**, so no rule over a diff separates them. ADR-0051 §D5 hit the same
+  wall on the same script; this applies that precedent one step earlier — not shipped at all.
+- **`CLEAN` now says what it does not mean, in three places**: the script header, c2c's Step 5 gate
+  block, and `commit`'s Step 1 block — because whoever reads a CLEAN line reads it there, not in the
+  script. The `commit` block points at its **Test diff** section as what actually covers this class.
+  It is a human step and the ADR does not pretend otherwise.
+- **`plan_deviations` renders OUTSIDE the six-array roll-up** (ADR-0052 §D5 bounded it deliberately).
+  The exclusion is semantic: the six are findings asking "review or not"; a deviation asserts nothing
+  is wrong and asks "is this departure acceptable".
+
+Known consequences, recorded rather than fixed:
+- `plan_deviations` is unverified and always will be. A coder that deviates without declaring is
+  exactly as invisible as before; the risk is a future reader treating a short list as evidence.
+- **The in-place assertion blind spot stays open.** Documented, measured, unclosed. Anyone relying
+  on the weakening gate for assertion integrity is relying on something that does not exist.
+- The reviewer lens is prose in a prompt; nothing enforces that the plan is read.
+- **Lesson pinned in the harness:** a prose assertion must not depend on where a line wraps. E5/E6/E8
+  first failed on markdown reflow, not on missing content — `step5-checkpoint-review.test.sh` now
+  matches against a flattened copy of the file. The line-wrap cousin of rule 3.
+
+Detail: `docs/architecture/ADR-0073-177-178-what-the-gates-do-not-see.md`.

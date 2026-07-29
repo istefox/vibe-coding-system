@@ -156,6 +156,77 @@ else
   bad "D2: failure-signal exclusion not documented"
 fi
 
+# Prose anchors are matched against a FLATTENED copy: newlines and runs of whitespace collapse to
+# single spaces. A markdown reflow moves where a sentence wraps without changing what it says, and
+# an assertion that breaks on a reflow is a guard that fails for the wrong reason (the line-wrap
+# cousin of rule 3 — do not anchor on layout).
+CC_FLAT="$TMP/cc-flat.txt"
+tr '\n' ' ' < "$CC_SKILL" | tr -s ' ' > "$CC_FLAT"
+has() { grep -qF "$1" "$CC_FLAT"; }
+
+# ==================================================================================================
+# E. Issue #178 / ADR-0073 §D1-D3 — plan deviations are DISCLOSED, not gated.
+#
+# A coder declined three Pydantic bounds the approved plan specified. Its reasoning was sound and
+# was accepted at Gate 5 — but it was found by the orchestrator reading the diff, because no gate
+# looks at plan conformance. Every existing Step 5 -> Step 6 gate measures something adjacent and
+# passes a plan deviation: spec-coverage (the id was cited AND tested), weakening-scan (tests were
+# ADDED), interface-check (a validator is not a signature), diff-budget (smaller, if anything).
+# ==================================================================================================
+if grep -q '"plan_deviations"' "$CC_SKILL"; then
+  ok "E1: step5-report.json's schema carries the additive plan_deviations array"
+else
+  bad "E1: plan_deviations is not in the schema — the deviation never leaves the coder's head"
+fi
+
+if grep -q 'PLAN DEVIATIONS:' "$CC_SKILL"; then
+  ok "E2: the coder brief asks for the deviations in a terminal PLAN DEVIATIONS: block"
+else
+  bad "E2: nothing asks the coder to declare a declined plan constraint"
+fi
+
+if grep -q 'PLAN DEVIATIONS: none' "$CC_SKILL"; then
+  ok "E3: the brief specifies the explicit none form — absence of the block is not evidence of none"
+else
+  bad "E3: no 'none' sentinel — an omitted block would be indistinguishable from an unasked question"
+fi
+
+# The load-bearing distinction. If this ever reads as a gate, the self-report becomes a check that
+# an agent grades itself on, which is exactly what ADR-0047 A3 refuses.
+if grep -q 'DISCLOSURE, not a gate' "$CC_SKILL"; then
+  ok "E4: plan_deviations is documented as a disclosure and never a failure signal"
+else
+  bad "E4: the disclosure/gate distinction is not stated — this will be mistaken for coverage"
+fi
+
+if has 'nothing verifies this list is complete'; then
+  ok "E5: the Gate 5 render says the list is a self-report, in the render itself"
+else
+  bad "E5: the render does not disclose that the list is unverified"
+fi
+
+# Option 2 of the issue, decided YES: the Step 6 reviewer is briefed with the plan.
+if has 'PLAN CONFORMANCE as an explicit lens'; then
+  ok "E6: the Step 6 reviewer is briefed with the plan and asked for conformance explicitly"
+else
+  bad "E6: the reviewer is not asked to compare implementation against the plan"
+fi
+
+# ...and told not to treat a departure as automatically wrong, or the lens becomes the conformance
+# gate the ADR rejected, implemented by prompt instead of by code.
+if grep -q 'NOT automatically a defect' "$CC_SKILL"; then
+  ok "E7: the reviewer lens states a departure is not automatically a defect"
+else
+  bad "E7: the lens reads as 'report every departure' — the rejected conformance gate by another name"
+fi
+
+# The render must not be folded into the six-array roll-up ADR-0052 D5 deliberately bounded.
+if has 'NOT the seventh member of the roll-up'; then
+  ok "E8: plan_deviations renders on its own line, outside the six-array advisory roll-up"
+else
+  bad "E8: plan_deviations was folded into the roll-up — the summary this block exists to bound"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -gt 0 ] && exit 1 || exit 0

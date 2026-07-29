@@ -135,6 +135,11 @@ Reading the result — the scripts report, this step decides:
   is rendered verbatim in the Step 4 gate so it is visible at the click.
 - **`NEWDEP` lines never stop anything.** They are advisory: render them in the Step 4
   `Pre-commit findings` block and proceed.
+- **A CLEAN weakening scan is not evidence that no test was weakened (ADR-0073 §D4, issue #177).**
+  An assertion edited in place is invisible to every detector in `weakening-scan.sh` — the counts
+  match, so `assert-removed` cannot fire. This is precisely why the **Test diff** section below
+  exists and is not optional: it is the only thing in this flow that puts a changed assertion in
+  front of a human.
 - **`WEAKENED` lines are advisory in attended mode.** They render in the Step 4 `Pre-commit
   findings` block and stop nothing here — `review-triage-fix`'s own circuit breaker B is the actual
   enforcement point; this call is a heads-up at commit time, not a second gate.

@@ -64,6 +64,33 @@ function is_test(p){ return (p ~ /(^|\/)tests?\//) || (p ~ /(^|\/)spec\//) \
   || (p ~ /\.test\.[a-zA-Z]+$/) || (p ~ /\.spec\.[a-zA-Z]+$/) \
   || (p ~ /Tests?\.[a-zA-Z]+$/) }
 
+# ==================================================================================================
+# WHAT `CLEAN` DOES NOT MEAN (ADR-0073 §D4, issue #177). READ THIS BEFORE TRUSTING A CLEAN LINE.
+#
+# `assert-removed` is a COUNT COMPARISON: asrt_rm > asrt_add. Editing an assertion IN PLACE removes
+# one assert-bearing line and adds one, so the counts are equal and the rule cannot fire. Changing
+#
+#     assert result.tension_ok is True   ->   assert result.tension_ok is False
+#
+# to match whatever the implementation happens to produce is the textbook weakening move, and it is
+# invisible to EVERY detector here: the file still exists, no skip marker appears, the counts match,
+# the `def` count is unchanged, and the test still has an assertion.
+#
+# NO DETECTOR WAS ADDED, and the reason is measured rather than assumed:
+#   - The diff shape is genuinely ambiguous. Correcting a wrong test and relaxing a right one
+#     produce byte-identical diffs. No rule over a diff can separate them, so any detector here
+#     reports "an assertion changed", which is ordinary test maintenance.
+#   - Measured over this repository's last 354 commits (89 of which touch a test file): a rule on
+#     `asrt_rm == asrt_add > 0` fires twice. BOTH hits are PROSE — a comment containing the word
+#     "assertion" and an `ok "…"` message containing "asserts". Precision on the observed sample:
+#     0 of 2. A signal that is always wrong is one its readers learn to dismiss, which is how a
+#     detector makes the CLEAN line here mean LESS rather than more (ADR-0048 §D7).
+#   - ADR-0051 §D5 reached the same wall on this same script and shipped `literal-assertion-added`
+#     disabled by default for it. This is that precedent applied one step earlier: not shipped.
+#
+# So the blind spot is real, permanent for now, and written down instead of papered over. A CLEAN
+# line from this script means "none of the detectors below fired", never "no weakening occurred".
+# ==================================================================================================
 function is_assert_tok(s){ return s ~ /assert|expect\(|XCTAssert|EXPECT_|ASSERT_|require\.|should|t\.Error|t\.Fatal/ }
 function is_test_def(s){ return s ~ /(def|func|fn)[ \t]+[Tt]est|[ \t]it\(|[ \t]test\(|@Test/ }
 # `xit\(` and `\.skip\(` are token-boundary anchored, not bare substrings (live-defect fix):
