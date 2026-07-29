@@ -76,3 +76,64 @@ project-conductor's per-item SPEC→ADR→plan→impl cycle does not apply here.
   hit live in production immediately after this deploy, 9 consecutive re-invocations before Claude
   Code's own hard cap forced the turn to end. Fixed in both the deployed copy and this staging
   source so a future sync does not reintroduce it.
+
+### Phase 4 — the class behind the fix (issues #193–#197, derived from ADR-0074/ADR-0075)
+
+Group C closed #127 and #123, and both turned out to be **instances of a rule nobody enforces**.
+Three of these five issues are that rule; two are concrete gaps the same audit disclosed. None is
+urgent — nothing here is failing today — which is exactly the condition under which this class of
+work gets skipped and then rediscovered as a live incident, twice, as #127 and #123 both were.
+
+**Sequencing rationale.** The order below is driven by one hard constraint and two soft ones.
+The hard one: **#194 needs elapsed time**, so its instrumentation goes first to start the clock.
+The soft ones: #195's helper should absorb the duplication #123 created *while both copies are
+still understood by the same reader*, and #197 is a consumer of the boundary rule #195 defines.
+
+#### 4.1 — Start the clock, consolidate what is fresh
+
+- [ ] **#194 phase 1 — instrument only, decide nothing.** Make the audit log distinguish a
+  main-session-fallback allow from a subagent-transcript allow. No behaviour change, no risk, and
+  it converts "how often does transcript lookup fail" from an argument into a number. Today the
+  log cannot answer it retrospectively, which is why the fallback has survived unexamined since it
+  was written. Build-stamp the result: ADR-0016's v2.1.154 experience is the standing evidence
+  that the transcript layout moves underneath us.
+- [ ] **#195 — the additive-field rule, and the helper if that is the chosen shape.** #123 wrote
+  the same five-state logic twice in one pass, in two skills, with **opposite and both-correct**
+  defaults for absence. That asymmetry is load-bearing and a helper must preserve it rather than
+  flatten it — which is the argument for building it now, while one reader still holds both
+  halves, and against building it in six months from the source.
+
+#### 4.2 — The class guards
+
+- [ ] **#193 — derived guard for the self-arming marker pattern.** The highest-value item here:
+  it prevents recurrence of the only bug in this group that actually deadlocked a chain. Model it
+  on `skill-text-corrections.test.sh` F6 — derive the population at run time, count-guard the
+  derivation, and put exemptions in the hook source rather than in a filename list.
+  **Ask which direction the guard runs in before writing it** (rule 5): it must fail on a file the
+  list omits, not merely validate the files it names. That was #127's own failure mode.
+- [ ] **#197 — apply #195's boundary rule to `manifest-validate.sh` invariant 4.** Ordered after
+  #195 on purpose: on its own it is five files and a judgement call, but with the boundary rule
+  already stated it becomes one conditional and a test. The five files stay byte-unchanged.
+
+#### 4.3 — Decide on evidence, and the cheap one
+
+- [ ] **#194 phase 2 — read the measurement, then decide** keep / drop / accept, and record the
+  decision in `pre-flight-pattern-enforce.sh`'s own header. Two hooks currently explain each
+  other's opposite choices about the same fallback, and only one of them has ever been examined
+  on its own terms.
+- [ ] **#196 — the interpreter enumeration.** Smallest, and mostly a decision with its failure
+  direction stated. Option 1 (pin the limit in test section E) changes no behaviour and is the
+  low-risk default; option 2 (invert to a tool exclusion list) fails toward denying, which is
+  safer for a guardrail and more disruptive for a chain. `agent-command-scope.sh` took a live
+  behaviour change in #127 — spacing a second one behind everything else is deliberate.
+
+#### Risks
+
+- **#193 and #195 both ship a derived, class-level check**, and both can pass vacuously if the
+  derivation matches nothing. Same failure shape, same mitigation (count guard), and they must not
+  land in the same PR — a vacuous pass in one would be masked by a real pass in the other.
+- **#196 and #194 both alter a live guardrail on an unattended path.** Neither is failing today;
+  both have a fail-direction choice that deserves its own gate rather than a batch approval.
+- **The whole phase is preventive**, so nothing in it produces a visible improvement. That is the
+  same condition that kept the ADR-0043 `PAIRS` gap invisible for months: the work whose success
+  looks identical to never having done it.
