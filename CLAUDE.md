@@ -991,3 +991,53 @@ Known consequences, recorded rather than fixed:
   breaks both silently.
 
 Detail: `docs/architecture/ADR-0068-176-worktree-isolation-contract.md`.
+
+## Decisions from the plan-task form chain (ADR-0069)
+
+One canonical plan-task form, in one place the consumers derive from (issue #172). A heading-form
+plan — `## Task 1 — … (R-01)`, no checkboxes — was refused by `concept-to-code` Step 5 and by
+`autopilot-build` check 5, both telling the operator the plan "may be malformed". It was not:
+`architect.md`'s Output Format sanctions **both** the heading and the checkbox form, and the
+consumers were reading a narrower contract than the writer was given.
+
+- **The count never measured what its name says.** Nothing in the chain ever writes `[x]` back into
+  a plan file — completion lives in `step5-report.json` as `tasks_completed`, and the `[x]`
+  machinery in c2c belongs to `PROJECT.md`. So a plan's checkboxes are always unchecked and
+  `unchecked >= 1` is a malformed-plan guard, not progress. Worse, in a heading-form plan the
+  checkboxes that exist are **sub-steps inside a task**, so the count was never counting tasks
+  either. It worked only because every caller needs `>= 1` and never the value.
+- **Measured, not assumed: 57 plans, four parsers, three answers.** `spec-coverage.sh` (checklist
+  item OR H2–H4 containing "Task") matches 56; the two consumers (any `- [ ]`) match 50 — seven
+  plans carry no checkbox at all; `diff-budget-check.sh` (`- [ ] **Task N`) matches 18. The
+  heading form is not a tolerated deviation, it is what architects write.
+- **The predicate lives in `plan-task-predicate.awk` and is LOADED, never pasted** — `awk -f
+  <predicate> -f <program>`. Making three files agree would have left three answers that agree
+  today; this leaves one file that decides. `spec-coverage.sh` had **two copies of its own** and
+  now has none. `plan-tasks.sh --count` is the single entry point for both SKILL.md consumers.
+- **It is a CHECKER (branch on exit code), and the two gates beside it at the same Step 5
+  checkpoint are REPORTERS** (always exit 0, signal on stdout, print `CLEAN`). Exit 3 = the check
+  did not run, distinct from 0 tasks — without it a broken awk prints 0 and every caller aborts
+  blaming the plan, which is #172 reproduced one level down.
+- **The 57th plan is recognised by nothing, including `spec-coverage.sh` today.**
+  `2026-06-06-claude-md-slim.md` writes `### Step N — …`. Widening to `Task|Step` was rejected: it
+  changes token extraction for every plan to accommodate one completed plan. Exempted **by name**
+  in test `PTE2`, with `PTE3` asserting the file still exists so the exemption cannot outlive its
+  subject. A new unrecognised plan fails; it does not disappear into a threshold.
+- **`diff-budget-check.sh` is deliberately out of scope — issue #184.** Its predicate does not
+  merely recognise a line, it *delimits a block*, and a budget's file scope depends on that
+  boundary. Same measurement shows it has never fired: the single corpus plan declaring a `Budget:`
+  is heading-form, so ADR-0052's check has produced no finding on a real plan since it shipped.
+
+Known consequences, recorded rather than fixed:
+- **Inert, and worse than inert, until sync.** Both call sites invoke `~/.claude/…`; without the two
+  new `PAIRS` entries they exit 127 and the "did not run" branch aborts every dispatch.
+  `pairs-completeness.test.sh` cannot see this (skill `scripts/` are outside its scope, ADR-0043) —
+  `PTB7` pins the entries directly.
+- The count over-counts on purpose: `## Tasks` as a section heading matches, a checkbox sub-step
+  matches. Correct for a `>= 1` guard, wrong for anything that needs a real task count or a task
+  block — that is exactly what #184 needs.
+- `**Check 5 — Plan has tasks:**` and `**Pre-dispatch: plan structure validation` are extraction
+  markers for `plan-task-count.test.sh` PTC/PTF. Rewriting either block's body is safe; changing a
+  heading breaks the extraction, which reports as a skipped section rather than a failure.
+
+Detail: `docs/architecture/ADR-0069-172-plan-task-form.md`.

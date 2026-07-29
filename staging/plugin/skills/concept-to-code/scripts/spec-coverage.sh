@@ -41,6 +41,13 @@ set -u
 SELF="spec-coverage"
 TAB=$(printf '\t')
 
+# The plan-task predicate is LOADED, not restated (ADR-0069 §D2, issue #172). This file used to
+# carry its own copy of heading_level/is_checklist_item/is_task_heading in each of its two awk
+# programs — four definitions of two functions — and that duplication is what let three files
+# drift into three different answers to "what is a plan task". Both programs below now compose
+# with it via `awk -f <predicate> -f <program>`.
+PREDICATE=$(cd "$(dirname "$0")" && pwd)/plan-task-predicate.awk
+
 usage() {
   [ "${1:-}" = "" ] || printf '%s: %s\n' "$SELF" "$1" >&2
   cat >&2 <<'EOF'
@@ -91,10 +98,8 @@ OUTSIDE="$TMPD/outside.txt";   : >"$OUTSIDE"
 
 # --- SPEC parser: declaration extraction, malformed-in-section, out-of-section well-formed IDs ---
 cat >"$TMPD/spec_parse.awk" <<'AWKEOF'
-function heading_level(l,   m) {
-  if (match(l, /^#+[ \t]/)) return RLENGTH - 1
-  return 0
-}
+# heading_level() and is_checklist_item() come from plan-task-predicate.awk, loaded alongside
+# this program — do not redefine them here (awk rejects a duplicate function definition).
 function is_start_heading(l,   lvl, rest, ll) {
   lvl = heading_level(l)
   if (lvl < 2) return 0
@@ -102,9 +107,6 @@ function is_start_heading(l,   lvl, rest, ll) {
   sub(/^#+[ \t]+/, "", rest)
   ll = tolower(rest)
   return (ll ~ /^success criteria/) || (ll ~ /^acceptance criteria/) || (ll ~ /^definition of done/)
-}
-function is_checklist_item(l) {
-  return l ~ /^[ \t]*[-*][ \t]\[[ xX]\]/
 }
 function item_text(l,   t) {
   t = l
@@ -157,7 +159,7 @@ BEGIN { collecting = 0 }
 AWKEOF
 
 awk -v IDS_FILE="$IDS" -v MALFORMED_FILE="$MALFORMED_IN" -v OUTSIDE_FILE="$OUTSIDE" \
-    -f "$TMPD/spec_parse.awk" "$SPEC"
+    -f "$PREDICATE" -f "$TMPD/spec_parse.awk" "$SPEC"
 
 # --- structural error accumulation ---
 STRUCT="$TMPD/structural.out"; : >"$STRUCT"
@@ -191,17 +193,8 @@ fi
 # --- plan task-line token extraction (used by ORPHAN and by plan coverage below) ---
 PLAN_TOKENS_RAW="$TMPD/plan_tokens_raw.txt"; : >"$PLAN_TOKENS_RAW"
 cat >"$TMPD/plan_parse.awk" <<'AWKEOF'
-function heading_level(l,   m) {
-  if (match(l, /^#+[ \t]/)) return RLENGTH - 1
-  return 0
-}
-function is_checklist_item(l) {
-  return l ~ /^[ \t]*[-*][ \t]\[[ xX]\]/
-}
-function is_task_heading(l,   lvl) {
-  lvl = heading_level(l)
-  return (lvl >= 2 && lvl <= 4) && (l ~ /Task/)
-}
+# heading_level(), is_checklist_item(), is_task_heading() and is_task_line() come from
+# plan-task-predicate.awk, loaded alongside this program — do not redefine them here.
 function extract_tokens(l,    i, p, pos, cb, leftok, d1, d2, after, rightok, tok) {
   i = 1
   while (1) {
@@ -227,10 +220,10 @@ function extract_tokens(l,    i, p, pos, cb, leftok, d1, d2, after, rightok, tok
   }
 }
 {
-  if (is_checklist_item($0) || is_task_heading($0)) extract_tokens($0)
+  if (is_task_line($0)) extract_tokens($0)
 }
 AWKEOF
-awk -v TOKENS_FILE="$PLAN_TOKENS_RAW" -f "$TMPD/plan_parse.awk" "$PLAN"
+awk -v TOKENS_FILE="$PLAN_TOKENS_RAW" -f "$PREDICATE" -f "$TMPD/plan_parse.awk" "$PLAN"
 
 PLAN_TOKENS="$TMPD/plan_tokens.txt"
 sort -u "$PLAN_TOKENS_RAW" >"$PLAN_TOKENS" 2>/dev/null || : >"$PLAN_TOKENS"

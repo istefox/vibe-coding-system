@@ -763,13 +763,21 @@ If either path is missing on disk: do NOT dispatch coder. Present to user:
 
 **Pre-dispatch: plan structure validation (run after existence check):**
 ```bash
-# Two guards, both load-bearing (issue #174). `-e` because the pattern STARTS WITH A DASH and grep
-# otherwise consumes it as an option, never runs, and reports nothing for every plan. `${_uc:-0}`
-# because `grep -c` prints 0 AND exits 1 on no match, so `|| echo 0` would append a second line.
-_uc=$(grep -c -e '- \[ \]' "<manifest.artifacts.plan>" 2>/dev/null); unchecked=${_uc:-0}
+# plan-tasks.sh owns the definition of a plan task (ADR-0069 §D1/§D3, issue #172). Do NOT inline a
+# grep here: the architect is allowed BOTH `### Task 3 — …` headings and `- [ ]` checkbox items
+# (architect.md Output Format), a checkbox-only count rejects 7 of the 57 plans in the corpus, and
+# three files each holding their own answer is the defect #172 was filed about.
+# This is a CHECKER — branch on its exit code. The anti-test-weakening scan four blocks below and
+# the diff-budget reporter are the opposite contract (always exit 0, signal on stdout, print
+# CLEAN). Do not copy one block's branching into the other.
+tasks=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count "<manifest.artifacts.plan>")
+rc=$?
 ```
-If `unchecked = 0`: do NOT dispatch coder. Present to user:
-> "Plan at `<manifest.artifacts.plan>` has no unchecked tasks (`- [ ]`). Architect may have marked all tasks done, or the plan is malformed. Open the plan, verify the task list, and re-invoke Step 5."
+If `rc = 2` or `rc = 3`: do NOT dispatch coder — **the check did not run**, which is not the same as
+finding no tasks. Report the script's stderr verbatim and stop.
+
+If `tasks = 0`: do NOT dispatch coder. Present to user:
+> "Plan at `<manifest.artifacts.plan>` contains no recognisable task. A task is either a `## Task N — …` heading (H2–H4) or a `- [ ]` checklist item. Open the plan, verify the task list, and re-invoke Step 5."
 
 **Pre-dispatch: anti-test-weakening baseline mark (ADR-0047):**
 ```bash
