@@ -275,12 +275,12 @@ free to honour.
 
 #### 6.1 — Remove active misinformation (small, independent, do first)
 
-- [ ] **#213 — the RUNBOOK validator path.** The path fix is trivial; **the defect is the false
+- [x] **#213 — the RUNBOOK validator path.** DONE (ADR-0081, PR #215). The path fix is trivial; **the defect is the false
   green.** `bash` on a missing script exits 127, the loop greps for "Validation failed", never
   matches, and reports `OK` for every agent file. An operator following the full-install procedure
   gets a clean validation pass having validated nothing. Fix the guard (`[ -x "$V" ] || exit 1`)
   before, or independently of, fixing the path — the guard is the part that generalises.
-- [ ] **#212 — the `hook-verify-workflow.sh` layout remap.** Nothing is broken; it cost adjudication
+- [x] **#212 — the `hook-verify-workflow.sh` layout remap.** DONE (ADR-0081, PR #215) — there were **two** anomalies, not one. Nothing is broken; it cost adjudication
   time once in this very audit and the plausible failure mode is someone "fixing" the reference and
   breaking a deployed path. A note at both sites plus an assertion that the remap still exists.
   Also answer the open sub-question rather than assuming: **is it the only shape-remapping `PAIRS`
@@ -288,7 +288,7 @@ free to honour.
 
 #### 6.2 — One derived reference check, two issues closed
 
-- [ ] **#207 + #210 together.** Repoint three stale/drifting references to **named headings**
+- [x] **#207 + #210 together.** DONE (ADR-0082, PR #216). Repoint three stale/drifting references to **named headings**
   (`SKILL.md:129`, and `agent-write-scope.sh`'s two), then build one check whose population spans
   **both** `staging/plugin/skills/*/SKILL.md` and `staging/plugin/scripts/*.sh` headers.
   - Direction first (rule 5): it must fail on a reference the derivation **omits**, not merely
@@ -299,6 +299,30 @@ free to honour.
     better clothes.
   - `SKILL.md:2684 → 152-158` is drifted, not yet wrong. Convert it in the same pass; it is the next
     one to break.
+
+  **Outcome — the plan under-counted by a factor of two, and the derivation is why.** The three
+  references the roadmap named were the three the issues had verified. Deriving over all of
+  `staging/` (not just `skills/*/SKILL.md` + `scripts/*.sh`) found **six wrong, one drifted, eight
+  accurate-but-numeric** — fifteen in all. Three of the six were named by **no issue**, and two of
+  those live in **skill-private `scripts/`**, a surface neither #207 nor #210 mentions and the
+  subtree ADR-0043 recorded `pairs-completeness.test.sh` as blind to. Rule 5, demonstrated a third
+  time on one defect.
+
+  The heading-collision warning turned out to be already spent: ADR-0018's own rename resolved the
+  Step 5 / Step 6 duplicate, and `workflow-dispatch-pins.test.sh` B4a/B4b/B5 hold it open. All nine
+  anchors resolve uniquely — checked before converting, as the plan required.
+
+  **`hook-verify-workflow.sh`'s pointer rotted the day before, in ADR-0080's own commit** — the one
+  that grew `pre-flight-pattern-enforce.sh`'s header by ~50 lines while fixing a neighbouring defect
+  in the same file. The population needing this check is not "old files someone forgot".
+
+  Mechanism for 6.3/6.4 to reuse: derive the population, extract tokens, require each to be
+  converted **or declared in the file that carries it** on ONE line
+  (`xref-exempt: <tok>|<tok> — <reason ≥ 40 chars>`). The extractor **skips declaration lines**, or
+  a waiver for a token present nowhere else looks live (rule 12); `U2` runs it backwards so a
+  declared-but-absent token is flagged. The one-line rule is load-bearing: a wrapped reason is a
+  prose assertion that depends on where the text breaks — fourth instance of that family after
+  ADR-0073, ADR-0076 and ADR-0080, and it caught the first three declarations written for this fix.
 
 #### 6.3 — The big one, and the pattern the rest reuse
 
