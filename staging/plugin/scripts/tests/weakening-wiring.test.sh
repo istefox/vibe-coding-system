@@ -229,7 +229,7 @@ fi
 
 # WB4 — the count trap. grep -c prints 0 AND exits 1 on no match, so "|| echo 0" appends a SECOND
 # line and the result is the two-line string "0\n0"; "|| true" leaves the single line "0".
-wb4_wrong=$(printf '%s\n' "$clean_out" | grep -c '^WEAKENED' || echo 0)
+wb4_wrong=$(printf '%s\n' "$clean_out" | grep -c '^WEAKENED' || echo 0)  # idiom-demo (plan-task-count.test.sh PTD)
 wb4_right=$(printf '%s\n' "$clean_out" | grep -c '^WEAKENED' || true)
 wb4_wrong_lines=$(printf '%s\n' "$wb4_wrong" | grep -c .)
 if [ "$wb4_wrong_lines" -eq 2 ] && [ "$wb4_right" = "0" ]; then

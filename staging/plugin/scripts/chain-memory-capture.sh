@@ -122,7 +122,9 @@ TMP_HIST=$(mktemp "$HIST_DIR/.${SLUG}.XXXXXX" 2>/dev/null) || exit 0
 } > "$TMP_HIST" 2>/dev/null || { rm -f "$TMP_HIST" 2>/dev/null; exit 0; }
 
 # Cap event log at last 200 entries (preserve header).
-EVT_COUNT=$(grep -c '^- ' "$TMP_HIST" 2>/dev/null || echo 0)
+# `grep -c` prints 0 AND exits 1 on no match: `|| echo 0` would make this the two-line "0\n0" and
+# the -gt below would error instead of comparing (issue #174).
+_ec=$(grep -c '^- ' "$TMP_HIST" 2>/dev/null); EVT_COUNT=${_ec:-0}
 if [ "${EVT_COUNT:-0}" -gt 200 ]; then
   HEADER_PART=$(awk '/^## Event log/{print; exit} {print}' "$TMP_HIST")
   KEPT=$(grep '^- ' "$TMP_HIST" | tail -200)
