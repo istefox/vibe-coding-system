@@ -1,5 +1,5 @@
 #!/bin/bash
-# pre-flight-pattern-enforce v1.4 — gate for coder agent: blocks Edit/Write/MultiEdit
+# pre-flight-pattern-enforce v1.6 — gate for coder agent: blocks Edit/Write/MultiEdit
 # if PATTERN: header is missing in the sliding window (ADR-0004, ADR-0001 contract).
 # Contract: exit 0 + empty stdout = allow; exit 0 + {"decision":"block",...} = block.
 # Fail-open on any internal error (never exit non-zero, never crash visibly).
@@ -42,6 +42,38 @@
 #   A future Claude Code update that starts strictly validating this enum would
 #   otherwise silently fail-open on every coder Edit/Write/MultiEdit — the exact
 #   opposite of what this guardrail exists to do.
+#
+# v1.6 (2026-07-29, issue #194 phase 1 — INSTRUMENTATION ONLY, no behaviour change):
+# - Every coder-path decision now records WHICH transcript produced it, as `src=<token>`
+#   inside the existing free-text reason column. Nothing about what is allowed or blocked
+#   changed; only what the log says about it.
+#
+#   THE QUESTION THIS EXISTS TO ANSWER. The fallback below (line ~140) reads the MAIN
+#   SESSION jsonl when the subagent's own transcript cannot be found. It then scans
+#   assistant entries and ALLOWS on a match — so a subagent whose transcript is missing
+#   inherits the ORCHESTRATOR's recent output, and a `PATTERN:` line the orchestrator
+#   emitted (it edits files too) satisfies the check for an agent that declared nothing.
+#   `write-scope-enforce.sh` refuses this exact fallback for itself and explains why in ITS
+#   header, calling a missed check here acceptable. That is a judgement, never a
+#   measurement: the log recorded `allow  PATTERN found in window` for both paths, so the
+#   question was not answerable retrospectively at all.
+#
+#   HOW TO READ IT (the denominator is every coder decision, hence src= on fail-open too):
+#     awk -F'\t' '$5 ~ /src=/' "$LOG" | grep -o 'src=[a-z-]*' | sort | uniq -c
+#   `src=main-fallback` paired with action `allow` is the case in question.
+#
+#   THE NUMBER IS BUILD-SPECIFIC AND MUST BE STAMPED WITH THE CC VERSION IT WAS TAKEN ON.
+#   v2.1.154 silently moved workflow subagent transcripts to subagents/workflows/<wf_id>/,
+#   which is what v1.3 below exists to handle — the layout this measurement depends on has
+#   already moved once (ADR-0016). A rate measured on one build says nothing about the next.
+#
+#   Column format is UNCHANGED (5 tab-separated fields): hook-verify-workflow.sh parses $1
+#   and $2, so the token goes inside the prose field rather than into a sixth column.
+#
+#   Side effect worth knowing: `src=` also separates a workflow coder from an Agent-tool
+#   coder, which hook-verify-workflow.sh:30 documents as a known limit of this same log.
+#   That limit is narrowed here as a by-product; hook-verify-workflow.sh itself is
+#   deliberately NOT changed — phase 1 instruments, it does not decide.
 
 DIR="${PATTERN_ENFORCE_DIR:-$HOME/.claude/state/pattern-enforce}"
 LOG="$DIR/audit.log"
@@ -108,10 +140,12 @@ fi
 # Workflow subagent jsonl: <proj_dir>/<SID>/subagents/workflows/<wf_id>/agent-<id>.jsonl
 TP=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
 TRANSCRIPT=""
+# v1.6: which of the three lookups won. Never used for a decision — only logged.
+TSRC="none"
 if [ -n "$AGENT_ID" ] && [ -n "$TP" ]; then
   PROJ_DIR=$(dirname "$TP")
   SUBAGENT_CANDIDATE="$PROJ_DIR/$SID/subagents/agent-$AGENT_ID.jsonl"
-  [ -f "$SUBAGENT_CANDIDATE" ] && TRANSCRIPT="$SUBAGENT_CANDIDATE"
+  [ -f "$SUBAGENT_CANDIDATE" ] && { TRANSCRIPT="$SUBAGENT_CANDIDATE"; TSRC="subagent"; }
 fi
 
 # v1.3: workflow subagent path — search under subagents/workflows/*/
@@ -120,7 +154,7 @@ if [ -z "$TRANSCRIPT" ] && [ -n "$AGENT_ID" ] && [ -n "$TP" ]; then
   WORKFLOWS_DIR="$PROJ_DIR/$SID/subagents/workflows"
   if [ -d "$WORKFLOWS_DIR" ]; then
     WF_CANDIDATE=$(find "$WORKFLOWS_DIR" -name "agent-$AGENT_ID.jsonl" 2>/dev/null | head -1)
-    [ -n "$WF_CANDIDATE" ] && [ -f "$WF_CANDIDATE" ] && TRANSCRIPT="$WF_CANDIDATE"
+    [ -n "$WF_CANDIDATE" ] && [ -f "$WF_CANDIDATE" ] && { TRANSCRIPT="$WF_CANDIDATE"; TSRC="workflow"; }
   fi
 fi
 
@@ -129,12 +163,13 @@ fi
 if [ -z "$TRANSCRIPT" ]; then
   if [ -n "$TP" ] && [ -f "$TP" ]; then
     TRANSCRIPT="$TP"
+    TSRC="main-fallback"
   fi
 fi
 
 # Fail-open if transcript still not found
 if [ ! -f "$TRANSCRIPT" ]; then
-  log_audit "$SID" "$TOOL" "fail-open" "transcript not found (agent_id=$AGENT_ID)"
+  log_audit "$SID" "$TOOL" "fail-open" "transcript not found (agent_id=$AGENT_ID) src=$TSRC"
   exit 0
 fi
 
@@ -149,12 +184,12 @@ RECENT=$(tail -n 200 "$TRANSCRIPT" 2>/dev/null \
 # files); the hook enforces the *presence* of a declarative header, not the exact
 # taxonomy word — fine-grained category validation is the reviewer's pattern-drift job.
 if printf '%s\n' "$RECENT" | grep -E '^PATTERN: (ADD|REMOVE|REPLACE|MODIFY|CREATE|NEW) \|' >/dev/null 2>&1; then
-  log_audit "$SID" "$TOOL" "allow" "PATTERN found in window"
+  log_audit "$SID" "$TOOL" "allow" "PATTERN found in window src=$TSRC"
   exit 0
 fi
 
 # Block: PATTERN missing
-log_audit "$SID" "$TOOL" "block" "PATTERN missing in window=$WINDOW"
+log_audit "$SID" "$TOOL" "block" "PATTERN missing in window=$WINDOW src=$TSRC"
 jq -nc --arg r "pre-flight-pattern-enforce: PATTERN: header missing in sliding window. ADR-0001 requires emitting \`PATTERN: <CATEGORY> | <payload>\` before every Edit/Write/MultiEdit. Example: \`PATTERN: MODIFY | path/file.py:42 rename var\`. Emit the header and retry. If the block persists, STOP and report to the orchestrator — do NOT attempt to bypass or disable this guardrail." \
   '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}' 2>/dev/null \
   || printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"missing PATTERN header (see ADR-0001)"}}\n'
