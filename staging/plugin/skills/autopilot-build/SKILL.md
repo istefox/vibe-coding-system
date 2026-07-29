@@ -109,7 +109,10 @@ done
 
 **Check 5 — Plan has unchecked work:**
 ```bash
-unchecked=$(grep -c '- \[ \]' "$plan" 2>/dev/null || echo 0)
+# Two guards, both load-bearing (issue #174). `-e` because the pattern STARTS WITH A DASH and grep
+# otherwise consumes it as an option, never runs, and aborts this check for every plan. `${_uc:-0}`
+# because `grep -c` prints 0 AND exits 1 on no match, so `|| echo 0` would append a second line.
+_uc=$(grep -c -e '- \[ \]' "$plan" 2>/dev/null); unchecked=${_uc:-0}
 [ "$unchecked" -ge 1 ] || { echo "✗ plan: no unchecked tasks (- [ ]) found. All tasks may be done or the plan is malformed."; exit 1; }
 ```
 

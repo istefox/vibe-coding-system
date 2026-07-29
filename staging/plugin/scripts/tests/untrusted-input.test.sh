@@ -102,7 +102,7 @@ else
 fi
 
 # UD4 — the count trap: grep -c ... || echo 0 yields a two-line string on no match.
-wrong=$(printf '%s\n' "$CLEAN_OUT" | grep -c '^INJECTION' || echo 0)
+wrong=$(printf '%s\n' "$CLEAN_OUT" | grep -c '^INJECTION' || echo 0)  # idiom-demo (plan-task-count.test.sh PTD)
 right=$(printf '%s\n' "$CLEAN_OUT" | grep -c '^INJECTION' || true)
 wrong_lines=$(printf '%s\n' "$wrong" | grep -c .)
 if [ "$wrong_lines" -eq 2 ] && [ "$right" = "0" ]; then

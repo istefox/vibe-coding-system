@@ -51,7 +51,7 @@ if command -v jq >/dev/null 2>&1; then
   {"number":144,"title":"Fix crash on launch"} ]
 JSON
   bash "$ROADMAP" --root "$d" --label release-blocker --issues-json "$d/issues.json" >/dev/null
-  c=$(grep -c '(issue #' PROJECT.md 2>/dev/null || echo 0)
+  _c=$(grep -c '(issue #' PROJECT.md 2>/dev/null); c=${_c:-0}   # issue #174 count idiom
   { [ "$c" = "2" ] && grep -q '(issue #137)' PROJECT.md && grep -q '(issue #144)' PROJECT.md; } \
     && ok "roadmap: 2 issues -> 2 features" || no "roadmap: 2 issues -> 2 features (c=$c)"
   m=$(wc -l < docs/specs/_issue-map.tsv | tr -d ' ')

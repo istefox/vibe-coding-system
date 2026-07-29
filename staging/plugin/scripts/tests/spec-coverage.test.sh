@@ -75,7 +75,7 @@ fi
 # RT. Caller traps, EXECUTED (forward guards, green on arrival, never fix evidence). These exist
 # so a future edit cannot re-spring traps this codebase has already paid for once each.
 # ==============================================================================================
-wrong=$(printf 'x\n' | grep -c 'nomatch' || echo 0)
+wrong=$(printf 'x\n' | grep -c 'nomatch' || echo 0)  # idiom-demo (plan-task-count.test.sh PTD)
 right=$(printf 'x\n' | grep -c 'nomatch' || true)
 wrong_lines=$(printf '%s\n' "$wrong" | grep -c .)
 if [ "$wrong_lines" -eq 2 ] && [ "$right" = "0" ]; then

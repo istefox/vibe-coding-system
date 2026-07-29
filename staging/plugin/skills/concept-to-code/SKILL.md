@@ -763,7 +763,10 @@ If either path is missing on disk: do NOT dispatch coder. Present to user:
 
 **Pre-dispatch: plan structure validation (run after existence check):**
 ```bash
-unchecked=$(grep -c '- \[ \]' "<manifest.artifacts.plan>" 2>/dev/null || echo 0)
+# Two guards, both load-bearing (issue #174). `-e` because the pattern STARTS WITH A DASH and grep
+# otherwise consumes it as an option, never runs, and reports nothing for every plan. `${_uc:-0}`
+# because `grep -c` prints 0 AND exits 1 on no match, so `|| echo 0` would append a second line.
+_uc=$(grep -c -e '- \[ \]' "<manifest.artifacts.plan>" 2>/dev/null); unchecked=${_uc:-0}
 ```
 If `unchecked = 0`: do NOT dispatch coder. Present to user:
 > "Plan at `<manifest.artifacts.plan>` has no unchecked tasks (`- [ ]`). Architect may have marked all tasks done, or the plan is malformed. Open the plan, verify the task list, and re-invoke Step 5."
