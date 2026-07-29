@@ -98,6 +98,7 @@ plugin/skills/concept-to-code/scripts/gate0-detect.sh|skills/concept-to-code/scr
 plugin/skills/concept-to-code/scripts/manifest-init.sh|skills/concept-to-code/scripts/manifest-init.sh
 plugin/skills/concept-to-code/scripts/manifest-set-artifact.sh|skills/concept-to-code/scripts/manifest-set-artifact.sh
 plugin/skills/concept-to-code/scripts/manifest-set-flag.sh|skills/concept-to-code/scripts/manifest-set-flag.sh
+plugin/skills/concept-to-code/scripts/manifest-field-state.sh|skills/concept-to-code/scripts/manifest-field-state.sh
 plugin/skills/concept-to-code/scripts/manifest-set-gate.sh|skills/concept-to-code/scripts/manifest-set-gate.sh
 plugin/skills/concept-to-code/scripts/manifest-transition.sh|skills/concept-to-code/scripts/manifest-transition.sh
 plugin/skills/concept-to-code/scripts/manifest-validate.sh|skills/concept-to-code/scripts/manifest-validate.sh

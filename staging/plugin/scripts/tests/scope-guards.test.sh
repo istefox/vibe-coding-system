@@ -207,7 +207,10 @@ extract_check6() {
 # trailing-exit-0 normalization needed here (see this plan's Risk register for why Section A does
 # need it and Section C does not).
 run_check6() {
-  ( cd "$1" && bash -c "$(extract_check6)" )
+  # The fence resolves manifest-field-state.sh through CLAUDE_PLUGIN_ROOT first (issue #195).
+  # staging/plugin IS that layout, so this is the documented resolution path, not a test seam:
+  # in CI there is no $HOME/.claude and the second tier would leave the gate failing closed.
+  ( cd "$1" && CLAUDE_PLUGIN_ROOT="$STAGING/plugin" bash -c "$(extract_check6)" )
 }
 
 # C1 (static, genuine RED now): check 6 gains a runnable bash fence (today it is prose-only).
@@ -324,7 +327,10 @@ run_check6 "$TMP/c/mixed" >/dev/null 2>&1
 _repo_root=$(cd "$STAGING/.." && pwd)
 _n=$(ls "$_repo_root"/docs/manifests/*.manifest.yml 2>/dev/null | wc -l | tr -d ' ')
 if [ "$_n" -ge 30 ]; then
-  ( cd "$_repo_root" && bash -c "$(extract_check6)" ) >/dev/null 2>&1
+  # Through run_check6, not a second inline invocation: this had its own copy of the runner and
+  # so missed the CLAUDE_PLUGIN_ROOT binding when the fence gained a helper dependency, failing
+  # for a reason that had nothing to do with the manifests it exists to check.
+  run_check6 "$_repo_root" >/dev/null 2>&1
   [ "$?" -eq 0 ] && ok "C13: all $_n manifests in this repository pass check 6" \
                  || bad "C13: check 6 aborts on this repository's own manifests"
 else
@@ -353,7 +359,7 @@ extract_check7() {
 # outside the extracted text, for the same reason run_check1 does.
 run_check7() {
   printf 'manifest=%s\n%s\nexit 0\n' "$1" "$(extract_check7)" > "$TMP/check7-cmd.sh"
-  bash "$TMP/check7-cmd.sh"
+  CLAUDE_PLUGIN_ROOT="$STAGING/plugin" bash "$TMP/check7-cmd.sh"
 }
 
 mkdir -p "$TMP/d"

@@ -140,16 +140,32 @@ grep -qxF "${hash}	${root_n}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null 
 
 **Check 7 — hook_verified known:**
 ```bash
-hv=$(python3 -c "import yaml; m=yaml.safe_load(open('$manifest')); print(m.get('hook_verified'))" 2>/dev/null)
+# Field state via the shared helper (issue #195, ADR-0076). Two-tier resolution; if neither
+# resolves this gate fails closed, because an infrastructure gap must never be silently absorbed
+# by a second copy of the logic.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/manifest-field-state.sh" ]; then
+  _mfs="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/manifest-field-state.sh"
+elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/manifest-field-state.sh" ]; then
+  _mfs="$HOME/.claude/skills/concept-to-code/scripts/manifest-field-state.sh"
+else
+  echo "✗ hook_verified: manifest-field-state.sh not found in either location. Run: bash <repo>/staging/sync-to-claude.sh --apply"; exit 1
+fi
+hv=$(bash "$_mfs" "$manifest" hook_verified 2>/dev/null) || hv="UNREADABLE"
 # Assert the two VALID values, never enumerate the invalid ones (issue #123, ADR-0075 §D4). The
 # old test was `[ "$hv" = "None" ] || [ -z "$hv" ]`, so anything that was neither — `maybe`, a
 # typo, a string "false" from a quoted YAML value — PASSED, and the run then branched on it.
-# Unlike nightly check 6, absence here is correctly an abort: this manifest is the one about to be
-# built, so it is in flight by definition and its dispatch mode has to be known.
+#
+# ABSENCE IS AN ABORT HERE, and that is the OPPOSITE of nightly-autopilot check 6, which reads the
+# same field through the same helper and tolerates it. Both are right: that one sweeps a corpus of
+# long-completed chains whose dispatch mode cannot affect anything; this one reads the single
+# manifest about to be built, in flight by definition. The helper reports the state and leaves the
+# policy at each call site precisely so this asymmetry stays visible (ADR-0076 §D2). Do not
+# "reconcile" the two.
 case "$hv" in
-  True|False) : ;;
-  None|"")    echo "✗ hook_verified: value is null/absent, or the manifest could not be read. Run the Step 5 smoke test in an interactive session first."; exit 1 ;;
-  *)          echo "✗ hook_verified: value is \"$hv\" — must be true or false. The manifest is corrupted or was hand-edited; fix or re-init."; exit 1 ;;
+  PRESENT\|True|PRESENT\|False) : ;;
+  ABSENT\|*)  echo "✗ hook_verified: field absent (current_step=${hv#ABSENT|}). This manifest is the one about to be built, so its dispatch mode must be known. Run the Step 5 smoke test in an interactive session first."; exit 1 ;;
+  UNREADABLE|"") echo "✗ hook_verified: the manifest could not be read, or the check did not run (python3/PyYAML). This is not the same as a bad value; fix the file or the interpreter and re-run."; exit 1 ;;
+  *)          echo "✗ hook_verified: value is \"${hv#PRESENT|}\" — must be true or false. The manifest is corrupted or was hand-edited; fix or re-init."; exit 1 ;;
 esac
 ```
 
