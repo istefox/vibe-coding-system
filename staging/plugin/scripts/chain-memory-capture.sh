@@ -9,6 +9,10 @@
 #
 # NOTE: deliberately NOT `set -e`. Every step is best-effort; a parse/IO failure
 # degrades to a no-op, never an error that would disturb the Bash tool flow.
+#
+# transcript-scan-exempt: derives the PROJECT DIR from dirname(transcript_path) and never opens
+#   the transcript. No content is read, so no text an agent causes to be read can reach a
+#   decision.
 set -uo pipefail
 
 # --- 0. Read payload (tolerant; jq absent or bad JSON → no-op) -----------------

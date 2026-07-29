@@ -19,6 +19,9 @@
 # preventing.
 #
 # Bash 3.2 clean.
+#
+# transcript-scan-exempt: probe-only, never registered. A harness around hook-probe.sh; touches
+#   only the probe's own log.
 
 set -u
 

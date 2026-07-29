@@ -34,6 +34,9 @@
 # but returned no worktree path".
 #
 # Bash 3.2 clean: no assoc arrays, no mapfile, no process substitution.
+#
+# transcript-scan-exempt: probe-only, and MUST NEVER be registered (see its header). Appends the
+#   raw payload to its own log; reads no transcript.
 
 DIR="${WORKTREE_PROBE_DIR:-$HOME/.claude/state/worktree-probe}"
 OUT="$DIR/payloads.jsonl"

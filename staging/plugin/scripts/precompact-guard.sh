@@ -35,6 +35,9 @@
 # refuse this one PreCompact (documented top-level shape for PreCompact, unlike Stop/PreToolUse's
 # hookSpecificOutput envelopes). State dir + audit log in the same shape as agent-command-scope.sh.
 # Bash 3.2 clean: no associative arrays, no mapfile, no process substitution.
+#
+# transcript-scan-exempt: uses dirname(transcript_path) to locate the project memory dir. Never
+#   opens the transcript.
 set -u
 
 DIR="${PRECOMPACT_GUARD_DIR:-$HOME/.claude/state/precompact-guard}"

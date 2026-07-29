@@ -48,6 +48,10 @@
 # additionalContext or nothing; it never emits `decision`.
 #
 # Fail-open on every path (§D3, matching every hook here): never blocks, always exits 0.
+#
+# transcript-scan-exempt: passes transcript_path to context-occupancy.sh and never reads the file
+#   itself. The exemption travels with that one: if the delegate ever extracts a marker, this line
+#   is wrong.
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
