@@ -107,13 +107,16 @@ for f in "$spec" "$adr" "$plan"; do
 done
 ```
 
-**Check 5 — Plan has unchecked work:**
+**Check 5 — Plan has tasks:**
 ```bash
-# Two guards, both load-bearing (issue #174). `-e` because the pattern STARTS WITH A DASH and grep
-# otherwise consumes it as an option, never runs, and aborts this check for every plan. `${_uc:-0}`
-# because `grep -c` prints 0 AND exits 1 on no match, so `|| echo 0` would append a second line.
-_uc=$(grep -c -e '- \[ \]' "$plan" 2>/dev/null); unchecked=${_uc:-0}
-[ "$unchecked" -ge 1 ] || { echo "✗ plan: no unchecked tasks (- [ ]) found. All tasks may be done or the plan is malformed."; exit 1; }
+# plan-tasks.sh owns the definition of a plan task (ADR-0069 §D1/§D3, issue #172). Do NOT inline a
+# grep here: the architect is allowed BOTH `### Task 3 — …` headings and `- [ ]` checkbox items,
+# and a checkbox-only count aborts this unattended run on 7 of the 57 plans in the corpus — with a
+# message blaming the plan. Cross-skill call, same terms as the manifest-*.sh calls above.
+tasks=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count "$plan"); rc=$?
+# rc 2/3 mean the check DID NOT RUN. Aborting is still correct unattended, but say which it was.
+[ "$rc" -eq 0 ] || { echo "✗ plan: task check did not run (plan-tasks.sh exit $rc)."; exit 1; }
+[ "$tasks" -ge 1 ] || { echo "✗ plan: no recognisable task found. A task is a '## Task N — …' heading (H2-H4) or a '- [ ]' checklist item. The plan may be malformed."; exit 1; }
 ```
 
 **Check 6 — test-cmd real and trusted:**
