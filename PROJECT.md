@@ -91,13 +91,13 @@ still understood by the same reader*, and #197 is a consumer of the boundary rul
 
 #### 4.1 — Start the clock, consolidate what is fresh
 
-- [ ] **#194 phase 1 — instrument only, decide nothing.** Make the audit log distinguish a
+- [x] **#194 phase 1 — instrument only, decide nothing.** Make the audit log distinguish a
   main-session-fallback allow from a subagent-transcript allow. No behaviour change, no risk, and
   it converts "how often does transcript lookup fail" from an argument into a number. Today the
   log cannot answer it retrospectively, which is why the fallback has survived unexamined since it
   was written. Build-stamp the result: ADR-0016's v2.1.154 experience is the standing evidence
   that the transcript layout moves underneath us.
-- [ ] **#195 — the additive-field rule, and the helper if that is the chosen shape.** #123 wrote
+- [x] **#195 — the additive-field rule, and the helper if that is the chosen shape.** #123 wrote
   the same five-state logic twice in one pass, in two skills, with **opposite and both-correct**
   defaults for absence. That asymmetry is load-bearing and a helper must preserve it rather than
   flatten it — which is the argument for building it now, while one reader still holds both
@@ -105,13 +105,13 @@ still understood by the same reader*, and #197 is a consumer of the boundary rul
 
 #### 4.2 — The class guards
 
-- [ ] **#193 — derived guard for the self-arming marker pattern.** The highest-value item here:
+- [x] **#193 — derived guard for the self-arming marker pattern.** The highest-value item here:
   it prevents recurrence of the only bug in this group that actually deadlocked a chain. Model it
   on `skill-text-corrections.test.sh` F6 — derive the population at run time, count-guard the
   derivation, and put exemptions in the hook source rather than in a filename list.
   **Ask which direction the guard runs in before writing it** (rule 5): it must fail on a file the
   list omits, not merely validate the files it names. That was #127's own failure mode.
-- [ ] **#197 — apply #195's boundary rule to `manifest-validate.sh` invariant 4.** Ordered after
+- [x] **#197 — apply #195's boundary rule to `manifest-validate.sh` invariant 4.** Ordered after
   #195 on purpose: on its own it is five files and a judgement call, but with the boundary rule
   already stated it becomes one conditional and a test. The five files stay byte-unchanged.
 
@@ -121,7 +121,9 @@ still understood by the same reader*, and #197 is a consumer of the boundary rul
   decision in `pre-flight-pattern-enforce.sh`'s own header. Two hooks currently explain each
   other's opposite choices about the same fallback, and only one of them has ever been examined
   on its own terms.
-- [ ] **#196 — the interpreter enumeration.** Smallest, and mostly a decision with its failure
+- [x] **#196 — the interpreter enumeration** (2026-07-29, PR #203, ADR-0079). Landed larger
+  than scoped: the enumeration turned out to be bounded by the permission layer, and the real
+  defect was `R2_GIT`'s trailing boundary — the sibling of the one #127 fixed, unpropagated. Smallest, and mostly a decision with its failure
   direction stated. Option 1 (pin the limit in test section E) changes no behaviour and is the
   low-risk default; option 2 (invert to a tool exclusion list) fails toward denying, which is
   safer for a guardrail and more disruptive for a chain. `agent-command-scope.sh` took a live
@@ -137,3 +139,21 @@ still understood by the same reader*, and #197 is a consumer of the boundary rul
 - **The whole phase is preventive**, so nothing in it produces a visible improvement. That is the
   same condition that kept the ADR-0043 `PAIRS` gap invisible for months: the work whose success
   looks identical to never having done it.
+
+#### Phase 4 status (2026-07-29)
+
+Four of five shipped: #194 phase 1 (PR #199), #195 (PR #200, ADR-0076), #193 (PR #201, ADR-0077),
+#197 (PR #202, ADR-0078), #196 (PR #203, ADR-0079).
+
+**#194 phase 2 is blocked on data, by design.** The `src=` instrumentation deployed at ~20:15 CEST
+and the audit log carries **zero** coder-path rows since — no `coder` subagent has run. The
+hard constraint named at the top of this phase was that #194 needs elapsed time; that is what is
+now being waited on, not a missing decision. Reporting a keep/drop/accept verdict on an empty
+sample is the failure mode this whole phase exists to guard against.
+
+Two ways forward, neither started:
+- **Organic:** any `concept-to-code` Step 5 run dispatches coders and produces rows.
+- **Controlled probe:** dispatch a coder deliberately and read the `src=` SEQUENCE across its
+  writes. This tests a specific hypothesis rather than sampling a rate — if the subagent transcript
+  file is not yet flushed when the first `PreToolUse` fires, the fallback would fire on nearly every
+  coder's FIRST write, which one dispatch would show. Requires human authorisation to dispatch.
