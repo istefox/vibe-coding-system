@@ -74,6 +74,36 @@
 #   coder, which hook-verify-workflow.sh:30 documents as a known limit of this same log.
 #   That limit is narrowed here as a by-product; hook-verify-workflow.sh itself is
 #   deliberately NOT changed — phase 1 instruments, it does not decide.
+#
+# v1.6 phase 2 (2026-07-29, issue #194 — THE DECISION, measured on CC 2.1.220).
+# - VERDICT: the main-session fallback STAYS. Recorded here rather than in write-scope-enforce.sh's
+#   header, which is where this hook's behaviour had been explained from until now.
+#
+#   WHAT WAS MEASURED, and it is a small sample stated as one. A controlled coder dispatch made
+#   three Edit/Write calls: all three logged `src=subagent`, INCLUDING THE FIRST. That refutes the
+#   one mechanism that would have made the fallback fire routinely — a flush race, where the
+#   subagent's transcript does not exist yet when its first PreToolUse fires. It does exist: the
+#   file was born at 19:15:58Z and the first decision was logged at 19:16:02Z, four seconds later.
+#   Supporting evidence, 193 files: both transcript layouts are present on disk under this project
+#   (137 regular, 56 under subagents/workflows/<wf_id>/) and both match the two lookups below.
+#
+#   WHY KEEP IT ANYWAY. Dropping it turns a rare false ALLOW into a rare chain-breaking DENY, and
+#   fail-open on every internal error is this file's stated contract (line 5). The asymmetry with
+#   write-scope-enforce.sh is real and is NOT an inconsistency: that hook's fallback would be
+#   actively wrong — it would bind a write scope from the orchestrator's text — while this one is
+#   merely permissive. Different failure, different correct answer.
+#
+#   THE RESIDUAL IS REAL AND UNMEASURED: n=3, Agent-tool path only. No Workflow dispatch was
+#   probed, and that is the path v2.1.154 silently relocated.
+#
+#   PRE-REGISTERED, so the next reader does not re-litigate from scratch and so the outcome cannot
+#   be rationalised after the fact:
+#     - Count with the command above. If `src=main-fallback` is 0 across >= 50 coder decisions
+#       spanning at least one Workflow dispatch, DROP the fallback: it is then dead code whose only
+#       possible effect is to fail open.
+#     - If it is non-zero, do NOT drop it. Find out why the lookup failed first — a fallback that
+#       fires is evidence the lookup is broken, and removing it would hide that.
+#     - Re-run the probe after any major CC bump. This verdict is build-stamped on purpose.
 
 #
 # transcript-scan-exempt: reads ASSISTANT entries, not `user` entries, and ALLOWS on a match rather
@@ -82,8 +112,9 @@
 #   a match allows, a spurious match is a MISSED CHECK, never the deadlock #127 produced. The
 #   exemption is on DIRECTION, which is the weaker kind: this hook's real exposure is that the
 #   main-session fallback lets the orchestrator's own PATTERN line satisfy the check for a subagent
-#   that declared nothing. That is issue #194, open, instrumented as of phase 1 (`src=` in the
-#   audit log), and NOT closed by this exemption. Do not read this line as "audited and fine".
+#   that declared nothing. That is issue #194 — measured and decided in v1.6 phase 2 above (the
+#   fallback stays, on a stated n=3 with a pre-registered condition for dropping it), NOT closed by
+#   this exemption. Do not read this line as "audited and fine".
 
 DIR="${PATTERN_ENFORCE_DIR:-$HOME/.claude/state/pattern-enforce}"
 LOG="$DIR/audit.log"

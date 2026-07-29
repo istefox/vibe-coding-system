@@ -186,6 +186,44 @@ else
   bad "C4: the header should state that the rate must be stamped with the CC version"
 fi
 
+# =====================================================================================
+# D. The phase-2 DECISION (issue #194, ADR-0080). The verdict was "keep the fallback", reached on a
+# small sample, so what protects it is not the number — it is that the reasoning, the sample size
+# and the condition for revisiting all live in this hook's own header. Before #194 this hook's
+# behaviour was explained from write-scope-enforce.sh's header, about a third file.
+# Flattened, and stripped of BOTH comment markers and backticks: the header wraps across comment
+# lines and marks `src=main-fallback` as code, so a needle written in plain prose misses it. Third
+# time this family has bitten (ADR-0073 line wrap, ADR-0076 comment marker) — a prose assertion
+# must not depend on how the text is decorated any more than on where it breaks.
+_flat=$(tr '\n' ' ' < "$HOOK" | sed 's/#//g; s/`//g')
+
+# D1: the sample size is stated, not implied. A verdict on n=3 that does not say n=3 is the thing
+# a later reader would take as settled.
+printf '%s' "$_flat" | grep -q 'n=3' \
+  && ok "D1: the header states the sample size the verdict rests on" \
+  || bad "D1: the verdict must state its own sample size"
+
+# D2: the pre-registered condition for dropping the fallback. Written BEFORE more data arrives so
+# the outcome cannot be rationalised afterwards — that is the whole value of pre-registering.
+if printf '%s' "$_flat" | grep -qi 'pre-registered' \
+   && printf '%s' "$_flat" | grep -q 'src=main-fallback is 0 across'; then
+  ok "D2: a pre-registered condition for dropping the fallback is recorded"
+else
+  bad "D2: the header must carry the condition under which the fallback gets dropped"
+fi
+
+# D3: and the opposite branch. "If it fires, drop it" would be exactly backwards — a fallback that
+# fires is evidence the lookup is broken, and removing it would hide the breakage.
+printf '%s' "$_flat" | grep -qi 'do NOT drop it' \
+  && ok "D3: the header says a firing fallback means investigate, not remove" \
+  || bad "D3: the non-zero branch must say do not drop"
+
+# D4: the asymmetry with write-scope-enforce.sh is named as deliberate. Two hooks taking opposite
+# decisions about the same fallback is exactly what a later reader would try to reconcile.
+printf '%s' "$_flat" | grep -q 'actively wrong' \
+  && ok "D4: the asymmetry with write-scope-enforce.sh is explained at this hook's own site" \
+  || bad "D4: the header must say why the sibling hook refuses the same fallback"
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

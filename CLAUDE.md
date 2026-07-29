@@ -1472,3 +1472,39 @@ by hand. Anyone reading the coverage table as "these are the only executors" is 
 J2/J4/I4/I5 and all of section E pass before and after; I1/I2/I3/J1/J3 were RED.
 
 Detail: `docs/architecture/ADR-0079-196-grant-coverage-and-r2-boundary.md`.
+
+## Decisions from the pattern-enforce fallback verdict (ADR-0080)
+
+Closes issue #194, completing phase 4. Measured on **CC 2.1.220**; the verdict is build-stamped.
+
+**VERDICT: the main-session fallback STAYS.**
+
+- **The flush-race hypothesis is dead, and that is what one probe could settle.** A controlled coder
+  dispatch made three Edit/Write calls and all three logged `src=subagent`, **including the first**.
+  The transcript file was born at `19:15:58Z`; the first decision was logged at `19:16:02Z`. The
+  refutation is a timestamp, not an outcome. Supporting evidence, 193 files: both layouts exist on
+  disk (137 regular, 56 under `subagents/workflows/<wf_id>/`) and both match the hook's lookups.
+- **n = 3, Agent-tool path only.** No Workflow dispatch was probed — the path v2.1.154 relocated.
+  Anyone reading this as "the fallback does not fire" is over-reading it.
+- **Why keep it anyway:** dropping converts a rare false ALLOW into a rare chain-breaking DENY, and
+  fail-open on every internal error is that file's stated contract since before any of this. **The
+  asymmetry with `write-scope-enforce.sh` is real and NOT an inconsistency** — that hook's fallback
+  would be *actively wrong* (it would bind a write scope from the orchestrator's text), this one is
+  merely *permissive*. Different failure, different correct answer, now stated at this hook's own
+  site instead of in a neighbour's header.
+- **The drop condition is PRE-REGISTERED**, written before more data arrives so the outcome cannot
+  be rationalised later: `src=main-fallback` = 0 across ≥50 coder decisions spanning at least one
+  Workflow dispatch → drop it. **Non-zero → do NOT drop it**, investigate why the lookup failed. A
+  fallback that fires is evidence the lookup is broken, and removing it would hide that. The second
+  branch is worth stating because the intuitive reading runs the other way.
+- **A verdict on n=3 is protected by its reasoning being legible, not by its sample.** Test section
+  D asserts the header states the sample size, carries the drop condition, states the do-not-drop
+  branch, and explains the sibling asymmetry. All four fail against the phase-1 header. They check
+  the reasoning is PRESENT, never that it is TRUE.
+
+**Lesson, third of its family:** D2 first failed because the header wraps across comment lines AND
+marks `src=main-fallback` as code, so a plain-prose needle missed it. ADR-0073 hit the line-wrap
+form, ADR-0076 the comment-marker form, this the backtick form. **A prose assertion must not depend
+on how the text is decorated any more than on where it breaks.**
+
+Detail: `docs/architecture/ADR-0080-194-fallback-verdict.md`.
