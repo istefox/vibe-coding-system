@@ -58,6 +58,12 @@ set -u
 
 SELF="diff-budget-check"
 
+# The plan-task predicate is LOADED, not restated (ADR-0069 §D2, ADR-0070 §D2). This script carried
+# the fourth private copy in the repository and the strictest of them: `- [ ] **Task N`, which
+# matched 18 of 57 real plans and none of the heading-form ones, so this check had never produced a
+# finding on a real plan.
+PREDICATE=$(cd "$(dirname "$0")" && pwd)/plan-task-predicate.awk
+
 usage() {
   [ "${1:-}" = "" ] || printf '%s: %s\n' "$SELF" "$1" >&2
   cat >&2 <<'EOF'
@@ -97,10 +103,11 @@ SCOPE_GLOBS="$TMPD/scope_globs.txt"; : >"$SCOPE_GLOBS"
 
 # --- plan parser: per-task Budget: (files, line ceiling), whole-plan Scope: globs -----------------
 cat >"$TMPD/plan_parse.awk" <<'AWKEOF'
+# is_task_opener() comes from plan-task-predicate.awk, loaded alongside this program (ADR-0070
+# §D2) — do not redefine it here. This parser needs the BLOCK-OPENER question, not the looser
+# is_task_line() in the same file: a checkbox sub-step mentioning a task must not close the
+# previous task's block and steal its Budget.
 function trim(s) { gsub(/^[ \t]+/,"",s); gsub(/[ \t]+$/,"",s); return s }
-function is_task_line(l) {
-  return l ~ /^[ \t]*[-*][ \t]\[[ xX]\][ \t]*\*\*Task[ \t]+[0-9]+/
-}
 function task_num(l,   t) {
   match(l, /Task[ \t]+[0-9]+/)
   t = substr(l, RSTART, RLENGTH)
@@ -110,7 +117,7 @@ function task_num(l,   t) {
 BEGIN { in_task = 0; cur = ""; got = 0 }
 {
   line = $0
-  if (is_task_line(line)) {
+  if (is_task_opener(line)) {
     cur = task_num(line)
     got = 0
     in_task = 1
@@ -129,7 +136,12 @@ BEGIN { in_task = 0; cur = ""; got = 0 }
   if (in_task && !got) {
     if (match(line, /[Bb]udget:/)) {
       rest = trim(substr(line, RSTART + RLENGTH))
-      if (match(rest, /\([^()]*\)[ \t]*$/)) {
+      # Trailing markdown emphasis is tolerated: a real plan writes the whole declaration in
+      # italics — `*Budget: `SPEC.md` (~90 lines)*` — and requiring the paren group at strict
+      # end-of-line rejected every declaration in the only plan in the corpus that has any
+      # (ADR-0070 §D4). §D6 of ADR-0052 already calls this syntax "lenient prose, not a rigid
+      # schema"; this is that intent applied, not a widening of it.
+      if (match(rest, /\([^()]*\)[ \t]*[*_`]*[ \t]*$/)) {
         parenraw = substr(rest, RSTART, RLENGTH)
         filespart = trim(substr(rest, 1, RSTART - 1))
         sub(/,[ \t]*$/, "", filespart)
@@ -148,7 +160,8 @@ BEGIN { in_task = 0; cur = ""; got = 0 }
 }
 AWKEOF
 
-awk -v BUDGET_FILE="$BUDGET_FILE" -v SCOPE_FILE="$SCOPE_GLOBS" -f "$TMPD/plan_parse.awk" "$PLAN"
+awk -v BUDGET_FILE="$BUDGET_FILE" -v SCOPE_FILE="$SCOPE_GLOBS" \
+    -f "$PREDICATE" -f "$TMPD/plan_parse.awk" "$PLAN"
 
 # --- whole-plan inert check (§D1/§D4): no task anywhere declared a parseable budget --------------
 if [ ! -s "$BUDGET_FILE" ]; then
@@ -219,6 +232,12 @@ function basename(p,   n, a) { n = split(p, a, "/"); return a[n] }
   path = substr(line, 2, p - 2)
   gsub(/[ \t]+$/, "", path)  # git pads the path column to align "|" across differently-named files
   rest = substr(line, p + 3)
+  # git RIGHT-ALIGNS the count column, so every file whose count has fewer digits than the widest
+  # one in the diff carries leading spaces here. Without this strip the `^[0-9]+` match fails and
+  # the file is dropped from the candidate set entirely — no SCOPE finding, and its lines missing
+  # from the BUDGET total. Silently, and for most files in any diff with a mixed range of sizes
+  # (ADR-0070 §D6). Found by running the checker on a real two-file diff, not by reading it.
+  sub(/^[ \t]+/, "", rest)
   if (!match(rest, /^[0-9]+/)) next
   cnt = substr(rest, RSTART, RLENGTH)
   bn = basename(path)
@@ -252,7 +271,26 @@ FILES_ACTUAL=0
 LINES_ACTUAL=0
 while IFS="$(printf '\t')" read -r _path _cnt; do
   [ -n "$_path" ] || continue
-  if grep -qxF "$_path" "$MASTER_SCOPE" 2>/dev/null || glob_match "$_path"; then
+  # `git diff --stat` ELIDES a long path to `.../tail/of/it` when the stat table exceeds its width
+  # (80 columns in a pipe). Measured on this repository: a 63-character path is truncated as soon as
+  # a second file shares the table. An elided name matches nothing, so it would be reported
+  # out-of-scope AND its lines would go uncounted — wrong in both directions at once (ADR-0070 §D5).
+  # Callers are fixed to pass `--stat=999`; this recovers the case where one does not, by resolving
+  # the tail against the declared set. Ambiguous tails are left elided and reported, because a
+  # guess here would be worse than the finding.
+  _lookup="$_path"
+  case "$_path" in
+    .../*)
+      _sfx="${_path#.../}"
+      # sort -u, not a raw count: MASTER_SCOPE is the union of EVERY task's declared list, so one
+      # file declared by five tasks appears five times. Counting raw lines reads that as ambiguity
+      # and refuses to resolve a path that is not ambiguous at all.
+      _hits=$(grep -F -- "/$_sfx" "$MASTER_SCOPE" 2>/dev/null | sort -u)
+      _nhit=$(printf '%s\n' "$_hits" | grep -c . )
+      [ "$_nhit" = "1" ] && _lookup="$_hits"
+      ;;
+  esac
+  if grep -qxF "$_lookup" "$MASTER_SCOPE" 2>/dev/null || glob_match "$_lookup"; then
     FILES_ACTUAL=$((FILES_ACTUAL + 1))
     LINES_ACTUAL=$((LINES_ACTUAL + _cnt))
   else

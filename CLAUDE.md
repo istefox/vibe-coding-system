@@ -1041,3 +1041,46 @@ Known consequences, recorded rather than fixed:
   heading breaks the extraction, which reports as a skipped section rather than a failure.
 
 Detail: `docs/architecture/ADR-0069-172-plan-task-form.md`.
+
+## Decisions from the diff-budget predicate chain (ADR-0070)
+
+Closes issue #184. `diff-budget-check.sh` had produced no finding on any real plan since ADR-0052
+shipped it in July, and nobody noticed: it is a reporter, so a plan it cannot parse looks exactly
+like a plan with nothing to report — the common, documented, legitimate case.
+
+- **Four independent defects, not one**, three invisible until the one above is fixed. (1) The task
+  predicate needed `- [ ] **Task N` — 18 of 57 plans. (2) The budget syntax required the paren group
+  at strict end-of-line, and the one plan that declares budgets writes them in italics
+  (`*Budget: … (~90 lines)*`), so all nine failed. (3) `git diff --stat` **elides long paths** at the
+  default 80 columns, so a file was reported out of scope AND its lines went uncounted. (4) git
+  **right-aligns the count column**, and the extractor required a digit immediately after `" | "`, so
+  every file narrower than the widest one in the diff was dropped from the candidate set entirely.
+- **Defect 4 is the lesson.** It survives a correct predicate, a correct budget parse and an
+  untruncated path, and it was found by running the checker on a two-file diff and asking why the
+  totals were short. Not by reading it, and not by a harness that had been green for months.
+- **`is_task_opener()` is a SECOND predicate, beside `is_task_line()` in the same shared file.**
+  They answer different questions: "is there a task here" (guard, `>= 1`, over-counting is safe)
+  versus "does a task BLOCK START here" (boundary, over-matching corrupts attribution). A checkbox
+  sub-step reading `- [ ] Re-run Task 2.` satisfies the first and must not satisfy the second, or a
+  `Budget:` gets attributed to whatever number the prose happened to mention.
+- **`--stat=999` at both call sites, never a bare `--stat`.** The script also resolves an elided
+  tail against the declared set, but only when it resolves to exactly one **distinct** path —
+  `MASTER_SCOPE` is a union across tasks, so a file declared by five tasks appears five times and a
+  raw line count reads that as ambiguity.
+- **BB2 had pinned the bug as the contract.** It asserted every plan in the corpus stays `CLEAN`,
+  which passed only because the check was inert, and would have blocked this fix. Its intent (a
+  plan declaring nothing stays silent) is preserved; its population is corrected, and `BB2b` bounds
+  the exclusion.
+
+Known consequences, recorded rather than fixed:
+- **A dormant feature becomes active.** The first Step 5 after this deploys may report `BUDGET`/
+  `SCOPE` on work in flight, against budgets written when nothing read them. Advisory by contract,
+  but the first one will look like a regression.
+- `task_num()` extracts digits only, so `## Task 1b` and `## Task 1` both resolve to `1` and
+  `--tasks 1b` cannot be expressed — a budget can be attributed to a sibling task on any plan using
+  letter suffixes. Changing the identifier model touches `--tasks` expansion and the `BUDGET_FILE`
+  key; deliberately out of scope.
+- Two plans use a different word for a task entirely (`### Step 0 —`, `### T1 —`) and match no
+  predicate. Exempted by name in `PTG9`, with `PTG10` asserting both still exist.
+
+Detail: `docs/architecture/ADR-0070-184-diff-budget-task-predicate.md`.

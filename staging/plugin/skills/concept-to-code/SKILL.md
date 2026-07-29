@@ -632,7 +632,9 @@ never from the coder's self-assessment:
 3. Attempt count, recorded in `tracer_bullet_attempts`.
 4. Did it touch files outside its declared scope? Run:
    ```bash
-   git diff --stat "$BASELINE_COMMIT" | bash ~/.claude/skills/concept-to-code/scripts/diff-budget-check.sh \
+   # --stat=999, never a bare --stat: git elides a long path to `.../tail` at the default 80-column
+   # width, and an elided name is compared against the declared file set as-is (ADR-0070 §D5).
+   git diff --stat=999 "$BASELINE_COMMIT" | bash ~/.claude/skills/concept-to-code/scripts/diff-budget-check.sh \
      --plan "<manifest-dir>/.tracer-bullet-plan.md" --tasks 1
    ```
    Parse `BUDGET`/`SCOPE` lines per the reporter contract stated at diff-budget-check.sh's own
@@ -1421,7 +1423,8 @@ sentence has now been written three times in this directory (ADR-0048 §D7, the 
 weakening gate above, and here).
 ```bash
 if [ -n "$_dbudget" ]; then
-  _db=$(git diff --stat "$_pre5" 2>/dev/null \
+  # --stat=999, never a bare --stat — git elides long paths at 80 columns (ADR-0070 §D5).
+  _db=$(git diff --stat=999 "$_pre5" 2>/dev/null \
         | bash "$_dbudget" --plan "<manifest.artifacts.plan>" --tasks "<comma list of every task number dispatched so far>")
 fi
 ```
