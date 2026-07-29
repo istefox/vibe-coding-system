@@ -235,3 +235,118 @@ Stated because a negative result nobody records gets re-derived:
 - **This phase is preventive in the same way phase 4 was**, and carries the same property: nothing
   in it produces a visible improvement. The difference is that this one has a deadline — the
   shakedown run — and an unrun pre-flight check is exactly what that run would trip over.
+
+### Phase 6 — fix the seven open issues (#206, #207, #208, #210, #211, #212, #213)
+
+Supersedes the Phase 5 sketch, which was written before #210–#213 existed and before the seven were
+read against each other. Reading them together changes the plan in three ways that no single issue
+could state.
+
+#### Three cross-issue facts that drive the order
+
+**1. #210 is not a separate fix from #207 — it is the same fix on a second surface.** #210 says so
+in its own body: #207's scope, as written, covers references *inside* `SKILL.md` files, and #210's
+two verified-stale references live in a **hook source's header**. Building #207's derived check first
+and #210's second means either building the instrument twice or building it wrong once. They are one
+work item that closes two issues.
+
+**2. #206, #211 and two thirds of #208 want the SAME instrument, not similar ones.** Each asks for:
+derive a population at run time, let a file **declare its own waiver** rather than keeping a list in
+the test, and count-guard the derivation. #206 derives fences and asks which are contracts; #211
+derives skills and asks which are deliberately uncovered; #208 (1) needs a count guard that is
+per-population instead of global; #208 (3) needs the agent list derived from the hook's own `case`
+arm. That is one pattern, four applications.
+
+The repository has already built it three times — `skill-text-corrections` F6, `transcript-scan-rule`,
+`agent-command-scope` section J — **each time slightly differently.**
+
+**The decision here is deliberate and worth stating: do NOT extract a shared helper up front.**
+ADR-0069 is the precedent and it cuts the other way from the instinct. The plan-task predicate was
+correctly extracted *after* three divergent copies existed and could be compared; extracting on the
+strength of a pattern nobody has applied twice in the same shape is the speculative version of the
+same move. So #206 establishes the shape knowingly, #211 and #208 reuse it, and the extraction
+question gets asked at the end **with four call sites of evidence** instead of a guess. Accepting a
+fourth copy on purpose is the point, not an oversight.
+
+**3. #207's stale pointer is inside the file #206 has to work in.** `concept-to-code/SKILL.md` is
+both the subject of #207's confirmed defect and the largest source of fences #206 must extract.
+Fixing the pointers first means #206's author is not reading wrong ones. Weak as dependencies go,
+free to honour.
+
+#### 6.1 — Remove active misinformation (small, independent, do first)
+
+- [ ] **#213 — the RUNBOOK validator path.** The path fix is trivial; **the defect is the false
+  green.** `bash` on a missing script exits 127, the loop greps for "Validation failed", never
+  matches, and reports `OK` for every agent file. An operator following the full-install procedure
+  gets a clean validation pass having validated nothing. Fix the guard (`[ -x "$V" ] || exit 1`)
+  before, or independently of, fixing the path — the guard is the part that generalises.
+- [ ] **#212 — the `hook-verify-workflow.sh` layout remap.** Nothing is broken; it cost adjudication
+  time once in this very audit and the plausible failure mode is someone "fixing" the reference and
+  breaking a deployed path. A note at both sites plus an assertion that the remap still exists.
+  Also answer the open sub-question rather than assuming: **is it the only shape-remapping `PAIRS`
+  entry?** The issue is explicit that "the only one this sweep surfaced" is a different claim.
+
+#### 6.2 — One derived reference check, two issues closed
+
+- [ ] **#207 + #210 together.** Repoint three stale/drifting references to **named headings**
+  (`SKILL.md:129`, and `agent-write-scope.sh`'s two), then build one check whose population spans
+  **both** `staging/plugin/skills/*/SKILL.md` and `staging/plugin/scripts/*.sh` headers.
+  - Direction first (rule 5): it must fail on a reference the derivation **omits**, not merely
+    validate the ones it finds. That is the ADR-0043 lesson and #207 names it.
+  - **Check heading collisions before converting.** `concept-to-code`'s Step 5 and Step 6 workflow
+    blocks share a heading verbatim — ADR-0018's fix had to name the step as well. A non-distinctive
+    heading reference is not an improvement over a line number, it is the same fragility wearing
+    better clothes.
+  - `SKILL.md:2684 → 152-158` is drifted, not yet wrong. Convert it in the same pass; it is the next
+    one to break.
+
+#### 6.3 — The big one, and the pattern the rest reuse
+
+- [ ] **#206 — nine abort-capable fences that nothing executes.** Five in `autopilot-build`, and
+  **that subset carries most of the value**: it is the unattended path, where an aborting pre-flight
+  is the only thing between a manifest and a silent bad run.
+  - **Order within: `autopilot-build`'s five first.** If this item has to be cut short, cutting after
+    those five leaves the argument intact.
+  - **Fix the inherited hazard, do not just avoid it.** `plan-task-count.test.sh` PTC/PTF already
+    extract by heading anchor, and a heading rewrite turns extraction into a *skipped section* that
+    passes quietly. Whatever #206 adds inherits that; the existing two should be corrected in the
+    same pass, or the phase ships new code that is safer than the old code beside it.
+  - **The extractor must tolerate indented fences.** `nightly-autopilot` indents them inside numbered
+    lists, and a column-0 anchor undercounts — this issue's own first measurement said 101 instead of
+    138 for exactly that reason.
+  - Decide the contract-vs-illustration marker here, since #211 will reuse it.
+
+#### 6.4 — Reuse the pattern
+
+- [ ] **#211 — ten skills read by no test.** Not "test all ten": decide per skill whether it is
+  deliberately uncovered or an oversight, and record the first case **in the skill file itself**.
+  Should be substantially smaller once 6.3 has settled the declaration mechanism.
+- [ ] **#208 — three derived guards stopping at unchecked boundaries.** (1) per-population count
+  guard, (3) derive the agent list from `agent-command-scope.sh`'s own `case` arm. (2) may be
+  correct to leave — if so, **say it in the test**, so the next author meets a decision instead of
+  inventing an exemption that would be wrong.
+
+#### 6.5 — Close the loop
+
+- [ ] Ask the extraction question with four call sites in hand: is there one derivation+waiver+
+  count-guard helper here, or five deliberate copies? Either answer is fine; an unasked question is
+  not.
+- [ ] Then the **shakedown run**, with its three expected non-regressions unchanged from Phase 5:
+  `diff-budget-check.sh` active for the first time since July, the `manifest-field-state.sh`
+  dependencies aborting on an un-synced machine, and Step 5's Workflow dispatch finally producing the
+  Workflow-path data ADR-0080's pre-registered condition waits on.
+
+#### Risks
+
+- **#206 is the item most likely to grow past its estimate.** Nine fences, each needing a fixture and
+  a substitution contract (`run_check1` and `run_check6` already show two different shapes), plus a
+  classification decision. Split by skill if needed; `autopilot-build` alone is a defensible landing
+  point.
+- **6.4 is sized on an assumption** — that 6.3's mechanism transfers. If it does not, #211 and #208
+  are full-size items and the phase is longer than it looks.
+- **Nothing in this phase produces a visible improvement**, the same property Phase 4 had. The
+  difference remains that an unrun pre-flight check is exactly what the shakedown run would trip on.
+- **Seven issues is the most that has been open at once since the audit-fix roadmap.** The temptation
+  is to batch them into fewer PRs; #206 and #211 in particular must not share a PR, for the same
+  reason #193 and #195 could not — two derived checks that can each pass vacuously would mask each
+  other.
