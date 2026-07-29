@@ -238,11 +238,145 @@ printf 'topic: "x"\nhook_verified: true\n' > "$TMP/c/true/docs/manifests/2026-07
 run_check6 "$TMP/c/true" >/dev/null 2>&1
 [ "$?" -eq 0 ] && ok "C5: hook_verified: true => PASS (exit 0)" || bad "C5: hook_verified: true should PASS"
 
-# C6 (dynamic, genuine RED): one manifest, hook_verified field absent/corrupted => ABORT (exit 1).
+# C6 (dynamic): a manifest with no hook_verified and no current_step => ABORT (exit 1).
+# The fixture and the expectation are unchanged from the original C6; only the LABEL is corrected.
+# It read "absent/corrupted", and issue #123 is precisely that those are two different things: this
+# fixture is a manifest still in flight, where an absent field means nobody knows the dispatch
+# mode. C7 below covers the case the old label wrongly swept in with it.
 mkdir -p "$TMP/c/null/docs/manifests"
 printf 'topic: "x"\n' > "$TMP/c/null/docs/manifests/2026-07-01-x.manifest.yml"
 run_check6 "$TMP/c/null" >/dev/null 2>&1
-[ "$?" -eq 1 ] && ok "C6: hook_verified absent/corrupted => ABORT (exit 1)" || bad "C6: corrupted hook_verified should ABORT"
+[ "$?" -eq 1 ] && ok "C6: hook_verified absent on an IN-FLIGHT manifest => ABORT (exit 1)" \
+               || bad "C6: absent hook_verified on an in-flight manifest should ABORT"
+
+# =====================================================================================
+# C7-C13 -- issue #123. Check 6 iterated EVERY manifest in docs/manifests/ and aborted the whole
+# roadmap on any hook_verified that was not true/false. Two long-completed chains
+# (2026-05-23-clean-public-repo-anonymize, 2026-05-29-dynamic-workflows-step5) hit it. Neither was
+# corrupted: both PREDATE the field, which ADR-0016 added to manifest-init.sh afterwards. The
+# diagnostic said "corrupted or hand-edited", which is actively misleading, and the abort was
+# roadmap-wide for two chains unrelated to the roadmap being launched.
+#
+# A completed chain's dispatch mode cannot affect a future run, so absence there is the documented
+# default (false) rather than an error. Absence on a chain still in flight is still an abort (C6).
+
+# C7: THE ISSUE. Absent field on a COMPLETED manifest => PASS.
+mkdir -p "$TMP/c/oldschema/docs/manifests"
+printf 'topic: "x"\nschema_version: "1.1"\ncurrent_step: "completed"\n' \
+  > "$TMP/c/oldschema/docs/manifests/2026-05-23-x.manifest.yml"
+run_check6 "$TMP/c/oldschema" >/dev/null 2>&1
+[ "$?" -eq 0 ] && ok "C7: absent hook_verified on a COMPLETED manifest => PASS (predates the field)" \
+               || bad "C7: a pre-schema completed manifest still aborts the roadmap (#123)"
+
+# C8: the corruption the check was written for is NOT weakened by C7. A present-but-invalid value
+# aborts even on a completed manifest — that is a value someone wrote, not a value nobody wrote.
+mkdir -p "$TMP/c/maybe/docs/manifests"
+printf 'topic: "x"\ncurrent_step: "completed"\nhook_verified: maybe\n' \
+  > "$TMP/c/maybe/docs/manifests/2026-07-01-x.manifest.yml"
+run_check6 "$TMP/c/maybe" >/dev/null 2>&1
+[ "$?" -eq 1 ] && ok "C8: present-but-invalid value => ABORT even when completed" \
+               || bad "C8: an invalid hook_verified value stopped aborting — C7 weakened the check"
+
+# C9: the message must name the actual value. "has hook_verified=None" was the original defect's
+# whole visible surface: it told the operator nothing about which of the two causes it was.
+_c9=$(run_check6 "$TMP/c/maybe" 2>&1)
+printf '%s' "$_c9" | grep -q 'maybe' \
+  && ok "C9: the abort names the actual invalid value" \
+  || bad "C9: the abort should quote the value it rejected — got: $_c9"
+
+# C10: the two causes must read differently. An operator who sees "corrupted or hand-edited" for a
+# manifest that is merely old goes looking for damage that is not there.
+_c10=$(run_check6 "$TMP/c/null" 2>&1)
+if printf '%s' "$_c10" | grep -qi 'in flight\|not completed\|still running'; then
+  ok "C10: absent-on-in-flight is diagnosed as its own case, not as corruption"
+else
+  bad "C10: absent and invalid still share one message — got: $_c10"
+fi
+
+# C11: a manifest the check cannot READ is a third state. An unparseable file produced an empty
+# value and was reported as an invalid one — the check did not run, which is not the same as
+# finding something wrong (the distinction secret-scan.sh, spec-coverage.sh and plan-tasks.sh all
+# make with a dedicated exit code).
+mkdir -p "$TMP/c/broken/docs/manifests"
+printf 'topic: "x\n  bad: [unclosed\n' > "$TMP/c/broken/docs/manifests/2026-07-01-x.manifest.yml"
+run_check6 "$TMP/c/broken" >/dev/null 2>&1
+_rc=$?
+_c11=$(run_check6 "$TMP/c/broken" 2>&1)
+if [ "$_rc" -eq 1 ] && printf '%s' "$_c11" | grep -qi 'could not be read\|unreadable\|did not run'; then
+  ok "C11: an unparseable manifest aborts as did-not-run, distinct from an invalid value"
+else
+  bad "C11: unparseable manifest not distinguished (rc=$_rc) — got: $_c11"
+fi
+
+# C12: leniency must not mask a bad neighbour. One pre-schema completed manifest beside one
+# invalid manifest still aborts — the loop must keep scanning past the tolerated one.
+mkdir -p "$TMP/c/mixed/docs/manifests"
+printf 'topic: "a"\ncurrent_step: "completed"\n' > "$TMP/c/mixed/docs/manifests/2026-05-23-a.manifest.yml"
+printf 'topic: "b"\ncurrent_step: "completed"\nhook_verified: maybe\n' > "$TMP/c/mixed/docs/manifests/2026-07-01-b.manifest.yml"
+run_check6 "$TMP/c/mixed" >/dev/null 2>&1
+[ "$?" -eq 1 ] && ok "C12: a tolerated pre-schema manifest does not mask an invalid one" \
+               || bad "C12: the loop stopped short — an invalid manifest was missed"
+
+# C13: the real corpus. Every manifest this repository actually carries must pass, or the check
+# would abort a roadmap here. This is the population the issue was found in — asserted against the
+# files rather than against a fixture, with a count guard so an empty glob cannot pass vacuously
+# (the pairs-completeness self-test lesson).
+_repo_root=$(cd "$STAGING/.." && pwd)
+_n=$(ls "$_repo_root"/docs/manifests/*.manifest.yml 2>/dev/null | wc -l | tr -d ' ')
+if [ "$_n" -ge 30 ]; then
+  ( cd "$_repo_root" && bash -c "$(extract_check6)" ) >/dev/null 2>&1
+  [ "$?" -eq 0 ] && ok "C13: all $_n manifests in this repository pass check 6" \
+                 || bad "C13: check 6 aborts on this repository's own manifests"
+else
+  bad "C13: expected >= 30 manifests in docs/manifests/, found $_n — C13 would pass vacuously"
+fi
+
+# =====================================================================================
+# Section D -- issue #123, sibling call site: autopilot-build check 7
+# =====================================================================================
+# The same field read the same brittle way, one skill over, with the MIRROR defect. Check 7 reads
+# a single manifest — the one about to be built, which is by definition not completed — so absence
+# should abort and does. But its test is `[ "$hv" = "None" ] || [ -z "$hv" ]`, so any value that is
+# neither of those PASSES: `hook_verified: maybe` sails through and the run then branches on it.
+# Nightly check 6 aborted on too much; this aborts on too little. Same field, same one-liner,
+# opposite failure — which is why #123's audit had to look at both.
+
+extract_check7() {
+  awk '
+    /^\*\*Check 7 / { grab=1; next }
+    grab && /^```bash/ { infence=1; next }
+    grab && infence && /^```/ { exit }
+    grab && infence { print }
+  ' "$AB_SKILL"
+}
+# run_check7 <manifest-file> — check 7 reads $manifest, so bind it and append a trailing exit 0
+# outside the extracted text, for the same reason run_check1 does.
+run_check7() {
+  printf 'manifest=%s\n%s\nexit 0\n' "$1" "$(extract_check7)" > "$TMP/check7-cmd.sh"
+  bash "$TMP/check7-cmd.sh"
+}
+
+mkdir -p "$TMP/d"
+printf 'topic: "x"\nhook_verified: false\n' > "$TMP/d/ok.manifest.yml"
+printf 'topic: "x"\n'                        > "$TMP/d/absent.manifest.yml"
+printf 'topic: "x"\nhook_verified: maybe\n'  > "$TMP/d/maybe.manifest.yml"
+
+run_check7 "$TMP/d/ok.manifest.yml" >/dev/null 2>&1
+[ "$?" -eq 0 ] && ok "D1: check 7 passes a valid hook_verified" \
+               || bad "D1: check 7 rejected a valid manifest"
+
+run_check7 "$TMP/d/absent.manifest.yml" >/dev/null 2>&1
+[ "$?" -eq 1 ] && ok "D2: check 7 still aborts on an absent field (the manifest is in flight)" \
+               || bad "D2: check 7 stopped aborting on an absent field"
+
+run_check7 "$TMP/d/maybe.manifest.yml" >/dev/null 2>&1
+[ "$?" -eq 1 ] && ok "D3: check 7 aborts on a present-but-invalid value" \
+               || bad "D3: check 7 ACCEPTS an invalid hook_verified value — the run branches on garbage"
+
+_d4=$(run_check7 "$TMP/d/maybe.manifest.yml" 2>&1)
+printf '%s' "$_d4" | grep -q 'maybe' \
+  && ok "D4: check 7's abort names the value it rejected" \
+  || bad "D4: check 7's abort should quote the rejected value — got: $_d4"
 
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

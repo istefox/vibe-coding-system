@@ -1260,3 +1260,42 @@ Known consequences, recorded rather than fixed:
   the list-form `subprocess.run` and variable-splicing bypasses as expected-ALLOW.
 
 Detail: `docs/architecture/ADR-0074-127-self-arming-marker-class.md`.
+
+## Decisions from the hook_verified state chain (ADR-0075)
+
+Closes issue #123, the last of the open-issue roadmap. `nightly-autopilot` check 6 iterated every
+manifest in `docs/manifests/` and aborted the whole roadmap on any `hook_verified` that was not
+`true`/`false`. Two long-completed chains hit it. Neither was corrupted: both **predate the field**,
+which ADR-0016 added to `manifest-init.sh` afterwards.
+
+- **`m.get()` cannot tell three states apart.** It returns `None` for an ABSENT field and for an
+  explicit null, and the shell one-liner produced an empty string when the file could not be PARSED
+  at all — so one comparison reported three situations with one sentence, and that sentence named
+  the least likely of them ("corrupted or was hand-edited"). Now four branches on a discriminated
+  token: valid, absent-on-completed (pass, with a note), absent-in-flight (abort), invalid (abort,
+  naming the value), unreadable (abort, as **did not run**). That last one is the same distinction
+  `secret-scan.sh`, `spec-coverage.sh` and `plan-tasks.sh` already make — reporting an unread file
+  as bad data is the original error one level down.
+- **Leniency is bounded by `current_step: completed`, and the boundary is the point.** A completed
+  chain's dispatch mode cannot affect a future run; a chain in flight without the field is one
+  nobody knows the dispatch path of, and guessing is what the safe default exists to avoid.
+- **The issue's third checkbox — narrow the loop to pending roadmap features — is declined with
+  reasons.** It needs the PROJECT.md-feature → manifest mapping ADR-0030 §2.2 already had to fix
+  twice for suffix collisions, and a wrong mapping there fails **silently** by skipping a manifest
+  that matters. Worse than the bug being fixed.
+- **`autopilot-build` check 7 had the MIRROR defect and is fixed in the same pass.** Same field,
+  same one-liner, one skill over: `[ "$hv" = "None" ] || [ -z "$hv" ]` means anything that is
+  neither PASSES, so `hook_verified: maybe` sailed through and the run branched on it. Nightly
+  aborted on too much; autopilot-build aborted on too little. Now asserts the two VALID values —
+  the form that cannot rot as the invalid set grows.
+- **`project_root` note corrected:** it is **five** manifests carrying a dead
+  `/Users/stefanoferri/…` path, not the one the issue named. Nothing iterates `project_root` across
+  manifests, so it blocks nothing; left unfixed because rewriting five completed historical records
+  to a path they were never created under falsifies the record for no consumer.
+
+Known consequences: check 6 now passes on strictly more inputs (bounded to completed chains, but a
+guard relaxing); the lenient branch prints a `note:` per tolerated manifest; the five invariant-4
+failures remain. C8/C9/C12/C13/D1/D2 pass before and after — forward guards, not fix evidence.
+C7/C10/C11/D3/D4 are the five that were RED.
+
+Detail: `docs/architecture/ADR-0075-123-hook-verified-states.md`.

@@ -120,16 +120,60 @@ Any failure writes an `aborted` report and stops. No dispatch, no push. Emit one
    else
      _bad=0
      for _m in $_manifests; do
-       _hv=$(python3 -c "import yaml; m=yaml.safe_load(open('$_m')); print(m.get('hook_verified'))" 2>/dev/null)
-       if [ "$_hv" != "True" ] && [ "$_hv" != "False" ]; then
-         echo "✗ hook_verified: $_m has hook_verified=$_hv (must be true/false). Manifest is corrupted or was hand-edited; fix or re-init."
-         _bad=1
-       fi
+       # Four states, not two (issue #123, ADR-0075). `m.get('hook_verified')` returned None for a
+       # field that is ABSENT and for one explicitly set to null, and an empty string when the file
+       # could not be parsed at all — so a manifest older than the field was reported as corrupted,
+       # and a manifest the check never read was reported as having a bad value.
+       _st=$(python3 -c "
+import sys, yaml
+try:
+    m = yaml.safe_load(open(sys.argv[1]))
+except Exception:
+    print('UNREADABLE'); raise SystemExit(0)
+if not isinstance(m, dict):
+    print('UNREADABLE'); raise SystemExit(0)
+if 'hook_verified' not in m:
+    print('ABSENT|' + str(m.get('current_step')))
+else:
+    print('VALUE|' + str(m['hook_verified']))
+" "$_m" 2>/dev/null)
+       case "$_st" in
+         'VALUE|True'|'VALUE|False')
+           : ;;                                     # the two valid values
+         'ABSENT|completed')
+           echo "note: $_m has no hook_verified field and is completed — it predates the field"
+           echo "  (ADR-0016 added it to manifest-init.sh afterwards). A completed chain's dispatch"
+           echo "  mode cannot affect this run, so the documented default (false) applies. Not an abort."
+           ;;
+         'ABSENT|'*)
+           echo "✗ hook_verified: $_m has no hook_verified field and is NOT completed"
+           echo "  (current_step=${_st#ABSENT|}) — a chain still in flight whose dispatch mode is unknown."
+           echo "  This is not the pre-schema case; re-init the manifest or set the field explicitly."
+           _bad=1
+           ;;
+         'UNREADABLE'|'')
+           echo "✗ hook_verified: $_m could not be read — the check DID NOT RUN on it."
+           echo "  Either the YAML is unparseable or python3/PyYAML is unavailable. This is not the"
+           echo "  same as finding a bad value; fix the file or the interpreter and re-run."
+           _bad=1
+           ;;
+         *)
+           echo "✗ hook_verified: $_m has hook_verified=${_st#VALUE|} (must be true/false)."
+           echo "  A value is present and is neither — the manifest is corrupted or was hand-edited."
+           _bad=1
+           ;;
+       esac
      done
      [ "$_bad" -eq 0 ] || exit 1
    fi
    ```
    (drives Workflow vs Agent-tool dispatch downstream, per manifest, exactly as before.)
+
+   **Scope stays roadmap-wide, deliberately (ADR-0075 §D3).** Issue #123 raised narrowing the loop
+   to the manifests of pending roadmap features. Rejected: that needs the PROJECT.md-feature →
+   manifest mapping ADR-0030 already had to fix twice for suffix collisions, and a wrong mapping
+   silently skips a manifest that matters. The absent-on-completed default removes the landmine
+   without a lookup that can be wrong.
 7. **`gh` authenticated:** `gh auth status` succeeds (needed to push and open PRs).
 8. **CI + branch protection:** if `.github/workflows/ci.yml` is absent, drop the template
    (`~/.claude/templates/ci.yml` at runtime; source `staging/project-templates/ci/ci.yml`),
