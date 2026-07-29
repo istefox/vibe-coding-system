@@ -53,6 +53,7 @@ and left the manifest at `ready_for_implementation`. This skill picks up from th
 Run all checks sequentially; emit one line per check (`✓ <label>` or `✗ <label>: <reason>`).
 
 **Check 1 — Scope guard (run FIRST, before reading the manifest):**
+<!-- fence-contract: autopilot-build-check-1 -->
 
 ```bash
 # Extract project_root from the manifest file directly (no yq dependency)
@@ -78,9 +79,15 @@ fi
 ```
 
 **Check 2 — Manifest state:**
+<!-- fence-contract: autopilot-build-check-2 -->
 ```bash
 bash ~/.claude/skills/concept-to-code/scripts/manifest-validate.sh "<manifest-path>" || exit 1
-step=$(grep '^current_step:' "<manifest-path>" | awk '{print $2}')
+# `sed 's/^current_step: *//;s/"//g'` is manifest-validate.sh's idiom, used at 17 sites there and
+# by check 1 above. Do NOT go back to `awk '{print $2}'`: manifest-init.sh and
+# manifest-transition.sh both write the value QUOTED, so awk yields `"ready_for_implementation"`
+# with the quotes and this check aborted on every manifest the system has ever produced (issue
+# #218) — with a message that reads as nonsense and blames the manifest.
+step=$(grep '^current_step:' "<manifest-path>" | sed 's/^current_step: *//;s/"//g' | head -1)
 [ "$step" = "ready_for_implementation" ] || { echo "✗ state: current_step is $step, not ready_for_implementation. Complete the interactive chain through Gate 3 first."; exit 1; }
 ```
 
@@ -88,6 +95,7 @@ step=$(grep '^current_step:' "<manifest-path>" | awk '{print $2}')
 Read `manifest.hitl_gates`. For gates 1, 2, 3: verify each `status: approved`. If any is not
 `approved`, abort with: "Gate N not approved. Complete the interactive chain through Gate N first."
 
+<!-- fence-contract: autopilot-build-check-3 -->
 ```bash
 for gate_n in 1 2 3; do
   status=$(python3 -c "
@@ -101,6 +109,7 @@ done
 ```
 
 **Check 4 — Artifacts on disk:**
+<!-- fence-contract: autopilot-build-check-4 -->
 ```bash
 spec=$(python3 -c "import yaml; m=yaml.safe_load(open('$manifest')); print(m['artifacts']['spec'] or '')" 2>/dev/null)
 adr=$(python3 -c "import yaml; m=yaml.safe_load(open('$manifest')); print(m['artifacts']['adr'] or '')" 2>/dev/null)
@@ -112,6 +121,7 @@ done
 ```
 
 **Check 5 — Plan has tasks:**
+<!-- fence-contract: autopilot-build-check-5 -->
 ```bash
 # plan-tasks.sh owns the definition of a plan task (ADR-0069 §D1/§D3, issue #172). Do NOT inline a
 # grep here: the architect is allowed BOTH `### Task 3 — …` headings and `- [ ]` checkbox items,
@@ -124,6 +134,7 @@ tasks=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count "$pl
 ```
 
 **Check 6 — test-cmd real and trusted:**
+<!-- fence-contract: autopilot-build-check-6 -->
 ```bash
 tcf="$project_root/.claude/test-cmd"
 test -f "$tcf" || { echo "✗ test-cmd: .claude/test-cmd not found."; exit 1; }
@@ -139,6 +150,7 @@ grep -qxF "${hash}	${root_n}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null 
 ```
 
 **Check 7 — hook_verified known:**
+<!-- fence-contract: autopilot-build-check-7 -->
 ```bash
 # Field state via the shared helper (issue #195, ADR-0076). Two-tier resolution; if neither
 # resolves this gate fails closed, because an infrastructure gap must never be silently absorbed
@@ -170,6 +182,7 @@ esac
 ```
 
 **Check 8 — Git repo at CWD:**
+<!-- fence-contract: autopilot-build-check-8 -->
 ```bash
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "✗ git: CWD is not inside a git repository. Worktree isolation will fail."; exit 1; }
 ```

@@ -1596,3 +1596,62 @@ correct snapshot of its moment). `C10`/`C11`/`C14`/`C15` pass before and after �
 labelled in the harness, with `U1` as their red evidence.
 
 Detail: `docs/architecture/ADR-0082-207-210-cross-reference-form.md`.
+
+## Decisions from the fence-contract chain (ADR-0083)
+
+Closes issue #206, phase 6.3, and #218 which it found. Rule 11 measured: 138 bash fences across
+`staging/plugin/skills/*/SKILL.md`, **13** abort-capable, **4** executed by anything.
+
+**THE RULE — a bash fence that can ABORT a run declares itself `<!-- fence-contract: <id> -->` and
+must be executed by a test, or `<!-- fence-illustration: <reason ≥ 40 chars> -->` on one line. The
+marker is ALSO the extraction anchor.**
+
+- **#218, found by running a fence rather than reading it: `autopilot-build` check 2 has never been
+  able to pass.** `step=$(grep '^current_step:' … | awk '{print $2}')` does not strip the quotes
+  that `manifest-init.sh:73` and `manifest-transition.sh:133` both write, so the comparison was
+  never true and the unattended pre-flight aborted on every manifest the system has ever produced —
+  printing `current_step is "ready_for_implementation", not ready_for_implementation`. A singleton,
+  and that is the interesting part: `manifest-validate.sh` uses the correct `sed` idiom at 17 sites
+  and check 1 uses a correct 3-sed chain **twenty-five lines above**. Check 2 invented a third.
+- **Recount before building on a count.** #206 said 15 abort-capable, ~6 covered. Truth: 13 and 4.
+  The 15 came from matching `ABORT` as a **substring**, which hits "aborted"; the 6 counted a fence
+  that is not abort-capable. Both off by two the same way, so `15-6` and `13-4` agree on 9. **Two
+  wrong numbers subtracting to the right one is not a check.**
+- **`bash -n` is the contract-versus-illustration classifier**, so the split the issue calls the
+  deeper finding was measured rather than settled by taste: exactly one of the 13 fails to parse
+  (`concept-to-code`'s merge-back block, carrying `<base-fork halt: …>` pseudo-code). `F7` keeps a
+  declared contract parseable.
+- **The received description of the heading-anchor hazard was wrong, in two different ways, both
+  worse.** Measured by rewording the anchors: `plan-task-count` 43/0 → **35 passed/2 failed** and
+  `scope-guards` 29/0 → **27/2**. (1) Six of `plan-task-count`'s assertions **vanished** — a suite
+  reporting fewer assertions does not read as broken, and nobody watches the count. (2)
+  `scope-guards` **misattributes**: an empty extraction is an empty script, an empty script exits 0,
+  so every *positive* assertion goes green and only the abort ones fail, with messages that blame
+  the guard. A reader hunts for a bug in check 1 that does not exist. Not "passes quietly" as this
+  file and the roadmap both said.
+- **Three fixes, all verified in the failing direction:** marker anchors on all five pre-existing
+  extractors (rewording `**Check 1 —` now leaves scope-guards 30/30); empty extraction returns
+  **97**, outside the fence's own `0|1` contract, so deleting a marker now fails all four
+  A-assertions instead of two; and an **assertion-count floor** `Z1` in each of the three files — a
+  floor, not an exact count, so it catches a vanished assertion without a bump on every addition.
+- **F4 accepts two needles and both are executions** (`run_fence "<id>"`, or the literal
+  `fence-contract: <id> -->` used by a re-anchored bespoke extractor). A `# covered elsewhere`
+  comment would have been a claim; a test cannot extract a fence without naming its id.
+- **Both directions per contract** (ADR-0039): good fixture and the bad input it exists to catch.
+  That is how #218 surfaced. Fixtures patch a **real** manifest, with the base chosen by *running*
+  `manifest-validate.sh` over the corpus — ADR-0078's dead `project_root` makes a valid manifest
+  fail for an unrelated reason as soon as `current_step` becomes non-terminal.
+
+Known consequences: the `commit` fence's abort path is **not** forced (E17–E19 cover branch
+creation, the no-op half, and the slug guard that stops a subject of "main" producing `feat/main`);
+`fence_is_abort_capable` is lexical, so a fence that aborts only via a called script's exit code is
+outside the population — twelve contracts is a floor on that set, not a proof of its size; two
+markers sit inside indented list items, so the parser must be indentation-tolerant (`S3`), which is
+why the issue's own first count said 101 instead of 138. **No synthetic pseudo-code fixture exists,
+deliberately:** two drafts were written and both **parsed as valid bash** — `… || <base-fork halt: …
+stop>` followed by another line consumes that line's first token as the `>` target, so the
+construct only fails when the pseudo-code closes the block. `S9` runs the classifier over the real
+fence (rule 10). `F5`/`F6`/`F7` passed on the empty declaration set — forward guards, not fix
+evidence; `F3` listing all 13 unmarked fences is the red evidence.
+
+Detail: `docs/architecture/ADR-0083-206-fence-contract-coverage.md`.

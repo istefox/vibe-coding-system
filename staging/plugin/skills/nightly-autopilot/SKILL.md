@@ -93,6 +93,7 @@ Any failure writes an `aborted` report and stops. No dispatch, no push. Emit one
 3. **Opt-in marker:** `.claude/nightly-autopilot.yml` exists and sets `publish: true`. Absent or
    `false` → abort with "publish not opted-in for this repo; run stops at local commit, use
    autopilot-build instead."
+   <!-- fence-contract: nightly-autopilot-optin -->
    ```bash
    m="$PWD/.claude/nightly-autopilot.yml"
    test -f "$m" || { echo "✗ opt-in: $m missing"; exit 1; }
@@ -108,6 +109,7 @@ Any failure writes an `aborted` report and stops. No dispatch, no push. Emit one
    "test-cmd not trusted — review `.claude/test-cmd` then run once:
    `bash ~/.claude/hooks/approve-test-cmd.sh \"$PWD\"`".
 6. **hook_verified known (roadmap-wide, pre-flight):**
+   <!-- fence-contract: nightly-autopilot-check-6 -->
    ```bash
    _manifests=$(ls "$PWD"/docs/manifests/*.manifest.yml 2>/dev/null)
    if [ -z "$_manifests" ]; then
