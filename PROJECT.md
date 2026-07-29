@@ -163,3 +163,75 @@ Two ways forward, neither started:
   writes. This tests a specific hypothesis rather than sampling a rate — if the subagent transcript
   file is not yet flushed when the first `PreToolUse` fires, the fallback would fire on nearly every
   coder's FIRST write, which one dispatch would show. Requires human authorisation to dispatch.
+
+### Phase 5 — make the shakedown run survivable (issues #206–#208)
+
+Phase 4 emptied the backlog, so this phase comes from an **audit of the skill and agent layer**, the
+surface the previous phases did not touch. Its purpose is narrower than "find defects": the next
+step after it is a **shakedown run of the chain on a real feature**, and this phase exists so that
+run tests the chain rather than testing today's edits.
+
+That framing is what orders it. Four live guardrails changed on 2026-07-29 — `agent-command-scope`
+twice, `manifest-validate`, `pre-flight-pattern-enforce` — and two pre-flight gates gained a
+dependency that **fails closed**. The first real run is where all of that lands.
+
+#### What the audit found clean, so nobody re-checks it
+
+Stated because a negative result nobody records gets re-derived:
+
+- **No missing script path.** Every `~/.claude/…`, `$HOME/…` and `$CLAUDE_PLUGIN_ROOT/…` reference
+  in every `SKILL.md` resolves. The one apparent miss — `hook-verify-workflow.sh` under the skill —
+  is ADR-0024's deliberate flat-vendoring remap, present in `PAIRS`.
+- **Every skill script has a `PAIRS` entry**, 40 examined with a count guard. ADR-0043's blind spot
+  is not currently costing anything.
+- **The `grep -c … || echo 0` idiom appears nowhere as a use.** All ten hits are *warnings against
+  it*, in ten different files. The #174 lesson propagated further than the fix did.
+- **No unguarded leading-dash grep pattern** survives.
+- **The agent layer is consistent.** Frontmatter carries `model` and `effort` on all eight, no agent
+  claims a tool in prose that its frontmatter withholds. The single sweep hit — `researcher`
+  "mentions Write" — is the sentence "Write the brief." ADR-0036/0042's work holds.
+
+#### 5.1 — Before anything else
+
+- [ ] **#206 — nine abort-capable fences that nothing executes.** 138 bash fences in the skill
+  layer, 15 can stop a run, ~6 are covered. **Five of the nine uncovered are in `autopilot-build`**,
+  the unattended path. This is the one that decides whether the shakedown run fails on the chain or
+  on an unrun pre-flight check, so it goes first and `autopilot-build` goes first within it.
+  The deeper half — nothing marks which fences are contracts and which are illustrations — is worth
+  solving here rather than counting by hand again.
+
+#### 5.2 — Cheap, and it removes a live wrong pointer
+
+- [ ] **#207 — a stale line-number cross-reference, and the unchecked class.**
+  `concept-to-code/SKILL.md:129` points at `SKILL.md:1355-1358` "for the exact transition block";
+  those lines now hold the weakening-scan `CLEAN` warning. It does not point at nothing — it points
+  at *other plausible technical prose*, which is worse. The named-heading instrument already exists
+  (ADR-0018 addendum, `workflow-dispatch-pins.test.sh`) and was applied to one file.
+
+#### 5.3 — Preventive, and therefore the one at risk of being skipped
+
+- [ ] **#208 — the three derived class guards each stop at a boundary nobody checks.** One question
+  asked three times: what is outside this derivation, and would we notice? The sharpest of the three
+  is that `transcript-scan-rule`'s count guard can be satisfied by a different population than the
+  one at risk — a guard that appears to cover something it does not.
+
+#### Then, and only then
+
+- [ ] **Shakedown run.** A small, real, low-stakes feature, chosen as much to exercise 2026-07-29's
+  changes as to build the thing. Expect three things and do not mistake them for regressions:
+  `diff-budget-check.sh` is active for the first time since July and may report `BUDGET`/`SCOPE` on
+  work in flight against budgets written when nothing read them; the two new `manifest-field-state.sh`
+  dependencies abort the pre-flight on an un-synced machine; and Step 5's Workflow dispatch is what
+  finally produces the **Workflow-path** data ADR-0080's pre-registered condition is waiting on.
+
+#### Risks
+
+- **#206 is the largest item and the one most likely to grow.** Nine fences, each needing a fixture
+  and a substitution contract, on top of a classification decision. If it has to be split, split by
+  skill and do `autopilot-build` alone first — it carries the whole unattended-path argument.
+- **The extraction anchors are headings**, and a heading rewrite turns extraction into a *skipped
+  section* rather than a failure. `plan-task-count.test.sh` already carries that hazard; anything
+  #206 adds inherits it. A skipped extraction must fail.
+- **This phase is preventive in the same way phase 4 was**, and carries the same property: nothing
+  in it produces a visible improvement. The difference is that this one has a deadline — the
+  shakedown run — and an unrun pre-flight check is exactly what that run would trip over.
