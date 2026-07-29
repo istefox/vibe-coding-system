@@ -331,10 +331,24 @@ for pair in "secret-scan.sh|staging/plugin/scripts/secret-scan.sh" \
             "weakening-scan.sh|staging/plugin/skills/review-triage-fix/scripts/weakening-scan.sh" \
             "interface-check.sh|staging/plugin/scripts/interface-check.sh"; do
   dname="${pair%%|*}"; relpath="${pair#*|}"
+  # NARROWED 2026-07-29 (ADR-0073 §D4, issue #177) from "no uncommitted change" to "no uncommitted
+  # change OUTSIDE COMMENTS". The guard's stated intent is that a feature must never modify the
+  # BEHAVIOUR of an existing check script, and its behavioural twin sits three assertions below
+  # (empty input -> documented exit code and output, untouched). As written it also froze the files
+  # against documentation, which is how it fired on a comment-only header edit that recorded a
+  # measured blind spot — a guard written against one past error firing on a legitimate change
+  # (rule 9 of .claude/context.md). It is NOT disabled: an executable-line change still fails.
+  _chg=$(git -C "$REPO" diff -U0 -- "$relpath" 2>/dev/null \
+         | grep -E '^[-+]' | grep -vE '^(\+\+\+|---)' \
+         | sed -E 's/^[-+][[:space:]]*//' \
+         | grep -vE '^(#|$)' | grep -c . || true)
+  case "$_chg" in ''|*[!0-9]*) _chg=0 ;; esac
   if git -C "$REPO" diff --quiet -- "$relpath" 2>/dev/null; then
     ok "CE-$dname: no uncommitted change against the tracked copy of $dname (forward guard)"
+  elif [ "$_chg" -eq 0 ]; then
+    ok "CE-$dname: uncommitted change to $dname is comment-only — executable lines untouched (forward guard)"
   else
-    bad "CE-$dname: $dname has uncommitted changes — this feature must NEVER modify existing check scripts"
+    bad "CE-$dname: $dname has $_chg uncommitted EXECUTABLE line change(s) — a feature must never modify the behaviour of an existing check script"
   fi
 done
 

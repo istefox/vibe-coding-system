@@ -892,6 +892,20 @@ Read project CLAUDE.md at <manifest.artifacts.project_claude_md> (if not null).
 [IF $_project_context is non-empty — add this block, otherwise omit entirely:]
 ## Project Roadmap (multi-feature context)
 <insert full content of PROJECT.md here>
+**Declare any plan constraint you do not implement (ADR-0073 §D1, issue #178).** If the plan
+specifies something concrete — a validation bound, an interface shape, a named approach — and you
+decide against it, do NOT implement it silently. Emit one line per case in your report, in the
+terminal `PLAN DEVIATIONS:` block, before `PATTERN:`:
+
+```
+PLAN DEVIATIONS:
+- task <N> | <the constraint, quoted or closely paraphrased> | declined|altered | <one line: why>
+```
+
+Emit the literal line `PLAN DEVIATIONS: none` when there are none. Deviating is legitimate and
+often correct — a plan is written before the code is read. What is not legitimate is deviating
+without saying so, because the human approving Gate 5 then has to find it by reading the diff.
+
 Implement ONLY what is specified in the plan above. Do NOT implement features marked [ ] (planned but not yet started) or re-implement anything marked [x] (already done). Use the roadmap only to understand existing interfaces, naming, and patterns you must stay consistent with.
 [END IF]
 
@@ -1173,6 +1187,10 @@ Schema (JSON):
     { "task": "3", "files_expected": 1, "files_actual": 2,
       "lines_expected": 120, "lines_actual": 210, "out_of_scope": ["src/unrelated.py"] }
   ],
+  "plan_deviations": [
+    { "task": "2", "constraint": "<the plan constraint, quoted or closely paraphrased>",
+      "action": "declined | altered", "reason": "<one line: why>" }
+  ],
   "task_metrics": [
     { "task": "3", "test_count_delta": 2, "deleted_lines": 14,
       "iteration_count": 2, "elapsed_wall_seconds": 187 }
@@ -1256,6 +1274,16 @@ is also what every manifest written before ADR-0039 means by omitting the field.
   `test_cmd_placeholder`/`test_cmd_provisional` skipped the tester stage, produces. A `"coder"`
   entry (an implementation coder wrote a test — either `test-write-scope.sh` denied nothing, or
   it was never wired) is surfaced at Gate 5 for a human to read; it is a record, never a gate.
+- `plan_deviations` is a **DISCLOSURE, not a gate** (ADR-0073 §D1, issue #178), and never a failure
+  signal in any mode. It records a plan constraint the coder chose not to implement, so the choice
+  reaches Gate 5 as a list to approve rather than as something the orchestrator must notice while
+  reading a diff. Absent means none was declared and is **not** malformed.
+  **It is a self-report, and that is fine here precisely because it is not a gate.** This system's
+  own rule — do not trust an agent's self-report as the gate (ADR-0047 §A3, RTF Step 3) — is about
+  gates. A disclosure feeding a human decision is the opposite case: a coder that hides a deviation
+  leaves the reviewer exactly where it was before this field existed, so the field can only add
+  information, never remove a check. Nothing verifies it, and nothing should be built on it as if
+  something did.
 - `budget_findings` is advisory only and **never a failure signal** (ADR-0052 §D3). A per-task line-count ceiling is
   an estimate made before the work by an agent that has not read every file it will touch — it
   will be wrong regularly and in both directions, so a gate on it would halt on noise more often
@@ -1319,6 +1347,14 @@ fi
 - `grep -q '^WEAKENED'`, anchored. Never `[ -n "$_wk" ]` — the script prints `CLEAN` when it
   finds nothing, so the output is never empty and an emptiness test is always true:
   **never gate on empty output**.
+- **`CLEAN` means "no detector fired", never "no weakening occurred" (ADR-0073 §D4, issue #177).**
+  The blind spot with a name: an assertion edited IN PLACE removes one assert-bearing line and adds
+  one, so `assert-removed`'s count comparison cannot fire. Flipping `is True` to `is False` to match
+  what the implementation produces is invisible to every detector in that script. No detector was
+  added — the diff shape is ambiguous by construction and the measurement showed 0-of-2 precision on
+  this repository's own history (see the script's header). **When this gate reports CLEAN, the
+  assertions in the diff have not been checked by anything.** Reading the test diff at the commit
+  gate is what covers it, and that is a human step, not a mechanical one.
 - Never `n=$(… | grep -c '^WEAKENED' || echo 0)` — `grep -c` prints `0` **and** exits 1 on no
   match, so `|| echo 0` appends a second line and `n` becomes the two-line string `0\n0`.
 
@@ -1747,6 +1783,16 @@ FINDINGS_SCHEMA (each finding object):
 Phase 1 — Review:
   agent(`
     Review all files modified in this implementation cycle.
+
+    The approved implementation plan is at <manifest.artifacts.plan>. Read it, and include PLAN
+    CONFORMANCE as an explicit lens: where the implementation departs from what the plan
+    specified, say so as a finding (ADR-0073 §D2, issue #178).
+    A departure is NOT automatically a defect — a plan is written before the code is read, and
+    "the coder chose a better approach" is a frequent and legitimate outcome. Report it at the
+    severity the DEPARTURE ITSELF warrants, judged on the code, not on the fact of departing.
+    step5-report.json's plan_deviations array lists the departures the coder declared; treat it
+    as a starting point, never as the complete set, since it is a self-report.
+
     Return a JSON array of findings matching FINDINGS_SCHEMA.
     Key: "findings". No other top-level keys.
   `, { agentType: "reviewer", model: "sonnet", effort: "high" })
@@ -2955,6 +3001,24 @@ severity table already set for a sub-gate reporting on itself rather than being 
 into Gate 5. See the Gate 5.05 block below for that render and ADR-0066 §D2 for why it never
 blocks either.
 
+**`plan_deviations` is rendered at Gate 5, on its own line, and is NOT the seventh member of the
+roll-up (ADR-0073 §D3, issue #178).** The exclusion is semantic, like `task_metrics`' and unlike
+`accessibility_i18n_findings`': the six are *findings* — each asserts something may be wrong and
+asks whether to run a review cycle. A plan deviation asserts nothing is wrong. It is a declaration
+that the implementation departs from the document the human approved at Gate 2, and the decision it
+asks for is not "review or not" but "is this departure acceptable". Folding it into a summary about
+review-cycle volume would bury exactly the thing that needs reading.
+
+Render it immediately BEFORE the roll-up, and only when non-empty:
+`Plan deviations declared by the coder (<N>) — the implementation departs from the approved plan
+here:` followed by one line per entry, `task <N>: <constraint> — <action>: <reason>`. When the
+array is empty or absent, render nothing at all: a "Plan deviations: none" line on every run is the
+padding the roll-up block above already refuses.
+
+**It is a self-report and the render says so**, in one clause: `(declared by the coder; nothing
+verifies this list is complete)`. That sentence is what keeps this a disclosure rather than a gate
+someone later mistakes for coverage.
+
 **`task_metrics` is not part of this roll-up and is not rendered at Gate 5, or anywhere else, at
 all (ADR-0064 §D2, issue #118).** Its exclusion IS semantic — `task_metrics` carries no claim,
 only a number, so there is nothing here for a human to decide, at this gate or any other. It is
@@ -2962,7 +3026,7 @@ written to `step5-report.json` for later analysis and read only when someone goe
 
 Use `AskUserQuestion`:
 ```
-question: "Gate 5 — Review cycle (Human approval required)\n\nTasks completed: <N>\nFiles modified: <list>\nTests: <green | red | n/a>\nHarness delta: <if relevant>\n<the advisory roll-up rendered above>\nAnonymize: <ON if manifest.anonymize=true | OFF (default)>\n\nRun a review-triage-fix cycle? Estimated: 5-10 min.\n\nOnly you can decide whether a review cycle is needed."
+question: "Gate 5 — Review cycle (Human approval required)\n\nTasks completed: <N>\nFiles modified: <list>\nTests: <green | red | n/a>\nHarness delta: <if relevant>\n<plan-deviations block, rendered only when non-empty>\n<the advisory roll-up rendered above>\nAnonymize: <ON if manifest.anonymize=true | OFF (default)>\n\nRun a review-triage-fix cycle? Estimated: 5-10 min.\n\nOnly you can decide whether a review cycle is needed."
 header: "Gate 5 · Review"
 options:
   - label: "Run review-triage-fix"
