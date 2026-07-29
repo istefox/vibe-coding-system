@@ -1431,3 +1431,44 @@ trips five unrelated invariants, and a first draft did exactly that — reportin
 an empty `project_root` reason, a failure about everything except the thing under test.
 
 Detail: `docs/architecture/ADR-0078-197-project-root-terminal.md`.
+
+## Decisions from the grant-coverage chain (ADR-0079)
+
+Closes issue #196. The issue asked whether `agent-command-scope.sh`'s fixed interpreter enumeration
+is the right instrument. Measuring it produced a different answer than expected, twice.
+
+- **The enumeration is not the risk, because the permission layer bounds it.** An agent can only
+  invoke what its frontmatter grants, and the two scoped agents grant exactly three executors:
+  `bash` and `python3` (both), `awk` (reviewer). All three are covered — the first two by
+  `INTERP_C` at a command position, `awk` through `system()` which `R2_EXEC` matches. **The
+  intersection of "outside the enumeration" and "actually invocable" is empty today.** So inverting
+  to a tool-exclusion list buys nothing and costs the failure direction.
+- **What is unguarded is WIDENING A GRANT**, and nothing would have noticed. The hook now carries a
+  `# grant-covered:` line plus a prose classification of every granted command word, and test
+  section J derives the words FROM THE AGENT FILES at run time. Verified in the failing direction:
+  adding `Bash(deno *)` to reviewer.md makes J3 fail naming `deno`. J4 makes the classification
+  behavioural, not lexical — both granted interpreters must be caught in practice, not just listed.
+- **The real defect: R2's trailing boundary, the sibling of the one #127 fixed.** #127 widened R1's
+  trailing class to accept a closing quote. `R2_GIT` already accepted a quote and was left alone —
+  but inside a shell double-quoted string the inner quotes are BACKSLASH-escaped, so a verb-last
+  call ends `push\"` and `["')]` does not match:
+  `python3 -c "import os; os.system(\"git push\")"` was **ALLOWED**, while the same line with
+  `git commit -m x` was denied because a space follows the verb. Test A6 passed throughout for
+  exactly the accidental reason section A did before #127.
+  **Fixing a boundary in one rule and not its sibling** is the lesson, and it is the second time
+  this shape has appeared in this file. Found by running the hook over the forms an interpreter
+  actually produces — not by reading it, and not by the harness, which was green.
+- **The compound guard had to survive the widening:** `print(\"git commit\")` now matches the verb
+  half and must still be allowed (I4), and a read-only verb behind a real exec construct stays
+  allowed (I5).
+- **The residual limit is pinned as expected-ALLOW (J5):** an interpreter neither enumerated nor
+  using an `R2_EXEC` construct escapes — `lua -e "os.execute('git push')"` is the shape. Closed
+  today ONLY by the permission layer, a different mechanism in a different file. Threat model
+  unchanged: a guardrail against a shortcut, not a sandbox.
+
+Known consequences: the hook denies strictly more than it did, the second widening in one day on a
+live guardrail. The grant check reads two specific agent files — a third scoped agent needs adding
+by hand. Anyone reading the coverage table as "these are the only executors" is reading a snapshot.
+J2/J4/I4/I5 and all of section E pass before and after; I1/I2/I3/J1/J3 were RED.
+
+Detail: `docs/architecture/ADR-0079-196-grant-coverage-and-r2-boundary.md`.

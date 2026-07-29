@@ -34,6 +34,29 @@
 #
 # Bash 3.2 clean: no assoc arrays, no mapfile, no process substitution.
 
+# GRANT COVERAGE (issue #196, ADR-0079). INTERP_C below is a fixed enumeration, and the obvious
+# worry is an interpreter outside it. Measured, that worry is bounded by a layer above this hook:
+# an agent can only invoke what its frontmatter GRANTS, and the two scoped agents grant exactly
+# three executors. So the enumeration is not the risk — WIDENING A GRANT is, and nothing here would
+# notice. Every `Bash(<word> …)` word on architect.md and reviewer.md is classified below, and
+# agent-command-scope.test.sh section J derives the words from those files at run time and requires
+# each to appear here. Adding `Bash(deno *)` to an agent fails J3 instead of silently opening the
+# -c path.
+#
+# grant-covered: bash python3 awk git rg grep npx shasum
+#
+#   bash, python3   executors — matched at a command position by INTERP_C (J4 checks in practice)
+#   awk             executor  — reaches a shell only through system(), which R2_EXEC matches
+#   git             the subject of the rules, not an executor; its mutating verbs are the denylist
+#   rg, grep        search tools. Their -c is COUNT, which is exactly what #127's audit had to
+#                   stop this hook from treating as an interpreter's -c (test C12-C15).
+#   npx            granted only as `npx [--yes] markdownlint-cli2*`, one tool, not a general runner
+#   shasum         hashes a file; no execution path
+#
+# The residual limit is real and pinned as expected-ALLOW in test J5: an interpreter that is neither
+# enumerated nor using an R2 exec construct (lua's os.execute is the shape) escapes. It is closed
+# today only by the permission layer — a different mechanism, in a different file.
+
 DIR="${AGENT_COMMAND_SCOPE_DIR:-$HOME/.claude/state/agent-command-scope}"
 LOG="$DIR/audit.log"
 mkdir -p "$DIR" 2>/dev/null || true
@@ -84,8 +107,17 @@ R1="(^|[;&|(){}]|&&|\\|\\||\`|\\\$\\(|${INTERP_C})[[:space:]]*git[[:space:]]+${M
 
 # R2 — an interpreter shelling out. Compound on purpose: the exec construct alone is fine
 # (os.system("git log")), the verb alone is fine (print("git commit")), only both together deny.
+#
+# R2_GIT's trailing class carries the BACKSLASH for the same reason R1's carries the quote, and it
+# was missed when R1 was fixed (issue #196). Inside a shell double-quoted string the inner quotes
+# are backslash-escaped, so a verb-last call ends `push\"` and a class of ["')] does not match:
+#   python3 -c "import os; os.system(\"git push\")"        was ALLOWED
+#   python3 -c "import os; os.system(\"git commit -m x\")"  was denied — a space follows the verb
+# Test A6 passed throughout for exactly the accidental reason section A did before #127: every case
+# in it carries an argument after the verb. Fixing a boundary in one rule and not its sibling is
+# the whole lesson; sections H and I now pin both.
 R2_EXEC='(os\.system|subprocess\.(run|call|Popen|check_output|check_call)|commands\.getoutput|[^a-zA-Z_]system\(|popen|child_process|execSync|spawnSync|%x\{|IO\.popen)'
-R2_GIT="git[[:space:]]+${MUTATING}([[:space:]]|[\"')]|\$)"
+R2_GIT="git[[:space:]]+${MUTATING}([[:space:]]|[\"')\\\\]|\$)"
 
 VERB=""
 if printf '%s' "$CMD" | grep -Eq "$R1"; then

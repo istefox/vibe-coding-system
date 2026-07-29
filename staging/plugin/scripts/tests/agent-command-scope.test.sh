@@ -178,6 +178,77 @@ deny_case "H4: absolute interpreter path"               architect '/bin/bash -c 
 deny_case "H5: bash -lc (combined flags)"               architect 'bash -lc "git push origin"'
 deny_case "H6: an intervening interpreter flag"         reviewer  'python3 -u -c "git commit"'
 
+# =====================================================================================
+# I. R2's TRAILING BOUNDARY — the same defect as H, in the sibling rule, unpropagated.
+# #127 widened R1's trailing class to accept a closing quote, because `bash -c "git push"` escaped
+# a class of ([[:space:]]|$). R2_GIT already accepted a quote and was left alone. It should not
+# have been: inside a shell double-quoted string the inner quotes are BACKSLASH-escaped, so the
+# character after a verb-last call is `\`, and R2_GIT missed it.
+#
+#     python3 -c "import os; os.system(\"git push\")"      -> ALLOWED
+#     python3 -c "import os; os.system(\"git commit -m x\")" -> denied   (A6, space after the verb)
+#
+# A6 passed throughout for the same accidental reason section A did in H: it carries an argument
+# after the verb. Fixing a boundary in one rule and not its sibling is the whole lesson.
+deny_case "I1: os.system with the verb last, escaped quotes"  architect 'python3 -c "import os; os.system(\"git push\")"'
+deny_case "I2: subprocess.run string form, verb last"         reviewer  'python3 -c "import subprocess; subprocess.run(\"git push\", shell=True)"'
+deny_case "I3: popen, verb last"                              architect 'python3 -c "import os; os.popen(\"git clean\")"'
+# I4: the compound guard still holds — an exec construct is required. A quoted verb with no way to
+# execute it stays data, which is what C9 protects and what widening R2_GIT must not break.
+allow_case "I4: verb last in a print, still not an exec"      architect 'python3 -c "print(\"git commit\")"'
+allow_case "I5: read-only verb behind an exec, verb last"     reviewer  'python3 -c "import os; os.system(\"git log\")"'
+
+# =====================================================================================
+# J. GRANT COVERAGE (issue #196). The interpreter enumeration in INTERP_C is a fixed list, and the
+# obvious worry is an interpreter outside it. Measured, that worry is bounded by a layer above:
+# an agent can only invoke what its frontmatter GRANTS, and the two scoped agents grant exactly
+# three executors — bash, python3 (both) and awk (reviewer) — all three covered.
+#
+# So the enumeration is not the risk. WIDENING A GRANT is. This section derives the granted command
+# words from the agent files at run time and requires each to be classified in the hook's own
+# source, so adding `Bash(deno *)` to reviewer.md fails here instead of silently opening the -c path.
+granted_words() {
+  sed -n 's/^tools:.*/&/p' "$1" | tr ',' '\n' \
+    | sed -n 's/.*Bash(\([^ )*]*\).*/\1/p' | sed 's/[^a-zA-Z0-9_.-]//g' | sed '/^$/d' | sort -u
+}
+DECLARED=$(grep '^# grant-covered:' "$HOOK" | head -1 | sed 's/^# grant-covered://')
+_nd=$(printf '%s\n' $DECLARED | sed '/^$/d' | wc -l | tr -d ' ')
+[ "$_nd" -ge 4 ] && ok "J1: the hook declares $_nd classified grant words" \
+                 || bad "J1: no usable '# grant-covered:' declaration in the hook ($_nd words)"
+
+_words=$( { granted_words "$ARCH_AGENT"; granted_words "$REV_AGENT"; } | sort -u )
+_nw=$(printf '%s\n' $_words | sed '/^$/d' | wc -l | tr -d ' ')
+[ "$_nw" -ge 4 ] && ok "J2: derived $_nw distinct Bash grant words from the two agent files" \
+                 || bad "J2: derived only $_nw grant words — J3 would pass vacuously"
+
+_unclassified=""
+for _w in $_words; do
+  case " $DECLARED " in *" $_w "*) ;; *) _unclassified="$_unclassified $_w" ;; esac
+done
+[ -z "$_unclassified" ] && ok "J3: every granted command word is classified in the hook" \
+  || bad "J3: granted but unclassified —$_unclassified. Widening a grant must not silently open the -c path."
+
+# J4: the classification must be behavioural, not a word in a list. The two interpreters both
+# agents hold have to be genuinely matched by the command-position rule.
+_beh=0
+for _i in bash python3; do
+  _out=$(run "$(payload architect "$_i -c \"git push origin main\"")")
+  denied "$_out" && _beh=$((_beh+1))
+done
+[ "$_beh" -eq 2 ] && ok "J4: both granted interpreters are matched in practice, not just listed" \
+                  || bad "J4: only $_beh of 2 granted interpreters are actually caught"
+
+# J5: the residual limit, asserted as EXPECTED-ALLOW alongside E's other two. An interpreter that
+# is neither enumerated nor using an R2 exec construct escapes. `lua`/`os.execute` is the shape.
+# It is closed today only by the permission layer, which is a different mechanism in a different
+# file — so if someone grants a new interpreter, J3 fires and this is the reason why it matters.
+_out=$(run "$(payload architect 'lua -e "os.execute(\"git push origin\")"')")
+if [ -z "$_out" ]; then
+  ok "J5: an UNGRANTED interpreter with a non-R2 exec construct is NOT caught (documented limit)"
+else
+  bad "J5: it is now caught — good, but ADR-0079's bound and the threat model must be updated"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
