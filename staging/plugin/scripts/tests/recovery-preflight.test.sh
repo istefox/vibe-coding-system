@@ -321,6 +321,79 @@ else
   ok "RG4: no PAIRS entry for recovery-preflight.test.sh (harnesses do not deploy)"
 fi
 
+# ==================================================================================================
+# RH. Issue #173 / ADR-0071 — the pre-flight had no producer.
+#
+# 5.0.1 and 5.0.2 assert a clean tree on a feature branch. Nothing in the chain created either:
+# `git checkout -b` appeared in the file exactly once, inside 5.0.2's own error message. So EVERY
+# first run failed the pre-flight — structurally, not situationally — and the remediation it printed
+# would have stashed SPEC.md, the ADR and the plan, i.e. the coder's own inputs.
+# ==================================================================================================
+COMMIT_SKILL="$STAGING/plugin/skills/commit/SKILL.md"
+
+# --- the producer exists, is named once, and is invoked by every proceeding path ---
+RH1_N=$(grep -c '^#### Gate 4.0 — Commit the planning artifacts' "$CC" 2>/dev/null || true)
+[ "$RH1_N" = "1" ] \
+  && ok "RH1: Gate 4.0 is defined exactly once in concept-to-code/SKILL.md" \
+  || bad "RH1: expected exactly one Gate 4.0 definition, found $RH1_N"
+
+RH2_N=$(grep -c 'Run \*\*Gate 4.0\*\*' "$CC" 2>/dev/null || true)
+[ "$RH2_N" -ge 3 ] \
+  && ok "RH2: all three proceeding paths reference Gate 4.0 ($RH2_N references)" \
+  || bad "RH2: only $RH2_N path(s) reference Gate 4.0 — autopilot bypass, 'Implement now' and 'Confirmed' all need it"
+
+# The abort path must NOT commit. Asserted as absence within the abort block, which is the one
+# place a well-meaning edit would add it "for consistency".
+RH3_BLOCK=$(awk '/^\*\*After the user clicks "Abort chain":\*\*/{f=1} f{print} f&&/^STOP/{exit}' "$CC")
+printf '%s\n' "$RH3_BLOCK" | grep -q 'Gate 4.0' \
+  && bad "RH3: the Abort path references Gate 4.0 — an aborted chain must not leave a commit behind" \
+  || ok "RH3 (forward guard, green before and after): the Abort path does not run Gate 4.0"
+
+# --- the producer delegates, it does not hand-roll git ---
+RH4_BLOCK=$(awk '/^#### Gate 4.0 — Commit the planning artifacts/{f=1; next} f&&/^\*\*\[Autopilot bypass/{exit} f{print}' "$CC")
+printf '%s\n' "$RH4_BLOCK" | grep -q 'commit' \
+  && ok "RH4: Gate 4.0 delegates to the commit skill" \
+  || bad "RH4: Gate 4.0 does not mention the commit skill"
+printf '%s\n' "$RH4_BLOCK" | grep -qE 'git (checkout -b|commit|add)' \
+  && bad "RH4b: Gate 4.0 hand-rolls git — there must be exactly one commit path in the system" \
+  || ok "RH4b (forward guard, green before and after — the block did not exist to hand-roll git in): Gate 4.0 runs no raw git commands"
+printf '%s\n' "$RH4_BLOCK" | grep -q -- '--no-pr' \
+  && ok "RH5: Gate 4.0 passes --no-pr (nothing to publish at the session boundary)" \
+  || bad "RH5: Gate 4.0 does not pass --no-pr — every chain run would be asked to open a PR"
+printf '%s\n' "$RH4_BLOCK" | grep -q -- '--autopilot' \
+  && ok "RH6: Gate 4.0 names the unattended form (--autopilot)" \
+  || bad "RH6: Gate 4.0 does not name --autopilot — the unattended path would stall on the commit gate"
+
+# --- the flag exists in the skill it is passed to, and suppresses only publication ---
+if [ -f "$COMMIT_SKILL" ]; then
+  grep -q -- '`--no-pr`' "$COMMIT_SKILL" \
+    && ok "RH7: commit/SKILL.md documents --no-pr" \
+    || bad "RH7: commit/SKILL.md has no --no-pr — Gate 4.0 passes a flag the skill does not know"
+  # The distinction that matters: --no-pr must not become a second --autopilot.
+  grep -q 'Step 4 HITL gate is \*\*unaffected\*\*' "$COMMIT_SKILL" \
+    && ok "RH8: --no-pr is documented as leaving the Step 4 approval gate intact" \
+    || bad "RH8: commit/SKILL.md does not state that --no-pr leaves the HITL gate intact — it must not become a second --autopilot"
+  grep -q 'Skipped entirely when `--no-pr` is present' "$COMMIT_SKILL" \
+    && ok "RH9: Step 6 states its own --no-pr skip condition at the step, not only in Arguments" \
+    || bad "RH9: Step 6 does not state the --no-pr skip — a reader following the steps would run it anyway"
+else
+  bad "RH7: $COMMIT_SKILL not found — RH7..RH9 skipped"
+fi
+
+# --- 5.0.1's remediation no longer leads with stash on the chain-artifact case ---
+RH10_BLOCK=$(awk '/^\*\*Step 5.0.1 — Working tree clean/{f=1; next} f&&/^\*\*Step 5.0.2/{exit} f{print}' "$CC")
+printf '%s\n' "$RH10_BLOCK" | grep -q 'Never advise `git stash` here' \
+  && ok "RH10: 5.0.1 forbids the stash advice on the chain-artifact case" \
+  || bad "RH10: 5.0.1 does not forbid stashing the chain's own artifacts — the advice that would delete the coder's inputs"
+printf '%s\n' "$RH10_BLOCK" | grep -q 'unrelated' \
+  && ok "RH11: 5.0.1 still prescribes stash for the unrelated-dirty-tree case (ADR-0050 §D2 preserved)" \
+  || bad "RH11: 5.0.1 lost the deliberate-dirty-resume case — the fix must not delete the behaviour it narrows"
+
+# --- autopilot-build's entry contract agrees with the pre-flight it hands off to ---
+grep -q 'committed, on a feature branch' "$AB" \
+  && ok "RH12: autopilot-build's prerequisites require the artifacts to be committed on a feature branch" \
+  || bad "RH12: autopilot-build still documents only 'exist on disk', contradicting the pre-flight it hands off to"
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

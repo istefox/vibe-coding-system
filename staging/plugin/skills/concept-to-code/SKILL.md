@@ -686,7 +686,25 @@ Four assertions, run once, at the very top of Step 5 — before dispatch-mode se
 ```bash
 git status --porcelain
 ```
-Non-empty output → refuse to dispatch. Print the literal remediation command: "Recovery-readiness pre-flight: working tree has uncommitted changes. Run `git stash push -u -m 'c2c-step5-preflight'` (or commit) and re-invoke Step 5." Do not proceed to dispatch-mode selection. A deliberately dirty resume now needs an explicit stash (ADR-0050 §D2 negative consequence 2) — that is accepted, not a bug.
+Non-empty output → refuse to dispatch. Do not proceed to dispatch-mode selection.
+
+**The remediation depends on WHAT is dirty, and the two cases pull in opposite directions
+(ADR-0071 §D3).** Decide by intersecting `git status --porcelain` with the chain's own artifacts —
+`SPEC.md`, `manifest.artifacts.adr`, `manifest.artifacts.plan`, the manifest itself, `CLAUDE.md`:
+
+- **Any chain artifact is uncommitted** → the producer did not run, or ran and was declined.
+  Print: "Recovery-readiness pre-flight: the chain's own planning artifacts are uncommitted. Gate 4.0
+  should have committed them. Run `/skill commit '<topic> — planning artifacts' --no-pr`, then
+  re-invoke Step 5." **Never advise `git stash` here**: `-u` would stash `SPEC.md`, the ADR and the
+  plan, which are exactly what the coder and tester dispatches read, producing a Step 5 that runs
+  against missing inputs. Until ADR-0071 this was the printed advice, and it was wrong on the only
+  path that ever reached it.
+- **Only unrelated files are dirty** → this is the deliberately-dirty resume ADR-0050 §D2 negative
+  consequence 2 describes. Print: "Recovery-readiness pre-flight: working tree has uncommitted
+  changes unrelated to the chain. Run `git stash push -u -m 'c2c-step5-preflight'` (or commit them)
+  and re-invoke Step 5."
+- **Both** → prescribe the commit first, then the stash, in that order, and say why: committing the
+  artifacts is what makes the stash safe.
 
 **Step 5.0.2 — A feature branch is checked out, not the default branch.**
 ```bash
@@ -2721,7 +2739,40 @@ Reject behavior: re-invoke `claude-md-generator` with feedback prefix.
 
 Trigger: post Gate 3, manifest in `step_4_session_boundary`.
 
-**[Autopilot bypass: if `manifest.autopilot = true`, skip AskUserQuestion entirely. Emit: "Gate 4: autopilot — session boundary bypassed, continuing to Step 5 ✓". Transition `step_4_session_boundary → ready_for_implementation`. Immediately proceed to Step 5 — do NOT stop, do NOT emit the /clear instructions block.]**
+#### Gate 4.0 — Commit the planning artifacts (ADR-0071)
+
+**Run on every path that proceeds past Gate 4, and on none that does not.** Named once here; the
+three proceeding branches below each reference it, and "Abort chain" does not — an aborted chain
+must not leave a commit behind.
+
+Step 5's recovery pre-flight (5.0.1, 5.0.2) requires a clean working tree on a feature branch.
+Until ADR-0071 **nothing in the chain produced that state**: Steps 1–3 always write `SPEC.md`, the
+ADR, the plan and the manifest, and the chain always starts wherever the user was — so every first
+run failed the pre-flight, and the remediation it printed (`git stash push -u`) would have stashed
+the coder's own inputs. This step is the producer.
+
+Invoke the `commit` skill — never hand-rolled `git` here. Its Step 3.6 creates the feature branch
+and structurally refuses to commit to the default branch, its Step 4 is the HITL gate, and Step 7
+of this chain already uses it, so there is exactly one commit path in the system:
+
+- **Attended** (`manifest.autopilot = false`): invoke `commit` with args
+  `<topic-full-title> — planning artifacts (ADR: <manifest.artifacts.adr>) --no-pr`.
+  The Step 4 gate still asks; `--no-pr` suppresses only the PR question, which would otherwise fire
+  on every chain run with nothing to publish.
+- **Unattended** (`manifest.autopilot = true`): the same, plus `--autopilot`. Local commit only —
+  this changes no autonomy boundary, ADR-0020 already places a local commit inside it.
+
+If the tree is already clean AND `HEAD` is already off the default branch, `commit` reports nothing
+to commit: that is a resumed or already-committed run, and it is a pass, not an error. Proceed.
+
+If the commit is declined or aborted at its own gate, **do not transition** — Gate 4 stays
+un-answered and the chain remains at `step_4_session_boundary`. Report that Step 5 will refuse to
+dispatch until the artifacts are committed, and stop.
+
+**[Autopilot bypass: if `manifest.autopilot = true`, skip AskUserQuestion entirely. Run **Gate 4.0**
+first (with `--autopilot --no-pr`). Emit: "Gate 4: autopilot — session boundary bypassed, continuing
+to Step 5 ✓". Transition `step_4_session_boundary → ready_for_implementation`. Immediately proceed to
+Step 5 — do NOT stop, do NOT emit the /clear instructions block.]**
 
 Use `AskUserQuestion` (only when `manifest.autopilot = false`):
 ```
@@ -2741,6 +2792,7 @@ options:
 ```
 
 **After the user clicks "Implement now (autopilot, this session)":**
+0. Run **Gate 4.0** — attended form (the flag below is not set yet, and the human is present).
 1. Set the flag: `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest-path> autopilot true`.
 2. Emit: "Gate 4: implement now — autopilot ON for Steps 5-7 ✓".
 3. Transition `step_4_session_boundary → ready_for_implementation`.
@@ -2750,6 +2802,8 @@ options:
    guard, and circuit breaker still apply.
 
 **After the user clicks "Confirmed":**
+0. Run **Gate 4.0**. This is the path the producer exists for: the fresh session opens at Step 5 and
+   asserts a clean tree on a feature branch, and it has no way to create either.
 1. Transition `step_4_session_boundary → ready_for_implementation`.
 2. Immediately emit this block as your final text output (no other tool calls):
 

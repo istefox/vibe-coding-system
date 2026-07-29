@@ -1084,3 +1084,45 @@ Known consequences, recorded rather than fixed:
   predicate. Exempted by name in `PTG9`, with `PTG10` asserting both still exist.
 
 Detail: `docs/architecture/ADR-0070-184-diff-budget-task-predicate.md`.
+
+## Decisions from the Step 5 pre-flight producer chain (ADR-0071)
+
+Closes issue #173, the last of group A. ADR-0050's pre-flight asserts a clean tree on a feature
+branch at Step 5 entry. Both assertions are right; **neither had a producer**. `git checkout -b`
+appeared in `concept-to-code/SKILL.md` exactly once, inside 5.0.2's own error message, so every
+first run of the chain failed the pre-flight — structurally, not situationally.
+
+- **The printed remediation was actively wrong.** `git stash push -u` would have stashed `SPEC.md`,
+  the ADR and the plan — exactly what the coder and tester dispatches read. The live run reached
+  Step 5 only because the model overrode the instruction. 5.0.1 now branches on WHAT is dirty:
+  commit for the chain's own artifacts (never stash), stash for the unrelated-dirty-tree resume that
+  ADR-0050 §D2 describes, and commit-then-stash for both. `RH11` asserts the second case survives —
+  a fix that narrows a behaviour must not delete it.
+- **Gate 4.0 is the producer**, defined once and referenced by the three paths that proceed past
+  Gate 4, and by NOT the "Abort chain" path — an aborted chain must not leave a commit behind
+  (`RH3`). Gate 4 is the last point the old session can act and exactly where the fresh session's
+  assumptions begin.
+- **It invokes the `commit` skill and never hand-rolls git.** Step 3.6 there already creates the
+  branch and structurally refuses the default branch; Step 7 of this chain already calls it. A
+  dedicated branch-and-commit would be a second commit path that drifts from the first — the defect
+  ADR-0069 had just removed from the plan-task predicate, in a new place. `RH4b` forbids raw
+  `git checkout -b`/`commit`/`add` inside the Gate 4.0 block.
+- **`--no-pr` is new on `commit`** and skips Steps 6/6b/6c/7 while **leaving the Step 4 approval gate
+  intact** — that is the whole difference from `--autopilot`, which skips approval and skips Step 6
+  as a side effect. Orthogonal, combinable. Documented in Arguments AND at Step 6, because a reader
+  following the numbered steps does not re-read the header.
+- **`autopilot-build`'s entry contract was the wrong half of a disagreement.** It said the artifacts
+  "exist on disk" while handing off to a pre-flight requiring them committed on a feature branch. It
+  now names the committed state and points at Gate 4.0.
+
+Known consequences, recorded rather than fixed:
+- The feature branch's first commit is documentation-only, and a chain abandoned during Step 5 leaves
+  a branch carrying a design commit and nothing else. Cheap, reversible, and the price of a
+  `recovery_baseline_sha` that points at a commit which actually contains the artifacts — before
+  this it recorded a state that had never been committed.
+- Gate 4.0 adds one HITL gate to the attended flow (the `commit` skill's own). It appears where a
+  decision already existed implicitly, rather than adding a new decision.
+- `commit/SKILL.md` still has no harness of its own (ADR-0046 noted this); `RH7`–`RH9` are the first
+  assertions in the repository that read it.
+
+Detail: `docs/architecture/ADR-0071-173-step5-preflight-producer.md`.

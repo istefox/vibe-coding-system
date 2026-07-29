@@ -29,6 +29,10 @@ and left the manifest at `ready_for_implementation`. This skill picks up from th
 - `current_step: ready_for_implementation` in the manifest.
 - Gates 1, 2, 3 all `status: approved`.
 - SPEC.md, ADR, and plan exist on disk and plan has unchecked tasks.
+- Those artifacts are **committed, on a feature branch** — `concept-to-code` Gate 4.0 produces that
+  state (ADR-0071). Step 5's recovery pre-flight refuses to dispatch without it and there is no
+  leniency branch on the unattended path, so an uncommitted tree here is an `aborted` report, not a
+  prompt. This line used to say only "exist on disk", which contradicted the pre-flight it hands off to.
 - `.claude/test-cmd` is not `NONE`, not a placeholder, and SHA-pinned trust is registered.
 - `hook_verified` is `true` or `false` (not null — run the smoke test interactively first).
 - Session CWD equals `manifest.project_root` or is a parent of it.
