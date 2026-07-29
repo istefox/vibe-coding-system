@@ -1508,3 +1508,45 @@ form, ADR-0076 the comment-marker form, this the backtick form. **A prose assert
 on how the text is decorated any more than on where it breaks.**
 
 Detail: `docs/architecture/ADR-0080-194-fallback-verdict.md`.
+
+## Decisions from the false-green / zone-anomaly chain (ADR-0081)
+
+Closes issues #213 and #212, phase 6.1. Two unrelated defects fixed together because both are a
+correct-looking artifact that reports success without having checked anything.
+
+**#213 — the RUNBOOK's agent validation could not fail.** The path was wrong
+(`plugins/cache/…/unknown/…`; the validator is under `plugins/marketplaces/…/plugins/…`), and **the
+path is the lesser half.** `bash` on a missing script exits **127** and writes to stderr; the loop's
+only signal was `grep -q "Validation failed"`, which finds nothing there, so the `||` branch printed
+`OK` for every file. Reproduced verbatim from git history before fixing: **eight `OK` lines and the
+validator had never existed.**
+- **Branch on the exit code, not on grepped output.** `validate-agent.sh` exits 1/0 (read, then
+  confirmed live). 127 is not 0, so a missing script cannot fake a pass; a grep for output wording
+  can be defeated by the script's absence.
+- **`find` + hard-fail, and the guard is the part that generalises** — the block says to keep it even
+  if the path is ever pinned again. The `cache`/`marketplaces` split is evidence layouts move.
+- **The fixed block was executed**, not just written: it validates all eight agent files and reports
+  clean. First time this step has validated anything. Rule 11 applied to the fix, not only to the
+  finding.
+- The dead path survives in three **historical plans** — not edited (ADR-0034 precedent).
+
+**#212 — two zone anomalies in `PAIRS`, one undeclared.** `hook-verify-workflow.sh` is flat in
+staging (ADR-0016/0024) and remapped into `skills/concept-to-code/scripts/` on deploy; the audit
+reported it as a missing file and the reason had to be reconstructed from an ADR.
+- **There are TWO, not one.** The first sweep compared src/dst tails and returned forty hits, because
+  `plugin/scripts/X → hooks/X` is the *normal* mapping. The right question is which entry lands in a
+  **different subtree from its peers**: `hook-verify-workflow.sh` (undeclared) and `usage-report.py`
+  (already documented at `sync-to-claude.sh:19`). #212 warned against assuming one, and was right.
+- **Declared in `sync-to-claude.sh` via `# pairs-zone-anomaly:`, derived and checked in the test.** A
+  third anomaly fails at introduction. ZA4 runs it backwards (a stale waiver would keep ZA3 green),
+  ZA2 count-guards the `PAIRS` parse, ZA5 pins the flat source — the half that breaks if someone
+  "fixes" the reference. Both ZA3 and ZA4 seen failing on planted cases.
+
+**Found on the way, and it is the same defect one level in:** `pairs-completeness.test.sh` has no
+`ok()`/`bad()` helpers — its counters are touched only by its `check_*` functions. The first ZA draft
+called them anyway: **six assertions printed "command not found" and the suite reported
+`PASS=244 FAIL=0` and exited 0.** Nothing there runs under `set -e`, so a call to an undefined helper
+is indistinguishable from a passing assertion. Both helpers are now defined with that history above
+them.
+
+Detail: `docs/architecture/ADR-0081-213-212-false-green-and-zone-anomalies.md`.

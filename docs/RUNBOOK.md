@@ -89,10 +89,32 @@ bash -n ~/.claude/hooks/protect-files.sh && bash -n ~/.claude/hooks/auto-format.
 ```bash
 mkdir -p ~/.claude/agents
 cp staging/plugin/agents/*.md ~/.claude/agents/
-# Re-validation
-V="$HOME/.claude/plugins/cache/claude-plugins-official/plugin-dev/unknown/skills/agent-development/scripts/validate-agent.sh"
-for f in ~/.claude/agents/*.md; do bash "$V" "$f" >/tmp/v 2>&1; grep -q "Validation failed" /tmp/v && echo "FAIL $f" || echo "OK $f"; done
+
+# Re-validation. Two things here are deliberate; see the note below before simplifying either.
+V=$(find "$HOME/.claude/plugins" -name validate-agent.sh -type f 2>/dev/null | head -1)
+[ -n "$V" ] && [ -r "$V" ] || {
+  echo "validator not found under ~/.claude/plugins — validation DID NOT RUN"; exit 1; }
+echo "validator: $V"
+
+fail=0
+for f in ~/.claude/agents/*.md; do
+  if bash "$V" "$f" >/tmp/v 2>&1; then echo "OK   $(basename "$f")"
+  else echo "FAIL $(basename "$f")"; cat /tmp/v; fail=1; fi
+done
+[ "$fail" -eq 0 ] && echo "all agent files validated" || { echo "validation failed"; exit 1; }
 ```
+
+> **Why `find` and not a literal path (issue #213).** This step used to hard-code
+> `.../plugins/cache/claude-plugins-official/plugin-dev/unknown/skills/...`, which does not exist —
+> the validator lives under `plugins/marketplaces/.../plugins/plugin-dev/skills/...`. A different
+> layer of the plugin system entirely, and not a path shape worth re-pinning by hand.
+>
+> **Why the exit code and not `grep "Validation failed"`.** That grep is what turned the wrong path
+> into a **false green**: `bash` on a missing script exits 127 and prints to stderr, the grep finds
+> no "Validation failed" text, and every file is reported `OK` having been validated by nothing.
+> `validate-agent.sh` exits 1 on failure and 0 on pass (verified), so the exit code is both the
+> reliable signal and the one that cannot be defeated by the script being absent. The `[ -n "$V" ]`
+> guard is the part that generalises — keep it even if the path is ever pinned again.
 
 ### Step 7 — Zone 2: skills
 
