@@ -1,6 +1,8 @@
 #!/bin/bash
 # detect-public-remote.sh — D1: detect if repo root has a public GitHub remote.
 # Fail-safe cascade toward "silent": every uncertain or non-github case outputs "silent".
+# xref-exempt: line 1|line 2 — stdout positions in this script's own output contract, not a
+# reference into another file. Callers parse by position, so the numbers are the contract itself.
 # Stdout: "public" (line 1) + "repo=<owner/repo>" (line 2) when public GitHub detected.
 #         "silent" (line 1 only) in all other cases.
 # Exit 0 always (classification is in stdout, not exit code).

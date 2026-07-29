@@ -50,6 +50,8 @@ if [ ! -s "$HEADINGS_TMP" ]; then
   exit 0
 fi
 
+# xref-exempt: line 1 — a position inside the CLAUDE.md file this script is parsing at run time,
+# not a reference into another file in this repository. It moves with the input, not with us.
 # Pass 2 — emit rows. For each heading, end = next heading start - 1; the last heading
 # ends at EOF (total). Emit a PREAMBLE row if first H2 is past line 1.
 prev_heading=""

@@ -49,6 +49,8 @@ Skip files with no issues. End with a prioritized summary of the most impactful 
 
 Example output:
 
+<!-- xref-exempt: Line 12|Line 24|Line 31|line 12|line 24|line 31 — positions inside the hypothetical ContentView.swift of this skill's own example output, plus the summary that refers back to them; they describe a file the reader supplies at run time, never a file in this repository. -->
+
 ### ContentView.swift
 
 **Line 12: Use `foregroundStyle()` instead of `foregroundColor()`.**

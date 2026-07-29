@@ -83,8 +83,9 @@ RECORDS="$TMPD/records"; : >"$RECORDS"
 FN_OUT="$TMPD/fn_out";   : >"$FN_OUT"
 FN_PATHS="$TMPD/fn_paths"; : >"$FN_PATHS"
 
-# --- the filename rule (ADR-0046 §D7). The four patterns are commit/SKILL.md:70's, verbatim and
-# NOT narrowed: narrowing them would weaken an existing invariant guardrail. Case-insensitive.
+# --- the filename rule (ADR-0046 §D7). The four patterns are commit/SKILL.md's Step 1 secrets
+# check — the `.env`, `*secret*`, `*credential*`, `*.pem` list — verbatim and NOT narrowed:
+# narrowing them would weaken an existing invariant guardrail. Case-insensitive.
 fname_match() {
   _lp=$(printf '%s' "$1" | tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz')
   _bn="${_lp##*/}"

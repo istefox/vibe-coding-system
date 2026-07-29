@@ -71,7 +71,8 @@
 #   and $2, so the token goes inside the prose field rather than into a sixth column.
 #
 #   Side effect worth knowing: `src=` also separates a workflow coder from an Agent-tool
-#   coder, which hook-verify-workflow.sh:30 documents as a known limit of this same log.
+#   coder, which hook-verify-workflow.sh documents as a known limit of this same log, in its
+#   "an allow/block row cannot be matched on `agent_type=coder`" paragraph.
 #   That limit is narrowed here as a by-product; hook-verify-workflow.sh itself is
 #   deliberately NOT changed — phase 1 instruments, it does not decide.
 #
@@ -88,7 +89,8 @@
 #   (137 regular, 56 under subagents/workflows/<wf_id>/) and both match the two lookups below.
 #
 #   WHY KEEP IT ANYWAY. Dropping it turns a rare false ALLOW into a rare chain-breaking DENY, and
-#   fail-open on every internal error is this file's stated contract (line 5). The asymmetry with
+#   fail-open on every internal error is this file's stated contract (its header's
+#   "Fail-open on any internal error" line). The asymmetry with
 #   write-scope-enforce.sh is real and is NOT an inconsistency: that hook's fallback would be
 #   actively wrong — it would bind a write scope from the orchestrator's text — while this one is
 #   merely permissive. Different failure, different correct answer.
@@ -229,6 +231,8 @@ if printf '%s\n' "$RECENT" | grep -E '^PATTERN: (ADD|REMOVE|REPLACE|MODIFY|CREAT
   exit 0
 fi
 
+# xref-exempt: file.py:42 — an illustrative path inside the deny message's own PATTERN example
+# below, shown to the coder so it can format its header. Not a reference into another file.
 # Block: PATTERN missing
 log_audit "$SID" "$TOOL" "block" "PATTERN missing in window=$WINDOW src=$TSRC"
 jq -nc --arg r "pre-flight-pattern-enforce: PATTERN: header missing in sliding window. ADR-0001 requires emitting \`PATTERN: <CATEGORY> | <payload>\` before every Edit/Write/MultiEdit. Example: \`PATTERN: MODIFY | path/file.py:42 rename var\`. Emit the header and retry. If the block persists, STOP and report to the orchestrator — do NOT attempt to bypass or disable this guardrail." \

@@ -26,9 +26,14 @@
 #   bypass-noncoder  -> detail is "agent_type=<value>"   (the ONLY decision that records agent_type)
 #
 # So an allow/block row cannot be matched on `agent_type=coder`; no such row exists. The invariant is
-# stronger anyway: `pre-flight-pattern-enforce.sh` returns early unless `agent_type == "coder"` (its
-# lines 91-94), so REACHING allow or block already proves a coder was ruled on. That is what this
-# script keys off.
+# stronger anyway: `pre-flight-pattern-enforce.sh` returns early unless `agent_type == "coder"`
+# (its `if [ "$AGENT_TYPE" != "coder" ]` discriminator), so REACHING allow or block already proves
+# a coder was ruled on. That is what this script keys off.
+#
+# That reference used to be a line range. It rotted the day ADR-0080 (issue #194) grew that file's
+# header by ~50 lines and pushed the discriminator down — the same commit that was fixing a
+# neighbouring defect in the same file. Naming the code line instead is self-checking: it moves
+# with the thing it describes.
 #
 #   allow | block                                  -> the guard resolved the transcript and ruled.
 #                                                     `block` proves enforcement exactly as `allow` does.

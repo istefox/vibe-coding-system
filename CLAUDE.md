@@ -1550,3 +1550,49 @@ is indistinguishable from a passing assertion. Both helpers are now defined with
 them.
 
 Detail: `docs/architecture/ADR-0081-213-212-false-green-and-zone-anomalies.md`.
+
+## Decisions from the cross-reference form chain (ADR-0082)
+
+Closes issues #207 and #210, phase 6.2. Rule 3 — a cross-reference by line number rots — had been
+enforced on **one file** since ADR-0018's addendum. Nothing checked the class.
+
+**THE RULE — a cross-reference must name a DISTINCTIVE ANCHOR, never a line number. A
+`<file>:<digits>` or `line <digits>` string that is genuinely not a reference is declared in the
+file that carries it, on ONE line: `xref-exempt: <token>|<token>|… — <reason ≥ 40 chars>`.**
+
+- **The derivation found three wrong references neither issue named, in a third surface neither
+  issue named.** #207 filed an inventory of five sites; #210 verified two and added the
+  hook-source → `SKILL.md` surface the inventory excluded by construction; deriving over all of
+  `staging/` found defects in skill-private `scripts/` — the subtree ADR-0043 recorded
+  `pairs-completeness.test.sh` as blind to. Six wrong, one drifted, eight accurate-but-numeric,
+  all fifteen converted. Rule 5 demonstrated three times on one defect.
+- **The one to remember: `hook-verify-workflow.sh`'s pointer rotted the day ADR-0080 grew
+  `pre-flight-pattern-enforce.sh`'s header by ~50 lines** — the same commit that was fixing a
+  neighbouring defect in the same file, the day before. The population needing checks is not "old
+  files someone forgot"; it is every file, including the ones being actively corrected.
+- **The extractor SKIPS `xref-exempt:` lines, and that is what makes the waiver honest.** A
+  declaration names the tokens it exempts, so those tokens appear on the declaration line; without
+  the skip, a waiver for a token present nowhere else would look live (rule 12). `U2` runs it
+  backwards — a declared-but-absent token is a stale exemption covering nothing (ADR-0081 ZA4's
+  direction). `S3` is the fixture that proves the skip.
+- **The one-line marker requirement is not cosmetic.** A reason wrapped across lines is a prose
+  assertion that depends on where the text breaks — ADR-0073's line wrap, ADR-0076's comment
+  marker, ADR-0080's backticks, now a fourth. `U3` measures only the marker line, so a wrapped
+  reason fails at the moment it is written. Found the honest way: the first three declarations
+  were wrapped and `U3` caught all three.
+- **Self-references assert a count of 2, not `>= 1`** — the anchor at the target plus the reference
+  naming it — so either half disappearing is loud. `C1b`/`C2b` pin the marker form at exactly 1,
+  or "2 occurrences" could be two references and no anchor.
+
+Known consequences: three markdown prompts gain an HTML comment (real if small prompt cost,
+accepted because the alternative is a waiver that does not travel with the file); the check
+verifies an anchor EXISTS, never that it is the right place for the claim — all six wrong
+references had **true claims and wrong pointers**, and a false claim with a valid anchor would
+pass; the `§<digits>` form is deliberately outside the extractor (it is an ADR section reference
+here, and the one line-range use is already pinned by `workflow-dispatch-pins.test.sh` B1);
+`spec-coverage.sh`'s reference into `docs/specs/` is converted but unverifiable, since `docs/` is
+out of the population by design (ADR-0034 precedent — a line number in a historical record is a
+correct snapshot of its moment). `C10`/`C11`/`C14`/`C15` pass before and after — forward guards,
+labelled in the harness, with `U1` as their red evidence.
+
+Detail: `docs/architecture/ADR-0082-207-210-cross-reference-form.md`.

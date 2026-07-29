@@ -30,7 +30,8 @@
 # item's text (after the "- [ ] " / "- [x] " marker) inside a recognized section (Success criteria
 # / Acceptance criteria / Definition of done, matched case-insensitively at ## or deeper, ending at
 # the next line at heading level 1 or 2). A checklist item that merely MENTIONS an ID mid-sentence
-# (e.g. this feature's own SPEC line 43) declares nothing. A well-formed ID at the start of a
+# (e.g. this feature's own SPEC, whose "A SPEC with `R-01`,`R-02` and a plan covering only `R-01`"
+# success criterion mentions two IDs mid-sentence) declares nothing. A well-formed ID at the start of a
 # checklist item OUTSIDE every recognized section is the narrow escape hatch for a generator that
 # emits IDs under an unrecognized heading: MALFORMED, exit 3 — never widened to "any R-NN anywhere"
 # (that fires on prose, including this file's own header).
@@ -88,7 +89,7 @@ done
 TMPD=$(mktemp -d) || { printf '%s: cannot create a temp directory\n' "$SELF" >&2; exit 2; }
 trap 'rm -rf "$TMPD"' EXIT
 
-# count_re() shape copied from secret-scan.sh:103 — never `grep -c X f || echo 0` (grep -c PRINTS 0
+# count_re() shape copied from secret-scan.sh's own count_re() — never `grep -c X f || echo 0` (grep -c PRINTS 0
 # AND EXITS 1 on no match, so the fallback also fires and the substitution yields the two-line
 # string "0\n0", which breaks arithmetic on every clean run).
 count_re() { _c=$(grep -c "$1" "$2" 2>/dev/null); printf '%s' "${_c:-0}"; }

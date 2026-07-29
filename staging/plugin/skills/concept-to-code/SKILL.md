@@ -126,8 +126,8 @@ Behavior:
    commit survey. Gate 0d performs the chain's **single** `current_step` transition out of
    `step_0_init`: `step_0_init → gate_0d_scaffolding`, then immediately `gate_0d_scaffolding →
    step_1_interview` (`chain_path=standard`/null) or `→ step_e1_plan` (express) or `→
-   step_h1_interview` (hybrid) — see `SKILL.md:1355-1358` for the exact transition block,
-   unmodified by this task.
+   step_h1_interview` (hybrid) — see the **Gate 0d transition block** at the end of the Gate 0d
+   section in §5 for the exact transition, unmodified by this task.
 
 For `chain_path=standard` with `mode=brownfield`, Step 1 is a no-op (§4 Step 1 already handles
 this); otherwise execution continues in the matching path's own Step 1 definition (§4 Step 1 /
@@ -1820,8 +1820,9 @@ Phase 2 — Group findings by file (in-script, no agent):
 Phase 3 — Fix in parallel per file group:
   // model: "opus" deliberately overrides the sonnet frontmatter of coder/refactorer/debugger.
   // This is a cross-skill convention, not drift here: same override in review-triage-fix
-  // (SKILL.md:170 — "fix agents make judgment calls without a structured plan, Opus reduces
-  // the risk of introducing new issues") and in deep-refactor (its "model: opus requirement"
+  // (its "**Model override — branches on the variant declared in Step 0, item 5:**" block —
+  // fix agents make judgment calls without a structured plan, Opus reduces the risk of
+  // introducing new issues) and in deep-refactor (its "model: opus requirement"
   // section), decided in ADR-0018 § Dispatch model. Model and effort come from different
   // places on purpose — model overridden to opus, effort still each agent's frontmatter value
   // via FIX_EFFORT — so the mismatch below is intended, not a leftover.
@@ -2478,6 +2479,8 @@ options:
 `[yes]` → `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`; proceed.
 `[no]` → proceed.
 
+**Gate 0d transition block:**
+
 Transition: set `current_step` to `gate_0d_scaffolding` via `scripts/manifest-transition.sh`, then immediately transition based on `chain_path`:
 - `chain_path = standard` (or null) → `gate_0d_scaffolding → step_1_interview`
 - `chain_path = express` → `gate_0d_scaffolding → step_e1_plan`
@@ -2688,7 +2691,7 @@ After "Abort": terminate the chain.
 
 **[Autopilot default: never call `approve-test-cmd.sh` unconditionally (ADR-0014, ADR-0020 D4 —
 TOFU trust must pre-exist, never auto-granted in autopilot). Probe pre-existing trust read-only,
-the exact same mechanism as the Form-B resume-path guard (`SKILL.md:152-158`, unmodified):
+the exact same mechanism as the Form-B resume-path guard (**Step 2b — TOFU guard (resume path only)**, unmodified):
 ```bash
 TCF="<project-root>/.claude/test-cmd"
 H=$(shasum -a 256 "$TCF" | awk '{print $1}')

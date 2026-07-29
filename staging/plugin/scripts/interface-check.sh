@@ -115,7 +115,7 @@ fi
 TMPD=$(mktemp -d) || { printf '%s: cannot create a temp directory\n' "$SELF" >&2; exit 2; }
 trap 'rm -rf "$TMPD"' EXIT
 
-# count_re() shape copied from secret-scan.sh:103 — never `grep -c X f || echo 0` (grep -c PRINTS 0
+# count_re() shape copied from secret-scan.sh's own count_re() — never `grep -c X f || echo 0` (grep -c PRINTS 0
 # AND EXITS 1 on no match, so the fallback also fires and the substitution yields the two-line
 # string "0\n0", breaking arithmetic on every clean run).
 count_re() { _c=$(grep -c "$1" "$2" 2>/dev/null); printf '%s' "${_c:-0}"; }
