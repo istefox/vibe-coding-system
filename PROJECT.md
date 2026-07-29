@@ -193,7 +193,7 @@ Stated because a negative result nobody records gets re-derived:
 
 #### 5.1 — Before anything else
 
-- [ ] **#206 — nine abort-capable fences that nothing executes.** 138 bash fences in the skill
+- [x] **#206 — nine abort-capable fences that nothing executes.** DONE (ADR-0083, PR #219), and it found #218. 138 bash fences in the skill
   layer, 15 can stop a run, ~6 are covered. **Five of the nine uncovered are in `autopilot-build`**,
   the unattended path. This is the one that decides whether the shakedown run fails on the chain or
   on an unrun pre-flight check, so it goes first and `autopilot-build` goes first within it.
@@ -339,6 +339,35 @@ free to honour.
     lists, and a column-0 anchor undercounts — this issue's own first measurement said 101 instead of
     138 for exactly that reason.
   - Decide the contract-vs-illustration marker here, since #211 will reuse it.
+
+  **Outcome — it found a P1, and the roadmap's own two warnings were both wrong.**
+
+  **#218: `autopilot-build` check 2 has never been able to pass.** `awk '{print $2}'` does not strip
+  the quotes that `manifest-init.sh:73` and `manifest-transition.sh:133` both write, so the
+  comparison was never true and the unattended pre-flight aborted on every manifest the system has
+  ever produced, printing `current_step is "ready_for_implementation", not
+  ready_for_implementation`. A singleton: `manifest-validate.sh` uses the correct `sed` idiom at 17
+  sites and check 1 uses a correct 3-sed chain **twenty-five lines above**. Check 2 invented a
+  third. Found by running the fence. This is the entire argument for the phase, delivered.
+
+  **The counts were wrong.** 13 abort-capable, not 15; 4 covered, not ~6. The 15 came from matching
+  `ABORT` as a substring, which hits "aborted"; the 6 counted a fence that is not abort-capable.
+  Both off by two the same way, so `15-6` and `13-4` agree on 9 — two wrong numbers subtracting to
+  the right one is not a check.
+
+  **The heading-anchor hazard was mischaracterised here and in `CLAUDE.md`.** Measured by rewording
+  the anchors: `plan-task-count` 43/0 → **35 passed/2 failed**, `scope-guards` 29/0 → **27/2**. Not
+  a quiet pass. Two worse things: six assertions **vanished** from one (a suite reporting fewer
+  assertions does not read as broken), and the other **misattributes** — an empty extraction is an
+  empty script, an empty script exits 0, so positive assertions go green and only the abort ones
+  fail, blaming the guard. Fixed three ways, each verified failing: marker anchors on all five
+  extractors, empty extraction returns 97, and an assertion-count **floor** in three files.
+
+  **Mechanism for 6.4:** `<!-- fence-contract: <id> -->` / `<!-- fence-illustration: <reason ≥ 40
+  chars> -->`, one line, immediately above the fence, doubling as the extraction anchor. `bash -n`
+  is the contract-vs-illustration classifier and it isolated exactly one illustration among the 13 —
+  the decision was measured, not settled by taste. `F4` accepts only needles that are real
+  executions; a `# covered elsewhere` comment would have been a claim.
 
 #### 6.4 — Reuse the pattern
 
