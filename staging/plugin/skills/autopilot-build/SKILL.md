@@ -141,7 +141,16 @@ grep -qxF "${hash}	${root_n}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null 
 **Check 7 — hook_verified known:**
 ```bash
 hv=$(python3 -c "import yaml; m=yaml.safe_load(open('$manifest')); print(m.get('hook_verified'))" 2>/dev/null)
-[ "$hv" = "None" ] || [ -z "$hv" ] && { echo "✗ hook_verified: value is null/absent. Run the Step 5 smoke test in an interactive session first."; exit 1; }
+# Assert the two VALID values, never enumerate the invalid ones (issue #123, ADR-0075 §D4). The
+# old test was `[ "$hv" = "None" ] || [ -z "$hv" ]`, so anything that was neither — `maybe`, a
+# typo, a string "false" from a quoted YAML value — PASSED, and the run then branched on it.
+# Unlike nightly check 6, absence here is correctly an abort: this manifest is the one about to be
+# built, so it is in flight by definition and its dispatch mode has to be known.
+case "$hv" in
+  True|False) : ;;
+  None|"")    echo "✗ hook_verified: value is null/absent, or the manifest could not be read. Run the Step 5 smoke test in an interactive session first."; exit 1 ;;
+  *)          echo "✗ hook_verified: value is \"$hv\" — must be true or false. The manifest is corrupted or was hand-edited; fix or re-init."; exit 1 ;;
+esac
 ```
 
 **Check 8 — Git repo at CWD:**
