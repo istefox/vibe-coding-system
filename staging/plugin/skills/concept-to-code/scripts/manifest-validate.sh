@@ -43,12 +43,41 @@ if ! grep -q '^topic_full_title:' "$MANIFEST"; then
   fail "topic_full_title field missing"
 fi
 
-# Invariant 4: project_root must be a directory that exists
+# Invariant 4: project_root must be present, and must be an existing directory UNLESS the chain
+# has reached a terminal state (issue #197, ADR-0078).
+#
+# WHY THE CONDITION. The field records where a chain ran. On a terminal manifest that is a
+# HISTORICAL FACT, not a live precondition, and requiring the directory to exist asserts that every
+# manifest is validated on the machine that produced it. Five of this repository's own manifests
+# carry a path from a different machine and failed this invariant for that reason alone.
+#
+# TERMINAL MEANS ABSORBING, and that was verified against the state machine rather than assumed:
+# no transition pair in manifest-transition.sh has completed, failed or aborted as its SOURCE, so a
+# manifest in one of them can never move again. Wider than ADR-0075's `completed`-only tolerance
+# for hook_verified, and for a stated reason — that rule's argument ("a finished chain cannot
+# affect a future run") covers all three absorbing states, and narrowing to one would be following
+# its letter past its reason.
+#
+# IT CANNOT WEAKEN A LIVE PATH. Every consumer reads a manifest that is in flight:
+# manifest-transition.sh validates pre-transition and a terminal manifest never transitions;
+# autopilot-build check 2 requires current_step = ready_for_implementation immediately after
+# validating. On those, the existence check is unchanged.
+#
+# PRESENCE is still required in every state — a missing project_root is corruption at any point.
 project_root_val="$(grep '^project_root:' "$MANIFEST" | sed 's/^project_root: *//;s/"//g' | head -1)"
+project_root_step="$(grep '^current_step:' "$MANIFEST" | sed 's/^current_step: *//;s/"//g' | head -1)"
 if [ -z "$project_root_val" ]; then
   fail "project_root field missing or empty"
 elif [ ! -d "$project_root_val" ]; then
-  fail "project_root '$project_root_val' is not an existing directory"
+  case "$project_root_step" in
+    completed|failed|aborted)
+      # Terminal: the path is a record of where this chain ran, and nothing will run again.
+      # Silent rather than a note — this script's only output channel is fail(), and its main
+      # caller (manifest-transition.sh) discards stderr, so a note would reach nobody.
+      : ;;
+    *)
+      fail "project_root '$project_root_val' is not an existing directory" ;;
+  esac
 fi
 
 # Invariant 5: current_step must be in valid enum

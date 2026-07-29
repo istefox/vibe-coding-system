@@ -1389,3 +1389,45 @@ Seen RED against a reverted tree (both enforcing hooks broken): T1 and both T2 f
 files, the other nine pass.
 
 Detail: `docs/architecture/ADR-0077-193-transcript-scan-class-guard.md`.
+
+## Decisions from the terminal project_root chain (ADR-0078)
+
+Closes issue #197, completing phase 4.2. `manifest-validate.sh` invariant 4 required `project_root`
+to be an existing directory in EVERY state, which asserts that every manifest is validated on the
+machine that produced it. Five of this repository's own manifests carry a path from a different
+machine and failed for that reason alone.
+
+- **The paths are not corrupt** — they are accurate for the machine those chains ran on. Presence
+  is still required in every state (a missing field is corruption at any point); only the
+  directory-exists half is now conditional.
+- **Terminal means ABSORBING, verified against the state machine rather than assumed:** no
+  transition pair in `manifest-transition.sh` has `completed`, `failed` or `aborted` as its SOURCE,
+  and the unconditional `any -> failed|aborted` branch creates edges INTO two of them and none out.
+  **Wider than ADR-0075's `completed`-only tolerance, deliberately** — that rule's argument covers
+  all three identically, and ADR-0075 named one because one was all its two manifests had.
+  Narrowing here would follow its letter past its reason.
+- **It cannot weaken a live path**, which is what makes it safe rather than convenient: every
+  consumer reads an in-flight manifest (`manifest-transition.sh` validates pre-transition and a
+  terminal manifest never transitions; `autopilot-build` check 2 requires
+  `ready_for_implementation` on the next line). B4 pins that an in-flight manifest with a dead root
+  still fails, naming `project_root`.
+- **Silent, not a note** — the script's only channel is `fail()` and its main caller discards
+  stderr. Opposite of ADR-0075's nightly check 6, which prints a note because a pre-flight is
+  talking to an operator.
+- **The five files stay byte-unchanged, and C2 enforces it from the other side:** it asserts at
+  least one manifest still carries a dead root, so C1 cannot go green the day someone "fixes" the
+  five and leaves the exemption untested while looking covered.
+- **The premise is pinned, not the conclusion.** Section A derives the absorbing set from the
+  transition script and the exempt list from the validator's own source, both at run time. A0
+  count-guards the derivation, A3 runs it in reverse (a live state must not be exempt, or an empty
+  exempt list would satisfy A2).
+
+Known consequences: a terminal manifest with a genuinely wrong root — a typo, not a machine
+difference — now passes, indistinguishable by inspection and worth close to nothing to catch on a
+chain that will never run again. A0/A3/B5/B6/B7/C2 pass before and after.
+
+**Harness lesson:** the fixtures are built by patching a REAL manifest. A hand-written minimal one
+trips five unrelated invariants, and a first draft did exactly that — reporting "still invalid" with
+an empty `project_root` reason, a failure about everything except the thing under test.
+
+Detail: `docs/architecture/ADR-0078-197-project-root-terminal.md`.
