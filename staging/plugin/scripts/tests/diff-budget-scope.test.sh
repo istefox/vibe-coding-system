@@ -154,8 +154,15 @@ else
   bad "BB1: expected CLEAN on a fully budget-less plan — got out=[$OUT] rc=$RC"
 fi
 
-bb2_count=0; bb2_bad=0
+# AMENDED for issue #184 / ADR-0070. This loop used to include EVERY plan, and passed — because the
+# check was inert. A plan that declares a budget is not "legacy" and must NOT stay silent when a
+# diff touches a file outside its declared set; asserting otherwise pinned the defect as the
+# contract and would have blocked the fix. BB2's intent (a plan declaring nothing stays silent) is
+# unchanged; its population is corrected. BJ1/BJ2 below assert the excluded plan DOES respond, so
+# the exclusion cannot quietly become a hole.
+bb2_count=0; bb2_bad=0; bb2_skipped=0
 for f in "$REPO"/docs/superpowers/plans/*.md; do
+  if grep -q '[Bb]udget:' "$f" 2>/dev/null; then bb2_skipped=$((bb2_skipped + 1)); continue; fi
   bb2_count=$((bb2_count + 1))
   mk_diffstat "bb2_$bb2_count" "some/random/touched/file_$bb2_count.py:37" >"$TMP/stat_in"
   o=$(bash "$DBC" --plan "$f" --tasks 1 2>"$TMP/bb2err" <"$TMP/stat_in")
@@ -169,7 +176,14 @@ for f in "$REPO"/docs/superpowers/plans/*.md; do
   fi
 done
 if [ "$bb2_bad" -eq 0 ]; then
-  ok "BB2: every plan in the real docs/superpowers/plans/ corpus stays genuinely silent (CLEAN, exit 0, empty stderr)"
+  ok "BB2: every budget-free plan in the real corpus stays genuinely silent (CLEAN, exit 0, empty stderr); $bb2_skipped budget-declaring plan(s) excluded and covered by BJ1/BJ2"
+fi
+# The exclusion must stay small and must actually have a subject — if it ever covers most of the
+# corpus, or none of it, BB2 has stopped measuring what it claims.
+if [ "$bb2_skipped" -ge 1 ] && [ "$bb2_skipped" -le 5 ]; then
+  ok "BB2b: the budget-declaring exclusion covers $bb2_skipped plan(s) — small and live"
+else
+  bad "BB2b: $bb2_skipped plan(s) excluded from BB2 — re-derive the exclusion, it no longer bounds anything"
 fi
 if [ "$bb2_count" -ge 5 ]; then
   ok "BB3: the BB2 corpus loop visited $bb2_count files (>= 5) — not a vacuous pass"
@@ -340,6 +354,96 @@ if grep -q 'diff-budget-scope.test' "$TMP/pairs"; then
 else
   ok "BH4: no PAIRS entry for diff-budget-scope.test.sh (harnesses do not deploy)"
 fi
+
+# ==================================================================================================
+# BJ. Issue #184 / ADR-0070 — the check had NEVER fired on a real plan.
+#
+# Its private predicate needed `- [ ] **Task N` (18 of 57 plans), and the one plan in the corpus
+# that declares a Budget: is heading-form, so it produced no task block and no attribution. Two
+# defects, both required: the predicate, and a paren group demanded at strict end-of-line while the
+# real plan wraps the whole declaration in markdown italics.
+#
+# THESE ASSERTIONS RUN AGAINST THE REAL CORPUS, not a fixture, because a fixture written by the
+# same hand that wrote the parser is what let this survive: every existing BA-BE fixture below uses
+# the strict form, so the harness was green while the feature was inert.
+# ==================================================================================================
+BJ_PLAN="$REPO/docs/superpowers/plans/2026-07-28-176-worktree-isolation-contract.md"
+if [ ! -f "$BJ_PLAN" ]; then
+  bad "BJ0: $BJ_PLAN not found — BJ1..BJ3 are meaningless (if the plan was renamed, repoint them)"
+else
+  ok "BJ0: the real heading-form, budget-declaring plan is present"
+
+  # Within the declared budget and scope: still CLEAN. NEITHER of BJ1/BJ2 is evidence on its own,
+  # in either direction: verified against the pre-fix script, BJ1 passes there too — an inert
+  # parser prints CLEAN for everything — while a parser that fired on everything would satisfy BJ2.
+  # Only the pair distinguishes a working check from a broken one in both directions.
+  mk_diffstat bj1 "staging/plugin/scripts/tests/worktree-isolation-contract.test.sh:100" ".github/workflows/docs-ci.yml:2" >"$TMP/stat_in"
+  BJ1_OUT=$(bash "$DBC" --plan "$BJ_PLAN" --tasks 2 <"$TMP/stat_in")
+  [ "$BJ1_OUT" = "CLEAN" ] \
+    && ok "BJ1: a diff inside task 2's declared budget and scope is CLEAN" \
+    || bad "BJ1: expected CLEAN on an in-budget diff, got [$BJ1_OUT]"
+
+  # Over the line ceiling and outside the declared file set: both signals fire.
+  mk_diffstat bj2 "staging/plugin/scripts/tests/worktree-isolation-contract.test.sh:900" "src/unrelated.py:40" >"$TMP/stat_in"
+  BJ2_OUT=$(bash "$DBC" --plan "$BJ_PLAN" --tasks 2 <"$TMP/stat_in")
+  { printf '%s\n' "$BJ2_OUT" | grep -q '^BUDGET' && printf '%s\n' "$BJ2_OUT" | grep -q '^SCOPE'; } \
+    && ok "BJ2: an over-budget, out-of-scope diff on a HEADING-form plan reports BUDGET and SCOPE" \
+    || bad "BJ2: expected BUDGET and SCOPE on a heading-form plan, got [$BJ2_OUT] — the check is still inert"
+
+  # The italic tolerance, isolated. Without it BJ2 cannot fire even with the right predicate.
+  BJ3_N=$(awk '/[Bb]udget:/ && /\)[ \t]*[*_`]/ {n++} END{print n+0}' "$BJ_PLAN")
+  [ "$BJ3_N" -ge 1 ] \
+    && ok "BJ3: the real plan does write its Budget: in trailing markdown emphasis ($BJ3_N line(s)) — the tolerance is load-bearing, not cosmetic" \
+    || bad "BJ3: no emphasis-wrapped Budget: line found — re-derive the tolerance before keeping it"
+fi
+
+# Backward compatibility over the WHOLE corpus (ADR-0052 §D1's hard gate, re-asserted after
+# widening). A plan declaring no budget must be genuinely silent — and before this change that was
+# satisfied accidentally, by a parser silent on almost everything.
+BJ_DIR="$REPO/docs/superpowers/plans"
+if [ -d "$BJ_DIR" ]; then
+  mk_diffstat bj4 "a.txt:1" >"$TMP/stat_in"
+  bj_total=0; bj_noisy=0; : >"$TMP/bj-noisy"
+  for _p in "$BJ_DIR"/*.md; do
+    [ -f "$_p" ] || continue
+    bj_total=$((bj_total+1))
+    [ "$_p" = "$BJ_PLAN" ] && continue          # the one plan that legitimately has budgets
+    _o=$(bash "$DBC" --plan "$_p" --tasks 1-99 <"$TMP/stat_in" 2>&1)
+    [ "$_o" = "CLEAN" ] || { bj_noisy=$((bj_noisy+1)); printf '%s: %s\n' "$(basename "$_p")" "$_o" >>"$TMP/bj-noisy"; }
+  done
+  [ "$bj_total" -ge 30 ] \
+    && ok "BJ4 (count guard): the corpus sweep ran over $bj_total plans" \
+    || bad "BJ4 (count guard): only $bj_total plan(s) swept — BJ5 proves nothing"
+  [ "$bj_noisy" -eq 0 ] \
+    && ok "BJ5: every budget-free plan in the corpus stays completely silent" \
+    || bad "BJ5: $bj_noisy plan(s) became noisy: $(head -3 "$TMP/bj-noisy" | tr '\n' ' ')"
+else
+  bad "BJ4: plan corpus not found at $BJ_DIR"
+fi
+
+# BJ6 — the right-aligned count column (ADR-0070 §D6), pinned on its own because it is the
+# subtlest of the four defects and the only one that survives a correct predicate, a correct
+# budget parse and an untruncated path. git pads narrower counts with leading spaces; the parser
+# required a digit immediately after " | ", so any file smaller than the widest one in the diff
+# vanished from the candidate set — no SCOPE finding, and its lines absent from the BUDGET total.
+cat >"$TMP/bj6-plan.md" <<'EOF'
+# Plan
+
+## Task 1 — Something (R-01)
+
+*Budget: `big.py` (~10 lines)*
+EOF
+# Handcrafted, not mk_diffstat: the alignment is the subject of the assertion, so it must be
+# written explicitly rather than left to whatever width git picks for a fixture.
+printf ' small.py |   7 +\n big.py   | 400 ++++\n 2 files changed, 407 insertions(+)\n' >"$TMP/stat_in"
+BJ6_OUT=$(bash "$DBC" --plan "$TMP/bj6-plan.md" --tasks 1 <"$TMP/stat_in")
+printf '%s\n' "$BJ6_OUT" | grep -q '^SCOPE.*small\.py' \
+  && ok "BJ6: a file with a narrower, right-aligned count is still seen (SCOPE reported for small.py)" \
+  || bad "BJ6: small.py vanished from the candidate set — got [$BJ6_OUT]"
+
+printf '%s\n' "$BJ6_OUT" | grep -q 'lines=10/400' \
+  && ok "BJ6b: the wider file's lines still reach the BUDGET total unchanged" \
+  || bad "BJ6b: expected lines=10/400 in [$BJ6_OUT]"
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"

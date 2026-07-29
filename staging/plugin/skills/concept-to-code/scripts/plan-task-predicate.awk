@@ -38,3 +38,39 @@ function is_task_heading(l,   lvl) {
 function is_task_line(l) {
   return is_checklist_item(l) || is_task_heading(l)
 }
+
+# ------------------------------------------------------------------------------------------------
+# is_task_opener() — THE SECOND QUESTION, and it is not the same one (ADR-0070, issue #184).
+#
+# is_task_line() answers "is there a task here", for a `>= 1` malformed-plan guard where
+# over-counting is the safe direction. is_task_opener() answers "does a task BLOCK START on this
+# line", for a consumer that attributes content — a `Budget:`, a file list — to the task it belongs
+# to. There, over-counting is not safe: a checkbox SUB-STEP reading `- [ ] Re-run Task 2. Sections
+# A and B green.` satisfies is_task_line(), and using it as a boundary would close task 1's block
+# early and attribute its budget to task 2. Measured on the real corpus, not hypothesised.
+#
+# The rule: the task designation must be at the START of the line's own content, after the heading
+# marker or the checkbox marker, and after an optional `**`. That admits both documented forms
+#
+#   ## Task 1 — …            ### Task 3 — … (R-02, R-05)
+#   - [ ] **Task 1 — …**     - [ ] Task 1 — …
+#
+# and rejects a sub-step that merely mentions a task, which is the whole point.
+#
+# Measured 2026-07-29 over the 57 plans in docs/superpowers/plans/: 55 match. The two that do not
+# use a different word for a task entirely — `### Step 0 —` and `### T1 —` — and both predate the
+# `architect.md` contract that names the `Task N` form. See ADR-0070 §D3: exempted by name, not
+# absorbed, because widening to `Step|T[0-9]` would make `## The T1 approach` a task boundary.
+function is_task_opener(l,   lvl, rest) {
+  rest = l
+  lvl = heading_level(l)
+  if (lvl >= 2 && lvl <= 4) {
+    sub(/^#+[ \t]+/, "", rest)
+  } else if (is_checklist_item(l)) {
+    sub(/^[ \t]*[-*][ \t]\[[ xX]\][ \t]*/, "", rest)
+  } else {
+    return 0
+  }
+  sub(/^\*\*[ \t]*/, "", rest)
+  return rest ~ /^[Tt]ask[ \t]+[0-9]+/
+}

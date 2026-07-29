@@ -374,6 +374,77 @@ PTD_SELF3=$(printf 'w=$(grep -c X f || echo 0)  # idiom-demo declared\n' | ptd_n
   && ok "PTD3 (self-check, positive twin of PTD2): the idiom-demo waiver suppresses a real instance" \
   || bad "PTD3 (self-check): the idiom-demo waiver did not suppress ($PTD_SELF3 hit(s)) — filter 3 is dead"
 
+# ==================================================================================================
+# PTG. is_task_opener() — the SECOND predicate (ADR-0070 §D1, issue #184). It answers "does a task
+#      BLOCK START here", not "is there a task here". The distinction is the whole reason it exists:
+#      diff-budget-check.sh uses it as a boundary to attribute a Budget: to a task, and the looser
+#      is_task_line() would let a checkbox SUB-STEP close the previous task's block and steal it.
+# ==================================================================================================
+cat > "$TMP/opener.awk" <<'AWKEOF'
+{ printf "%d\t%d\t%s\n", is_task_opener($0), is_task_line($0), $0 }
+AWKEOF
+opener_of() { printf '%s\n' "$1" | awk -f "$PRED" -f "$TMP/opener.awk" | cut -f1; }
+line_of()   { printf '%s\n' "$1" | awk -f "$PRED" -f "$TMP/opener.awk" | cut -f2; }
+
+# Both documented forms open a block.
+[ "$(opener_of '## Task 1 — Do the thing (R-01)')" = "1" ] \
+  && ok "PTG1: an H2 'Task N' heading opens a task block" \
+  || bad "PTG1: '## Task 1 — …' did not open a block"
+[ "$(opener_of '### Task 3 — … (R-02, R-05)')" = "1" ] \
+  && ok "PTG2: the architect.md H3 form opens a task block" \
+  || bad "PTG2: '### Task 3 — …' did not open a block"
+[ "$(opener_of '- [ ] **Task 1 — the strict legacy form**')" = "1" ] \
+  && ok "PTG3 (regression): the old strict checkbox form still opens a block" \
+  || bad "PTG3: the strict '- [ ] **Task N' form stopped opening a block — 18 plans use it"
+[ "$(opener_of '- [ ] Task 2 — a checkbox task without bold')" = "1" ] \
+  && ok "PTG4: a checkbox task without bold opens a block" \
+  || bad "PTG4: '- [ ] Task 2 — …' did not open a block"
+
+# The case the whole predicate exists for.
+SUBSTEP='- [ ] Re-run Task 2. Sections A and B green.'
+{ [ "$(opener_of "$SUBSTEP")" = "0" ] && [ "$(line_of "$SUBSTEP")" = "1" ]; } \
+  && ok "PTG5: a sub-step MENTIONING a task is not an opener, though is_task_line() still matches it" \
+  || bad "PTG5: the sub-step case is broken — opener=$(opener_of "$SUBSTEP") line=$(line_of "$SUBSTEP"); a Budget: would be attributed to the wrong task"
+[ "$(opener_of '## Tasks')" = "0" ] \
+  && ok "PTG6: a '## Tasks' section heading is not an opener (is_task_line deliberately still matches it)" \
+  || bad "PTG6: '## Tasks' opened a block — every plan with that section would gain a phantom task"
+[ "$(opener_of 'Prose that mentions Task 4 in passing.')" = "0" ] \
+  && ok "PTG7: prose mentioning a task is not an opener" \
+  || bad "PTG7: plain prose opened a task block"
+
+# Corpus. Same shape as PTE, same two named exemptions plus one more: deep-refactor writes `### T1`.
+if [ -d "$PLANS_DIR" ]; then
+  cat > "$TMP/openct.awk" <<'AWKEOF'
+{ if (is_task_opener($0)) n++ } END { print n + 0 }
+AWKEOF
+  ptg_total=0; : > "$TMP/ptg-zero.txt"
+  for _p in "$PLANS_DIR"/*.md; do
+    [ -f "$_p" ] || continue
+    ptg_total=$((ptg_total+1))
+    _n=$(awk -f "$PRED" -f "$TMP/openct.awk" "$_p" 2>/dev/null)
+    [ "${_n:-0}" -ge 1 ] || printf '%s\n' "$(basename "$_p")" >> "$TMP/ptg-zero.txt"
+  done
+  # Two plans name their tasks with a different word entirely — `### Step 0 —` and `### T1 —`, both
+  # predating architect.md's `Task N` contract. Widening to Step|T[0-9] was rejected in ADR-0070 §D3:
+  # `## The T1 approach` would become a task boundary. Named, so a NEW miss fails here.
+  cat > "$TMP/ptg-known" <<'EOF'
+2026-06-06-claude-md-slim.md
+2026-05-30-deep-refactor-skill.md
+EOF
+  ptg_unexpected=$(grep -vxF -f "$TMP/ptg-known" "$TMP/ptg-zero.txt" 2>/dev/null | grep -c .)
+  [ "$ptg_total" -ge 30 ] \
+    && ok "PTG8 (count guard): the opener corpus loop ran over $ptg_total plans" \
+    || bad "PTG8 (count guard): only $ptg_total plan(s) scanned"
+  [ "$ptg_unexpected" -eq 0 ] \
+    && ok "PTG9: every plan has a task opener except the two known non-'Task' plans ($(grep -c . "$TMP/ptg-zero.txt") exempt of $ptg_total)" \
+    || bad "PTG9: $ptg_unexpected plan(s) unexpectedly have no opener: $(tr '\n' ' ' < "$TMP/ptg-zero.txt")"
+  ptg_live=0
+  while IFS= read -r _k; do [ -f "$PLANS_DIR/$_k" ] && ptg_live=$((ptg_live+1)); done < "$TMP/ptg-known"
+  [ "$ptg_live" = "2" ] \
+    && ok "PTG10 (exemptions are live): both named plans still exist" \
+    || bad "PTG10: only $ptg_live of 2 exempted plans exist — prune the list, it protects nothing"
+fi
+
 echo
 echo "plan-task-count: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
