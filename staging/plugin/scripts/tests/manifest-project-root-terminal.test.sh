@@ -35,12 +35,17 @@ DEAD="/nonexistent-machine-root/Developer/whatever"
 # hand-written minimal one trips five unrelated invariants (artifacts on a completed status,
 # hitl_gates count, chain_path), and every verdict below would then be about those instead — a
 # first draft did exactly that and reported "still invalid" with an empty project_root reason.
+# The base is chosen by PATCHING each candidate and testing the result, never by looking for one
+# whose project_root happens to exist on this machine. A first draft did the latter and passed
+# locally while failing in CI, where the checkout path differs and NO manifest has a live root —
+# a machine-dependent assumption inside the test for the issue about machine-dependent assumptions.
 BASE=""
 for _c in "$REPO"/docs/manifests/*.manifest.yml; do
-  _r=$(grep -m1 '^project_root:' "$_c" | sed 's/^project_root:[[:space:]]*//; s/"//g')
-  [ -n "$_r" ] && [ -d "$_r" ] && { BASE="$_c"; break; }
+  sed -e 's|^current_step: .*|current_step: "completed"|' \
+      -e "s|^project_root: .*|project_root: \"$TMP\"|" "$_c" > "$TMP/base-probe.yml"
+  if bash "$VALIDATE" "$TMP/base-probe.yml" >/dev/null 2>&1; then BASE="$_c"; break; fi
 done
-[ -n "$BASE" ] || { echo "FAIL: no usable base manifest with a live project_root"; exit 1; }
+[ -n "$BASE" ] || { echo "FAIL: no manifest validates even with a live project_root — fixtures cannot be built"; exit 1; }
 
 # mk <name> <current_step> <root | __NONE__ | __EMPTY__>
 mk() {
