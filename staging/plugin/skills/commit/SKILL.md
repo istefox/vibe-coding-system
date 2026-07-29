@@ -21,13 +21,17 @@ Closes the implementation cycle with a HITL-verified Conventional Commit.
 ## Arguments
 
 ```
-/commit [context-hint] [--autopilot]
+/commit [context-hint] [--autopilot] [--no-pr]
 ```
 
 Optional `context-hint`: brief feature description for the commit body.
 From the concept-to-code chain: `<topic-full-title> (ADR: <adr-path>)`.
 
 `--autopilot`: when present in args, **skip Step 4 HITL gate** and execute the commit immediately with the generated message. Emit: `"Commit: autopilot — executing commit directly..."` before `git commit`. Step 6 (PR) is also skipped in autopilot mode. **Only set by project-conductor or c2c when `manifest.autopilot=true`** — never set manually unless you explicitly want unattended commits.
+
+`--no-pr`: **skip Step 6 and everything downstream of it** (6, 6b, 6c, 7) — no PR question, no push, no CI watch, no merge proposal. The Step 4 HITL gate is **unaffected**: this flag suppresses publication, never approval, and it is the difference between it and `--autopilot`. The two are orthogonal and may be combined.
+
+Use it when a commit is a checkpoint rather than a deliverable — the caller knows there is nothing to publish yet, so asking would be pure friction on every run. `concept-to-code` Gate 4.0 (ADR-0071) is the first such caller: it commits the planning artifacts so Step 5's recovery pre-flight has the clean, on-a-feature-branch tree it requires, with implementation still to come. After the flag suppresses Step 6, emit `"Commit: --no-pr — PR/push/merge skipped."` so the absence of the usual question is visible rather than looking like a step that silently failed.
 
 ---
 
@@ -460,6 +464,12 @@ Rules:
 - Wrap the whole step in `|| true` — never abort the commit flow if this fails.
 
 ### Step 6 — PR (optional, only after successful commit)
+
+**Skipped entirely when `--no-pr` is present in args**, along with Steps 6b, 6c and 7 — this is the
+only entry point to all four. Emit `"Commit: --no-pr — PR/push/merge skipped."` and stop after
+Step 5.5. Do not run the idempotency check below: an existing open PR is not a reason to override
+a caller that said not to publish. `--autopilot` skips this step too, for its own reason; either
+flag alone is sufficient and the two may be combined.
 
 **Idempotency check, before the gate:** don't ask again if a PR is already open for this branch
 (e.g. a prior invocation of this skill already created one for the same feature branch):
