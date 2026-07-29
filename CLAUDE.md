@@ -1038,7 +1038,10 @@ Known consequences, recorded rather than fixed:
   block — that is exactly what #184 needs.
 - `**Check 5 — Plan has tasks:**` and `**Pre-dispatch: plan structure validation` are extraction
   markers for `plan-task-count.test.sh` PTC/PTF. Rewriting either block's body is safe; changing a
-  heading breaks the extraction, which reports as a skipped section rather than a failure.
+  heading breaks the extraction. **That last clause said "reports as a skipped section rather
+  than a failure" and was measured wrong — see ADR-0083 §D3: it reports as a LOUD failure that
+  also removes five dependent assertions from the run. Both extractors were re-anchored on
+  `fence-contract:` markers in #206, so a heading rewrite now breaks nothing.**
 
 Detail: `docs/architecture/ADR-0069-172-plan-task-form.md`.
 
