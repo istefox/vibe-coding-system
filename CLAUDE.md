@@ -1126,3 +1126,48 @@ Known consequences, recorded rather than fixed:
   assertions in the repository that read it.
 
 Detail: `docs/architecture/ADR-0071-173-step5-preflight-producer.md`.
+
+## Decisions from the SPEC near-miss self-repair chain (ADR-0072)
+
+Closes issue #171. `spec-coverage.sh` ran against a SPEC declaring 17 requirements, reported
+nothing and exited 0: they were written as `- R-01 — …`, and a declaration is recognised only as
+the first token of a **checklist item**. A plain bullet was examined by nothing — the token reached
+neither the declared set nor the malformed set nor the out-of-section set — so `DECL_N` stayed 0 and
+the SPEC took the documented silent no-IDs path.
+
+- **Detect and HEAL, not detect and block.** The issue framed it as fail-or-ignore; the third option
+  is better. A chain that stops with a precise command beats one that stops with a wrong command,
+  and a chain that applies the command itself beats both. `spec-normalize-ids.sh` adds the missing
+  marker; `concept-to-code` Step 5 runs it automatically on that one diagnosable cause and prints
+  the diff afterwards.
+- **Normalise, never regenerate.** Re-invoking `interview-driver` means redoing the interview;
+  `spec-from-issue` rebuilds from the issue and discards human edits. The SPEC has already passed
+  Gate 1, so regeneration destroys an approved review. `- R-01 — X` and `- [ ] R-01 — X` say the
+  same thing, so adding the marker changes no content — a FORMATTING repair, and the boundary is
+  stated so nothing later grows into rewriting requirement text.
+- **This composes with ADR-0071 and depends on it.** Automatic in-place editing is safe because
+  Gate 4.0 has already committed the planning artifacts, so `git checkout -- <spec>` reverses it.
+  Without #173's producer this would be writing to an unversioned file.
+- **The detection is bound by the repair's reach (§D4):** every flagged line must become readable
+  once the marker is added, or the gate reports a problem, rewrites the file and still fails. That
+  invariant is what excludes a bold-wrapped id — `- [ ] **R-01**` is invisible to the checker too,
+  so normalising would not help. A pre-existing blind spot in both forms, pinned by `RN12`.
+- **The near-miss guard is NOT conditioned on `DECL_N`, unlike its sibling (§D5).** An id outside
+  every recognised section is only evidence when nothing was declared; a plain bullet INSIDE a
+  recognised section has no innocent reading. The mixed SPEC is the worse case — only *partially*
+  silent. The first draft reused the `DECL_N == 0` condition and the mixed fixture caught it.
+- **`spec-id-predicate.awk` is the one place that decides**, loaded by the checker and by the
+  repairer. A repair keyed on a different rule than the check would rewrite what the check accepts
+  or miss what it rejects. Depends on `plan-task-predicate.awk`, loaded first.
+
+Known consequences, recorded rather than fixed:
+- **A gate now edits a human-reviewed artifact without asking.** Bounded, reversible and printed as
+  a diff, but it is the first time the chain does this to a SPEC.
+- Bold-wrapped ids stay invisible to the checker in both forms. Named, tested, unfixed.
+- No new stdout token: the near-miss reports as `MALFORMED` and the two causes are distinguished on
+  stderr, so the exit-code contract is untouched.
+- `RN1` is not fix evidence on its own — the pre-fix checker also exited 3 on the fixture, via
+  `ORPHAN`. `RN2`/`RN3` distinguish the right code from the right code for the wrong cause; `RN6`-
+  `RN9` guard the repair's blast radius rather than proving it runs.
+
+Detail: `docs/architecture/ADR-0072-171-spec-id-near-miss-self-repair.md`.

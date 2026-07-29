@@ -716,6 +716,135 @@ else
   bad "RI6: architect.md line 4 or its Command-scope/Write-scope bullets regressed — this is a forward guard duplicating agent-tool-scoping.test.sh A1/A12/A14, not fix evidence for this feature. Missing:$RI6_MISSING"
 fi
 
+# ==================================================================================================
+# RN. Issue #171 / ADR-0072 — the near-miss, and the repair that heals it.
+#
+# A requirement declared as `- R-01 — …` inside a recognised section was examined by NOTHING: the
+# parser only ever looked at checklist items, so the token reached neither the declared set nor the
+# malformed set nor the out-of-section set, DECL_N stayed 0, and the SPEC took the silent no-IDs
+# path. A SPEC with 17 requirements passed the gate.
+#
+# THE INVARIANT UNDER TEST IS THE ROUND TRIP, not detection alone (RN5): every line the checker
+# flags as a near-miss must become a line it READS once the repair runs. A detection the repair
+# cannot heal would report a problem, rewrite the file, and still fail — worse than no detection.
+# ==================================================================================================
+NORM="$STAGING/plugin/skills/concept-to-code/scripts/spec-normalize-ids.sh"
+SPRED="$STAGING/plugin/skills/concept-to-code/scripts/spec-id-predicate.awk"
+
+for _f in "$NORM" "$SPRED"; do
+  [ -f "$_f" ] \
+    && ok "RN0: $(basename "$_f") exists" \
+    || bad "RN0: $_f not found — every RN assertion below is meaningless"
+done
+
+printf '# Plan\n\n## Task 1 — do it (R-01, R-02)\n' >"$TMP/rn-plan.md"
+printf '# SPEC\n\n## Objectives\n\n- R-99 before the section, must not change\n\n## Success criteria\n\n- R-01 — does X\n- [ ] R-02 — already correct\n- a plain note with no id\n\n## Notes\n\n- R-98 after the section, must not change\n' >"$TMP/rn.spec.md"
+
+RN1_OUT=$(bash "$SCOV" --spec "$TMP/rn.spec.md" --plan "$TMP/rn-plan.md" 2>"$TMP/rn.err"); RN1_RC=$?
+RN1_ERR=$(cat "$TMP/rn.err")
+
+# RN1 IS NOT FIX EVIDENCE ON ITS OWN. Verified against the pre-fix checker: this fixture already
+# exited 3 there, for an unrelated reason (the plan cites R-01, which was declared nowhere, so it
+# came out as ORPHAN). RN2 and RN3 are what distinguish the right exit code from the right exit
+# code for the wrong cause. RN6-RN9 likewise pass pre-fix, because with no normaliser the file is
+# never touched at all — they are guards on the repair's blast radius, not proof that it runs.
+[ "$RN1_RC" -eq 3 ] \
+  && ok "RN1: a plain-bullet declaration is a structural error (exit 3), not a silent pass" \
+  || bad "RN1: expected exit 3 on a near-miss SPEC, got $RN1_RC — this is the #171 defect"
+
+printf '%s\n' "$RN1_OUT" | grep -q "^MALFORMED${TAB}R-01" \
+  && ok "RN2: the near-miss id is reported on stdout as MALFORMED" \
+  || bad "RN2: R-01 not reported — got [$RN1_OUT]"
+
+# The stderr sentence must name THIS cause, not the sibling guard's. Both write MALFORMED to stdout,
+# so stderr is the only channel that distinguishes "right form, wrong place" from "right place,
+# wrong form" — and it carries the repair command, which is the point of the whole design.
+printf '%s\n' "$RN1_ERR" | grep -q 'declared as plain bullets' \
+  && ok "RN3: stderr names the plain-bullet cause, distinct from the out-of-section guard" \
+  || bad "RN3: stderr does not name the plain-bullet cause — got [$RN1_ERR]"
+printf '%s\n' "$RN1_ERR" | grep -q 'spec-normalize-ids.sh' \
+  && ok "RN4: stderr carries the exact repair command" \
+  || bad "RN4: stderr does not name the repair command — a detection with no prescribed heal"
+
+# --- RN5: the round trip. Detection is only worth having if the repair makes it readable. ---
+bash "$NORM" --spec "$TMP/rn.spec.md" --apply >"$TMP/rn.diff" 2>&1; RN5_NRC=$?
+RN5_OUT=$(bash "$SCOV" --spec "$TMP/rn.spec.md" --plan "$TMP/rn-plan.md" --list 2>/dev/null); RN5_RC=$?
+{ [ "$RN5_NRC" -eq 0 ] && [ "$RN5_RC" -eq 0 ] && printf '%s\n' "$RN5_OUT" | grep -q "^R-01${TAB}does X"; } \
+  && ok "RN5 (round trip): after --apply the same SPEC passes and R-01 is declared" \
+  || bad "RN5: repair did not make the SPEC readable — nrc=$RN5_NRC rc=$RN5_RC out=[$RN5_OUT]"
+
+# --- RN6-RN9: the repair touches only what it must. ---
+grep -q '^- R-99 before the section, must not change$' "$TMP/rn.spec.md" \
+  && ok "RN6: a bullet BEFORE the section is byte-identical after the repair" \
+  || bad "RN6: the repair rewrote a bullet outside the recognised section"
+grep -q '^- R-98 after the section, must not change$' "$TMP/rn.spec.md" \
+  && ok "RN7: a bullet AFTER the section is byte-identical after the repair" \
+  || bad "RN7: the repair rewrote a bullet after the section closed"
+grep -q '^- a plain note with no id$' "$TMP/rn.spec.md" \
+  && ok "RN8: a plain bullet with no id is untouched" \
+  || bad "RN8: the repair rewrote a bullet carrying no requirement id"
+RN9_N=$(grep -c '^- \[ \] R-02 — already correct$' "$TMP/rn.spec.md")
+[ "$RN9_N" = "1" ] \
+  && ok "RN9: an already-correct checklist item is not double-marked" \
+  || bad "RN9: R-02 was rewritten ($RN9_N matches) — the repair is not idempotent on correct input"
+
+RN10_OUT=$(bash "$NORM" --spec "$TMP/rn.spec.md")
+[ "$RN10_OUT" = "CLEAN" ] \
+  && ok "RN10: a second run reports CLEAN — the repair is idempotent" \
+  || bad "RN10: second run still proposes changes: [$RN10_OUT]"
+
+# --- RN11: the negative twin. Without it, RN1 is also satisfied by a checker that fails on
+# everything (rule 8 of .claude/context.md). ---
+printf '# SPEC\n\n## Success criteria\n\n- [ ] R-01 — does X\n- [ ] R-02 — does Y\n' >"$TMP/rn-ok.spec.md"
+RN11_OUT=$(bash "$NORM" --spec "$TMP/rn-ok.spec.md")
+[ "$RN11_OUT" = "CLEAN" ] \
+  && ok "RN11 (negative twin of RN1): a correctly-written SPEC needs no repair" \
+  || bad "RN11: the repair wants to rewrite a correct SPEC: [$RN11_OUT]"
+
+# --- RN12: the disclosed limit, pinned so the exclusion is a decision on record. ---
+printf '# SPEC\n\n## Success criteria\n\n- **R-01** — bold id\n' >"$TMP/rn-bold.spec.md"
+RN12_OUT=$(bash "$NORM" --spec "$TMP/rn-bold.spec.md")
+[ "$RN12_OUT" = "CLEAN" ] \
+  && ok "RN12 (disclosed limit, ADR-0072 §D4): a bold-wrapped id is not detected — the checker cannot read it in either form" \
+  || bad "RN12: a bold id was rewritten into a form the checker still cannot read — a repair that does not repair"
+
+# --- RN13: the whole corpus stays silent, count-guarded. Same hard gate as section RE, re-asserted
+# after adding a new way for the checker to fail. ---
+RN13_TOTAL=0; RN13_NOISY=0
+for _s in "$REPO"/docs/specs/*.spec.md "$REPO/SPEC.md"; do
+  [ -f "$_s" ] || continue
+  RN13_TOTAL=$((RN13_TOTAL + 1))
+  _o=$(bash "$NORM" --spec "$_s" 2>&1)
+  [ "$_o" = "CLEAN" ] || RN13_NOISY=$((RN13_NOISY + 1))
+done
+[ "$RN13_TOTAL" -ge 30 ] \
+  && ok "RN13a (count guard): the corpus sweep ran over $RN13_TOTAL SPECs" \
+  || bad "RN13a (count guard): only $RN13_TOTAL SPEC(s) swept — RN13b proves nothing"
+[ "$RN13_NOISY" -eq 0 ] \
+  && ok "RN13b: no existing SPEC needs repair — the near-miss rule costs the corpus nothing" \
+  || bad "RN13b: $RN13_NOISY existing SPEC(s) would be rewritten — re-derive before shipping"
+
+# --- RN14: PAIRS. Both new files are called from a SKILL.md by their DEPLOYED path. ---
+SYNCSH2="$STAGING/sync-to-claude.sh"
+for _need in spec-id-predicate.awk spec-normalize-ids.sh; do
+  grep -q "concept-to-code/scripts/$_need|" "$SYNCSH2" 2>/dev/null \
+    && ok "RN14: $_need has a PAIRS entry" \
+    || bad "RN14: $_need has NO PAIRS entry — the gate would call a file that never deployed"
+done
+
+# --- RN15: both producers agree on the declaration form. Instance-level anchoring on one file is
+# what let #171 through (rule 9). ---
+ID_SKILL="$STAGING/plugin/skills/interview-driver/SKILL.md"
+SFI_SKILL="$STAGING/plugin/skills/spec-from-issue/SKILL.md"
+RN15_MISS=""
+for _p in "$ID_SKILL" "$SFI_SKILL"; do
+  [ -f "$_p" ] || { RN15_MISS="$RN15_MISS $(basename "$(dirname "$_p")")(absent)"; continue; }
+  grep -q -- '- \[ \] R-01' "$_p" || RN15_MISS="$RN15_MISS $(basename "$(dirname "$_p")")"
+done
+[ -z "$RN15_MISS" ] \
+  && ok "RN15: both SPEC producers show the literal '- [ ] R-01' form in their template" \
+  || bad "RN15: producer(s) without the literal marker:$RN15_MISS — the drift #171 was filed about"
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -47,6 +47,7 @@ TAB=$(printf '\t')
 # drift into three different answers to "what is a plan task". Both programs below now compose
 # with it via `awk -f <predicate> -f <program>`.
 PREDICATE=$(cd "$(dirname "$0")" && pwd)/plan-task-predicate.awk
+SPEC_PREDICATE=$(cd "$(dirname "$0")" && pwd)/spec-id-predicate.awk
 
 usage() {
   [ "${1:-}" = "" ] || printf '%s: %s\n' "$SELF" "$1" >&2
@@ -95,19 +96,15 @@ count_re() { _c=$(grep -c "$1" "$2" 2>/dev/null); printf '%s' "${_c:-0}"; }
 IDS="$TMPD/ids.tsv";           : >"$IDS"
 MALFORMED_IN="$TMPD/malformed_in.txt"; : >"$MALFORMED_IN"
 OUTSIDE="$TMPD/outside.txt";   : >"$OUTSIDE"
+NEARMISS="$TMPD/nearmiss.txt"; : >"$NEARMISS"
 
 # --- SPEC parser: declaration extraction, malformed-in-section, out-of-section well-formed IDs ---
 cat >"$TMPD/spec_parse.awk" <<'AWKEOF'
-# heading_level() and is_checklist_item() come from plan-task-predicate.awk, loaded alongside
-# this program — do not redefine them here (awk rejects a duplicate function definition).
-function is_start_heading(l,   lvl, rest, ll) {
-  lvl = heading_level(l)
-  if (lvl < 2) return 0
-  rest = l
-  sub(/^#+[ \t]+/, "", rest)
-  ll = tolower(rest)
-  return (ll ~ /^success criteria/) || (ll ~ /^acceptance criteria/) || (ll ~ /^definition of done/)
-}
+# heading_level() and is_checklist_item() come from plan-task-predicate.awk; is_spec_section_heading()
+# and is_near_miss_bullet() from spec-id-predicate.awk. Both are loaded alongside this program — do
+# not redefine any of them here (awk rejects a duplicate function definition). The section rule is
+# shared with spec-normalize-ids.sh on purpose: a repair keyed on a different rule than the check
+# would rewrite lines the check accepts, or miss the ones it rejects (ADR-0072 §D2).
 function item_text(l,   t) {
   t = l
   sub(/^[ \t]*[-*][ \t]\[[ xX]\][ \t]*/, "", t)
@@ -135,7 +132,19 @@ BEGIN { collecting = 0 }
   line = $0
   hl = heading_level(line)
   if (collecting && hl >= 1 && hl <= 2) collecting = 0
-  if (is_start_heading(line)) { collecting = 1; next }
+  if (is_spec_section_heading(line)) { collecting = 1; next }
+
+  # NEAR-MISS (issue #171): a requirement declared as a plain bullet inside a recognised section.
+  # Before ADR-0072 this line was examined by nothing — the parser only ever looked at checklist
+  # items — so its token reached neither IDS nor MALFORMED nor OUTSIDE, DECL_N stayed 0, and the
+  # whole SPEC took the silent no-IDs path. A SPEC declaring 17 requirements passed the gate.
+  if (collecting && is_near_miss_bullet(line)) {
+    nmt = line
+    sub(/^[ \t]*[-*][ \t]+/, "", nmt)
+    match(nmt, /^R-[0-9][0-9]/)
+    printf "%s\n", substr(nmt, RSTART, RLENGTH) >> NEARMISS_FILE
+    next
+  }
 
   if (is_checklist_item(line)) {
     txt = item_text(line)
@@ -159,7 +168,8 @@ BEGIN { collecting = 0 }
 AWKEOF
 
 awk -v IDS_FILE="$IDS" -v MALFORMED_FILE="$MALFORMED_IN" -v OUTSIDE_FILE="$OUTSIDE" \
-    -f "$PREDICATE" -f "$TMPD/spec_parse.awk" "$SPEC"
+    -v NEARMISS_FILE="$NEARMISS" \
+    -f "$PREDICATE" -f "$SPEC_PREDICATE" -f "$TMPD/spec_parse.awk" "$SPEC"
 
 # --- structural error accumulation ---
 STRUCT="$TMPD/structural.out"; : >"$STRUCT"
@@ -179,6 +189,28 @@ if [ "$DECL_N" -eq 0 ] && [ -s "$OUTSIDE" ]; then
     printf 'MALFORMED\t%s\n' "$id" >>"$STRUCT"
   done
   GUARD_FIRED=1
+fi
+
+# The same guard, on the other axis (ADR-0072 §D2, issue #171). Above: well-formed ids, right form,
+# wrong PLACE (outside every recognised section). Here: well-formed ids, right place, wrong FORM
+# (a plain bullet instead of a checklist item). Both mean the SPEC declares requirements the
+# checker cannot read, and both must break the silent no-IDs path rather than take it.
+# Distinguished on stderr, not by a new stdout token — the caller's contract is unchanged, and
+# GUARD_FIRED vs NEARMISS_FIRED is what selects the sentence that names the actual cause.
+#
+# NOT conditioned on DECL_N, unlike the guard above, and the asymmetry is deliberate. A well-formed
+# id outside every recognised section is only evidence of a problem when nothing was declared —
+# otherwise it is most likely prose elsewhere in the document. A plain bullet INSIDE a recognised
+# requirements section has no innocent reading. The MIXED spec is in fact the worse case, because
+# it is only PARTIALLY silent: some requirements are gated and some vanish. Costs the corpus
+# nothing — RN13b sweeps all 35 SPECs and none is affected.
+NEARMISS_FIRED=0
+if [ -s "$NEARMISS" ]; then
+  sort -u "$NEARMISS" | while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    printf 'MALFORMED\t%s\n' "$id" >>"$STRUCT"
+  done
+  NEARMISS_FIRED=1
 fi
 
 DUPS="$TMPD/dups.txt"
@@ -245,7 +277,9 @@ fi
 
 if [ -s "$STRUCT" ]; then
   cat "$STRUCT"
-  if [ "$GUARD_FIRED" -eq 1 ]; then
+  if [ "$NEARMISS_FIRED" -eq 1 ]; then
+    printf '%s: requirement ids are declared as plain bullets, not checklist items — the checker reads only `- [ ] R-NN …`. Repair with: spec-normalize-ids.sh --spec %s --apply\n' "$SELF" "$SPEC" >&2
+  elif [ "$GUARD_FIRED" -eq 1 ]; then
     printf '%s: a well-formed ID was found outside every recognized section — recognized headings are: Success criteria, Acceptance criteria, Definition of done\n' "$SELF" >&2
   fi
   exit 3
