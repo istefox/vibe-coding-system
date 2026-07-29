@@ -1,6 +1,16 @@
 #!/bin/bash
 # hook-verify-workflow v1.0 — decide `hook_verified` from evidence instead of eyesight.
 #
+# WHERE THIS FILE LIVES, because the two locations do not match (issue #212).
+#   staging:  staging/plugin/scripts/hook-verify-workflow.sh          <- here, FLAT
+#   deployed: ~/.claude/skills/concept-to-code/scripts/hook-verify-workflow.sh
+# It is vendored flat by ADR-0016 and kept flat by ADR-0024, which refuses to create a second source
+# of truth. `sync-to-claude.sh`'s PAIRS performs the remap, and concept-to-code/SKILL.md invokes the
+# DEPLOYED path. Both sides are correct — do NOT "normalise" either. Repointing SKILL.md at a
+# staging-shaped path would make it read a file sync never writes there.
+# Declared in sync-to-claude.sh's `pairs-zone-anomaly:` line and pinned by
+# pairs-completeness.test.sh ZA3/ZA5.
+#
 # Replaces the ADR-0016 smoke test, whose step 4 told an operator to "watch the terminal ... look for
 # a line beginning with PATTERN:". That procedure cannot produce a correct answer, because
 # "the hook never fired" and "the hook fired and stood down" both print nothing.

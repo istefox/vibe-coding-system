@@ -818,6 +818,13 @@ Run the deterministic check. Do NOT ask the user to watch the terminal: a hook t
 hook that fired and stood down look identical on screen. `pre-flight-pattern-enforce.sh` records every
 decision it makes to its own audit log, and that log is the evidence.
 
+> **The path below is the DEPLOYED one and is deliberately not the staging shape** (issue #212).
+> `hook-verify-workflow.sh` is vendored flat at `staging/plugin/scripts/`, by ADR-0016 and ADR-0024;
+> `sync-to-claude.sh`'s PAIRS remaps it into `skills/concept-to-code/scripts/` on deploy. So
+> `staging/plugin/skills/concept-to-code/scripts/hook-verify-workflow.sh` does not exist, and a path
+> check run against staging reports it as missing — correctly, and harmlessly. Do not "fix" this
+> reference to a staging-shaped path: it would read a file sync never writes there.
+
 **Step A — mark, and make a scratch file:**
 ```bash
 MARK=$(bash ~/.claude/skills/concept-to-code/scripts/hook-verify-workflow.sh --mark)

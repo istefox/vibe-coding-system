@@ -21,6 +21,14 @@ SYNC="$STAGING/sync-to-claude.sh"
 
 PASS=0; FAIL=0
 
+# ok()/bad() did not exist in this file until issue #212 needed per-assertion reporting, and their
+# absence was INVISIBLE: six calls to an undefined `ok` printed "command not found" to stderr and
+# the suite still reported PASS=244 FAIL=0 and exited 0. Nothing here runs under `set -e`, and the
+# counters are only touched by the check_* helpers, so an assertion that never executes is
+# indistinguishable from one that passed. Anything added below must go through these.
+ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
+bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
+
 # check_pairs <base-dir> <pairs-file>
 # Reads src|dst lines from <pairs-file>, asserts <base-dir>/<src> exists as a file.
 # Updates the global PASS/FAIL counters and prints PASS: <src> / FAIL: <src> per line.
@@ -145,6 +153,64 @@ plugin/scripts/worktree-capture.sh
 EOF
 check_complete "$tmp/real-pairs" "plugin/scripts" '*.sh' "$tmp/scripts-exempt"
 check_exemptions_live "$tmp/scripts-exempt"
+
+# =====================================================================================
+# ZONE ANOMALIES (issue #212). Every PAIRS entry maps its zone predictably — plugin/scripts/X ->
+# hooks/X, plugin/skills/X -> skills/X, plugin/agents/X -> agents/X, user/X -> X. Two entries do
+# not, both for good reasons, and until now neither was checked and only one was written down.
+#
+# This is the direction that matters (rule 5): the anomaly set is DERIVED from PAIRS and each member
+# must appear in sync-to-claude.sh's own `pairs-zone-anomaly:` declaration. A third anomaly fails
+# HERE, at the moment it is introduced, instead of being rediscovered by an audit that then has to
+# adjudicate whether it is deliberate. It cost exactly that once already: the audit of 2026-07-29
+# reported hook-verify-workflow.sh as a missing file and the conclusion had to be reconstructed
+# from ADR-0024.
+#
+# The needle is built at run time so this file does not match its own search (rule 12).
+ZMARK="pairs-zone-""anomaly"
+ZDECL=$(grep "^# *${ZMARK}:" "$SYNC" 2>/dev/null | head -1 | sed "s/^# *${ZMARK}://")
+
+_zn=$(printf '%s\n' $ZDECL | sed '/^$/d' | wc -l | tr -d ' ')
+[ "$_zn" -ge 1 ] && ok "ZA1: sync-to-claude.sh declares $_zn zone anomal(ies)" \
+                 || bad "ZA1: no '${ZMARK}:' declaration line found in $SYNC"
+
+# Derive. Expected dest per zone; anything else is an anomaly.
+ZFOUND=$(awk -F'|' '
+  /^plugin\/scripts\// { t=$1; sub(/^plugin\/scripts\//,"",t); if ($2 != "hooks/" t) print $1; next }
+  /^plugin\/skills\//  { t=$1; sub(/^plugin\//,"",t);          if ($2 != t)          print $1; next }
+  /^plugin\/agents\//  { t=$1; sub(/^plugin\//,"",t);          if ($2 != t)          print $1; next }
+  /^plugin\/rules\//   { t=$1; sub(/^plugin\//,"",t);          if ($2 != t)          print $1; next }
+  /^user\//            { t=$1; sub(/^user\//,"",t);            if ($2 != t)          print $1; next }
+' "$SYNC")
+
+# Count guard on the DERIVATION, not on the anomalies: if the PAIRS parse returns almost nothing,
+# an empty anomaly set looks like full compliance. Same failure shape as self-test 2 above.
+_zt=$(grep -cE '^(plugin|user)/[^|]+\|' "$SYNC")
+[ "$_zt" -ge 100 ] && ok "ZA2: parsed $_zt PAIRS entries for the zone check (count guard: >= 100)" \
+                   || bad "ZA2: only $_zt PAIRS entries parsed — ZA3 would pass vacuously"
+
+_zbad=""
+for _z in $ZFOUND; do
+  case " $ZDECL " in *" $_z "*) ;; *) _zbad="$_zbad $_z" ;; esac
+done
+[ -z "$_zbad" ] && ok "ZA3: every derived zone anomaly is declared in sync-to-claude.sh" \
+                || bad "ZA3: undeclared zone anomal(ies) —$_zbad"
+
+# ZA4: the reverse. A declaration for an anomaly that no longer exists is a stale waiver, and it
+# would keep ZA3 green while describing an arrangement that has been normalised away.
+_zstale=""
+for _d in $ZDECL; do
+  printf '%s\n' "$ZFOUND" | grep -qxF "$_d" || _zstale="$_zstale $_d"
+done
+[ -z "$_zstale" ] && ok "ZA4: every declared anomaly still exists in PAIRS" \
+                  || bad "ZA4: declared but no longer anomalous (stale waiver) —$_zstale"
+
+# ZA5: the flat source of the hook-verify-workflow remap must still be there. This is the half that
+# breaks if someone "fixes" the SKILL.md reference to point at a staging path — the deployed
+# invocation would then read a file that sync never wrote.
+[ -f "$STAGING/plugin/scripts/hook-verify-workflow.sh" ] \
+  && ok "ZA5: hook-verify-workflow.sh is still flat in staging/plugin/scripts (ADR-0016/0024)" \
+  || bad "ZA5: the flat source is gone — the skills/ remap now deploys nothing"
 
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

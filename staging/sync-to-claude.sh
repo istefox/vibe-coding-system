@@ -16,10 +16,29 @@ APPLY=0
 [ "${1:-}" = "--apply" ] && APPLY=1
 
 # src|dst pairs (dst relative to ~/.claude). Scripts land in hooks/ (this deployment's convention).
-# Exception: usage-report.py deploys to scripts/, not hooks/ (it's a plain script invoked
-# by usage-daily-hint.sh, not a hook entry point itself).
 # Exception: user/CLAUDE.md is the only non-plugin/ entry. user/settings.json stays out on
 # purpose (ADR-0025: machine-local keys need a jq del() pass, not a straight copy).
+#
+# ZONE ANOMALIES (issue #212). Every entry maps its zone predictably —
+# plugin/scripts/X -> hooks/X, plugin/skills/X -> skills/X, plugin/agents/X -> agents/X,
+# user/X -> X — except the two declared below. They must be DECLARED here rather than merely
+# tolerated, because an undeclared one costs adjudication time every time a path check runs over
+# staging and reports it as a miss, and because the plausible "fix" is to repoint the reference at
+# the staging path, which breaks the deployed invocation.
+#
+# pairs-zone-anomaly: plugin/scripts/hook-verify-workflow.sh plugin/scripts/usage-report.py
+#
+#   hook-verify-workflow.sh -> skills/concept-to-code/scripts/
+#     Vendored FLAT in staging under ADR-0016 and kept there by ADR-0024, which refuses to create a
+#     second source of truth. So staging/plugin/skills/concept-to-code/scripts/ does NOT contain it
+#     and concept-to-code/SKILL.md references it at its DEPLOYED path. That is correct; do not
+#     "normalise" either side.
+#   usage-report.py -> scripts/
+#     A plain script invoked by usage-daily-hint.sh at $HOME/.claude/scripts/usage-report.py, not a
+#     hook entry point, so hooks/ would be the wrong zone.
+#
+# pairs-completeness.test.sh derives this set from PAIRS and requires each member to appear in the
+# declaration line above — a THIRD anomaly fails there instead of being discovered by an audit.
 PAIRS="
 user/CLAUDE.md|CLAUDE.md
 plugin/agents/architect.md|agents/architect.md
