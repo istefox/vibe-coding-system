@@ -117,7 +117,7 @@ still understood by the same reader*, and #197 is a consumer of the boundary rul
 
 #### 4.3 — Decide on evidence, and the cheap one
 
-- [ ] **#194 phase 2 — read the measurement, then decide** keep / drop / accept, and record the
+- [x] **#194 phase 2 — read the measurement, then decide** (2026-07-29, PR pending, ADR-0080) keep / drop / accept, and record the
   decision in `pre-flight-pattern-enforce.sh`'s own header. Two hooks currently explain each
   other's opposite choices about the same fallback, and only one of them has ever been examined
   on its own terms.
@@ -145,7 +145,13 @@ still understood by the same reader*, and #197 is a consumer of the boundary rul
 Four of five shipped: #194 phase 1 (PR #199), #195 (PR #200, ADR-0076), #193 (PR #201, ADR-0077),
 plus #197 (PR #202, ADR-0078) and #196 (PR #203, ADR-0079).
 
-**#194 phase 2 is blocked on data, by design.** The `src=` instrumentation deployed at ~20:15 CEST
+**#194 phase 2 closed 2026-07-29 (ADR-0080).** A controlled coder dispatch settled the mechanism
+question in one probe: all three writes logged `src=subagent`, including the first, and the
+transcript file predated the first hook decision by four seconds. The flush-race hypothesis is dead
+and the fallback stays, on a stated n=3 with a pre-registered condition for dropping it. The
+paragraph below is kept as the record of why the phase was sequenced this way.
+
+**Why it was blocked, as written before the probe:** The `src=` instrumentation deployed at ~20:15 CEST
 and the audit log carries **zero** coder-path rows since — no `coder` subagent has run. The
 hard constraint named at the top of this phase was that #194 needs elapsed time; that is what is
 now being waited on, not a missing decision. Reporting a keep/drop/accept verdict on an empty
