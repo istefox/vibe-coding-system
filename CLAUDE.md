@@ -1299,3 +1299,52 @@ failures remain. C8/C9/C12/C13/D1/D2 pass before and after — forward guards, n
 C7/C10/C11/D3/D4 are the five that were RED.
 
 Detail: `docs/architecture/ADR-0075-123-hook-verified-states.md`.
+
+## Decisions from the additive-field state chain (ADR-0076)
+
+Closes issue #195, phase 4.1 of the roadmap. #123 was the instance; this is the rule and the one
+reader that makes following it cheap.
+
+**THE RULE — a checker that reads a manifest field must treat ABSENT as a distinct state from
+INVALID and from UNREADABLE, and must decide what absence means from the manifest's
+`current_step`. Read the state through `concept-to-code/scripts/manifest-field-state.sh`; never
+with a bare `m.get()`.**
+
+- **Why a bare `m.get()` cannot work.** It returns `None` for a field that is absent AND for one
+  explicitly set to null, and the shell one-liner around it returns an empty string when the file
+  could not be PARSED at all, because the traceback went to `/dev/null`. Fields reach
+  `manifest-init.sh` as additive by design (ADR-0016, ADR-0039), so absence is an expected state
+  with an era attached, not an error.
+- **The helper REPORTS, it never DECIDES** — `PRESENT|<value>` / `ABSENT|<current_step>` /
+  `UNREADABLE`, exit 3 for "could not run" (environment) as distinct from `UNREADABLE` (input).
+  The value domain is the caller's and has to be: `hook_verified` is a boolean, `step5_mode` is
+  `workflow|agent_fallback|null`, `step5_review_mode` is `none|checkpoint`. There is no general
+  "valid".
+- **The two call sites apply OPPOSITE policies to the same ABSENT state and both are right.**
+  nightly check 6 sweeps a corpus of long-completed chains whose dispatch mode cannot affect
+  anything → tolerate. autopilot-build check 7 reads the one manifest about to be built, in flight
+  by definition → abort. Both files carry the sentence **"Do not `reconcile` the two"**, and test
+  section P asserts both branches and both notes still exist. A helper returning a verdict would
+  have had to flatten this.
+- **A missing helper fails the gate CLOSED**, with the sync remedy printed — the opposite of
+  `commit`'s resolver, which degrades to today's behaviour because it guards an advisory reporter
+  and this guards a gate. The dependency class is not new: check 8 of the same pre-flight already
+  executes a `~/.claude` script.
+- **Strictness preserved, including a case that looks like a bug:** a quoted `"true"` reads
+  `true`, not `True`, so a caller asserting the booleans rejects it. That is what the one-liners
+  did, and a quoted boolean in a machine-generated manifest is a hand-edit.
+- `manifest-validate.sh` already applies this rule as a habit, case by case (invariants 12 and 14
+  are conditional "if present" for exactly this reason) — the same rule discovered independently
+  three times in one file, which is the evidence it is a rule. Its 28 invariants are NOT converted;
+  invariant 4 is issue #197's subject.
+
+Known consequences: two pre-flight gates now depend on a deployed script and fail closed until
+sync; the rule is prose and nothing enforces that a new checker uses the helper (#193's derived
+guard is the shape that could). P1/P2/R1 guard the design rather than evidence a fix.
+
+**Harness lessons, recorded because they recur:** `X6` first failed at exit 127 — emptying `PATH`
+to hide `python3` also hides `bash`. `P3` failed on a comment-line wrap, the ADR-0073 lesson one
+layer down. `P4` counted the explanation as the defect: its needle was the old one-liner, which
+both files legitimately quote while explaining why it was replaced (rule 12).
+
+Detail: `docs/architecture/ADR-0076-195-additive-field-state.md`.

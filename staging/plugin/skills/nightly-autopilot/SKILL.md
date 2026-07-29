@@ -118,27 +118,34 @@ Any failure writes an `aborted` report and stops. No dispatch, no push. Emit one
      echo "(ADR-0029 Section 1, 'Gap flagged for issue #34') -- hook-verify-workflow.sh is"
      echo "deliberately read-only and stateless; this check does not depend on one existing."
    else
+     # The field-state helper. Two-tier resolution, same order project-conductor and commit use.
+     # If NEITHER resolves the pre-flight aborts: this is a gate, and an infrastructure gap must
+     # fail closed and loudly, never quietly fall back to a second copy of the logic (issue #195).
+     if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/manifest-field-state.sh" ]; then
+       _mfs="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/manifest-field-state.sh"
+     elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/manifest-field-state.sh" ]; then
+       _mfs="$HOME/.claude/skills/concept-to-code/scripts/manifest-field-state.sh"
+     else
+       echo "✗ hook_verified: manifest-field-state.sh not found in either location."
+       echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+       exit 1
+     fi
      _bad=0
      for _m in $_manifests; do
        # Four states, not two (issue #123, ADR-0075). `m.get('hook_verified')` returned None for a
        # field that is ABSENT and for one explicitly set to null, and an empty string when the file
        # could not be parsed at all — so a manifest older than the field was reported as corrupted,
        # and a manifest the check never read was reported as having a bad value.
-       _st=$(python3 -c "
-import sys, yaml
-try:
-    m = yaml.safe_load(open(sys.argv[1]))
-except Exception:
-    print('UNREADABLE'); raise SystemExit(0)
-if not isinstance(m, dict):
-    print('UNREADABLE'); raise SystemExit(0)
-if 'hook_verified' not in m:
-    print('ABSENT|' + str(m.get('current_step')))
-else:
-    print('VALUE|' + str(m['hook_verified']))
-" "$_m" 2>/dev/null)
+       #
+       # The helper REPORTS the state; the policy below is this call site's own and stays visible
+       # here. autopilot-build check 7 reads the same field through the same helper and treats
+       # ABSENT as an abort — opposite to the branch below, and both are right (ADR-0076 §D2).
+       # Do not "reconcile" the two.
+       _st=$(bash "$_mfs" "$_m" hook_verified 2>/dev/null)
+       _rc=$?
+       [ "$_rc" -eq 0 ] || _st="UNREADABLE"     # exit 2/3: it did not run, same operator action
        case "$_st" in
-         'VALUE|True'|'VALUE|False')
+         'PRESENT|True'|'PRESENT|False')
            : ;;                                     # the two valid values
          'ABSENT|completed')
            echo "note: $_m has no hook_verified field and is completed — it predates the field"
@@ -158,7 +165,7 @@ else:
            _bad=1
            ;;
          *)
-           echo "✗ hook_verified: $_m has hook_verified=${_st#VALUE|} (must be true/false)."
+           echo "✗ hook_verified: $_m has hook_verified=${_st#PRESENT|} (must be true/false)."
            echo "  A value is present and is neither — the manifest is corrupted or was hand-edited."
            _bad=1
            ;;
