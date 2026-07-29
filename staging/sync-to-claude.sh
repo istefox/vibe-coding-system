@@ -42,7 +42,10 @@ plugin/skills/code-review-checklist/SKILL.md|skills/code-review-checklist/SKILL.
 plugin/skills/fastapi-react-vibe/SKILL.md|skills/fastapi-react-vibe/SKILL.md
 plugin/skills/interview-driver/SKILL.md|skills/interview-driver/SKILL.md
 plugin/skills/swift-vibe/SKILL.md|skills/swift-vibe/SKILL.md
+plugin/scripts/auto-format.sh|hooks/auto-format.sh
+plugin/scripts/chain-memory-capture.sh|hooks/chain-memory-capture.sh
 plugin/scripts/nightly-guard.sh|hooks/nightly-guard.sh
+plugin/scripts/protect-files.sh|hooks/protect-files.sh
 plugin/scripts/publish-feature.sh|hooks/publish-feature.sh
 plugin/scripts/set-branch-protection.sh|hooks/set-branch-protection.sh
 plugin/skills/nightly-autopilot/SKILL.md|skills/nightly-autopilot/SKILL.md
