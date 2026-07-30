@@ -402,21 +402,72 @@ fi
 # satisfied accidentally, by a parser silent on almost everything.
 BJ_DIR="$REPO/docs/superpowers/plans"
 if [ -d "$BJ_DIR" ]; then
+  #
+  # MEMBERSHIP IS BY PROPERTY, NOT BY IDENTITY (issue #235, found by the Phase 7 shakedown run).
+  # This loop asserts one thing: a plan declaring NO budget stays completely silent. A plan that
+  # DOES declare one legitimately reports SCOPE against a diff touching a file it never names —
+  # that is the feature working, and demanding silence of it asks the wrong question of that file.
+  #
+  # It used to exempt a single plan by path — `[ "$_p" = "$BJ_PLAN" ] && continue`, commented "the
+  # one plan that legitimately has budgets". That was a statement about the corpus at a moment in
+  # time, encoded as a permanent exception: exactly one plan declared budgets. The SECOND plan to
+  # declare them, written by the chain itself and doing what ADR-0052 asks, failed here. Identity
+  # is the waiver shape ADR-0069 §PTD refused by name; the property is what the assertion means.
+  #
+  # Same class as issue #230 (`spec-coverage.test.sh` RE3), found in the same run on a different
+  # corpus: intent expressed as a population, coinciding with the property only while the corpus
+  # had a single member exercising the feature.
+  #
+  # The predicate mirrors the budget SYNTAX diff-budget-check.sh documents in its own header —
+  # `Budget: <file>[, <file>...] (<~|±><N> line[s])` — rather than re-implementing its parser. It
+  # is deliberately independent of the checker's output on THIS diff: excluding "whatever the
+  # checker reports something for" would make the assertion below vacuously true.
+  # Measured over the corpus at the time of writing: 2 excluded, 56 asserted, 0 mismatches. The
+  # prose "Performance budget: <10s typical" in 2026-05-20-vibe-status-skill.md is correctly NOT
+  # excluded — it carries no parenthesised line count, declares no budget, and stays silent.
+  plan_declares_budget() {
+    grep -qE '[Bb]udget:.*\([^)]*[0-9]+[^)]*[Ll]ines?[^)]*\)' "$1" 2>/dev/null
+  }
+
   mk_diffstat bj4 "a.txt:1" >"$TMP/stat_in"
-  bj_total=0; bj_noisy=0; : >"$TMP/bj-noisy"
+  bj_total=0; bj_asserted=0; bj_excluded=0; bj_noisy=0; : >"$TMP/bj-noisy"
   for _p in "$BJ_DIR"/*.md; do
     [ -f "$_p" ] || continue
     bj_total=$((bj_total+1))
-    [ "$_p" = "$BJ_PLAN" ] && continue          # the one plan that legitimately has budgets
+    if plan_declares_budget "$_p"; then bj_excluded=$((bj_excluded+1)); continue; fi
+    bj_asserted=$((bj_asserted+1))
     _o=$(bash "$DBC" --plan "$_p" --tasks 1-99 <"$TMP/stat_in" 2>&1)
     [ "$_o" = "CLEAN" ] || { bj_noisy=$((bj_noisy+1)); printf '%s: %s\n' "$(basename "$_p")" "$_o" >>"$TMP/bj-noisy"; }
   done
-  [ "$bj_total" -ge 30 ] \
-    && ok "BJ4 (count guard): the corpus sweep ran over $bj_total plans" \
-    || bad "BJ4 (count guard): only $bj_total plan(s) swept — BJ5 proves nothing"
+  [ "$bj_asserted" -ge 30 ] \
+    && ok "BJ4 (count guard): the corpus sweep asserted $bj_asserted budget-free plans of $bj_total ($bj_excluded excluded by property)" \
+    || bad "BJ4 (count guard): only $bj_asserted plan(s) asserted of $bj_total ($bj_excluded excluded) — either the glob matches almost nothing, or the predicate is swallowing the corpus"
   [ "$bj_noisy" -eq 0 ] \
     && ok "BJ5: every budget-free plan in the corpus stays completely silent" \
     || bad "BJ5: $bj_noisy plan(s) became noisy: $(head -3 "$TMP/bj-noisy" | tr '\n' ' ')"
+
+  # BJ5b/BJ5c — the exclusion predicate itself, on FIXTURES rather than on whatever the corpus
+  # holds today. Asserting "at least one corpus plan is excluded" would rebuild the coupling this
+  # removes. Both directions (rule 8: a negative-case assertion pins nothing without its positive
+  # twin), and BJ5c is the real 2026-05-20 case generalised rather than pinned by filename.
+  cat >"$TMP/bj5b-plan.md" <<'EOF'
+# Plan
+
+## Task 1 — Something (R-01)
+Budget: src/thing.py (~40 lines)
+EOF
+  cat >"$TMP/bj5c-plan.md" <<'EOF'
+# Plan
+
+## Task 1 — Something (R-01)
+Performance budget: under 10s typical, 8s per-harness timeout.
+EOF
+  plan_declares_budget "$TMP/bj5b-plan.md" \
+    && ok "BJ5b: the predicate recognises a plan declaring a real task budget (it would be excluded)" \
+    || bad "BJ5b: a plan declaring 'Budget: src/thing.py (~40 lines)' was NOT recognised — the exclusion excludes nothing and BJ5 is back to asserting by identity"
+  plan_declares_budget "$TMP/bj5c-plan.md" \
+    && bad "BJ5c: prose mentioning a budget with no parenthesised line count was excluded — the predicate over-matches and quietly shrinks the asserted set" \
+    || ok "BJ5c: prose mentioning a budget with no parenthesised line count is NOT excluded — it stays in the asserted set"
 else
   bad "BJ4: plan corpus not found at $BJ_DIR"
 fi
