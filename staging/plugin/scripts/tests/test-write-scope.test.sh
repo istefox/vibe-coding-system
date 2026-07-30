@@ -441,6 +441,150 @@ else
   ok "TL1: autopilot-build/SKILL.md's Step 5 no longer restates the dirty-tree isolation condition (ADR-0068 §D1 / R-11, supersedes ADR-0049 §D2 in part)"
 fi
 
+# ==================================================================================================
+# TM. Dispatch granularity (issue #241, ADR-0088). ADR-0049 split test authoring from
+# implementation and dispatched the split at TASK granularity — but a plan task is a MIXED unit:
+# some of its sub-steps target test-shaped paths and some do not. The tester's brief reads the plan
+# only as a third fallback (SPEC R-NN ids first, Success Criteria second), so on a SPEC that
+# declares ids — the ADR-0048 case, i.e. the normal one — the tester is never told which of the
+# batch's sub-steps are its own, and the coder is denied them by the hook this file tests.
+#
+# Nothing here changes the hook, the marker, or ADR-0049's decision. TM5 is the guard that says so:
+# a "fix" for #241 that weakens the marker is the failure mode, not the remedy.
+#
+# Counting occurrences over the WHOLE file is deliberate, and it is why this section adds no sixth
+# heading-anchored extraction: ADR-0083 §D3 measured what a reworded heading does to an awk
+# extractor (assertions vanish, or an empty extract turns positive assertions green while only the
+# abort ones fail). An exact count over the file is immune to both and still pins each dispatch
+# path independently — a clause present once means one path is uncovered (ADR-0039's rule).
+# ==================================================================================================
+TMCC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+TMTESTER="$STAGING/plugin/agents/tester.md"
+
+# count_lit <literal> <file> — LINE count for a literal that must live on one line. Never a
+# `grep -c || echo 0` (that prints "0\n0" on no match, because grep -c prints 0 AND exits 1; issue
+# #100 shipped that bug once). Used ONLY by TM5, where being one line is the property under test:
+# the hook greps a single line, so a marker split across two is a marker the hook cannot see.
+count_lit() {
+  _n=$(grep -cF -- "$1" "$2" 2>/dev/null || true)
+  [ -n "${_n:-}" ] || _n=0
+  printf '%s' "$_n"
+}
+
+# count_flat <literal> <file> — OCCURRENCE count against a whitespace-flattened copy. Every prose
+# clause below uses this, because a prose assertion must not depend on where markdown wraps the
+# text (ADR-0073's lesson, and its relatives in ADR-0076, ADR-0080 and ADR-0082 — comment markers,
+# backticks, decoration). This section reproduced it on its first run: TM2 and TM3 reported 0
+# against clauses that were present and correct, purely because they wrapped across two lines.
+# `grep -c` cannot serve here: on a one-line flattened file it counts the line, so two occurrences
+# would report 1.
+count_flat() {
+  _n=$(tr '\n' ' ' <"$2" 2>/dev/null | tr -s ' ' | grep -oF -- "$1" 2>/dev/null | wc -l | tr -d ' ')
+  [ -n "${_n:-}" ] || _n=0
+  printf '%s' "$_n"
+}
+
+# Person-neutral on purpose: Workflow Stage 1 states this as orchestrator prose, the Agent-tool
+# template states it as a second-person brief. A second-person literal would fit one and not the
+# other, and the assertion would then be pinning voice rather than content.
+TM_TESTER_CLAUSE='a skipped sub-step is a sub-step nobody can do'
+TM_CODER_CLAUSE='were executed by the tester before this dispatch and are NOT yours'
+TM_GREEN_CLAUSE='an assertion the plan defers to a later task stays red'
+TM_AGENT_CLAUSE='test-shaped sub-steps in the range are yours in every case'
+
+n=$(count_flat "$TM_TESTER_CLAUSE" "$TMCC")
+if [ "$n" -eq 2 ]; then
+  ok "TM1: the tester brief's plan-is-read-always clause appears in exactly 2 dispatch sites (Workflow Stage 1 + Agent-tool Tester batch template)"
+else
+  bad "TM1: expected the tester plan-scope clause at exactly 2 dispatch sites, found $n — one path is uncovered (#241, ADR-0088)"
+fi
+
+n=$(count_flat "$TM_CODER_CLAUSE" "$TMCC")
+if [ "$n" -eq 2 ]; then
+  ok "TM2: the coder brief's test-sub-steps-are-not-yours clause appears in exactly 2 dispatch sites (Workflow Stage 2 + Agent-tool Single batch template)"
+else
+  bad "TM2: expected the coder test-sub-step clause at exactly 2 dispatch sites, found $n — one path is uncovered (#241, ADR-0088)"
+fi
+
+n=$(count_flat "$TM_GREEN_CLAUSE" "$TMCC")
+if [ "$n" -eq 2 ]; then
+  ok "TM3: 'make them green' is qualified at both coder dispatch sites — a red assertion the plan defers stays red"
+else
+  bad "TM3: expected the deferred-red qualification at exactly 2 coder dispatch sites, found $n (#241, ADR-0088)"
+fi
+
+if [ "$(count_flat "$TM_AGENT_CLAUSE" "$TMTESTER")" -ge 1 ]; then
+  ok "TM4: tester.md states the sub-step ownership contract in the agent's own file (ADR-0035: a contract belongs with the agent, not only in the dispatching skill)"
+else
+  bad "TM4: tester.md does not state the test-shaped sub-step ownership contract — a contract that lives only in the caller (ADR-0035, #241)"
+fi
+
+# TM5 — the regression guard this whole change is measured against. The hook greps ONE literal
+# line; an em dash, a paraphrase or a dropped site makes it silently inert (issue #87).
+hookn=$(count_lit "$MARKER" "$HOOK")
+ccn=$(count_lit "$MARKER" "$TMCC")
+if [ "$hookn" -eq 1 ] && [ "$ccn" -eq 3 ]; then
+  ok "TM5: the TEST-AUTHORING SCOPE marker is byte-identical, ASCII hyphen, at 1 hook site and 3 concept-to-code sites (2 dispatch templates + the mechanism prose)"
+else
+  bad "TM5: marker site count changed — hook=$hookn (want 1) concept-to-code=$ccn (want 3). #241's fix must not weaken the marker; that is the failure mode, not the remedy"
+fi
+
+# TM6 — the premise of ADR-0088, measured rather than asserted. A mixed task is not a property of
+# one feature: it is the shape of essentially every plan this repository has produced. The guard is
+# on the DENOMINATOR (ADR-0085): zero mixed plans out of zero plans reads exactly like "no problem".
+tm_test_shaped() {
+  case "$1" in *.md) return 1 ;; esac
+  case "$1" in */tests/*|tests/*|*/test/*|test/*|*/spec/*|spec/*) return 0 ;; esac
+  _b="${1##*/}"
+  case "$_b" in *.test.*|*.spec.*|test_*|*_test.*|*Test.*|*Tests.*|test-*.sh|run-tests.sh) return 0 ;; esac
+  return 1
+}
+PLANDIR="${TM_PLAN_DIR:-$REPO/docs/superpowers/plans}"
+tm_total=0; tm_mixed=0
+for _p in "$PLANDIR"/*.md; do
+  [ -f "$_p" ] || continue
+  tm_total=$((tm_total + 1))
+  _ht=0; _hi=0
+  for _f in $(grep -oE '[A-Za-z0-9._/-]+\.(sh|py|swift|ts|tsx|js|yml|yaml|json|awk|md)' "$_p" 2>/dev/null | sort -u); do
+    if tm_test_shaped "$_f"; then _ht=1; else _hi=1; fi
+  done
+  [ "$_ht" -eq 1 ] && [ "$_hi" -eq 1 ] && tm_mixed=$((tm_mixed + 1))
+done
+if [ "$tm_total" -lt 50 ]; then
+  bad "TM6: plan corpus derivation yielded only $tm_total plans (>= 50 expected) — the derivation is broken, and a broken derivation reports zero mixed plans exactly like a clean one"
+elif [ "$tm_mixed" -ge 40 ]; then
+  ok "TM6: $tm_mixed of $tm_total plans name both test-shaped and implementation paths — a mixed task is the normal shape, not one feature's quirk (ADR-0088 premise)"
+else
+  bad "TM6: only $tm_mixed of $tm_total plans are mixed (>= 40 expected) — ADR-0088's premise no longer holds and its reasoning needs revisiting"
+fi
+
+# TM7/TM8 — EXECUTED PREMISE, NOT FIX EVIDENCE. Both pass before and after this change: the hook is
+# byte-untouched by #241. They exist because ADR-0088's whole design rests on "the tester can write
+# these files and the coder cannot", and rule 11 says a claim nobody ran is unverified. The path is
+# a real file in this repository, not a synthetic fixture.
+TMREAL="$REPO/staging/plugin/scripts/tests/pairs-completeness.test.sh"
+setup_fixture tm7 "$MARKER"
+OUT=$(run "$(payload coder "$TMREAL" Edit "$AID" "$SID" "$TP")")
+denied "$OUT" && ok "TM7 (premise, passes before and after): a marker-carrying coder is DENIED a real staging test file — the half of ADR-0088 that makes a per-task dispatch impossible" \
+              || bad "TM7: a marker-carrying coder was allowed to write $TMREAL — ADR-0088's premise is wrong; got: $OUT"
+
+setup_fixture tm8 "$MARKER"
+OUT=$(run "$(payload tester "$TMREAL" Edit "$AID" "$SID" "$TP")")
+[ -z "$OUT" ] && ok "TM8 (premise, passes before and after): the tester is ALLOWED the same real file — the work is doable in-role, which is why #241 needs no marker change" \
+             || bad "TM8: the tester was denied $TMREAL — ADR-0088's remedy is not available; got: $OUT"
+
+# ==================================================================================================
+# Z. Assertion-count floor (ADR-0083 §D3). A suite reporting FEWER assertions does not read as
+# broken and nobody watches the count — six of plan-task-count's assertions once vanished that way.
+# A floor, not an exact count, so adding an assertion does not require bumping it.
+# ==================================================================================================
+Z_FLOOR=46
+if [ "$((PASS + FAIL))" -ge "$Z_FLOOR" ]; then
+  ok "Z1: assertion count $((PASS + FAIL)) is at or above the floor of $Z_FLOOR"
+else
+  bad "Z1: assertion count $((PASS + FAIL)) fell below the floor of $Z_FLOOR — assertions disappeared rather than failed"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

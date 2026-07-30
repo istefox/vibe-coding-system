@@ -947,6 +947,14 @@ bash <spec-coverage.sh, resolved exactly as in the Requirement-ID coverage gate 
 The tester writes failing tests only, for this task group, and reports back which requirement
 IDs (or which Success Criteria / plan-task lines, per whichever fallback fired) each test covers.
 
+**The fallback chain above decides WHAT to assert. The plan decides WHERE and under what name, and
+is read in every case — never as a fallback (ADR-0088, issue #241).** Add to the brief: work
+through this task group's sub-steps and execute every one that creates or edits a test file. Those
+sub-steps belong to the tester, because the coder dispatched next is denied them by
+`test-write-scope.sh` — so a skipped sub-step is a sub-step nobody can do. Where a sub-step says to
+confirm a failing assertion and stop, it stops: a red assertion left red is the deliverable, not an
+unfinished task. The tester reports which sub-steps it executed and which it leaves to the coder.
+
 #### Merge-back and base-fork audit (ADR-0068 §D5, §D6, §D9)
 
 One resolution site, referenced by both dispatch paths (the Workflow stages above and below,
@@ -1048,6 +1056,11 @@ coder prompt at this stage MUST include, verbatim, ASCII hyphen (ADR-0049 §D3 �
 an em dash leaves the guard silently inert, issue #87):
 ```
 TEST-AUTHORING SCOPE - the tester agent owns test files for this task. Do NOT create or edit tests.
+Sub-steps in your tasks that create or edit test files were executed by the tester before this
+dispatch and are NOT yours. Do not repeat them and do not edit those files. If that leaves a task
+looking incomplete, say so in your report rather than closing the gap yourself. Make the red tests
+green, except where the plan defers a red assertion to a later task: an assertion the plan defers
+to a later task stays red, and your report says which one and why.
 ```
 A coder whose write is denied by `test-write-scope.sh` is reading a consistent story: the tester
 agent owns test files for this task, and the correct response is to report the gap to the
@@ -1635,6 +1648,15 @@ every task dispatched so far), carrying whichever of the four fields were actual
 
 #### Fallback — Agent-tool batch dispatch (hook_verified = false or workflow unavailable)
 
+**Batch boundaries are a design choice, not an arithmetic one (ADR-0088, issue #241).** The tester
+runs once per batch, before the coder, so an assertion that depends on another task's output cannot
+see it if both sit in the same batch — the merge-back that would make it visible happens at the
+batch boundary. Two rules follow, and reading the plan is the only way to apply them: do not put an
+assertion in the same batch as the task it depends on, and do not split a red assertion from the
+task that turns it green. #222's plan is the worked example — Task 3's `C7` must see Task 2's
+vendored file, so they belong to different batches, while Task 1's `F10` and Task 2's vendoring
+belong to the same one.
+
 **Batch-dispatch policy (≥6 tasks in plan):** if the plan contains ≥6 tasks, do NOT
 dispatch the coder as a single monolithic block — the dispatch can silently truncate
 halfway (context overflow, timeout) without a final report and without running the
@@ -1710,9 +1732,17 @@ IDs, write one failing test per listed ID this batch covers. Else if the SPEC de
 brief from the SPEC's Success Criteria section verbatim. Else, brief from this batch's plan task
 text. Never brief from implementation files — none exists yet for this batch.
 
+That chain decides WHAT to assert. The plan decides WHERE and under what name, and you read it in
+every case — never as a fallback. Work through tasks <FROM>-<TO> sub-step by sub-step and execute
+every sub-step that creates or edits a test file. Those sub-steps are yours: the coder dispatched
+after you is denied them by a PreToolUse gate, so a skipped sub-step is a sub-step nobody can do.
+Where a sub-step says to confirm a failing assertion and stop, stop — a red assertion left red is
+the deliverable, not an unfinished task.
+
 Auto mode active. No intermediate HITL.
 Return a report naming the requirement IDs (or Success Criteria / plan-task lines, per whichever
-fallback fired) each test covers.
+fallback fired) each test covers, plus which sub-steps you executed and which you leave to the
+coder.
 ```
 
 **Single batch dispatch template** (dispatched AFTER this batch's tester above; MUST carry the
@@ -1724,8 +1754,13 @@ Read SPEC.md at <manifest.artifacts.spec>.
 Read project CLAUDE.md at <manifest.artifacts.project_claude_md> (if not null).
 
 TEST-AUTHORING SCOPE - the tester agent owns test files for this task. Do NOT create or edit tests.
+Sub-steps in your tasks that create or edit test files were executed by the tester before this
+dispatch and are NOT yours. Do not repeat them and do not edit those files. If that leaves a task
+looking incomplete, say so in your report rather than closing the gap yourself. Make the red tests
+green, except where the plan defers a red assertion to a later task: an assertion the plan defers
+to a later task stays red, and your report says which one and why.
 The red tests for tasks <FROM>-<TO> already exist — the tester agent wrote them before this
-dispatch. Make them green. You may not create or edit test files; if a test needs changing,
+dispatch. You may not create or edit test files; if a test needs changing,
 report it to the orchestrator instead of writing or editing it yourself.
 Use your Pre-flight Pattern Classifier (ADR-0001) for every Edit operation.
 

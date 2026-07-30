@@ -1790,3 +1790,52 @@ is a snapshot: six on 2026-07-30, re-derived from the files because PROJECT.md s
 the wrong four.
 
 Detail: `docs/architecture/ADR-0086-derived-guard-pattern-not-extracted.md`.
+
+## Decisions from the test-authoring granularity chain (ADR-0088)
+
+Closes issue #241, found by the Phase 7.1 shakedown at Step 5 — the first time any chain run reached
+it (#239 records why it never had). ADR-0049 split test authoring from implementation and dispatched
+the split at **task** granularity. A plan task is a **mixed** unit.
+
+- **The issue's framing was too narrow, and the measurement is what shows it.** #241 was filed as "a
+  feature whose deliverable is test code". Measured: **56 of 57 plans** in `docs/superpowers/plans/`
+  name both test-shaped and implementation paths (57 of 58 with #222's own). Not a category of
+  feature — the shape of essentially every plan this repository has produced.
+- **The cause is granularity, not perimeter.** The tester's brief is a strict fallback chain —
+  `R-NN` ids, then Success Criteria, then plan text — so on a SPEC that declares ids (the ADR-0048
+  case, i.e. the normal one) the plan is never read for scope. The coder's brief says the red tests
+  "already exist", presuming they were separate deliverables rather than sub-steps of its own tasks.
+  So a task with a test-shaped sub-step either got written by luck or could not close.
+- **Generator/verifier separation was already preserved, and saying so IS the decision.** #222's
+  plan encodes it by task ordering without anyone designing it that way: Task 1 writes `F10` and
+  confirms it RED, Task 2 vendors and turns it GREEN. Mapped onto the roles — the tester writes the
+  assertion and confirms its RED, the coder makes the change that greens it. That answers *who
+  verifies an assertion*, and no part of the perimeter has to move.
+- **ADR-0049 A5 stands and the marker is untouched.** `test-write-scope.sh` is byte-unchanged.
+  `TM5` pins the marker byte-identical at 1 hook site and 3 c2c sites: **a "fix" for #241 that
+  changes the marker is the failure mode, not the remedy.**
+- **No new script, and the reason is measured.** A mechanical per-task split needs a plan-side file
+  declaration; `**File(s):**` appears in **18 of 58** plans, a parseable `Budget:` in **2 of 58**.
+  Either would be inert on the majority and inert *silently*. The agent splits from the plan text
+  and **the hook is the backstop** — a misclassification is a loud deny plus a report, never a
+  silent wrong result. A second copy of the path predicate is refused: ADR-0086 would call it
+  extractable, but extracting it *into* the hook turns a missing file into an allow, weakening a
+  guardrail whose contract is allow-on-every-failure.
+- **Batch boundaries are a design choice**, stated where batches are chosen: the tester runs once
+  per batch before the coder, so an assertion cannot share a batch with the task it depends on, and
+  a red assertion must not be split from the task that greens it.
+
+Known consequences: this ships an **instruction, not an enforcement** — what changes is the failure
+shape, from a task nobody can close to a loud deny with a report. The batch-boundary rule has no
+mechanism (#242 is where one would belong). The Workflow path's prompt is model-generated, so the
+new clauses inherit the marker's own limit there. Inert until sync; the paused #222 run executes the
+deployed copy.
+
+**Harness lesson, fourth of its family.** `TM2`/`TM3` reported 0 on their first run against clauses
+that were present and correct, because the clauses **wrap across two lines** — ADR-0073's line wrap,
+ADR-0076's comment marker, ADR-0080's backticks, now met while writing an ADR that cites all three.
+Prose clauses match a whitespace-flattened copy via `count_flat`; `TM5` deliberately stays
+line-based via `count_lit`, because a marker split across two lines is a marker the hook cannot see
+and flattening would hide the very defect it guards.
+
+Detail: `docs/architecture/ADR-0088-241-test-authoring-split-granularity.md`.
