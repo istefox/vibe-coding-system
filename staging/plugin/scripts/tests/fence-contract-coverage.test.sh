@@ -37,6 +37,11 @@
 # mechanical classifier for the contract-versus-illustration question the issue calls the deeper
 # finding, and it found the single genuine illustration among the thirteen rather than leaving the
 # split to taste. `F7` keeps it: a fence declared a contract must at minimum parse.
+#
+# DERIVED-GUARD PATTERN — instance 2 of 6 (ADR-0086). Derives: fenced blocks inside a file. Waiver: `<!-- fence-contract: <id> -->` / `<!-- fence-illustration: … -->`, which is ALSO the extraction anchor.
+# The pattern is deliberately COPIED across the six, not shared. Before writing a seventh by
+# copying this file, read ADR-0086 §D1: extract only when two copies giving different answers
+# would be a DEFECT. Here they would not — the six ask six questions about six populations.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

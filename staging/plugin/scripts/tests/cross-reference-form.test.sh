@@ -46,6 +46,11 @@
 # historical records, not edited in place (the ADR-0034 precedent), so a line number in one is a
 # correct snapshot of its own moment. And the check verifies that an anchor EXISTS in its target
 # file, never that the anchor is the right place for the claim — that stays a reading task.
+#
+# DERIVED-GUARD PATTERN — instance 3 of 6 (ADR-0086). Derives: token occurrences inside a file. Waiver: `xref-exempt: <token>|<token> — <reason>`, which the extractor must SKIP.
+# The pattern is deliberately COPIED across the six, not shared. Before writing a seventh by
+# copying this file, read ADR-0086 §D1: extract only when two copies giving different answers
+# would be a DEFECT. Here they would not — the six ask six questions about six populations.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

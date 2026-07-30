@@ -166,6 +166,11 @@ Two ways forward, neither started:
 
 ### Phase 5 — make the shakedown run survivable (issues #206–#208)
 
+> **Superseded by Phase 6**, which was written after #210–#213 existed and after the seven issues
+> were read against each other. The items below are kept for their reasoning; their checkboxes are
+> marked done where Phase 6 closed them, so a reader grepping `- [ ]` sees the work that is actually
+> outstanding. Corrected 2026-07-30, having read as six open items when two remained.
+
 Phase 4 emptied the backlog, so this phase comes from an **audit of the skill and agent layer**, the
 surface the previous phases did not touch. Its purpose is narrower than "find defects": the next
 step after it is a **shakedown run of the chain on a real feature**, and this phase exists so that
@@ -202,7 +207,7 @@ Stated because a negative result nobody records gets re-derived:
 
 #### 5.2 — Cheap, and it removes a live wrong pointer
 
-- [ ] **#207 — a stale line-number cross-reference, and the unchecked class.**
+- [x] **#207 — a stale line-number cross-reference, and the unchecked class.** *(closed in 6.2, ADR-0082)*
   `concept-to-code/SKILL.md:129` points at `SKILL.md:1355-1358` "for the exact transition block";
   those lines now hold the weakening-scan `CLEAN` warning. It does not point at nothing — it points
   at *other plausible technical prose*, which is worse. The named-heading instrument already exists
@@ -210,14 +215,14 @@ Stated because a negative result nobody records gets re-derived:
 
 #### 5.3 — Preventive, and therefore the one at risk of being skipped
 
-- [ ] **#208 — the three derived class guards each stop at a boundary nobody checks.** One question
+- [x] **#208 — the three derived class guards each stop at a boundary nobody checks.** *(closed in 6.4, ADR-0085)* One question
   asked three times: what is outside this derivation, and would we notice? The sharpest of the three
   is that `transcript-scan-rule`'s count guard can be satisfied by a different population than the
   one at risk — a guard that appears to cover something it does not.
 
 #### Then, and only then
 
-- [ ] **Shakedown run.** A small, real, low-stakes feature, chosen as much to exercise 2026-07-29's
+- [x] **Shakedown run.** *(carried to 6.5, still outstanding — tracked there, not here.)* A small, real, low-stakes feature, chosen as much to exercise 2026-07-29's
   changes as to build the thing. Expect three things and do not mistake them for regressions:
   `diff-budget-check.sh` is active for the first time since July and may report `BUDGET`/`SCOPE` on
   work in flight against budgets written when nothing read them; the two new `manifest-field-state.sh`
@@ -326,7 +331,7 @@ free to honour.
 
 #### 6.3 — The big one, and the pattern the rest reuse
 
-- [ ] **#206 — nine abort-capable fences that nothing executes.** Five in `autopilot-build`, and
+- [x] **#206 — nine abort-capable fences that nothing executes.** Five in `autopilot-build`, and
   **that subset carries most of the value**: it is the unattended path, where an aborting pre-flight
   is the only thing between a manifest and a silent bad run.
   - **Order within: `autopilot-build`'s five first.** If this item has to be cut short, cutting after
@@ -422,9 +427,33 @@ free to honour.
 
 #### 6.5 — Close the loop
 
-- [ ] Ask the extraction question with four call sites in hand: is there one derivation+waiver+
+- [x] Ask the extraction question with four call sites in hand: is there one derivation+waiver+
   count-guard helper here, or five deliberate copies? Either answer is fine; an unasked question is
   not.
+
+  **Answered: six deliberate copies, no shared helper** (ADR-0086). The count was wrong here too —
+  re-derived from the files rather than from this list, there are **six** instances, not four, and
+  this paragraph named the wrong four. They split into two shapes: four carry the full triad
+  (`transcript-scan-rule`, `fence-contract-coverage`, `cross-reference-form`,
+  `skill-coverage-perimeter`), two derive and count but hold no waiver because they need none
+  (`skill-text-corrections` F6, `agent-command-scope` J).
+
+  **The criterion is the reusable part, not the verdict: extract only when two copies giving
+  different answers would be a DEFECT.** For ADR-0069's plan-task predicate, yes — three consumers
+  asking ONE question and getting three answers, which is what issue #172 cost. Here, no: six
+  questions about six populations, where `>= 8`, `>= 25`, `>= 100` and `>= 2` are legitimately
+  different numbers about legitimately different things.
+
+  Two differences a single helper cannot reconcile, both measured: `fence-contract`'s marker **is**
+  the extraction anchor and must be found, while `xref`'s must be **excluded** or a declaration
+  satisfies itself — contradictory requirements on the same field. And the marker's syntax follows
+  the file's language (shell comment vs HTML comment), not the pattern. Six parameters for six
+  callers is a configuration file with an extra indirection, not a helper.
+
+  Recorded in each of the six headers, one line naming the instance, because the seventh will be
+  written by **copying one of the six**. No test asserts those lines exist: an assertion that a
+  comment is present cannot be seen meaningfully RED, and it would be the seventh instance of the
+  pattern under review.
 - [ ] Then the **shakedown run**, with its three expected non-regressions unchanged from Phase 5:
   `diff-budget-check.sh` active for the first time since July, the `manifest-field-state.sh`
   dependencies aborting on an un-synced machine, and Step 5's Workflow dispatch finally producing the

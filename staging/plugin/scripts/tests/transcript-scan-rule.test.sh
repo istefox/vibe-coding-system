@@ -26,6 +26,11 @@
 # so much as mentions a transcript — and narrowing happens through DECLARED exemptions in the source.
 # That way a new file is in the population by default and must say something; a narrow derivation
 # would quietly not see it, which is #127's own failure mode applied to its own guard.
+#
+# DERIVED-GUARD PATTERN — instance 1 of 6 (ADR-0086). Derives: files filtered by content. Waiver: `# transcript-scan-exempt: <reason>`.
+# The pattern is deliberately COPIED across the six, not shared. Before writing a seventh by
+# copying this file, read ADR-0086 §D1: extract only when two copies giving different answers
+# would be a DEFECT. Here they would not — the six ask six questions about six populations.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

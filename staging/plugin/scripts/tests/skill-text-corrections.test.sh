@@ -27,6 +27,11 @@
 # Zero $HOME dependency: runs identically in CI (ubuntu-latest, no ~/.claude) and locally.
 # Never point any variable at $HOME/.claude/... -- that is the deployed copy, out of scope.
 # Bash 3.2 clean. Run: bash skill-text-corrections.test.sh
+#
+# DERIVED-GUARD PATTERN — instance 5 of 6 (ADR-0086). Derives: names parsed from one prose line (section F6 only). Waiver: no waiver — none is needed.
+# The pattern is deliberately COPIED across the six, not shared. Before writing a seventh by
+# copying this file, read ADR-0086 §D1: extract only when two copies giving different answers
+# would be a DEFECT. Here they would not — the six ask six questions about six populations.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)              # staging/plugin/scripts

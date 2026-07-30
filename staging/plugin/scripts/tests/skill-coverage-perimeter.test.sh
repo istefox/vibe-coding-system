@@ -33,6 +33,11 @@
 # DECLARED exemption in the skill itself. A new skill is in the population by default and must say
 # something. S7 runs it backwards: a declaration on a skill that IS covered is a stale waiver, and a
 # stale waiver reading as a clean bill of health is the failure ADR-0081 ZA4 exists to catch.
+#
+# DERIVED-GUARD PATTERN — instance 4 of 6 (ADR-0086). Derives: directories, verified against another tree. Waiver: `<!-- skill-coverage-exempt: <reason> -->`, position-constrained.
+# The pattern is deliberately COPIED across the six, not shared. Before writing a seventh by
+# copying this file, read ADR-0086 §D1: extract only when two copies giving different answers
+# would be a DEFECT. Here they would not — the six ask six questions about six populations.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)                    # staging/plugin/scripts
