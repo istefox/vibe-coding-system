@@ -33,3 +33,4 @@ docs/books/*
 .remember/recent.md
 .remember/archive.md
 .remember/remember.md
+.claude/.triage-fix-last-*.json
