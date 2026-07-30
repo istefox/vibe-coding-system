@@ -6,8 +6,8 @@ mode: "greenfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-07-30T12:09:39+00:00"
-last_updated_at: "2026-07-30T13:43:11+00:00"
-current_step: "step_4_session_boundary"
+last_updated_at: "2026-07-30T16:38:33+00:00"
+current_step: "ready_for_implementation"
 status: "in_progress"
 
 # Gate 0 routing result (ADR-0017)
@@ -25,7 +25,7 @@ test_cmd_provisional: false
 coder_model: "sonnet"
 
 # Autopilot mode (project-conductor): all HITL gates auto-select safe defaults
-autopilot: false
+autopilot: true
 
 # Dynamic Workflows Step 5 tracking (ADR-0016) — default false; smoke test flips it true per environment
 hook_verified: false
