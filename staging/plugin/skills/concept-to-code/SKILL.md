@@ -2910,11 +2910,19 @@ and structurally refuses to commit to the default branch, its Step 4 is the HITL
 of this chain already uses it, so there is exactly one commit path in the system:
 
 - **Attended** (`manifest.autopilot = false`): invoke `commit` with args
-  `<topic-full-title> — planning artifacts (ADR: <manifest.artifacts.adr>) --no-pr`.
+  `<topic-full-title> — planning artifacts (ADR: <manifest.artifacts.adr>) --no-pr
+  --include <spec>,<manifest.artifacts.adr>,<manifest.artifacts.plan>,<manifest-path>`.
   The Step 4 gate still asks; `--no-pr` suppresses only the PR question, which would otherwise fire
   on every chain run with nothing to publish.
 - **Unattended** (`manifest.autopilot = true`): the same, plus `--autopilot`. Local commit only —
   this changes no autonomy boundary, ADR-0020 already places a local commit inside it.
+
+**`--include` is what makes this step able to produce anything at all (issue #234).** On a
+greenfield chain those four artifacts are **untracked**, and `commit`'s default rule never stages
+untracked *under any circumstance*; the one door — Step 4's "Stage additional files" — is exactly
+what `--autopilot` skips. The fix looked at first like raw staging here, and it is not: `RH4b`
+forbids every raw git command in this block, staging included, and staging from the caller would
+put the file-scope decision in two places (ADR-0071 §D2 and its `## Clarification`). `CLAUDE.md` is deliberately absent from the list: it is tracked-modified, so the default scope already covers it, and naming a path that needs no naming invites the list to drift into a second scope rule.
 
 If the tree is already clean AND `HEAD` is already off the default branch, `commit` reports nothing
 to commit: that is a resumed or already-committed run, and it is a pass, not an error. Proceed.

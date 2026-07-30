@@ -21,7 +21,7 @@ Closes the implementation cycle with a HITL-verified Conventional Commit.
 ## Arguments
 
 ```
-/commit [context-hint] [--autopilot] [--no-pr]
+/commit [context-hint] [--autopilot] [--no-pr] [--include <path>[,<path>...]]
 ```
 
 Optional `context-hint`: brief feature description for the commit body.
@@ -30,6 +30,19 @@ From the concept-to-code chain: `<topic-full-title> (ADR: <adr-path>)`.
 `--autopilot`: when present in args, **skip Step 4 HITL gate** and execute the commit immediately with the generated message. Emit: `"Commit: autopilot — executing commit directly..."` before `git commit`. Step 6 (PR) is also skipped in autopilot mode. **Only set by project-conductor or c2c when `manifest.autopilot=true`** — never set manually unless you explicitly want unattended commits.
 
 `--no-pr`: **skip Step 6 and everything downstream of it** (6, 6b, 6c, 7) — no PR question, no push, no CI watch, no merge proposal. The Step 4 HITL gate is **unaffected**: this flag suppresses publication, never approval, and it is the difference between it and `--autopilot`. The two are orthogonal and may be combined.
+
+`--include <path>[,<path>...]`: **add these exact paths to the included set, untracked ones too** (issue #234, ADR-0071 §D2's Clarification). Comma-separated, repo-relative or absolute; a path containing a comma cannot be expressed and that limit is deliberate rather than worked around.
+
+This exists because the default rule — *untracked files are never staged, under any circumstance* — is right for a human at Step 4 and leaves an unattended caller with no door at all: `--autopilot` skips Step 4, which is where the only explicit-staging path lives. `concept-to-code` Gate 4.0 is the first such caller and could not commit the planning artifacts, which are untracked on a greenfield chain.
+
+Four rules, and they are the whole contract:
+
+1. **It widens the included set; it does not bypass anything.** The paths join the set Step 1 computes, and Step 5 stages them alongside `git add -u`. Every check in Step 1 still sees one coherent set.
+2. **It resolves AFTER the secrets check, never before.** The scan already covers `staged ∪ tracked_modified ∪ untracked`, so an `--include` path is in it either way — but the ordering must stay explicit, because a future edit that resolved `--include` first would open the door the filename rule exists to keep shut.
+3. **A path that does not exist aborts the commit, naming it.** A caller naming a missing artifact has a defect upstream, and committing the rest silently produces a half-done Gate 4.0 that looks complete. This is the same discipline as "an empty finding list from a run that never happened is not a clean result".
+4. **Never `git add .` / `git add -A` to satisfy it.** The paths are added individually, by name.
+
+**Only a caller that knows exactly which paths it wants may pass this.** It is not a convenience for widening a commit; a human who wants more files uses Step 4's "Stage additional files", which shows them first.
 
 Use it when a commit is a checkpoint rather than a deliverable — the caller knows there is nothing to publish yet, so asking would be pure friction on every run. `concept-to-code` Gate 4.0 (ADR-0071) is the first such caller: it commits the planning artifacts so Step 5's recovery pre-flight has the clean, on-a-feature-branch tree it requires, with implementation still to come. After the flag suppresses Step 6, emit `"Commit: --no-pr — PR/push/merge skipped."` so the absence of the usual question is visible rather than looking like a step that silently failed.
 
@@ -66,7 +79,25 @@ untracked=$(git ls-files --others --exclude-standard)                # NEVER aut
   tracked changes are mentioned as "not included", not swept in.
 - `untracked` non-empty in either case above → always list separately in the Step 4 gate as
   "Excluded — untracked, not staged". Never staged by default, under any circumstance — adding
-  one requires the explicit "Stage additional files" path in Step 4.
+  one requires the explicit "Stage additional files" path in Step 4, or `--include` from a caller
+  that names the paths (see below).
+- **`--include` resolution (issue #234), and it happens HERE, after the secrets check below, not
+  before it.** Split the flag's value on commas into `include_paths`; empty when the flag is
+  absent, which is exactly today's behaviour for every caller that does not pass it. Each path
+  joins the included set and is dropped from the "Excluded — untracked" list, since it is no
+  longer excluded.
+  ```bash
+  # $include_flag is the raw value after --include, or empty.
+  include_paths=$(printf '%s' "${include_flag:-}" | tr ',' '\n' | sed '/^[[:space:]]*$/d')
+  _missing=""
+  for _inc in $include_paths; do
+    [ -e "$_inc" ] || _missing="$_missing $_inc"
+  done
+  ```
+  **`_missing` non-empty → stop and report it, do not commit.** A caller naming a path that is not
+  there has a defect upstream of this skill, and committing the rest produces a half-done result
+  that looks complete — the same reason an unrun check is not a clean result. Name every missing
+  path, not the first.
 - **This untracked list is the authoritative, mechanical signal for debris (ADR-0062 §D2, issue
   #116).** An agent's own cleanup disposition list (its Output Format "Cleanup" bullet — coder,
   debugger, refactorer) is a self-report by the party being audited — the same class of evidence
@@ -414,6 +445,14 @@ empty commit — see Invariant guardrails); show only "Stage additional files" a
 if [ -z "$staged" ]; then
   git add -u   # tracked modifications/deletions/renames ONLY — never untracked
 fi
+# --include paths (issue #234): staged individually, by name, AFTER git add -u and after Step 1's
+# secrets check has already seen them in its union. Never `git add .` / `git add -A`. `--` guards a
+# path that starts with a dash. Absent flag -> $include_paths is empty and this loop does nothing,
+# which is byte-for-byte today's behaviour for the three callers that do not pass it.
+for _inc in $include_paths; do
+  [ -n "$_inc" ] || continue
+  git add -- "$_inc"
+done
 # Commit with approved message:
 git commit -m "$(cat <<'COMMITMSG'
 <commit-message>
