@@ -509,8 +509,28 @@ fi
 # first SPEC to actually declare R-NN ids in its success criteria — which is what ADR-0048 asked
 # for — made this backward-compatibility loop fail on the correct use of the feature it protects.
 # A backward-compatibility corpus must be a stable set; a work-in-flight file is not one.
-re3_count=0; re3_bad=0
+#
+# MEMBERSHIP IS BY PROPERTY, NOT BY LOCATION (issue #230, found by the Phase 7 shakedown run).
+# RE asserts one thing: a SPEC that declares NO ids passes silently. A SPEC that DOES declare ids
+# legitimately reports UNCOVERED against an empty plan — that is the feature working, and demanding
+# the silent pass of it asks the wrong question of that file.
+#
+# The 2026-07-28 fix above removed the root file, which addressed WHERE the failing SPEC was and not
+# WHAT made it fail. Archiving that same SPEC to its documented home — which the convention says to
+# do, and which issue #228's proposed guard would do automatically — put it back in this corpus
+# through the other door and failed this loop again. Every SPEC written since ADR-0048 declares ids,
+# so under a location filter the archive step is blocked for all of them.
+#
+# The predicate reuses the checker's own `--list` rather than a second declaration parser: one place
+# decides what an id is (the ADR-0069/ADR-0072 rule, applied here).
+spec_declares_ids() { [ -n "$(bash "$SCOV" --spec "$1" --plan "$TMP/re3-plan.md" --list 2>/dev/null)" ]; }
+
+re3_count=0; re3_bad=0; re3_skipped=0
 for f in "$REPO"/docs/specs/*.spec.md; do
+  if spec_declares_ids "$f"; then
+    re3_skipped=$((re3_skipped + 1))
+    continue
+  fi
   re3_count=$((re3_count + 1))
   o=$(bash "$SCOV" --spec "$f" --plan "$TMP/re3-plan.md" 2>"$TMP/re3err")
   r=$?
@@ -523,10 +543,29 @@ for f in "$REPO"/docs/specs/*.spec.md; do
   fi
 done
 if [ "$re3_count" -ge 30 ]; then
-  ok "RE4: the RE3 corpus loop visited $re3_count files (>= 30) — not a vacuous pass"
+  ok "RE4: the RE3 corpus loop asserted $re3_count id-less SPECs (>= 30, $re3_skipped excluded by property) — not a vacuous pass"
 else
-  bad "RE4: the RE3 corpus loop visited only $re3_count files (< 30) — a glob matching almost nothing would read as full coverage"
+  bad "RE4: the RE3 corpus loop asserted only $re3_count files (< 30, $re3_skipped excluded) — either the glob matches almost nothing, or the exclusion predicate is swallowing the corpus"
 fi
+
+# RE5/RE6: the exclusion predicate itself, on FIXTURES rather than on whatever is archived today.
+# Asserting "at least one corpus member is excluded" would make this test depend on which SPECs
+# happen to be in docs/specs/ at a given moment — the same location-coupling that produced #230.
+# Both directions (rule 8: a negative-case assertion pins nothing without its positive twin).
+cat >"$TMP/re5-with-ids.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — a criterion carrying a requirement id.
+EOF
+cat >"$TMP/re6-no-ids.spec.md" <<'EOF'
+## Success criteria
+- [ ] A criterion carrying no requirement id at all.
+EOF
+spec_declares_ids "$TMP/re5-with-ids.spec.md" \
+  && ok "RE5: the exclusion predicate recognises a SPEC that declares ids (it would be excluded)" \
+  || bad "RE5: a SPEC declaring R-01 was NOT recognised — the predicate excludes nothing and RE3 is back to asserting by location"
+spec_declares_ids "$TMP/re6-no-ids.spec.md" \
+  && bad "RE6: an id-less SPEC was excluded — the predicate over-matches and would empty the corpus silently" \
+  || ok "RE6: an id-less SPEC is NOT excluded — it stays in the asserted set"
 
 # ==============================================================================================
 # RF. concept-to-code/SKILL.md Step 5 — the Requirement-ID coverage gate block (ADR-0048 §D5).
