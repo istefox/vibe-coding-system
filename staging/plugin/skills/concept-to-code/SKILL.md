@@ -955,6 +955,8 @@ sub-steps belong to the tester, because the coder dispatched next is denied them
 confirm a failing assertion and stop, it stops: a red assertion left red is the deliverable, not an
 unfinished task. The tester reports which sub-steps it executed and which it leaves to the coder.
 
+Also add to the brief: Writes go under the dispatched worktree, never to an absolute path into the shared checkout: `isolation: worktree` bounds the working directory, not the filesystem, and an absolute path resolves out of it (ADR-0068 §D11, issue #245). Read the planning artifacts by absolute path; write by relative path.
+
 #### Merge-back and base-fork audit (ADR-0068 §D5, §D6, §D9)
 
 One resolution site, referenced by both dispatch paths (the Workflow stages above and below,
@@ -994,6 +996,15 @@ path.
 #             Workflow path: no identity is reported (F19) — enumerate `git worktree list` and
 #             select the entry that is not the main working tree instead of deriving the path
 #             from the run id (F20 is an observed convention, not a contract).
+# ESCAPE CHECK (ADR-0068 §D11, issue #245) — runs BEFORE the merge, on the SHARED checkout, not
+# the worktree. `isolation: worktree` bounds the agent's cwd, not its filesystem reach: an
+# absolute path resolves and writes here. Untracked, not `--porcelain`: the manifest is
+# legitimately modified-tracked throughout Step 5 (issue #239), so a dirty-tree check would fire
+# on every stage. The chain itself creates no untracked file in Step 5 — step5-report.json is
+# gitignored — so anything here came from outside the worktree it was supposed to stay in.
+ESCAPED=$(git ls-files --others --exclude-standard 2>/dev/null)
+[ -z "$ESCAPED" ] || <escape halt: report $ESCAPED as written outside the dispatched worktree,
+                      preserve $WB, do NOT merge, stop>
 [ -d "$WT" ] || { echo "nothing to merge: worktree auto-removed"; }   # F6, not an error
 if [ -d "$WT" ] && [ -n "$(git -C "$WT" status --porcelain 2>/dev/null)" ]; then
   BASE_SHA=$(git -C "$WT" rev-parse HEAD)      # fork point, captured BEFORE any commit lands
@@ -1016,6 +1027,20 @@ append one `worktree_merges` entry — `{stage, agent_type, branch, base_sha, me
 an older report means the run predates this feature, not that the report is malformed. After a
 successful merge the worktree is pruned; an **unmerged** worktree (halted, or left over from a
 conflict) is reported and preserved, never silently deleted.
+
+**Escape halt, and why it runs before the merge rather than at commit time (ADR-0068 §D11, issue
+#245).** An agent that writes through an absolute path lands in the shared checkout, and the damage
+is not the file — it is the merge. `git merge` refuses to overwrite an untracked file at a path the
+merge wants to create, so a stray write at exactly the path the worktree branch adds aborts the
+merge and gets reported as a conflict whose named cause is wrong. Checking here names the real one.
+`commit`'s Step 1 untracked list (ADR-0062) would catch the same debris several steps later, which
+is too late to protect this.
+
+Measured, not assumed (issue #245): the agent's `pwd`, `git rev-parse --show-toplevel` and the
+`PreToolUse` payload's `cwd` are all the worktree, and `tool_input.file_path` arrives resolved to an
+absolute path. **A `PreToolUse` hook keyed on that would still not have caught the observed
+incident**, which came through `mkdir`/`cp` — Bash, whose `tool_input` carries no `file_path` at
+all. That is why this check is here and not in a hook.
 
 **Base-fork halt, and why it is a halt, not a report.** `BASE_SHA != $PRE` means the worktree
 forked from somewhere other than the feature branch — the exact defect this feature exists to
@@ -1061,6 +1086,7 @@ dispatch and are NOT yours. Do not repeat them and do not edit those files. If t
 looking incomplete, say so in your report rather than closing the gap yourself. Make the red tests
 green, except where the plan defers a red assertion to a later task: an assertion the plan defers
 to a later task stays red, and your report says which one and why.
+Writes go under the dispatched worktree, never to an absolute path into the shared checkout: `isolation: worktree` bounds the working directory, not the filesystem, and an absolute path resolves out of it (ADR-0068 §D11, issue #245). Read the planning artifacts by absolute path; write by relative path.
 ```
 A coder whose write is denied by `test-write-scope.sh` is reading a consistent story: the tester
 agent owns test files for this task, and the correct response is to report the gap to the
@@ -1739,6 +1765,8 @@ after you is denied them by a PreToolUse gate, so a skipped sub-step is a sub-st
 Where a sub-step says to confirm a failing assertion and stop, stop — a red assertion left red is
 the deliverable, not an unfinished task.
 
+Writes go under the dispatched worktree, never to an absolute path into the shared checkout: `isolation: worktree` bounds the working directory, not the filesystem, and an absolute path resolves out of it (ADR-0068 §D11, issue #245). Read the planning artifacts by absolute path; write by relative path.
+
 Auto mode active. No intermediate HITL.
 Return a report naming the requirement IDs (or Success Criteria / plan-task lines, per whichever
 fallback fired) each test covers, plus which sub-steps you executed and which you leave to the
@@ -1763,6 +1791,8 @@ The red tests for tasks <FROM>-<TO> already exist — the tester agent wrote the
 dispatch. You may not create or edit test files; if a test needs changing,
 report it to the orchestrator instead of writing or editing it yourself.
 Use your Pre-flight Pattern Classifier (ADR-0001) for every Edit operation.
+
+Writes go under the dispatched worktree, never to an absolute path into the shared checkout: `isolation: worktree` bounds the working directory, not the filesystem, and an absolute path resolves out of it (ADR-0068 §D11, issue #245). Read the planning artifacts by absolute path; write by relative path.
 
 Auto mode active. No intermediate HITL.
 `.claude/test-cmd` is off-limits — never read, write, or modify it. If the test command needs changing, stop and report it to the orchestrator.
