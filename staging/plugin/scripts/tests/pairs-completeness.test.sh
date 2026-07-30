@@ -212,5 +212,80 @@ done
   && ok "ZA5: hook-verify-workflow.sh is still flat in staging/plugin/scripts (ADR-0016/0024)" \
   || bad "ZA5: the flat source is gone — the skills/ remap now deploys nothing"
 
+# =====================================================================================
+# DEPLOYED-ONLY REGISTRY (issue #222, ADR-0087). sync-to-claude.sh declares five skills that exist
+# in ~/.claude/skills/ and deliberately do NOT belong in staging/ (personal routines, a foreign
+# repo symlink, another project's intake front end, book-derived proprietary content). ADR-0077's
+# rule — a waiver travels with the file it excuses — cannot apply here: the excused file is absent
+# from staging/ by construction, so there is nothing for the waiver to travel with (ADR-0087 §D-
+# registry). This section is the CI-runnable half of the two-direction contract: every declared
+# name must be genuinely absent from staging/, every reason must clear the 40-char floor, and the
+# derivation itself must not collapse to zero.
+#
+# The needle is built at run time so this file does not match its own explanatory prose (rule 12).
+DMARK="deployed""-only"
+
+# Extracted via REDIRECTION into a tmp file, never a pipe into `while read` — a piped while runs in
+# a subshell in bash and would silently drop any counter built inside it, exactly the pitfall
+# check_pairs/check_complete above already avoid by reading `< "$_file"`.
+grep "^# *${DMARK}: " "$SYNC" > "$tmp/deployed-only-decl" 2>/dev/null
+
+# DO1: count guard on the derivation. This is RED right now — sync-to-claude.sh carries no
+# `# deployed-only:` lines yet (Task 4 of this feature adds the five). Must stay RED after this
+# section is written; Task 4's coder is what turns it GREEN.
+_don=$(grep -c "^# *${DMARK}: " "$SYNC" 2>/dev/null || true)
+[ -z "$_don" ] && _don=0
+[ "$_don" -ge 5 ] && ok "DO1: sync-to-claude.sh declares $_don deployed-only skill(s) (>= 5)" \
+                   || bad "DO1: only $_don '${DMARK}:' declaration(s) found in $SYNC — expected >= 5"
+
+# DO2: forward check on the REAL file — no declared name has a matching staging/plugin/skills/
+# <name>/SKILL.md (the stale-waiver direction R-05 names). Expected to pass trivially against the
+# real registry today (none of the five is vendored, by construction); its value is regression
+# protection, not a first RED. DO4 below is what proves this logic actually detects a stale entry —
+# without it, DO2 alone is vacuously satisfiable by an empty registry (self-test-2's own lesson,
+# applied here).
+_do2_bad=""
+while IFS= read -r _dline; do
+  [ -n "$_dline" ] || continue
+  _dname=$(printf '%s\n' "$_dline" | sed "s/^# *${DMARK}: *//" | cut -d' ' -f1)
+  [ -n "$_dname" ] || continue
+  if [ -f "$STAGING/plugin/skills/$_dname/SKILL.md" ]; then
+    _do2_bad="$_do2_bad $_dname"
+  fi
+done < "$tmp/deployed-only-decl"
+[ -z "$_do2_bad" ] && ok "DO2: no declared deployed-only name is vendored in staging/plugin/skills" \
+                   || bad "DO2: declared deployed-only but ALSO vendored (stale waiver) —$_do2_bad"
+
+# DO3: every declared reason is >= 40 characters (same floor S3/ADR-0077 T4 use elsewhere).
+_do3_bad=""
+while IFS= read -r _dline; do
+  [ -n "$_dline" ] || continue
+  _dname=$(printf '%s\n' "$_dline" | sed "s/^# *${DMARK}: *//" | cut -d' ' -f1)
+  _dreason=$(printf '%s\n' "$_dline" | sed "s/^# *${DMARK}: *//" | sed 's/^[^—-]*[—-] *//')
+  _rlen=${#_dreason}
+  [ "$_rlen" -lt 40 ] && _do3_bad="$_do3_bad $_dname($_rlen)"
+done < "$tmp/deployed-only-decl"
+[ -z "$_do3_bad" ] && ok "DO3: every declared reason is >= 40 characters" \
+                   || bad "DO3: reason(s) shorter than 40 characters —$_do3_bad"
+
+# DO4 (backward self-test, the R-09 evidence for R-05): build a synthetic one-line fixture
+# declaring an EXISTING staged skill ("commit") as deployed-only, and run DO2's exact stale-waiver
+# logic against the fixture instead of the real file. Without this, DO2 alone never exercises its
+# own failure branch — the real registry, by construction, never contains a stale name.
+printf '# %s: commit — a synthetic stale waiver planted for this self-test only, not a real entry\n' \
+  "$DMARK" > "$tmp/deployed-only-fixture"
+
+_do4_bad=""
+while IFS= read -r _dline; do
+  [ -n "$_dline" ] || continue
+  _dname=$(printf '%s\n' "$_dline" | sed "s/^# *${DMARK}: *//" | cut -d' ' -f1)
+  [ -n "$_dname" ] || continue
+  if [ -f "$STAGING/plugin/skills/$_dname/SKILL.md" ]; then
+    _do4_bad="$_do4_bad $_dname"
+  fi
+done < "$tmp/deployed-only-fixture"
+[ -n "$_do4_bad" ] && ok "DO4: self-test — stale waiver on a real staged skill (commit) is flagged" \
+                   || bad "DO4: self-test — a declared name that IS vendored was NOT flagged (the check would pass vacuously)"
+
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
