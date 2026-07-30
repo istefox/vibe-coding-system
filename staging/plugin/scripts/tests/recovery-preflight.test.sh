@@ -355,8 +355,8 @@ printf '%s\n' "$RH4_BLOCK" | grep -q 'commit' \
   && ok "RH4: Gate 4.0 delegates to the commit skill" \
   || bad "RH4: Gate 4.0 does not mention the commit skill"
 printf '%s\n' "$RH4_BLOCK" | grep -qE 'git (checkout -b|commit|add)' \
-  && bad "RH4b: Gate 4.0 hand-rolls git — there must be exactly one commit path in the system" \
-  || ok "RH4b (forward guard, green before and after — the block did not exist to hand-roll git in): Gate 4.0 runs no raw git commands"
+  && bad "RH4b: Gate 4.0 hand-rolls git — STAGING counts, not just committing: 'git add' here would put the file-scope decision in two places (commit Step 1 and the caller), which is what ADR-0071 §D2 exists to prevent. #234's fix belongs on the commit side, never here." \
+  || ok "RH4b (forward guard, green before and after — the block did not exist to hand-roll git in): Gate 4.0 runs no raw git commands, staging included"
 printf '%s\n' "$RH4_BLOCK" | grep -q -- '--no-pr' \
   && ok "RH5: Gate 4.0 passes --no-pr (nothing to publish at the session boundary)" \
   || bad "RH5: Gate 4.0 does not pass --no-pr — every chain run would be asked to open a PR"

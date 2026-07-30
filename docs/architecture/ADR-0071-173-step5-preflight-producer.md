@@ -153,3 +153,32 @@ at Gate 3 would leave a commit behind for a chain the user then aborts.
 - `docs/architecture/ADR-0068-176-worktree-isolation-contract.md` §D5 — the merge-back protocol that
   needs the feature branch Gate 4.0 creates
 - `staging/plugin/scripts/tests/recovery-preflight.test.sh` section RH
+
+## Clarification 2026-07-30 — §D2's scope includes STAGING, not only committing
+
+Nothing here changes. This records where the answer already lives, because the answer was misread
+by the one person who had just run the chain end to end, four hours after doing so.
+
+**§D2 forbids `git add` inside the Gate 4.0 block, not merely `git commit`.** The prose says "it
+never hand-rolls git", which reads to some as a prohibition on committing with staging left open.
+It is not: `recovery-preflight.test.sh`'s **`RH4b`** greps the Gate 4.0 block for
+`git (checkout -b|commit|add)` and fails on any of the three. The decision was made and enforced;
+only its statement was easy to read narrowly.
+
+**Why the strict reading is right on its merits, not only by precedent.** `commit`'s Step 1 owns
+the file-scope decision — which paths are included, which are listed as excluded-untracked, and
+what the secret scan's union covers. A caller that stages first hands `commit` a pre-staged set,
+and Step 1's own rule ("Something already staged → included set = `staged` only") then defers to
+it. That puts the scope decision in two places, which is exactly the "two implementations of one
+decision" §D2 exists to prevent and the shape issue #172 was filed about. Under `--autopilot`,
+where Step 4 never renders the set to a human, the divergence would also be invisible.
+
+**Consequence for issue #234, which this determines.** Gate 4.0 cannot commit the planning
+artifacts because they are untracked and `commit` never stages untracked outside its Step 4
+"Stage additional files" path — which `--autopilot` skips entirely. Given the above, the fix
+**must be a `commit`-side mechanism** (an explicit include-these-paths argument, honoured under
+`--autopilot`), and **must not** be a `git add` in Gate 4.0. That alternative is closed here rather
+than re-argued when #234 is picked up.
+
+`RH4b`'s failure message is sharpened in the same change to name staging, since that message is
+what a reader actually meets when they hit the rule.
