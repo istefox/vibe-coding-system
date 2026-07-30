@@ -302,6 +302,12 @@ if [ -n "$_inv" ]; then
     c2c-side)    bad "C6: c2c §25 no longer restricts macos-ux to gate 1c — the contract moved" ;;
     skill-side)  bad "C6: macos-ux/SKILL.md no longer names gate 1c, which c2c §25 restricts it to" ;;
   esac
+  _g=$(check_gate_contract ui-layout-audit "gate 5.05")
+  case "$_g" in
+    "")          ok "C7: c2c §25 restricts ui-layout-audit to gate 5.05 and the skill's own text says so" ;;
+    c2c-side)    bad "C7: c2c §25 no longer restricts ui-layout-audit to gate 5.05 — the contract moved" ;;
+    skill-side)  bad "C7: ui-layout-audit/SKILL.md no longer names gate 5.05, which c2c §25 restricts it to" ;;
+  esac
 fi
 
 # ==============================================================================================
