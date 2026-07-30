@@ -221,3 +221,23 @@ by this correction — see ADR-0068 §D9.
 
 See `docs/architecture/ADR-0068-176-worktree-isolation-contract.md` §D5, §D6, §D9 for the full
 account.
+
+## Correction 2026-07-30 (ADR-0088 amends the DISPATCH, not the decision)
+
+**ADR-0088 (issue #241) amends §D1's dispatch granularity. No decision in this ADR is reversed** —
+§D3's marker, §D4's predicate, A2 and A5 all stand, and `test-write-scope.sh` is byte-untouched.
+
+The split was dispatched at **task** granularity while a plan task is a **mixed** unit: some of its
+sub-steps target test-shaped paths and some do not. Measured over `docs/superpowers/plans/`, 56 of
+57 plans name both kinds of path, so this is the ordinary shape of a plan here rather than a
+property of one feature. The tester's brief reads the plan only as a third fallback (§D1's chain:
+`R-NN` ids, then Success Criteria, then plan text), so on a SPEC that declares ids — the ADR-0048
+case — the tester was never told which of the batch's sub-steps were its own, and the coder was
+denied them by the hook.
+
+ADR-0088 leaves the fallback chain intact as the answer to *what* to assert, and adds an
+unconditional instruction that the plan answers *where*: the batch's test-shaped sub-steps are the
+tester's in every case. A5's argument survives untouched, because the separation turned out to be
+preservable in the case that appeared to need an exemption.
+
+See `docs/architecture/ADR-0088-241-test-authoring-split-granularity.md` §D1–§D4.
