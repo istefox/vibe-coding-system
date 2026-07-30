@@ -3,21 +3,30 @@
 ## Overview
 Auto-generated roadmap from issues labeled `prep` (ADR-0023).
 
-## Where this stands (2026-07-30)
+## Where this stands (2026-07-30, evening)
 
-Reformulated because knowing the answer required reading 475 lines and correcting three of them.
+**Phases 1–7 are closed.** Phase 5 is superseded by Phase 6 and kept for its reasoning only.
 
-**Phases 1–6 are closed.** Phase 5 is superseded by Phase 6 and kept for its reasoning only.
-Everything from Phase 4 onward was preventive work on the harness and the skill layer, so **none of
-it has been exercised by a real chain run** — which is the whole point of what remains.
+**The shakedown ran, and it is the reason this file now has a Phase 8.** The
+`concept-to-code` chain executed end to end on issue #222 — Step 1 through Step 7, seven worktree
+dispatches, a full `review-triage-fix` cycle. It is **the first run in this system's history that
+ever reached Step 5**; every earlier run stopped at an earlier gate, each time on a different
+cause. #222 shipped in PR #251 with `sync-to-claude.sh --apply` run and a second dry run at zero
+drift.
 
-**Two items are outstanding, and only two:**
+**It produced twenty-one findings. Three were fixed because they blocked; seventeen are open and
+are Phase 8.** The count matters more than any single defect: everything from Phase 4 onward was
+preventive work verified against planted defects, which proves a guard fires and proves nothing
+about the chain it guards. One real run found more than four phases of inspection.
 
-1. **The shakedown run** (was 6.5's second point, now Phase 7). A real feature through the
-   `concept-to-code` chain. Everything since Phase 5 exists to make this run test the chain rather
-   than test that week's edits.
-2. **Issue #222** — five skills deployed and absent from `staging/`, one of them chain-invokable.
-   Independent of the shakedown; can go before or after.
+**Two patterns account for most of them, each seen three or four times:**
+
+1. *Consumer and producer specified in different places, with nothing checking the producer
+   exists.* #173, #238, #248 — a pre-flight asserting a state nothing produced, a helper with no
+   call site, a legal transition whose only producer sits behind a default-off flag.
+2. *A form close enough to be partially read is worse than one rejected outright.* #171, #230,
+   #235, #246. Rejection is visible; a partial read is a wrong answer delivered with a right
+   answer's confidence.
 
 **One standing rule, earned by this file three times.** A checkbox is ticked in the **same PR that
 closes its item**, never in a later docs pass. On 2026-07-30 this file reported six open items when
@@ -508,7 +517,7 @@ on this roadmap whose output is evidence rather than more assertions.
 
 #### 7.1 — The run
 
-- [ ] **Pick the feature, then commit to it.** Small, real, low-stakes, and preferably something the
+- [x] **Pick the feature, then commit to it.** Small, real, low-stakes, and preferably something the
   repository actually wants. **Recommended: issue #222**, which is the other outstanding item — it
   has a bounded requirement set (decide per skill: vendor or record as deployed-only), a plan that
   decomposes into tasks, tests worth writing, and no way to damage anything. Running it through the
@@ -517,9 +526,9 @@ on this roadmap whose output is evidence rather than more assertions.
     halt **is** the phase's product.
   - The alternative is a throwaway feature, which costs a second run to get the real one done and
     tests the chain on work nobody cares about, where a wrong answer is easy to wave through.
-- [ ] **Run it end to end**, attended, with no shortcuts around a gate. A gate that is inconvenient
+- [x] **Run it end to end**, attended, with no shortcuts around a gate. A gate that is inconvenient
   is the finding.
-- [ ] **Record every finding as an issue, one per finding, filtering none.** That rule produced #218,
+- [x] **Record every finding as an issue, one per finding, filtering none.** That rule produced #218,
   #222 and the four defects of #184. A run that reports "went fine" has told us nothing we did not
   already believe.
 
@@ -547,13 +556,13 @@ and every `PreToolUse` scope hook firing against real dispatches rather than syn
 
 #### 7.2 — Issue #222, if the run does not absorb it
 
-- [ ] Five skills deployed in `~/.claude/skills/` and absent from `staging/`: `agent-design`,
+- [x] Five skills deployed in `~/.claude/skills/` and absent from `staging/`: `agent-design`,
   `daily-close`, `daily-open`, `ui-layout-audit`, `vibiso-intake`. Decide per skill — vendor with a
   `PAIRS` entry, or record as deployed-only the way ADR-0024 recorded `website-auditor`.
-- [ ] **`ui-layout-audit` does not admit the second option.** `concept-to-code` §25 declares it
+- [x] **`ui-layout-audit` does not admit the second option.** `concept-to-code` §25 declares it
   chain-invokable at gate 5.05, so either vendor it or remove it from §25. A chain that names a skill
   it cannot verify is the ADR-0042 disagreement in a new place.
-- [ ] Make `skill-text-corrections` F6's silent skip loud, or count-guard it against the §25 list
+- [x] Make `skill-text-corrections` F6's silent skip loud, or count-guard it against the §25 list
   length rather than against what resolved. Today `_F6_CHECKED >= 5` is satisfied by the seven that
   do resolve.
 
@@ -566,3 +575,120 @@ and every `PreToolUse` scope hook firing against real dispatches rather than syn
   sound. Say which gates fired and which were never reached.
 - **The three non-regressions above will look like breakage in the moment.** They are written down
   here precisely because they will be met while tired and mid-run.
+
+#### 7.3 — Outcome (2026-07-30)
+
+The run completed. #222 shipped as PR #251; `--apply` ran; the second dry run reported zero drift.
+**Twenty-one findings**, three fixed because they blocked (#230, #235, and #241 via PR #243 /
+ADR-0088), seventeen open and carried into Phase 8.
+
+**The three expected non-regressions, against what actually happened:**
+
+- **`diff-budget-check.sh` fired for the first time since July** — and both findings were **false**,
+  from a cause nobody predicted: the architect writes per-file budget ceilings
+  (`file (~165 lines), file2 (~1 line)`), and the parser half-reads that form into a wrong file set
+  and a wrong ceiling (#246). The prediction was right that the first one would look like a
+  regression, and wrong about why.
+- **`manifest-field-state.sh`'s fail-closed dependency never fired.** The machine was synced. The
+  branch remains unexercised.
+- **Step 5's Workflow dispatch never happened.** `hook_verified` is `false`, so the run took the
+  Agent-tool fallback throughout. **ADR-0080's pre-registered condition is still unfed** — no
+  Workflow-path `src=` data was produced, and the fallback verdict stands on n=3 exactly as before.
+  A future run that flips `hook_verified` is what closes it.
+
+**Of "what has never run", what ran:**
+
+| ADR | outcome |
+|---|---|
+| ADR-0071 Gate 4.0 producer | Ran, and **could not produce** — #234, then #239 |
+| ADR-0068 base-fork comparison at merge-back | Ran **seven times, matched every time**. First live confirmation of `worktree.baseRef: "head"` |
+| ADR-0046/0047/0048 the three Step 5 → Step 6 gates | All three ran; coverage 10/10 exit 0, weakening `CLEAN`, budget false-positive above |
+| ADR-0069 heading-form plan predicate | Correct, but its output is consumed by a caller that needs a different predicate (#242) |
+| ADR-0072 the gate that can edit `SPEC.md` | **Never fired** — the SPEC was written with proper checklist ids |
+| `PreToolUse` scope hooks against real dispatches | `test-write-scope.sh` fired, correctly, and that is how #241 was found |
+
+**And the risk this file named came true in the useful direction.** "A clean run is the outcome most
+likely to be misread" — the run was not clean, and the twenty-one findings are the phase's product.
+The other risk, "the temptation will be to fix findings mid-run", was honoured except once: #241
+blocked Step 5 outright, so it was fixed first, in its own PR, before the run resumed.
+
+### Phase 8 — the seventeen the shakedown found
+
+Grouped by dependency, not by number. **8.1 and 8.2 run together as one phase with a PR per issue** —
+a deliberate choice, made knowing the cost: five issues in flight across three areas of the chain is
+the overlap that produced #247 during the shakedown itself (a correction to a rule written hours
+earlier). Mitigated by the ordering **inside** the phase, not by splitting it.
+
+#### 8.1 — The chain cannot complete a run
+
+- [ ] **#239 — Step 5.0.1 can never pass.** The chain writes the manifest after Gate 4.0 commits it,
+  on both Gate 4 branches; the fresh-session branch is worse, because Form B resume writes it
+  unconditionally. "The working tree is clean" and "the manifest is written at every state change"
+  are flatly incompatible requirements on the same file. The structural one — do it first.
+- [ ] **#248 — `step_5_implementation` has no producer on the default path.** Every occurrence of the
+  transition lives inside Step 4.5's tracer-bullet block, which is off by default, so Step 5 cannot
+  reach Step 6. Same class as #239 and the same stretch of the chain: one pass over Gate 4 → Step 6.
+- [ ] **#234 — Gate 4.0 cannot stage untracked artifacts.** Upstream of #239: without it Gate 4.0
+  produces nothing for #239's fix to preserve.
+
+#### 8.2 — The chain can destroy work
+
+- [ ] **#245 — `isolation: worktree` is a CWD convention, not a sandbox.** An absolute path writes
+  into the shared checkout; the three scope hooks all constrain *which files*, never *which tree*.
+  The coder's dispatch brief hands it four absolute paths in its first four lines. Three candidate
+  fixes with very different blast radii — do not bundle it with anything.
+- [ ] **#228 — Step 1 overwrites a root `SPEC.md` belonging to another topic.** `gate0-detect.sh`
+  already reports `spec_topic_match=false` and the detection protects nothing. Destroys a
+  human-reviewed artifact.
+
+#### 8.3 — What a gate shows, and what it records
+
+- [ ] **#237 — Gate 4 conflates *where* with *how*.** Four cells, two offered, and no attended
+  same-session path.
+- [ ] **#227 — Gate 0 shows two contradictory `Recommended` markers.** Same defect class as #237 in a
+  different gate; #227's own body says the two may want one answer. Design them together.
+- [ ] **#238 — the `hitl_gates` trail is written by nobody and has no slot for Gate 4.** Depends on
+  #237: the slot's shape follows what Gate 4 becomes.
+
+#### 8.4 — Batching
+
+- [ ] **#242 — the `>=6` threshold consumes a count ADR-0069 documents as not a task count.** 38
+  versus 7 on the shakedown's own plan.
+- [ ] **#247 — the two batch-boundary rules can conflict, and a checkpoint can be legitimately RED.**
+  A correction to ADR-0088 §D5, written during the run. If its fix introduces a plan-declared
+  "expected red", it consumes the same parsing #242 needs — so pair them.
+
+#### 8.5 — Recovery and history
+
+- [ ] **#244 — `recovery_baseline_sha` is not rebase-safe**, and a paused chain all but forces a
+  rebase. Do this first: it is #249's target.
+- [ ] **#249 — Step 7's commit describes nothing.** The merge-back already committed the feature as
+  `chore(step5): snapshot … worktree`. The cheapest fix is a soft-reset to the baseline, which is
+  why #244 comes first.
+
+#### 8.6 — Half-read forms and stale records
+
+Independent of each other and of everything above; no ordering constraint.
+
+- [ ] **#246 — a per-file `Budget:` line is half-parsed** into a false SCOPE and a false BUDGET
+  instead of being treated as absent. Fourth instance of the near-miss class.
+- [ ] **#240 — `step5_mode` documents `agent_fallback`**, which nothing has ever written; 17
+  manifests carry `agent_batch`.
+- [ ] **#232 — `detect-macos.sh` fires on the skill name `macos-ux`** and on a Stack line naming the
+  host platform, so every meta-SPEC in this repository trips Gate 1c.
+- [ ] **#233 — Gate 2b asks to authorise a test-cmd that is already SHA-pinned.** The autopilot
+  branch has the read-only probe; the attended one does not.
+- [ ] **#250 — RTF gitignores its state file by branch name**, so `.gitignore` grows one dead line
+  per branch. One glob fixes it permanently.
+
+#### What Phase 8 must not become
+
+- **A second inspection phase.** Sixteen of these seventeen were found by running the chain, not by
+  reading it. Each fix needs the same treatment: an assertion seen RED, and where the fix is prose,
+  an executed premise rather than a claim.
+- **A phase that re-derives the same guard six times.** #239, #248 and #238 are one class
+  (ADR-0086's criterion applies: would two copies giving different answers be a defect?). A derived
+  check over `manifest-transition.sh`'s legal pairs against their call sites would close it once —
+  and would be instance eight of the derived-guard pattern.
+- **A run of its own without a second shakedown.** Phase 8's own product is only verified by another
+  end-to-end run, which is also what feeds ADR-0080's still-unfed condition.
