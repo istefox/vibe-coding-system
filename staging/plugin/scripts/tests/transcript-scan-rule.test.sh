@@ -40,9 +40,14 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 MARK="transcript-""scan-exempt"
 
 # --- the derivation, in one place, used by the sweep and by both self-tests ------------------
-# population <dir> -> every *.sh that references a transcript at all
+# population <file>... -> every argument that references a transcript at all
+#
+# Takes FILE PATHS rather than a directory (issue #208, ADR-0085). The population spans two roots
+# now — the hooks and the skills' own scripts/ subtrees, which sit one level deeper — and a
+# second dir-shaped function would be two predicates that agree today, which is the failure this
+# whole file exists to guard one level up.
 population() {
-  for _f in "$1"/*.sh; do
+  for _f in "$@"; do
     [ -f "$_f" ] || continue
     grep -q 'transcript_path\|\.jsonl' "$_f" 2>/dev/null && printf '%s\n' "$_f"
   done
@@ -77,16 +82,44 @@ exempt() { grep -q "^#[[:space:]]*${MARK}:" "$1" 2>/dev/null; }
 
 # =====================================================================================
 # T. The sweep. Every file in the population either complies or declares.
-POP=$(population "$SCRIPTS")
-N=$(printf '%s\n' "$POP" | sed '/^$/d' | wc -l | tr -d ' ')
+#
+# TWO ROOTS, TWO COUNT GUARDS (issue #208, ADR-0085). ADR-0077 derived over the hooks only, on the
+# measured ground that no skill script reads a transcript. The measurement still holds — but a
+# single global guard of `N >= 8` is SATISFIED BY THE HOOKS ALONE, so if the skills glob were to
+# break (subtree renamed, path wrong), the sweep would quietly stop covering that root with the
+# count still green. A count guard that can be satisfied by a different population than the one at
+# risk is not guarding what it appears to guard. So the guard below is on the DENOMINATOR of each
+# root: how many candidate files the glob resolves at all, not how many matched.
+STAGING=$(cd "$SCRIPTS/../.." && pwd)                        # staging/
+SKILL_SCRIPTS_GLOB="$STAGING/plugin/skills/*/scripts/*.sh"
 
-# T0: the count guard. A derivation that matches nothing reports nothing, and a silent zero reads
+POP_HOOKS=$(population "$SCRIPTS"/*.sh)
+N=$(printf '%s\n' "$POP_HOOKS" | sed '/^$/d' | wc -l | tr -d ' ')
+
+# shellcheck disable=SC2086 — deliberate glob expansion
+POP_SKILLS=$(population $SKILL_SCRIPTS_GLOB)
+NS=$(printf '%s\n' "$POP_SKILLS" | sed '/^$/d' | wc -l | tr -d ' ')
+
+POP=$(printf '%s\n%s\n' "$POP_HOOKS" "$POP_SKILLS" | sed '/^$/d')
+
+# T0a: the hook root. A derivation that matches nothing reports nothing, and a silent zero reads
 # exactly like full coverage — the pairs-completeness self-test-2 lesson and the ADR-0043 direction
 # lesson, both of which this file exists to apply.
 if [ "$N" -ge 8 ]; then
-  ok "T0: the derivation found $N transcript-touching scripts (count guard: >= 8)"
+  ok "T0a: the hook root derived $N transcript-touching scripts (count guard: >= 8)"
 else
-  bad "T0: derivation found only $N scripts — every assertion below would pass vacuously"
+  bad "T0a: hook root derived only $N scripts — every assertion below would pass vacuously"
+fi
+
+# T0b: the skill-scripts root, guarded on its DENOMINATOR. Zero matches here is the expected and
+# correct result today; zero CANDIDATES means the glob stopped resolving, which looks identical
+# from the outside. That is the distinction the whole assertion exists for.
+_cand=0
+for _f in $SKILL_SCRIPTS_GLOB; do [ -f "$_f" ] && _cand=$((_cand+1)); done
+if [ "$_cand" -ge 20 ]; then
+  ok "T0b: the skill-scripts root resolves $_cand candidate .sh files, $NS of them transcript-touching"
+else
+  bad "T0b: the skill-scripts glob resolves only $_cand candidates — the subtree moved and this root is uncovered"
 fi
 
 _viol=""
@@ -157,7 +190,7 @@ SCOPE=$(jq -r 'select(.type=="user") | tostring' "$TP" \
   | grep -o 'you may edit ONLY [^ ]*' | head -1)
 ROGUE
 _z1=""
-for _f in $(population "$TMP/z"); do
+for _f in $(population "$TMP/z"/*.sh); do
   compliant "$_f" && continue
   exempt "$_f" && continue
   _z1="$_z1 $(basename "$_f")"
@@ -195,9 +228,42 @@ fi
 # violations, which is indistinguishable from full compliance — the failure shape this whole file
 # is about, applied to its own machinery.
 mkdir -p "$TMP/empty"
-_e=$(population "$TMP/empty" | sed '/^$/d' | wc -l | tr -d ' ')
+_e=$(population "$TMP/empty"/*.sh | sed '/^$/d' | wc -l | tr -d ' ')
 [ "$_e" -eq 0 ] && ok "Z4: an empty directory derives an empty population (T0 is what catches that)" \
                 || bad "Z4: population() invented $_e entries from an empty directory"
+
+# Z5: the predicate's KNOWN false positive, pinned as expected rather than left as a comment
+# (issue #208 item 2, ADR-0085). `compliant()` starts from the jq read of `user` entries, so a hook
+# that reads the transcript any other way — python3, a grep pipeline — returns 1 at the first step.
+# That verdict is INDISTINGUISHABLE from the verdict on a bash hook that scans every entry: a
+# genuinely compliant third shape and the exact defect this file exists to catch produce the same
+# output.
+#
+# THE DECISION, and it is a decision, not an oversight: extending the predicate for a shape nobody
+# has written is speculative, and the failure direction is loud rather than silent, so the predicate
+# stays as it is. What is NOT acceptable is the tempting response — writing an exemption for that
+# hook. The exemption would be false: the hook complies with the rule, and a waiver would record
+# the opposite for every later reader. If you are the author of the third shape, EXTEND compliant()
+# and delete this assertion's second half. This is the meeting point the issue asked for.
+cat > "$TMP/z/py-reader.sh" <<'PYR'
+#!/bin/bash
+# A hook that obeys THE RULE — first `user` entry only — through a different reader.
+TP=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
+SCOPE=$(python3 - "$TP" <<'PY'
+import json, sys
+for line in open(sys.argv[1]):
+    e = json.loads(line)
+    if e.get("type") == "user":
+        print(e.get("content", ""))
+        break            # first user entry only
+PY
+)
+PYR
+if compliant "$TMP/z/py-reader.sh"; then
+  bad "Z5: compliant() now accepts a non-jq reader — good, but the documented limit in ADR-0085 must be updated"
+else
+  ok "Z5: a rule-abiding non-jq reader is reported non-compliant (documented limit; extend the predicate, never exempt the hook)"
+fi
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"

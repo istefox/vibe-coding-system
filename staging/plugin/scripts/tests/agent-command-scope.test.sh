@@ -207,6 +207,66 @@ allow_case "I5: read-only verb behind an exec, verb last"     reviewer  'python3
 # So the enumeration is not the risk. WIDENING A GRANT is. This section derives the granted command
 # words from the agent files at run time and requires each to be classified in the hook's own
 # source, so adding `Bash(deno *)` to reviewer.md fails here instead of silently opening the -c path.
+#
+# BOUNDARY (issue #208, ADR-0085). That derivation used to start from two agent files named here by
+# hand, while the set of scoped agents is decided in the hook's own `case` arm. Two places that had
+# to agree, with nothing making them agree: a THIRD scoped agent would have had its grants unchecked
+# while J3 stayed green. The agent list is now derived from the arm itself — the same mechanism this
+# section already applies one level down, to the grant words.
+scoped_agents() {
+  awk '
+    /^case[[:space:]]+"\$AGENT_TYPE"[[:space:]]+in/ { inarm = 1; next }
+    inarm && /^esac/                                { exit }
+    inarm && /^[[:space:]]*\*\)/                    { next }
+    inarm && /\)/ {
+      line = $0
+      sub(/\)[^)]*$/, "", line)          # drop everything from the pattern-closing paren
+      sub(/^[[:space:]]*/, "", line)
+      gsub(/\|/, "\n", line)
+      print line
+    }
+  ' "$1" | sed 's/[^a-zA-Z0-9_-]//g' | sed '/^$/d' | sort -u
+}
+
+SCOPED=$(scoped_agents "$HOOK")
+_ns=$(printf '%s\n' $SCOPED | sed '/^$/d' | wc -l | tr -d ' ')
+if [ "$_ns" -ge 2 ]; then
+  ok "J0a: derived $_ns scoped agent(s) from the hook's own case arm: $(printf '%s ' $SCOPED)"
+else
+  bad "J0a: derived only $_ns scoped agent(s) from the case arm — J2/J3 below would run on nothing"
+fi
+
+# J0b: and every derived name must resolve to a real agent file. A typo in the arm would otherwise
+# produce an empty file list, and an empty file list yields zero grant words, which J3 reads as
+# "nothing unclassified" — the third time in this issue that a derivation needs its own guard.
+AGENT_FILES=""
+_unresolved=""
+for _a in $SCOPED; do
+  if [ -f "$STAGING/plugin/agents/$_a.md" ]; then
+    AGENT_FILES="$AGENT_FILES $STAGING/plugin/agents/$_a.md"
+  else
+    _unresolved="$_unresolved $_a"
+  fi
+done
+[ -z "$_unresolved" ] && ok "J0b: every scoped agent name resolves to a file under plugin/agents/" \
+  || bad "J0b: scoped agent name(s) with no agent file —$_unresolved. A typo in the case arm empties the grant derivation."
+
+# J0c: and no scoped agent may hold an UNRESTRICTED `Bash` grant. Found by running the J0a
+# derivation against a hypothetical third agent rather than by reading it: `coder.md` grants a bare
+# `Bash`, which yields zero `Bash(<word> …)` entries, so J2/J3 would pass on an agent that can
+# invoke anything at all. The section's whole argument — an agent can only invoke what its
+# frontmatter grants, and the granted executors are all covered — does not hold for such an agent,
+# and its silence would look exactly like coverage.
+_unbounded=""
+for _a in $SCOPED; do
+  _af="$STAGING/plugin/agents/$_a.md"
+  [ -f "$_af" ] || continue
+  grep '^tools:' "$_af" | tr ',' '\n' | sed 's/^[[:space:]]*//' | grep -qx 'Bash' \
+    && _unbounded="$_unbounded $_a"
+done
+[ -z "$_unbounded" ] && ok "J0c: no scoped agent holds an unrestricted Bash grant — the grant-coverage argument holds" \
+  || bad "J0c: scoped agent(s) with an unrestricted Bash grant —$_unbounded. J2/J3 pass vacuously for these; ADR-0079's bound does not apply."
+
 granted_words() {
   sed -n 's/^tools:.*/&/p' "$1" | tr ',' '\n' \
     | sed -n 's/.*Bash(\([^ )*]*\).*/\1/p' | sed 's/[^a-zA-Z0-9_.-]//g' | sed '/^$/d' | sort -u
@@ -216,7 +276,7 @@ _nd=$(printf '%s\n' $DECLARED | sed '/^$/d' | wc -l | tr -d ' ')
 [ "$_nd" -ge 4 ] && ok "J1: the hook declares $_nd classified grant words" \
                  || bad "J1: no usable '# grant-covered:' declaration in the hook ($_nd words)"
 
-_words=$( { granted_words "$ARCH_AGENT"; granted_words "$REV_AGENT"; } | sort -u )
+_words=$(for _af in $AGENT_FILES; do granted_words "$_af"; done | sort -u)
 _nw=$(printf '%s\n' $_words | sed '/^$/d' | wc -l | tr -d ' ')
 [ "$_nw" -ge 4 ] && ok "J2: derived $_nw distinct Bash grant words from the two agent files" \
                  || bad "J2: derived only $_nw grant words — J3 would pass vacuously"
