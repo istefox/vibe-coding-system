@@ -257,16 +257,58 @@ done < "$tmp/deployed-only-decl"
                    || bad "DO2: declared deployed-only but ALSO vendored (stale waiver) —$_do2_bad"
 
 # DO3: every declared reason is >= 40 characters (same floor S3/ADR-0077 T4 use elsewhere).
+#
+# The original extraction here stripped everything up to the FIRST hyphen-class character via
+# `sed 's/^[^—-]*[—-] *//'`, and every one of these skill names (agent-design, daily-close, ...)
+# CONTAINS a hyphen. So the sed cut the string at the name's own internal hyphen, not at the
+# " — " separator before the reason, and what got measured for length was
+# "<tail of the name> — <reason>", not the reason. It could not produce a false FAIL on the five
+# real declarations (their genuine reasons are long), so it looked correct — but it does not
+# measure a reason, and a long name with a short reason would pass on the name's length alone.
+#
+# Fixed by extracting via plain bash parameter expansion instead of a hyphen-class sed: strip the
+# marker, take the first whitespace-delimited token as the name, remove exactly that name prefix,
+# then strip the "—" (em dash) or "-" (hyphen) SEPARATOR specifically — never a character class
+# that also matches inside the name. No sed regex-escaping surface, bash 3.2 clean.
+do3_reason() {
+  # $1 = the full "<name> — <reason>" tail (marker already stripped by the caller).
+  _do3r_full="$1"
+  _do3r_name=$(printf '%s\n' "$_do3r_full" | cut -d' ' -f1)
+  _do3r_rest="${_do3r_full#"$_do3r_name"}"
+  while [ "${_do3r_rest#" "}" != "$_do3r_rest" ]; do _do3r_rest="${_do3r_rest#" "}"; done
+  case "$_do3r_rest" in
+    "—"*) _do3r_rest="${_do3r_rest#"—"}" ;;
+    "-"*) _do3r_rest="${_do3r_rest#"-"}" ;;
+  esac
+  while [ "${_do3r_rest#" "}" != "$_do3r_rest" ]; do _do3r_rest="${_do3r_rest#" "}"; done
+  printf '%s' "$_do3r_rest"
+}
+
 _do3_bad=""
 while IFS= read -r _dline; do
   [ -n "$_dline" ] || continue
-  _dname=$(printf '%s\n' "$_dline" | sed "s/^# *${DMARK}: *//" | cut -d' ' -f1)
-  _dreason=$(printf '%s\n' "$_dline" | sed "s/^# *${DMARK}: *//" | sed 's/^[^—-]*[—-] *//')
+  _dfull=$(printf '%s\n' "$_dline" | sed "s/^# *${DMARK}: *//")
+  _dname=$(printf '%s\n' "$_dfull" | cut -d' ' -f1)
+  _dreason=$(do3_reason "$_dfull")
   _rlen=${#_dreason}
   [ "$_rlen" -lt 40 ] && _do3_bad="$_do3_bad $_dname($_rlen)"
 done < "$tmp/deployed-only-decl"
 [ -z "$_do3_bad" ] && ok "DO3: every declared reason is >= 40 characters" \
                    || bad "DO3: reason(s) shorter than 40 characters —$_do3_bad"
+
+# DO5 (backward self-test for DO3, same shape as DO4 for DO2): DO3 alone can never be seen
+# failing against the real registry — all five reasons are genuinely long, so a still-broken
+# extraction and a correct one both report clean. Build a synthetic fixture line whose NAME is
+# long (to catch a regression back to "measure the name's tail") and whose REASON is clearly
+# under 40 characters, run DO3's exact extraction + length logic against it, and assert it is
+# flagged. Text kept free of key-shaped literals and "secret"/"credential"/".env"/".pem" path
+# fragments, same constraint DO4's fixture already observes (protect-files.sh / secret-scan.sh).
+_do5_fixture="some-extremely-long-descriptive-name — too short"
+_do5_reason=$(do3_reason "$_do5_fixture")
+_do5_len=${#_do5_reason}
+[ "$_do5_reason" = "too short" ] && [ "$_do5_len" -lt 40 ] \
+  && ok "DO5: self-test — a long-name/short-reason fixture is flagged (reason='$_do5_reason', len=$_do5_len)" \
+  || bad "DO5: self-test — extraction did not isolate the reason as expected (got '$_do5_reason', len=$_do5_len)"
 
 # DO4 (backward self-test, the R-09 evidence for R-05): build a synthetic one-line fixture
 # declaring an EXISTING staged skill ("commit") as deployed-only, and run DO2's exact stale-waiver
