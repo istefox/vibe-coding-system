@@ -697,3 +697,84 @@ not contain, and the correction belongs next to the claims it corrects.
   from the `PreToolUse` payload, which is the capability `WorktreeCreate` lacks
 - ADR-0047 §D7 — a report nobody must act on is a report nobody reads
 - ADR-0047 §A2, ADR-0048 — blast-radius rejection of `manifest-transition.sh` enforcement
+
+## D11 (added 2026-07-30, issue #245) — `isolation: worktree` is a CWD convention, not a sandbox
+
+**This ADR never said what an agent inside a worktree can reach, because the question did not come
+up: no chain run had reached Step 5 (issue #239).** The Phase 7.1 shakedown reached it, and a coder
+wrote into the shared checkout on its first `mkdir`/`cp` — through an absolute path, from inside a
+correctly-created worktree. It disclosed the escape itself, which is the only reason it was seen.
+
+### The threat model, stated in the terms its siblings use
+
+A worktree gives an agent its own directory and its own branch. **It does not confine the agent's
+filesystem reach.** An absolute path, a `~` expansion, or a `git -C <path>` resolves normally and
+lands wherever it points. This is the same sentence `agent-command-scope.sh` and
+`test-write-scope.sh` each carry about their own guards — *a guardrail against a shortcut, not a
+sandbox* — and it belongs here too, because nothing else in this repository says it about worktrees
+and a reader may reasonably assume the opposite. One did.
+
+None of the three scope hooks covers it either: they all constrain **which files**, never **which
+tree**. `agent-write-scope.sh` scopes `architect` to two documentation roots; `write-scope-enforce.sh`
+arms only on Step 6 Phase 3's per-file marker; `test-write-scope.sh` denies test-shaped paths only.
+
+### Measured before deciding, and the measurement closed the option it was meant to open
+
+Two live probes on CC 2.1.220, 2026-07-30, then reverted (`settings.json` restored byte-identical
+by hash):
+
+| fact | value |
+|---|---|
+| agent `pwd`, `git rev-parse --show-toplevel` | the worktree |
+| `git rev-parse --git-dir` | `<repo>/.git/worktrees/<id>` — mechanically distinguishes a worktree from the main tree |
+| `PreToolUse` payload `cwd` | **the worktree**, not the dispatching session's checkout |
+| `PreToolUse` payload `tool_input.file_path` | **already resolved to absolute**, even when the agent supplied a relative path |
+
+So a hook keyed on `cwd` is feasible and needs no path resolution:
+`case "$FILE_PATH" in "$CWD"/*) allow ;; *) deny ;; esac`.
+
+**And it would not have caught the incident.** The escape came through `mkdir`/`cp` — **Bash**,
+whose `tool_input` carries `.command` and no `.file_path` at all. A hook on `Write|Edit|MultiEdit`
+covers tool-based writes and nothing else. Extending it to `Bash` is not the
+`agent-command-scope.sh` shape either: that hook matches a fixed verb set at a command position, a
+bounded problem, while "does this shell string write outside the worktree" is unbounded — `cp`,
+`>`, `>>`, `tee`, `install`, `rsync`, `mv`, `python3 -c "open(…,'w')"`, any of them behind a
+variable.
+
+**A hook is therefore not the mechanism.** It remains available later as a supplement for
+tool-based writes; it must not be built expecting it to close this.
+
+### What ships instead
+
+1. **The escape check at merge-back**, before the merge, on the shared checkout:
+   `git ls-files --others --exclude-standard` non-empty → halt. Untracked rather than
+   `--porcelain`, because the manifest is legitimately modified-tracked throughout Step 5
+   (issue #239) and a dirty-tree check would fire on every stage. It catches an escape by **any**
+   tool, at the point where it becomes consequential rather than merely present.
+2. **A working-root clause in all four dispatch templates** (both tester sites, both coder sites),
+   stating that writes go under the worktree and reads may use absolute paths. Evidence is real but
+   thin and is stated as such: added mid-run after the incident, and the two subsequent coder
+   dispatches stayed inside. **n = 2.**
+
+### Why merge-back and not commit time
+
+`commit`'s Step 1 untracked list (ADR-0062, issue #116) already catches this debris, and it is the
+mechanical signal that decision was written for. It fires several steps too late: the harm is not
+the stray file, it is that `git merge` refuses to overwrite an untracked file at a path the merge
+wants to create. A stray write at exactly the path the worktree branch adds aborts the merge and is
+reported as a conflict whose named cause is wrong. In the observed incident the collision was
+byte-identical, which was luck.
+
+### Known and not closed
+
+- **The clause is an instruction; the check is the enforcement, and it is downstream.** An agent can
+  still write anywhere; what changes is that the run halts naming the real cause instead of merging
+  or mis-reporting.
+- **An escape that modifies a tracked file is invisible to the check.** Only untracked files are
+  examined, for the manifest reason above. Closing that needs #239 resolved first, after which a
+  baseline-comparison at Step 5 entry becomes available.
+- **An agent that escapes cannot clean up after itself.** `rm -rf` outside the worktree is denied by
+  the permission layer, correctly — so the debris always reaches the orchestrator, at exactly the
+  location most likely to break the next step. The safe denial and the isolation gap compound.
+- **F13–F18's build-stamping applies here too.** These payload facts are true of CC 2.1.220 and of
+  nothing else. Re-measure after a major bump rather than trusting the date.

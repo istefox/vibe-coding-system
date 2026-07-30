@@ -1328,6 +1328,87 @@ else
   ok "K4b (forward guard, mandatory negative twin): the K4 predicate correctly rejects a fixture presenting the naming convention (F20) as primary, ahead of git worktree list"
 fi
 
+# ==================================================================================================
+# W. §D11 — isolation: worktree is a CWD convention, not a sandbox (issue #245).
+#
+# The escape was real and was disclosed by the agent that made it: a coder wrote into the shared
+# checkout through an absolute path from inside a correctly-created worktree. Two live probes then
+# established that a PreToolUse hook keyed on `cwd` is feasible AND would not have caught it — the
+# escape came through mkdir/cp, i.e. Bash, whose tool_input carries no file_path at all.
+#
+# Prose clauses are matched against a whitespace-FLATTENED copy: a prose assertion must not depend
+# on where markdown wraps the text (ADR-0073's lesson, and its relatives in ADR-0076/0080/0082;
+# ADR-0088's own first run reproduced it again).
+# ==================================================================================================
+ADR68="$REPO/docs/architecture/ADR-0068-176-worktree-isolation-contract.md"
+
+w_count_flat() {
+  _n=$(tr '\n' ' ' <"$2" 2>/dev/null | tr -s ' ' | grep -oF -- "$1" 2>/dev/null | wc -l | tr -d ' ')
+  [ -n "${_n:-}" ] || _n=0
+  printf '%s' "$_n"
+}
+
+W_CLAUSE='Writes go under the dispatched worktree, never to an absolute path into the shared checkout'
+n=$(w_count_flat "$W_CLAUSE" "$CC")
+if [ "$n" -eq 4 ]; then
+  ok "W1: the working-root clause appears at exactly 4 dispatch sites (both tester templates, both coder templates)"
+else
+  bad "W1: expected the working-root clause at exactly 4 dispatch sites, found $n — a template without it dispatches an agent that was never told (#245)"
+fi
+
+# W2 — the check must read UNTRACKED, not the whole porcelain. The manifest is legitimately
+# modified-tracked throughout Step 5 (#239), so a --porcelain check would halt every stage.
+if grep -qF 'git ls-files --others --exclude-standard' "$CC" 2>/dev/null; then
+  ok "W2: the merge-back escape check reads untracked files, which is what leaves the #239 manifest case alone"
+else
+  bad "W2: the merge-back escape check does not use 'git ls-files --others --exclude-standard' (#245)"
+fi
+
+# W3 — ORDER is the property, not presence: after the merge the damage has already happened, and a
+# path collision would have been reported as a conflict whose named cause is wrong.
+_esc=$(grep -n 'git ls-files --others --exclude-standard' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+_mrg=$(grep -n 'git merge --no-edit "\$WB"' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+if [ -n "$_esc" ] && [ -n "$_mrg" ] && [ "$_esc" -lt "$_mrg" ]; then
+  ok "W3: the escape check runs BEFORE the merge (line $_esc < $_mrg)"
+else
+  bad "W3: the escape check does not precede the merge (escape=${_esc:-absent} merge=${_mrg:-absent}) — after it, the merge has already mis-reported the cause (#245)"
+fi
+
+if [ "$(w_count_flat 'is a CWD convention, not a sandbox' "$ADR68")" -ge 1 ]; then
+  ok "W4: ADR-0068 states the threat model in the terms its sibling guards use"
+else
+  bad "W4: ADR-0068 does not state that isolation: worktree is a CWD convention, not a sandbox (§D11)"
+fi
+
+# W5 — the measurement that CLOSED an option has to survive in the record, or the next reader
+# rebuilds the hook this ADR rejected and expects it to close the case.
+if [ "$(w_count_flat 'would not have caught the incident' "$ADR68")" -ge 1 ]; then
+  ok "W5: ADR-0068 records that a PreToolUse hook would not have caught the observed escape"
+else
+  bad "W5: ADR-0068 does not record why a hook is not the mechanism — the next reader will build it (#245)"
+fi
+
+# W6 — EXECUTED PREMISE, not fix evidence: passes before and after. The whole untracked-not-
+# porcelain choice rests on a claim about git's behaviour, and rule 11 says a claim nobody ran is
+# unverified. Real fixture repo, both directions.
+W_FIX="$TMP/w6-repo"
+mkdir -p "$W_FIX" && cd "$W_FIX" 2>/dev/null
+git init -q . 2>/dev/null
+git config user.email w6@example.invalid 2>/dev/null
+git config user.name w6 2>/dev/null
+printf 'tracked\n' > tracked.txt
+git add tracked.txt 2>/dev/null && git commit -q -m init 2>/dev/null
+printf 'modified\n' > tracked.txt                      # the #239 manifest shape
+_only_modified=$(git ls-files --others --exclude-standard 2>/dev/null)
+printf 'stray\n' > escaped.txt                         # the #245 escape shape
+_with_stray=$(git ls-files --others --exclude-standard 2>/dev/null)
+cd "$REPO" 2>/dev/null || cd /
+if [ -z "$_only_modified" ] && [ "$_with_stray" = "escaped.txt" ]; then
+  ok "W6 (premise, passes before and after): git ls-files --others is silent on a modified-tracked file and names an untracked one — the #239/#245 discrimination the check depends on"
+else
+  bad "W6: the untracked predicate does not discriminate as designed (modified-only='$_only_modified' with-stray='$_with_stray')"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
