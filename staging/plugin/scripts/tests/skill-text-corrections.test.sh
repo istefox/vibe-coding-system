@@ -349,20 +349,52 @@ fi
 # broke it on interview-driver anyway, because nothing checked the class, only the instances.
 # The skill list is DERIVED from c2c §25 rather than hardcoded here, so adding a chain-invoked skill
 # extends the guard automatically.
+#
+# Extended by ADR-0087 (issue #222): the c2c §25 invokable line also backticks `reviewer`, a staged
+# AGENT rather than a skill, and (until Task 2 of that feature vendors it) `ui-layout-audit`, which
+# resolves as NEITHER. F6's original `continue` on a missing SKILL.md could not tell these two cases
+# apart. F9 guards the raw-token derivation before resolution; F10 fails on any token resolving as
+# neither a staged skill nor a staged agent.
 _C2C="$STAGING/plugin/skills/concept-to-code/SKILL.md"
 _INVOKABLE_LINE=$(grep -n 'skills invokable inside this chain' "$_C2C" | head -1 | cut -d: -f1)
+
+# F9 (ADR-0087, count guard on the RAW token derivation, before resolution): a derivation that
+# silently collapses to zero tokens would make F10's "no unresolved token" check vacuously pass —
+# zero tokens produces zero unresolved names. Same shape as F6's own pre-existing `_F6_CHECKED`
+# floor, but measured before skill/agent resolution filters anything out (ADR-0087 §D4).
+_F9_RAW=0
+if [ -n "$_INVOKABLE_LINE" ]; then
+  _F9_RAW=$(sed -n "${_INVOKABLE_LINE}p" "$_C2C" | tr '`' '\n' | sed -n 'n;p' | sort -u | grep -c .)
+fi
+if [ "$_F9_RAW" -ge 7 ]; then
+  ok "F9: c2c §25's invokable line yields $_F9_RAW raw backticked tokens (>= 7)"
+else
+  bad "F9: c2c §25's invokable line yields only $_F9_RAW raw backticked tokens (expected >= 7) — the derivation broke"
+fi
+
 _F6_CHECKED=0
 _F6_BAD=""
+_F10_NEITHER=""
 if [ -n "$_INVOKABLE_LINE" ]; then
-  # Backticked tokens on that line that are also real staged skill directories. The line also
-  # backticks agent names and gate labels; the directory test filters them out.
+  # Every backticked token on that line. The line also backticks an agent name (`reviewer`) and,
+  # until vendored, a skill that does not yet exist in staging (`ui-layout-audit`) — resolution
+  # below sorts all three cases instead of silently skipping the ones that are not a skill.
   for _s in $(sed -n "${_INVOKABLE_LINE}p" "$_C2C" | tr '`' '\n' | sed -n 'n;p' | sort -u); do
     _sf="$STAGING/plugin/skills/$_s/SKILL.md"
-    [ -f "$_sf" ] || continue
-    _F6_CHECKED=$((_F6_CHECKED + 1))
-    _c=$(awk 'NR>1 && $0=="---"{print NR; exit}' "$_sf" 2>/dev/null)
-    if [ -n "$_c" ] && sed -n "2,${_c}p" "$_sf" | grep -qx 'disable-model-invocation: true'; then
-      _F6_BAD="$_F6_BAD $_s"
+    _af="$STAGING/plugin/agents/$_s.md"
+    if [ -f "$_sf" ]; then
+      # Resolves as a staged skill: F6's flag check applies (its meaning does not extend to agents).
+      _F6_CHECKED=$((_F6_CHECKED + 1))
+      _c=$(awk 'NR>1 && $0=="---"{print NR; exit}' "$_sf" 2>/dev/null)
+      if [ -n "$_c" ] && sed -n "2,${_c}p" "$_sf" | grep -qx 'disable-model-invocation: true'; then
+        _F6_BAD="$_F6_BAD $_s"
+      fi
+    elif [ -f "$_af" ]; then
+      # Resolves as a staged agent: the disable-model-invocation mechanism is Skill-only, so no flag
+      # check applies, but the token still counts as resolved (not collected into F10's failure list).
+      :
+    else
+      _F10_NEITHER="$_F10_NEITHER $_s"
     fi
   done
 fi
@@ -373,6 +405,17 @@ elif [ -n "$_F6_BAD" ]; then
   bad "F6: chain-invokable skill(s) carry disable-model-invocation, which makes c2c unable to invoke them:$_F6_BAD"
 else
   ok "F6: none of the $_F6_CHECKED chain-invokable skills carries disable-model-invocation"
+fi
+
+# F10 (ADR-0087, issue #222): every backticked token on c2c §25's invokable line must resolve as
+# either a staged skill or a staged agent. A token resolving as neither is a genuine, real RED on
+# the unmodified repository today: `ui-layout-audit` is chain-invokable (gate 5.05) but not yet
+# vendored into staging/ — recorded proof the check works, not a synthetic fixture. Do NOT vendor
+# ui-layout-audit to make this pass in this task; it lands in a later task.
+if [ -n "$_F10_NEITHER" ]; then
+  bad "F10: token(s) on c2c §25's invokable line resolve as neither a staged skill nor a staged agent:$_F10_NEITHER"
+else
+  ok "F10: every token on c2c §25's invokable line resolves as a staged skill or staged agent"
 fi
 
 # F7/F8 (issue #211, ADR-0084): the OTHER two flag carriers, asserted on the FILES.

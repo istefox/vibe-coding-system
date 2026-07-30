@@ -296,6 +296,50 @@ case "$OUT" in
   *) bad "F5: missing settings.json silently treated as baseRef-correct" ;;
 esac
 
+# =====================================================================================
+# G. Undeclared deployed skill report (issue #222, ADR-0087, R-06). sync-to-claude.sh reports,
+# once per run, every directory under $HOME/.claude/skills/ that is neither vendored in
+# staging/plugin/skills/ nor declared in the Task-4 `# deployed-only:` registry. It is a REPORT,
+# distinct from the MANUAL STEP blocks above: it never sets MANUAL=1 and never affects the exit
+# code. Pinned by the orchestrator so the tester and coder agree on the exact heading:
+REPORT_MARK="-- REPORT: deployed skill(s) neither vendored nor declared --"
+
+# build_home_skills <name> <skill-dir-names...> — returns the fixture HOME path. Reuses build_home's
+# fully-wired "yes" settings.json (every hook wired, baseRef correct) so the six existing MANUAL
+# STEP notices stay silent and cannot interfere with the new assertions; adds a $HOME/.claude/
+# skills/ directory populated with one empty directory per name given.
+build_home_skills() {
+  _n="$1"; shift
+  _h="$TMP/$_n"; mkdir -p "$_h/.claude/hooks" "$_h/.claude/skills"
+  printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+  for _s in "$@"; do
+    mkdir -p "$_h/.claude/skills/$_s"
+  done
+  printf '%s' "$_h"
+}
+
+# G1: one directory whose name is neither a vendored-skill name (from PAIRS) nor one of the five
+# Task-4 registry names ("agent-design", "daily-close", "daily-open", "vibiso-intake",
+# "website-auditor") — the report block must appear, naming it. This is RED right now (Task 6 has
+# not yet added the report block to sync-to-claude.sh) and must stay RED until Task 6 lands.
+OUT=$(run_sync "$(build_home_skills g1 commit some-unknown-skill)")
+case "$OUT" in
+  *"$REPORT_MARK"*) ok "G1: report block appears for a deployed skill neither vendored nor declared" ;;
+  *) bad "G1: report block did not appear for an undeclared, unvendored deployed skill (some-unknown-skill)" ;;
+esac
+case "$OUT" in
+  *"some-unknown-skill"*) ok "G1b: report block names the undeclared skill" ;;
+  *) bad "G1b: report block did not name the undeclared skill (some-unknown-skill)" ;;
+esac
+
+# G2: only vendored (commit) and/or declared (agent-design) names present — the report block must
+# not appear at all.
+OUT=$(run_sync "$(build_home_skills g2 commit agent-design)")
+case "$OUT" in
+  *"$REPORT_MARK"*) bad "G2: report block appeared although every deployed skill is vendored or declared" ;;
+  *) ok "G2: report block absent when every deployed skill is vendored or declared" ;;
+esac
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
