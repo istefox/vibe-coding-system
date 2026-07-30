@@ -371,13 +371,54 @@ free to honour.
 
 #### 6.4 — Reuse the pattern
 
-- [ ] **#211 — ten skills read by no test.** Not "test all ten": decide per skill whether it is
+- [x] **#211 — ten skills read by no test.** Not "test all ten": decide per skill whether it is
   deliberately uncovered or an oversight, and record the first case **in the skill file itself**.
   Should be substantially smaller once 6.3 has settled the declaration mechanism.
-- [ ] **#208 — three derived guards stopping at unchecked boundaries.** (1) per-population count
+- [x] **#208 — three derived guards stopping at unchecked boundaries.** (1) per-population count
   guard, (3) derive the agent list from `agent-command-scope.sh`'s own `case` arm. (2) may be
   correct to leave — if so, **say it in the test**, so the next author meets a decision instead of
   inventing an exemption that would be wrong.
+
+  **Outcome — the mechanism transferred, and both issues' premises needed correcting first.**
+
+  **#211's count was right and its premise was wrong** (ADR-0084, PR #221). It said the ten were
+  "read by no test at all". Measured: false — **three** derived sweeps already read the whole corpus
+  (`worktree-isolation-contract`, `agent-tool-parameter-names`, `skill-text-corrections` F6). Under
+  the obvious predicate "some test opens this file", **all 29 would pass** with the count guard
+  green. So the predicate is the literal string `<name>/SKILL.md`, which a glob or a variable cannot
+  produce, and `S6` pins that against a glob-only fixture. **A right number can sit on a wrong
+  premise, and only the premise decides the design.**
+
+  **The predicate proved itself on its own author.** The first draft of the `goal-loop` /
+  `research-prompt` assertions was a two-element `for` loop, and the perimeter check went on
+  reporting both skills as uncovered — correctly, since a hardcoded two-name loop is
+  indistinguishable from a sweep. They are now `F7`/`F8`, named, with the reason at that site.
+
+  Five skills covered as real oversights (`humanize-en` was ADR-0040's own unverified half;
+  `goal-loop`/`research-prompt` were pinned only by a blueprint sentence; `refactor-snapshot` and
+  `vibe-status` had sibling tests reading their `scripts/` and not their `SKILL.md`), two given the
+  cross-file gate contract with c2c §25, three declared deliberately uncovered.
+
+  **#208 had three boundaries and there was a fourth** (ADR-0085, PR #223). The premise held —
+  0 of 38 skill scripts read a transcript — so the guard went on the **denominator**: `T0b` counts
+  38 candidates, not 0 matches, because zero matches is the correct answer today while zero
+  candidates is a broken glob and from outside they are identical. `Z5` makes the `compliant()`
+  decision executable rather than a comment: a rule-abiding python3 reader is pinned as
+  reported-non-compliant, with the instruction to extend the predicate and **never** exempt the hook.
+
+  **The fourth boundary came from running the third-agent case, not from reading it.** The probe was
+  meant to confirm section J extends itself when an agent is added to the hook's `case` arm. It does
+  — and `coder.md` grants a bare, unrestricted `Bash`, yielding zero `Bash(<word> …)` entries, so
+  ADR-0079 §D1's whole argument does not hold for it and its silence would look exactly like
+  coverage. `J0c` asserts no scoped agent holds one. `coder` is one line of the hook away from being
+  in scope.
+
+  **Found on the way, filed as #222:** five skills are deployed in `~/.claude/skills/` and absent
+  from `staging/`. `ui-layout-audit` is the serious one — c2c §25 declares it chain-invokable at gate
+  5.05, and F6's `[ -f "$_sf" ] || continue` skips it in silence, so the one chain-invokable skill
+  that is not vendored is the one skill F6 cannot check. It does not carry the flag today; the
+  structural hole is what was filed. Widening #211's check to `~/.claude` was rejected — it would
+  make the harness depend on the machine's deploy state, the opposite of ADR-0024.
 
 #### 6.5 — Close the loop
 
