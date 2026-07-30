@@ -1750,3 +1750,43 @@ pass before and after; the five red-verified cases are subtree renamed, rogue re
 skill, predicate widened, arm removed, arm typo.
 
 Detail: `docs/architecture/ADR-0085-208-derived-guard-boundaries.md`.
+
+## Decisions from the derived-guard extraction question (ADR-0086)
+
+Roadmap item 6.5, first point — the question PROJECT.md deferred until the call sites existed. Six
+test files derive a population at run time, let a file declare its own waiver, and count-guard the
+derivation. **Answer: six deliberate copies, no shared helper.**
+
+**THE CRITERION, which is the reusable part rather than the verdict — extract only when two copies
+giving different answers would be a DEFECT.**
+
+- **ADR-0069 is the precedent that appears to settle it, and does not.** It pulled
+  `plan-task-predicate.awk` out of three consumers because they were asking **one** question and
+  getting three answers — drift, and it had already cost issue #172. The six guards ask **six**
+  questions about six populations, so there is no shared answer that could diverge. `>= 8`, `>= 25`,
+  `>= 100` and `>= 2` are legitimately different numbers, and the 40-character reason floor is a
+  convention rather than a fact.
+- **Two differences a single helper cannot reconcile, both measured.** `fence-contract`'s marker
+  **is** the extraction anchor and must be found (ADR-0083 §D3); `cross-reference-form`'s must be
+  **excluded** from extraction or a declaration satisfies itself, since the line naming the exempt
+  tokens contains them. Contradictory requirements on the same field. And the marker's syntax
+  follows the **file's language** — shell comment in the hook-facing guards, HTML comment in the
+  markdown-facing ones — with three different payloads (reason, reason+id, reason+token-list) and
+  one position constraint the others do not have.
+- **Correlated failure is worse than duplication, for guards specifically.** Each file is hermetic
+  and independently runnable by design (`Run: bash <file>`, and `docs-ci.yml` invokes them one by
+  one). Six independent checks are worth having *because they fail independently*; a defect in a
+  shared source disables all six at once, in the stay-green way this repository has already watched
+  three times.
+- **The rule is recorded in each of the six headers**, one line naming the instance, because the
+  seventh will be written by **copying one of the six**. No test asserts those lines exist: an
+  assertion that a comment is present cannot be seen meaningfully RED, prevents no defect beyond a
+  missing comment, and would literally be the seventh instance of the pattern under review.
+
+Known consequences: the count-guard idiom and the 40-char floor stay duplicated six times — the
+claim is that a drift there is not a defect, not that it cannot happen. The decision has **no
+enforcement** by choice, so a seventh copy skipping the header note is invisible. The instance count
+is a snapshot: six on 2026-07-30, re-derived from the files because PROJECT.md said four and named
+the wrong four.
+
+Detail: `docs/architecture/ADR-0086-derived-guard-pattern-not-extracted.md`.

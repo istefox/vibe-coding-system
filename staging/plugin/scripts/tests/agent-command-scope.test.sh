@@ -19,6 +19,11 @@
 # elements, and eval/base64/variable splicing defeat it outright. Section E pins one such bypass as
 # EXPECTED-ALLOW so the limit lives in CI rather than only in prose. If someone closes it, E fails
 # and forces the documentation to move with the code.
+#
+# DERIVED-GUARD PATTERN — instance 6 of 6 (ADR-0086). Derives: names parsed from a `case` arm (section J only). Waiver: no waiver — none is needed.
+# The pattern is deliberately COPIED across the six, not shared. Before writing a seventh by
+# copying this file, read ADR-0086 §D1: extract only when two copies giving different answers
+# would be a DEFECT. Here they would not — the six ask six questions about six populations.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
