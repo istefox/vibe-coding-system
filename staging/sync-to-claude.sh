@@ -39,6 +39,22 @@ APPLY=0
 #
 # pairs-completeness.test.sh derives this set from PAIRS and requires each member to appear in the
 # declaration line above — a THIRD anomaly fails there instead of being discovered by an audit.
+#
+# DEPLOYED-ONLY REGISTRY (issue #222, ADR-0087). Five skills exist in ~/.claude/skills/ and are
+# deliberately NOT vendored into staging/ — not forgotten, declared. ADR-0077's rule that a waiver
+# travels with the file it excuses cannot apply here: the excused file is absent from staging/ by
+# construction, so there is nothing for the waiver to travel with. The declaration lives here
+# instead, beside the zone-anomaly block above, in the file that decides what reaches ~/.claude.
+#
+# pairs-completeness.test.sh derives this registry at run time (DO1-DO4): every declared name must
+# be genuinely absent from staging/plugin/skills/, and every reason must be >= 40 characters. The
+# separator between name and reason is an em dash ("—"), not a hyphen.
+#
+# deployed-only: agent-design — proprietary book-derived knowledge base; its own frontmatter `license:` field says so.
+# deployed-only: daily-close — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365).
+# deployed-only: daily-open — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365), same class as daily-close.
+# deployed-only: vibiso-intake — front end of a different project's intake contract (vibiso-system ADR-002).
+# deployed-only: website-auditor — symlink into a foreign repository (steve-skills/website_auditor); moves ADR-0024 section 2.1's exclusion out of prose.
 PAIRS="
 user/CLAUDE.md|CLAUDE.md
 plugin/agents/architect.md|agents/architect.md
@@ -222,6 +238,30 @@ if [ "$APPLY" -eq 1 ]; then
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
     "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
     "$DEST/hooks/agent-command-scope.sh" "$DEST/hooks/vendor-checks.sh" 2>/dev/null || true
+fi
+
+# DEPLOYED SKILL REPORT (issue #222, ADR-0087, R-06). Every directory (or symlink resolving to a
+# directory — website-auditor's shape) under $DEST/skills/ that is neither vendored via PAIRS nor
+# declared in the deployed-only registry above is reported here, once. This is a REPORT, distinct
+# from the MANUAL STEP blocks below: it never sets MANUAL=1 and never affects the exit code — R-06
+# says the report never blocks the sync. $HOME-dependent and unverifiable in CI by construction
+# (ADR-0087 §D3), the same asymmetry ADR-0084 already accepted for the deployed-vs-staged check.
+if [ -d "$DEST/skills" ]; then
+  VENDORED_SKILLS=$(printf '%s\n' "$PAIRS" | awk -F'|' '$1 ~ /^plugin\/skills\/[^\/]+\/SKILL\.md$/ { n=$1; sub(/^plugin\/skills\//,"",n); sub(/\/SKILL\.md$/,"",n); print n }')
+  DECLARED_SKILLS=$(grep "^# *deployed-only: " "$STAGING/sync-to-claude.sh" 2>/dev/null | sed 's/^# *deployed-only: *//' | cut -d' ' -f1)
+  UNDECLARED=""
+  for _skill_dir in "$DEST"/skills/*/; do
+    [ -d "$_skill_dir" ] || continue
+    _sname=$(basename "$_skill_dir")
+    _sknown=0
+    for _v in $VENDORED_SKILLS; do [ "$_v" = "$_sname" ] && _sknown=1; done
+    for _r in $DECLARED_SKILLS; do [ "$_r" = "$_sname" ] && _sknown=1; done
+    [ "$_sknown" -eq 0 ] && UNDECLARED="$UNDECLARED $_sname"
+  done
+  if [ -n "$UNDECLARED" ]; then
+    printf '\n-- REPORT: deployed skill(s) neither vendored nor declared --\n'
+    for _u in $UNDECLARED; do printf '%s\n' "$_u"; done
+  fi
 fi
 
 # MANUAL STEP notices are gated on the state they describe. They used to print unconditionally,
