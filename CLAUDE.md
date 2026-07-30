@@ -1839,3 +1839,53 @@ line-based via `count_lit`, because a marker split across two lines is a marker 
 and flattening would hide the very defect it guards.
 
 Detail: `docs/architecture/ADR-0088-241-test-authoring-split-granularity.md`.
+
+## Decisions from the deployed-only skills chain (ADR-0087)
+
+Closes issue #222, Phase 7.2, and the feature the Phase 7.1 shakedown run was executed on. Six
+skills exist in `~/.claude/skills/` and not in `staging/`.
+
+**The issue's framing was one question; measuring the six showed it is two.** *Deployment* — must a
+fresh machine restoring from this repository receive this file? — and *verification* — must the
+harness be able to read it? ADR-0024 could answer them together for its sixteen skills. Here they
+diverge: yes/yes for `ui-layout-audit` (c2c §25 declares it chain-invokable at gate 5.05 and Gate
+5.05 invokes it by name), no/no for the other four. `daily-open`/`daily-close` are a personal
+routine bound to local connectors; `vibiso-intake` is another project's intake contract;
+`agent-design` carries `license: Proprietary internal knowledge base` over a `reference/` tree
+distilled from a published book.
+
+**So the defect is not "four skills are unvendored" — it is that nothing distinguishes "not part of
+the blueprint" from "forgotten"**, the same gap that left `website-auditor`'s exclusion in prose
+since ADR-0024.
+
+- **The registry lives in `sync-to-claude.sh`**, beside the `# pairs-zone-anomaly:` declarations,
+  because that file is what decides which files reach `~/.claude`. **ADR-0077's rule — a waiver
+  travels with the file it excuses — cannot apply here**: the excused file is absent from
+  `staging/` by construction, so there is nothing for the waiver to travel with. This is the one
+  shape that rule does not cover.
+- **Two verification directions, two homes, and the split is the point.** *Every entry names a
+  skill absent from staging* (a stale waiver) is CI-runnable — it reads only `staging/`. *Every
+  deployed skill is vendored or declared* needs `$HOME/.claude`, which ADR-0084 refused to make CI
+  depend on, so it is a report in `sync-to-claude.sh` at deploy time, read by the one person who
+  can answer "what is this skill".
+- **F6's `continue` was doing two jobs.** Measured, c2c §25 yields nine backticked tokens: seven
+  staged skills, `reviewer` (an **agent**), and `ui-layout-audit` (the gap). One skip could not tell
+  "legitimately not a skill" from "missing from staging". A token resolving as neither a staged
+  skill nor a staged agent is now a failure — derivation stays inside `staging/`, so no name list
+  enters the test (the identity waiver ADR-0069 §PTD refused).
+- **Task order is inverted on purpose, and reordering destroys the evidence.** F6 is fixed
+  **before** `ui-layout-audit` is vendored, so the corrected check's first run fails citing the
+  real gap rather than a planted fixture. Vendoring is what turns it green.
+- **`ui-layout-audit` gets the gate contract, not a coverage waiver** — a `C7` of the same shape as
+  `C5`/`C6`, so the third chain-invokable skill is asserted exactly as the first two.
+- **Instance 7 of the derived-guard family, and it stays a copy** (ADR-0086's criterion: would two
+  copies giving different answers be a defect? No — it is its own population asking its own
+  question).
+
+Known consequences: **no licence or provenance enforcement anywhere** — ADR-0065 (#119) deliberately
+shipped no detector, so `agent-design`'s licence is recorded as a reason and checked by nothing. A
+skill deployed tomorrow and never declared is invisible to CI by design; reading a green run as "the
+deployed set is fully accounted for" reads something this feature does not claim. R-06 has no CI
+coverage beyond `HOME`-override fixtures, the same asymmetry ADR-0084 already accepted.
+
+Detail: `docs/architecture/ADR-0087-222-deployed-only-skills.md`.
