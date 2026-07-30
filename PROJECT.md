@@ -3,6 +3,29 @@
 ## Overview
 Auto-generated roadmap from issues labeled `prep` (ADR-0023).
 
+## Where this stands (2026-07-30)
+
+Reformulated because knowing the answer required reading 475 lines and correcting three of them.
+
+**Phases 1–6 are closed.** Phase 5 is superseded by Phase 6 and kept for its reasoning only.
+Everything from Phase 4 onward was preventive work on the harness and the skill layer, so **none of
+it has been exercised by a real chain run** — which is the whole point of what remains.
+
+**Two items are outstanding, and only two:**
+
+1. **The shakedown run** (was 6.5's second point, now Phase 7). A real feature through the
+   `concept-to-code` chain. Everything since Phase 5 exists to make this run test the chain rather
+   than test that week's edits.
+2. **Issue #222** — five skills deployed and absent from `staging/`, one of them chain-invokable.
+   Independent of the shakedown; can go before or after.
+
+**One standing rule, earned by this file three times.** A checkbox is ticked in the **same PR that
+closes its item**, never in a later docs pass. On 2026-07-30 this file reported six open items when
+two remained: 6.3's box was left unticked by the PR that recorded its outcome two lines below,
+Phase 5's boxes still read as live after Phase 6 declared it superseded, and 6.5 named four call
+sites when there were six. Every one of those was a roadmap that disagreed with GitHub, and nothing
+made them agree.
+
 ## Phases
 
 ### Phase 1 — prep
@@ -454,10 +477,9 @@ free to honour.
   written by **copying one of the six**. No test asserts those lines exist: an assertion that a
   comment is present cannot be seen meaningfully RED, and it would be the seventh instance of the
   pattern under review.
-- [ ] Then the **shakedown run**, with its three expected non-regressions unchanged from Phase 5:
-  `diff-budget-check.sh` active for the first time since July, the `manifest-field-state.sh`
-  dependencies aborting on an un-synced machine, and Step 5's Workflow dispatch finally producing the
-  Workflow-path data ADR-0080's pre-registered condition waits on.
+- [x] Then the **shakedown run** — *moved to Phase 7, where it is the whole phase rather than the
+  tail of one.* It was written here as a closing step and it is not one: it is the first time any of
+  Phases 4–6 gets executed instead of asserted.
 
 #### Risks
 
@@ -473,3 +495,74 @@ free to honour.
   is to batch them into fewer PRs; #206 and #211 in particular must not share a PR, for the same
   reason #193 and #195 could not — two derived checks that can each pass vacuously would mask each
   other.
+
+### Phase 7 — execute the chain instead of asserting it (the shakedown run)
+
+Phases 4, 5 and 6 shipped 18 ADRs and roughly 250 assertions, and **not one line of any of it has
+been exercised by a real `concept-to-code` run**. Every guard was verified against a planted defect,
+which proves the guard fires and proves nothing about the chain it guards. This phase is the first
+time the system is run rather than inspected.
+
+Promoted out of 6.5, where it sat as a closing step. It is not a closing step: it is the only item
+on this roadmap whose output is evidence rather than more assertions.
+
+#### 7.1 — The run
+
+- [ ] **Pick the feature, then commit to it.** Small, real, low-stakes, and preferably something the
+  repository actually wants. **Recommended: issue #222**, which is the other outstanding item — it
+  has a bounded requirement set (decide per skill: vendor or record as deployed-only), a plan that
+  decomposes into tasks, tests worth writing, and no way to damage anything. Running it through the
+  chain closes both remaining items in one pass.
+  - The trade: if the chain halts mid-run, #222 halts with it. Acceptable — #222 is not urgent, and a
+    halt **is** the phase's product.
+  - The alternative is a throwaway feature, which costs a second run to get the real one done and
+    tests the chain on work nobody cares about, where a wrong answer is easy to wave through.
+- [ ] **Run it end to end**, attended, with no shortcuts around a gate. A gate that is inconvenient
+  is the finding.
+- [ ] **Record every finding as an issue, one per finding, filtering none.** That rule produced #218,
+  #222 and the four defects of #184. A run that reports "went fine" has told us nothing we did not
+  already believe.
+
+#### Three expected non-regressions — do not mistake them for breakage
+
+Carried unchanged from Phase 5, plus what 6.1–6.5 added:
+
+- **`diff-budget-check.sh` is active for the first time since July** (ADR-0070). It may report
+  `BUDGET`/`SCOPE` on work in flight, against budgets written when nothing read them. Advisory by
+  contract; the first one will still look like a regression.
+- **The `manifest-field-state.sh` dependencies fail CLOSED on an un-synced machine** (ADR-0076). If
+  the pre-flight aborts asking for a sync, that is the design working.
+- **Step 5's Workflow dispatch finally produces Workflow-path data** for ADR-0080's pre-registered
+  condition. `src=main-fallback` non-zero means investigate the lookup, **not** drop the fallback —
+  the branch that reads counter-intuitively, written down before the data arrives so the outcome
+  cannot be rationalised afterwards.
+
+#### What has never run, and is therefore what this tests
+
+Listed so a halt can be read against the right ADR instead of debugged from scratch: Gate 4.0's
+branch-and-commit producer (ADR-0071), the Step 5 gate that can now **edit `SPEC.md`** (ADR-0072),
+the heading-form plan predicate (ADR-0069), the worktree base-fork comparison at merge-back
+(ADR-0068), the three Step 5 → Step 6 gates and their two opposite caller idioms (ADR-0046/0047/0048),
+and every `PreToolUse` scope hook firing against real dispatches rather than synthetic payloads.
+
+#### 7.2 — Issue #222, if the run does not absorb it
+
+- [ ] Five skills deployed in `~/.claude/skills/` and absent from `staging/`: `agent-design`,
+  `daily-close`, `daily-open`, `ui-layout-audit`, `vibiso-intake`. Decide per skill — vendor with a
+  `PAIRS` entry, or record as deployed-only the way ADR-0024 recorded `website-auditor`.
+- [ ] **`ui-layout-audit` does not admit the second option.** `concept-to-code` §25 declares it
+  chain-invokable at gate 5.05, so either vendor it or remove it from §25. A chain that names a skill
+  it cannot verify is the ADR-0042 disagreement in a new place.
+- [ ] Make `skill-text-corrections` F6's silent skip loud, or count-guard it against the §25 list
+  length rather than against what resolved. Today `_F6_CHECKED >= 5` is satisfied by the seven that
+  do resolve.
+
+#### Risks
+
+- **The temptation will be to fix findings mid-run.** Do not: the run's value is the unbroken record
+  of what the chain does today. Note, file, continue — unless the chain cannot proceed at all.
+- **A clean run is the outcome most likely to be misread.** Every guard added since Phase 4 is
+  preventive, so a run touching none of them proves the feature was small, not that the system is
+  sound. Say which gates fired and which were never reached.
+- **The three non-regressions above will look like breakage in the moment.** They are written down
+  here precisely because they will be met while tired and mid-run.
