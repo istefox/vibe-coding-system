@@ -9,6 +9,7 @@ description: Audit and fix SwiftUI or HTML/CSS views for layout bugs — text tr
 - After writing or editing a SwiftUI view or HTML/CSS component.
 - Before committing UI code — one pass catches hours of manual refinement.
 - Trigger: "layout audit", "fix layout", "text truncated", "overflow", "scrollbar problem", "ui-layout-audit".
+- Invoked by the `concept-to-code` chain at gate 5.05 (conditional on UI files present in the diff).
 
 ## Arguments
 
