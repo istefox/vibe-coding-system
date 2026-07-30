@@ -394,6 +394,78 @@ grep -q 'committed, on a feature branch' "$AB" \
   && ok "RH12: autopilot-build's prerequisites require the artifacts to be committed on a feature branch" \
   || bad "RH12: autopilot-build still documents only 'exist on disk', contradicting the pre-flight it hands off to"
 
+
+# ==================================================================================================
+# RI. --include: the door Gate 4.0 needs, and the one it must not use (issue #234).
+#
+# ADR-0071 §D2's Clarification settles which side the fix belongs on: `RH4b` above forbids raw
+# `git add` in the Gate 4.0 block, and a caller that stages first would put the file-scope decision
+# in two places. So the mechanism is a `commit` flag, and these assertions pin both halves.
+#
+# Prose matched against a whitespace-FLATTENED copy — a prose assertion must not depend on where
+# markdown wraps (ADR-0073, and ADR-0088's own first run reproducing it).
+# ==================================================================================================
+COMMITMD="$STAGING/plugin/skills/commit/SKILL.md"
+
+ri_flat() {
+  _n=$(tr '\n' ' ' <"$2" 2>/dev/null | tr -s ' ' | grep -oF -- "$1" 2>/dev/null | wc -l | tr -d ' ')
+  [ -n "${_n:-}" ] || _n=0
+  printf '%s' "$_n"
+}
+
+# Exactly 2: the synopsis line AND the description that follows it. `>= 1` was the first draft and
+# a planted defect walked straight through it — removing one of the two left the other satisfying
+# the check, so "documented" and "mentioned once" were indistinguishable.
+_ri1=$(ri_flat '--include <path>[,<path>...]' "$COMMITMD")
+if [ "$_ri1" -eq 2 ]; then
+  ok "RI1: commit/SKILL.md carries --include in both the synopsis and its own description"
+else
+  bad "RI1: expected --include in the synopsis AND its description (2 occurrences), found $_ri1 — a flag named once is not documented (#234)"
+fi
+
+# RI2 — the ordering is the security property, not a style point: resolving --include before the
+# secrets check would open the door the filename rule exists to keep shut.
+if [ "$(ri_flat 'after the secrets check below, not before it' "$COMMITMD")" -ge 1 ]; then
+  ok "RI2: commit/SKILL.md states that --include resolves AFTER the secrets check"
+else
+  bad "RI2: commit/SKILL.md does not pin --include's ordering against the secrets check (#234)"
+fi
+
+# RI3 — a missing path must abort. Committing the rest yields a half-done Gate 4.0 that looks whole.
+if [ "$(ri_flat 'stop and report it, do not commit' "$COMMITMD")" -ge 1 ]; then
+  ok "RI3: a non-existent --include path aborts the commit rather than being skipped"
+else
+  bad "RI3: commit/SKILL.md does not abort on a missing --include path (#234)"
+fi
+
+# RI4 — Gate 4.0 must actually pass it. A flag no caller passes is #238's shape one skill over.
+RI_BLOCK=$(awk '/^#### Gate 4.0 — Commit the planning artifacts/{f=1; next} f&&/^\*\*\[Autopilot bypass/{exit} f{print}' "$CC")
+printf '%s\n' "$RI_BLOCK" > "$TMP/ri_block.txt"
+# The needle is the INVOCATION's argument form, not the bare word: this block also explains what
+# --include is for, so a needle of '--include' counted the explanation and passed with the
+# invocation deleted (rule 12, caught by planting rather than by reading).
+if [ "$(ri_flat '--include <spec>,<manifest.artifacts.adr>,<manifest.artifacts.plan>,<manifest-path>' "$TMP/ri_block.txt")" -ge 1 ]; then
+  ok "RI4: Gate 4.0 passes --include with the four artifact paths, so the flag has a caller"
+else
+  bad "RI4: Gate 4.0 does not pass --include with its artifact paths — the flag exists and nothing uses it (#234)"
+fi
+
+# RI5 — RH4b still holds with the fix in place. The point of #234's design is that the door is on
+# the commit side; if this block ever grows a `git add`, the design was abandoned rather than fixed.
+if printf '%s\n' "$RI_BLOCK" | grep -qE 'git (checkout -b|commit|add)'; then
+  bad "RI5: Gate 4.0 gained a raw git command while implementing #234 — the fix belongs on the commit side (ADR-0071 §D2 Clarification)"
+else
+  ok "RI5 (forward guard, green before and after): #234's fix left Gate 4.0 free of raw git"
+fi
+
+# RI6 — CLAUDE.md is deliberately absent from the --include list: it is tracked-modified, so
+# `git add -u` covers it. Asserted because a list that grows unexamined becomes a second scope rule.
+if [ "$(ri_flat 'CLAUDE.md` is deliberately absent from the list' "$TMP/ri_block.txt")" -ge 1 ]; then
+  ok "RI6: Gate 4.0 records why CLAUDE.md is NOT in the --include list"
+else
+  bad "RI6: Gate 4.0 does not say why CLAUDE.md is excluded from --include — the list will drift (#234)"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
