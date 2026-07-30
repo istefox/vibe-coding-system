@@ -1705,3 +1705,48 @@ the opposite of ADR-0024 — filed separately. `S0`/`S6`/`Z1` pass before and af
 assertions were seen RED on a planted defect.
 
 Detail: `docs/architecture/ADR-0084-211-skill-coverage-perimeter.md`.
+
+## Decisions from the derived-guard boundaries chain (ADR-0085)
+
+Closes issue #208, second half of phase 6.4. Three run-time-derived guards each stopped at a
+boundary nobody checked — one question asked three times: **what is outside this derivation, and
+would we notice?**
+
+- **The guard goes on the DENOMINATOR, not on the matches.** `transcript-scan-rule`'s premise still
+  holds (0 of 38 skill scripts read a transcript), so widening the sweep catches nothing new — `T1`
+  does catch a rogue reader planted under a skill, verified. The real risk is the **glob silently
+  ceasing to resolve**: a single `N >= 8` is satisfied by the hooks alone, so a renamed subtree
+  would leave the second root uncovered with the count green. `T0b` counts **candidates** (38), not
+  matches (0). Zero matches is correct; zero candidates is a broken derivation, and from outside
+  they look identical.
+- **`population()` takes file paths now, not a directory** — the two roots sit at different depths
+  and a second dir-shaped function would be two predicates that agree today, which is the failure
+  the file exists to guard one level up.
+- **`compliant()`'s false positive stays, and the decision is EXECUTABLE.** A non-jq reader returns
+  non-compliant at the first step, indistinguishable from the verdict on a full-scan hook. `Z5`
+  pins a rule-abiding python3 reader as reported-non-compliant, with the instruction that the fix is
+  to **extend the predicate, never to exempt the hook** — an exemption there would be false, since
+  the hook complies, and would record the opposite for every later reader. A comment would have been
+  a claim.
+- **The scoped-agent list is derived from `agent-command-scope.sh`'s own `case` arm** (`J0a`), and
+  every derived name must resolve to a real agent file (`J0b`) — a typo yields an empty file list,
+  which yields zero grant words, which `J3` reads as "nothing unclassified". Third time in one issue
+  that a derivation needed its own guard.
+- **Running the third-agent case found a FOURTH boundary nobody had named.** `coder.md` grants a
+  bare, unrestricted `Bash`, which yields zero `Bash(<word> …)` entries — so ADR-0079 §D1's whole
+  argument (an agent can only invoke what it is granted, and the granted executors are covered) does
+  not hold for it, and its silence would look exactly like coverage. `J0c` asserts no scoped agent
+  holds one. Not hypothetical: `coder` is one line of the hook away from being in scope. Found by
+  running the derivation against a hypothetical, the same route that found ADR-0079's R2 boundary
+  and ADR-0083's #218.
+
+Known consequences: no executable file changes — the hook and both enforcing hooks are
+byte-untouched. The `compliant()` false positive is still there, now with an assertion naming it as
+expected, so whoever writes the third shape sees a failure naming their file. The transcript
+population still stops at two roots; a reader in `staging/user/` or outside `plugin/scripts/` is
+outside both globs *and* outside `T0b`'s denominator guard — the boundary moved, it did not
+disappear. `J0c` matches an exact bare `Bash` token, so `Bash(*)` would pass it. `T0a`/`J0a`/`J0b`
+pass before and after; the five red-verified cases are subtree renamed, rogue reader planted under a
+skill, predicate widened, arm removed, arm typo.
+
+Detail: `docs/architecture/ADR-0085-208-derived-guard-boundaries.md`.
