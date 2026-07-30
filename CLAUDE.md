@@ -1658,3 +1658,50 @@ fence (rule 10). `F5`/`F6`/`F7` passed on the empty declaration set — forward 
 evidence; `F3` listing all 13 unmarked fences is the red evidence.
 
 Detail: `docs/architecture/ADR-0083-206-fence-contract-coverage.md`.
+
+## Decisions from the skill-coverage perimeter chain (ADR-0084)
+
+Closes issue #211, first half of phase 6.4. Ten of 29 staged skills had no test naming them, and
+nothing distinguished **audited and deliberately uncovered** from **never looked at**.
+
+**THE RULE — every staged skill is either read by a test that NAMES it, or declares in its own
+`SKILL.md` why not: `<!-- skill-coverage-exempt: <reason ≥ 40 chars> -->`, one line, within three
+lines of the frontmatter close.**
+
+- **The count was right and the premise was wrong, which is the more useful half.** #211 said the
+  ten were "read by no test at all". Measured: **three** derived sweeps already read the whole
+  corpus (`worktree-isolation-contract`, `agent-tool-parameter-names`, `skill-text-corrections` F6).
+  Under the obvious predicate — "some test opens this file" — **all 29 would pass**, the count guard
+  would stay green, and the perimeter would be as unmeasured as before. A right number can sit on a
+  wrong premise, and only the premise decides the design.
+- **The predicate is the literal string `<name>/SKILL.md`**, because a sweep reaches a file through
+  a glob or a variable and cannot produce one. `S6` pins that in the failing direction against a
+  glob-only fixture; weaken `covered_by()` and `S6` is what goes red.
+- **It proved itself on its own author.** The first draft of the `goal-loop`/`research-prompt`
+  assertions was a two-element `for` loop, and the perimeter check went on reporting both as
+  uncovered — correctly, since a hardcoded two-name loop is indistinguishable from a sweep. Now two
+  named assertions (`F7`/`F8`) with the reason written at that site.
+- **`goal-loop` and `research-prompt` were pinned only by a sentence in the blueprint.** If either
+  lost `disable-model-invocation`, F5 would still pass (the sentence still names it) and F6 would
+  still pass (neither is chain-invokable, so neither is in its derivation).
+- **`humanize-en` was ADR-0040's unverified half:** that ADR moved the perimeter *into* the
+  `description` field on the argument that the field is what the model reads when deciding to
+  invoke. Nothing asserted the field.
+- **`design-brainstorm`/`macos-ux` get the cross-file contract, not a waiver:** c2c §25 restricts
+  each to a gate (`1b`, `1c`) and nothing checked the skill's own text agrees — the ADR-0042 shape.
+  Both sides asserted, so a failure names which one moved.
+- **`S2` count-guards the waiver population** (zero declarations ⇒ `S3`/`S4`/`S5`/`S7` vacuous) and
+  **`S7` runs backwards** — a waiver on a covered skill is stale, and stale reads as clean
+  (ADR-0081 ZA4).
+
+Known consequences: the check verifies a skill is *named*, never that the naming assertion is any
+good — a mention in a comment satisfies it. Three `SKILL.md` files gain an HTML comment (prompt cost
+accepted, ADR-0083 terms). **Six skills are deployed in `~/.claude/skills/` and absent from
+`staging/`** — `agent-design`, `daily-close`, `daily-open`, `ui-layout-audit`, `vibiso-intake`,
+`website-auditor` (last one excluded on purpose by ADR-0024). `ui-layout-audit` is chain-invokable
+per c2c §25 at gate 5.05, and F6's `[ -f ] || continue` skips it in silence; no staging test can
+reach it, by construction. Widening to `~/.claude` would make the harness depend on deploy state,
+the opposite of ADR-0024 — filed separately. `S0`/`S6`/`Z1` pass before and after; all seventeen
+assertions were seen RED on a planted defect.
+
+Detail: `docs/architecture/ADR-0084-211-skill-coverage-perimeter.md`.

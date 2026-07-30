@@ -370,5 +370,34 @@ else
   ok "F6: none of the $_F6_CHECKED chain-invokable skills carries disable-model-invocation"
 fi
 
+# F7/F8 (issue #211, ADR-0084): the OTHER two flag carriers, asserted on the FILES.
+# F5 asserts the blueprint sentence names all three; F2 asserts the flag on disk for exactly one of
+# them. So goal-loop and research-prompt were pinned only by a sentence in a document — if either
+# lost the flag, F5 would still pass (the sentence would still name it) and F6 would still pass
+# (neither is chain-invokable, so neither is in its derivation). Same shape as ADR-0042's finding:
+# prose and file disagreeing with nothing to say which is authoritative.
+#
+# Written as two named assertions rather than a loop ON PURPOSE. #211's perimeter check counts a
+# skill as covered when a test names its path literally, because a loop or a glob is how a corpus
+# SWEEP reaches a file and a sweep says nothing about that skill in particular. A two-element loop
+# here would be indistinguishable from one, and these two files would still be reported uncovered —
+# which is what happened on the first draft.
+carries_flag() {
+  _close=$(awk 'NR>1 && $0=="---"{print NR; exit}' "$1" 2>/dev/null)
+  [ -n "$_close" ] && sed -n "2,${_close}p" "$1" | grep -qx 'disable-model-invocation: true'
+}
+
+if carries_flag "$STAGING/plugin/skills/goal-loop/SKILL.md"; then
+  ok "F7: goal-loop carries disable-model-invocation: true in frontmatter (no chain invokes it)"
+else
+  bad "F7: goal-loop should carry disable-model-invocation: true — the model can self-invoke it today, and F5 would not notice"
+fi
+
+if carries_flag "$STAGING/plugin/skills/research-prompt/SKILL.md"; then
+  ok "F8: research-prompt carries disable-model-invocation: true in frontmatter (no chain invokes it)"
+else
+  bad "F8: research-prompt should carry disable-model-invocation: true — the model can self-invoke it today, and F5 would not notice"
+fi
+
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

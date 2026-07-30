@@ -2,6 +2,7 @@
 name: swift-vibe
 description: This skill should be used when working on SwiftUI/iOS code and ready-to-use modern patterns are helpful (Observable+Bindable iOS 17+, SwiftData @Query, URLSession async/await).
 ---
+<!-- skill-coverage-exempt: snippet reference only — Swift code samples for a model to reuse; asserting their content would pin one API era, not a contract (ADR-0084). -->
 
 SwiftUI best practices with ready-to-use snippets.
 
