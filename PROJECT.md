@@ -692,6 +692,10 @@ Independent of each other and of everything above; no ordering constraint.
   per branch. One glob fixes it permanently.
 #### 8.7 — Execution roadmap
 
+> **Superseded by §8.8 (2026-07-31).** Every issue below is closed. This section is kept as the
+> planning record — the order it chose and the reasons it gave are what §8.8's outcome is measured
+> against — not as a list of open work.
+
 The grouping above says *what*. This says *in which order* and *which fix*, one direction chosen per
 issue. **Regenerated 2026-07-31 after Wave A1 shipped** (#239, ADR-0089, PR #257) — four measurements
 from that wave changed the plan, and one of them added a sixteenth issue.
@@ -840,6 +844,56 @@ alongside the serial queue below.
 - **Prose is not merely unexecuted, it is unexecutable** — and that is what keeps a block outside
   every guard built for the executable population. When a fix rewrites a rule, ask whether the rule
   can be run at all before asking whether it is right.
+
+#### 8.8 — Outcome (2026-07-31)
+
+**The Phase 8 fix roadmap is closed.** Twelve issues shipped in one session, each with its own PR,
+CI green, squash merge, and a verified `--apply` sync. Harness 53 → 67 files.
+
+| wave | issues | ADRs |
+|---|---|---|
+| A2 | #248 | ADR-0095 |
+| B | #228 | ADR-0096 |
+| C | #237, #227, #238 | ADR-0097, ADR-0098, ADR-0099 |
+| D | #242, #247 | ADR-0100, ADR-0101 |
+| G | #233 | ADR-0102 |
+| F | #244, #249 | ADR-0103, ADR-0104 |
+| — | #265, #267 (found by this phase's own guards) | ADR-0105, ADR-0106 |
+
+**One issue is open: #273**, split out of #247 and deferred with measured reasons — a plan-side
+expected-red syntax has the shape ADR-0091 has just shown is expensive to get wrong, and the cheaper
+alternative separates *new* from *carried-over*, not *intended* from *unintended*.
+
+##### What the roadmap got wrong about itself
+
+§8.7 planned sixteen issues and named the fix direction for each. Measuring changed the direction or
+the premise on **seven** of them:
+
+- **#227** said `file_vote` degenerates "past a few hundred files". The threshold is **20**, so
+  `express` can never be auto-recommended on any real repository.
+- **#228** named #176's SPEC as the only unarchived one; it had been archived by #229. And the
+  archive is **not** named by the topic slug — 3 of 41 — so the by-name check the issue proposed
+  would have written a duplicate beside 38 existing archives.
+- **#240** blamed ADR-0016, which was correct all along; the error entered in a *summary* of it.
+- **#242** called the case "benign on this plan by luck". The two counts diverge on **51 of 58**
+  plans, all over-counted.
+- **#247** predicted an unattended halt. `autopilot-build`'s breaker reads the report **after
+  dispatch**, once, so the run in question would not have halted.
+- **#248**'s own suggested guard does not catch #248 — it catches the #238 shape. It found #265
+  instead, on its first run.
+- **#267** named one defect; there were two, and the second (the last chain's SPEC is never
+  archived) is the one with a live consequence.
+
+**The lesson §8.7 could not have written: an issue's measurement is a hypothesis.** Re-deriving it
+before designing changed the design seven times out of twelve.
+
+##### What remains
+
+- **A second end-to-end shakedown.** Phase 8's product is verified only by another run, and that run
+  is also what feeds ADR-0080's still-unfed condition — `hook_verified` is still `false`, so no run
+  has ever taken the Workflow dispatch path and **half of every Step 5 fix in this table is
+  unexercised**. A green second shakedown must not be read as covering both paths.
+- **#273**, whenever the checkpoint needs to decide rather than the reader.
 
 #### What Phase 8 must not become
 
