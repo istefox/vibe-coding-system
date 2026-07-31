@@ -2508,3 +2508,47 @@ cannot see it** (no literal `exit 1|2`, no "abort"), so it is executed by its ow
 measured example of what sits outside ADR-0083's population, after ADR-0096.
 
 Detail: `docs/architecture/ADR-0102-233-gate2b-trust-probe.md`.
+
+## Decisions from the recovery-baseline rebase chain (ADR-0103)
+
+Closes issue #244, Wave F. ADR-0050 §D3 writes `recovery_baseline_sha` once and never rewrites it —
+*"a baseline that moves is not a baseline"*. It guarantees the **field** does not move and says
+nothing about the **history under it** moving. **The sha is still the right *state* and no longer
+the right *object*, and §D3 reads as covering that case when it does not.**
+
+- **Measured: one of two recorded baselines is orphaned, and it is the one whose chain was paused.**
+  The sequence is the paused-run workflow, not an exotic one — Step 5 records the baseline,
+  something halts the run, fixing the blocker means a PR to `main`, resuming means bringing the
+  branch up to date, and a rebase is the obvious way. ADR-0089 already establishes a paused Step 5
+  as normal. The orphaned object survives in the **reflog only**, so it is one `git gc` from
+  unrecoverable, and a reset to it would detach from the branch's real history.
+- **Three states, three sentences.** `BASELINE_OK`; `BASELINE_ORPHANED` (exists, not an ancestor);
+  `BASELINE_GONE` (does not exist). Collapsing the last two tells a human "gone" when the commit is
+  recoverable, or the reverse.
+- **It REPORTS and never halts, and that is the decision rather than a default.** The run is not
+  damaged, only its recovery path is, so halting would trade a working run for a hypothetical one.
+  Opposite call from the four pre-flight assertions above it, and for a stated reason: those guard
+  *entry* to a state the chain cannot safely be in; this describes a *contingency* that may never be
+  exercised.
+- **Exit 3 is load-bearing here specifically.** Without the no-repo guard, `git cat-file -e` fails
+  and the check reports **`BASELINE_GONE`** — a definite, alarming verdict from a check that never
+  ran. The plant that removes the guard produces exactly that.
+- **The operational rule, which was written nowhere (verified by search): merge `main` into the
+  feature branch; do not rebase it, once the baseline is set.** A merge preserves the recorded commit
+  as an ancestor; a rebase orphans it.
+- **The field is never corrected, including when the check says it is orphaned.** A baseline that
+  gets "fixed" whenever it looks wrong is a baseline again only in name. The #222 manifest keeps
+  `dfa9a6ff…`; the equivalent commit `f1a1df07…` is recorded in the ADR, where a human looking for
+  it will be.
+- **The structural option is deferred with its reason:** a tag or a tree hash is not a drop-in for a
+  sha, because `git reset` to a tree is not the same operation — choosing without answering "what
+  does recovery actually reset to" would be inventing a mechanism to avoid writing a sentence.
+
+Known consequences: a resumed Step 5 now prints a warning that did not exist, and on this
+repository's own #222 manifest it fires immediately — correct, and it will look like a new problem
+the first time; the rule is an instruction nothing enforces, since policing git operations outside
+the chain's turn is not a boundary this system has anywhere; **the check is declared and
+`fence_is_abort_capable` cannot see it** (it never halts, by design), so it is executed by its own
+file — third measured example outside ADR-0083's population, after ADR-0096 and ADR-0102.
+
+Detail: `docs/architecture/ADR-0103-244-recovery-baseline-rebase.md`.

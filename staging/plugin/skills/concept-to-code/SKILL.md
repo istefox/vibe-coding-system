@@ -855,6 +855,49 @@ sed -i.bak 's/^recovery_baseline_sha: null$/recovery_baseline_sha: "<BASELINE_CO
 ```
 If `manifest.recovery_baseline_sha` is already non-null (a resumed Step 5 run), skip the write — it is written once, at pre-flight, and never rewritten by a later step. A baseline that moves is not a baseline (ADR-0050 §D3).
 
+**On that resumed-run branch, check the recorded baseline is still reachable (issue #244,
+ADR-0103).** §D3 guarantees the *field* does not move; it never guaranteed the *history under it*
+does not. Measured on this repository's two recorded baselines, one is already orphaned — the one
+whose chain was paused.
+
+<!-- fence-contract: c2c-step5-baseline-ancestry -->
+```bash
+git rev-parse --git-dir >/dev/null 2>&1 || { echo "BASELINE_NOREPO"; exit 3; }
+_b="<baseline>"
+[ -n "$_b" ] || { echo "BASELINE_NOREPO"; exit 3; }
+if ! git cat-file -e "$_b" 2>/dev/null; then
+  echo "BASELINE_GONE $_b"
+elif git merge-base --is-ancestor "$_b" HEAD 2>/dev/null; then
+  echo "BASELINE_OK $_b"
+else
+  echo "BASELINE_ORPHANED $_b"
+fi
+exit 0
+```
+
+**This is a report, not a halt**, and the distinction is the decision: the run is not damaged, only
+its recovery path is, so stopping a healthy chain over a dead baseline would trade a working run for
+a hypothetical one. Render whichever line applies and proceed:
+
+- `BASELINE_OK` — say nothing.
+- `BASELINE_ORPHANED <sha>` — *"Recovery baseline `<sha>` is no longer an ancestor of this branch
+  (the branch was rebased). The object survives in the reflog only, so it is one `git gc` from
+  being unrecoverable. A recovery reset to it would detach from this branch's history. Find the
+  equivalent commit with `git log --format='%H %s' | grep <subject>` before relying on it."*
+- `BASELINE_GONE <sha>` — the same, plus: the object no longer exists at all and there is nothing to
+  reset to.
+- exit 3 — the check did not run. Say so; do not report a clean baseline.
+
+**The operational rule, which nothing stated before #244: merge `main` into the feature branch; do
+not rebase it, once `recovery_baseline_sha` is set.** A merge preserves the recorded commit as an
+ancestor and the baseline stays meaningful; a rebase orphans it. This matters because the sequence
+that triggers it is the normal one, not an exotic one — Step 5 records the baseline, something halts
+the run, fixing the blocker means a PR to `main`, and resuming means bringing the branch up to date.
+
+**The field is never corrected to match reality**, even when this check says it is orphaned. §D3's
+write-once rule is worth more than any single record, and a baseline that gets "fixed" whenever it
+looks wrong is a baseline again only in name.
+
 **Step 5.0.4 — `worktree.baseRef` is `"head"` in the effective `settings.json` (ADR-0068 §D1, R-05).**
 ```bash
 python3 -c "import json,os,sys; p=os.path.expanduser('~/.claude/settings.json'); d=json.load(open(p)); sys.exit(0 if d.get('worktree',{}).get('baseRef')=='head' else 1)"
