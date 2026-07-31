@@ -215,7 +215,7 @@ step_0_init → step_1_interview → gate_1_spec_review
      verdict=red, reduce scope→ ready_for_implementation → gate_2_architecture_review (new pair)
      verdict=red, hand-code   → ready_for_implementation → aborted (existing wildcard)]
   [FRESH SESSION]
-  → step_5_implementation → step_6_review → gate_5_review_decision
+  → step_5_implementation → step_6_review
   → step_7_commit → completed
   step_6_review → completed  (direct close — step_7_commit state skipped by orchestrator)
 ```
@@ -237,7 +237,7 @@ Terminal states: `completed`, `failed`, `aborted`. Any state can transition to `
 
 Gates 0, 0b–0d are NOT states: they are checks run inside `step_0_init` before the first transition.
 
-Legal transition pairs (49 total — 29 standard + 6 express + 14 hybrid, including Gate 0d routing, Step 4.5 tracer-bullet routing, and direct-close shortcuts):
+Legal transition pairs (45 total — 25 standard + 6 express + 14 hybrid, including Gate 0d routing, Step 4.5 tracer-bullet routing, and direct-close shortcuts). Four standard pairs through `gate_5_review_decision` were removed by issue #265 (ADR-0105): nothing ever entered that state, because Gate 5 is an inline sub-gate:
 - Standard (preserved): all 28 pre-existing pairs unchanged, plus 1 new pair for Step 4.5's
   amber / "red → reduce scope" route (ADR-0057): `ready_for_implementation→gate_2_architecture_review`.
   Green and "red → continue anyway" reuse the existing `ready_for_implementation→step_5_implementation`
@@ -259,7 +259,7 @@ Helper scripts:
 - `~/.claude/skills/concept-to-code/scripts/manifest-init.sh` — creates manifest at `step_0_init` (schema 1.3, adds `chain_path`, `gate0.chain_path`, `gate0.auto_detect_reason`)
 - `~/.claude/skills/concept-to-code/scripts/manifest-validate.sh` — validates schema 1.0|1.1|1.2|1.3 + state invariants + optional fields
 - `~/.claude/skills/clean-public-repo/scripts/detect-public-remote.sh` — auto-detect public GitHub remote (D1 ADR-0011); output `public|silent`; fail-safe to `silent`. **NB: belongs to the `clean-public-repo` skill, not to `concept-to-code` — use the absolute path.**
-- `~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest> <new-step> [<new-status>]` — performs legal state transitions atomically (49 pairs).
+- `~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest> <new-step> [<new-status>]` — performs legal state transitions atomically (45 pairs).
   **Calling convention — 2-arg form (use for all in-chain transitions):**
   ```bash
   bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh manifest.yml gate_1_spec_review
@@ -3465,7 +3465,15 @@ Emit: "Gate 4.5: autopilot — red probe, no unattended override, chain aborted 
 
 **Gate 5 — Review cycle decision (optional)**
 
-Trigger: post Step 5 (coder complete), `current_step = gate_5_review_decision`.
+Trigger: post Step 5 (coder complete), `current_step = step_6_review`.
+
+**Gate 5 runs inline, as an inline sub-gate with no dedicated current_step state, the fifth of its
+kind** — after Gate 2b (TOFU), Gate 4.5 (tracer-bullet red), and Gates 5.05/5.06. It had a state
+declared for it, `gate_5_review_decision`, that nothing ever entered: Step 5 transitions to
+`step_6_review` and presents this gate from there. Issue #265 (ADR-0105) removed the state rather
+than adding a producer, because four siblings already work this way and the state was the anomaly.
+**Do not reintroduce one** — the review decision is a branch inside `step_6_review`, not a phase of
+its own.
 
 **Advisory roll-up (ADR-0052 §D5 — read this before touching the block below).** `step5-report.json`
 carries **this specific roll-up's six** advisory-schema arrays: `weakening_findings`,
@@ -3491,8 +3499,8 @@ that gets skimmed. So this block's volume tracks signal, not schema size:
   shown).` A per-task enumeration of a 40-task plan is not a summary; the full list still lives in
   `step5-report.json` for anyone who wants it.
 - `weakening_findings` and `requirement_coverage.uncovered` are structurally near-always empty by
-  the time Gate 5 renders — both are failure signals that block the transition to
-  `gate_5_review_decision` before this point (ADR-0047, ADR-0048). They are still evaluated for the
+  the time Gate 5 renders — both are failure signals that block the Step 5 → `step_6_review`
+  transition before this point (ADR-0047, ADR-0048). They are still evaluated for the
   all-six-empty roll-up line above, for the rare case a user pushed through an acknowledged failure
   signal manually.
 
@@ -3684,9 +3692,9 @@ options:
 
 Trigger: post Gate 5.1, pre Step 7.
 
-Transition `<current_step> → step_7_commit` (current_step is `step_6_review` if RTF ran, or
-`gate_5_review_decision` if review was skipped — both are valid source states), then proceed
-directly to Step 7 (`commit` skill).
+Transition `step_6_review → step_7_commit`. That is the source state whether RTF ran or Gate 5
+skipped it — both reach here from `step_6_review`, since Gate 5 is a branch inside that state and
+not a state of its own (issue #265, ADR-0105).
 
 > This step is what remains of **Gate 5.5 (humanize deliverables), removed per ADR-0040**. The
 > gate listed README, CHANGELOG, ADR prose, `.md` docs and SPEC.md as its targets, and every one

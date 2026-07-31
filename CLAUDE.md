@@ -2597,3 +2597,41 @@ history for good; the fence is declared and `fence_is_abort_capable` cannot see 
 by its own file — fourth measured example outside ADR-0083's population.
 
 Detail: `docs/architecture/ADR-0104-249-step7-snapshot-collapse.md`.
+
+## Decisions from the Gate 5 state-removal chain (ADR-0105)
+
+Closes issue #265, which the derived producer guard from #248 found on its **first run**.
+`gate_5_review_decision` was entered by nothing: Step 5 transitions to `step_6_review` and presents
+Gate 5 from there, while Gate 5 asserted `Trigger: … current_step = gate_5_review_decision`, the
+roll-up spoke of "the transition to" it, and Step 7 listed it as a valid source. Four legal pairs,
+structurally unreachable. **Nothing aborted** — which is why it survived.
+
+- **The deciding argument is one neither of the issue's two options named.** §3 already documents a
+  pattern for gates with no `current_step` of their own: *"Gate 2b and Gate 5.05/5.06 are already
+  inline sub-gates with no dedicated state"*, and Step 4.5 follows it. **Gate 5 is the fifth
+  instance.** So the state is the anomaly, not the missing producer, and deleting it makes Gate 5
+  consistent with four siblings rather than merely making the graph smaller. Moving the gate would
+  have added a fifth shape to a system that already had one.
+- **Measured before deciding: zero manifests ever carried that `current_step`.** No record is
+  invalidated.
+- **The reason is written at Gate 5 with `Do not reintroduce one`**, because the next reader meeting
+  a gate without a state will otherwise fix what looks like an omission. `GR6` is the only thing
+  stopping that, and it asserts a sentence rather than a behaviour.
+- **Five assertions pinned 49 and were updated, not relaxed** (`E1`/`E2`/`E3`/`E7`, `TBP1`).
+  **`TBP1` was changed in kind:** its message claimed the amber/reduce-scope pair "is present" while
+  its test was `ACTUAL_PAIRS >= 49` — a total that moves whenever any unrelated pair does, and never
+  evidence about that pair. It now asserts the pair directly, with a count guard.
+
+**Two of my own assertions counted their own explanation.** `GR1` was `grep -q "$GONE" "$TR"`, and
+the script legitimately names the state while explaining why it no longer has one; `GR5` had the
+same shape against `SKILL.md`. Both now target the **mechanism** — a pair line, an exemption line, a
+graph arrow, an asserted `current_step` — never the name. **Rule 12, third and fourth instance in
+one day**, after `spec-archive.test.sh` `SA10` and `gate0-recommendation.test.sh` `N9`. And `GR1`'s
+count used `grep -c … || echo 0`, which yields `0\n0` on no match — **the exact idiom issue #174
+documented here.** `|| true` is the fix.
+
+Known consequences: the machine is four pairs smaller and `manifest-validate.sh` now rejects a
+manifest hand-edited to that state (zero existing ones affected, measured); the pair count is stated
+in three files and derived in one, so three chances to drift against one detector.
+
+Detail: `docs/architecture/ADR-0105-265-gate5-state-removal.md`.

@@ -50,8 +50,8 @@ step 13  gate_3_project_memory_review step_4_session_boundary
 step 14  step_4_session_boundary   ready_for_implementation
 step 15  ready_for_implementation  step_5_implementation
 step 16  step_5_implementation     step_6_review
-step 17  step_6_review             gate_5_review_decision
-step 18  gate_5_review_decision    completed
+step 17  step_6_review             step_7_commit
+step 18  step_7_commit             completed
 
 # Phase: happy2 — 11 transitions covering shortcut pair (proj2/)
 PROJ2="$TMP/proj2"
@@ -78,8 +78,8 @@ step2  6  step_3_project_memory          gate_3_project_memory_review
 step2  7  gate_3_project_memory_review   step_4_session_boundary
 step2  8  step_4_session_boundary        ready_for_implementation
 step2  9  ready_for_implementation       step_5_implementation
-step2 10  step_5_implementation          gate_5_review_decision
-step2 11  gate_5_review_decision         completed
+step2 10  step_5_implementation          step_6_review
+step2 11  step_6_review                  completed
 
 # Phase: illegal — 3 attempts from step_0_init (proj3/, fresh manifest)
 PROJ3="$TMP/proj3"

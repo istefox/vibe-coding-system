@@ -419,10 +419,15 @@ ACTUAL_PAIRS=$(grep -cE '^[[:space:]]*echo "[a-z_0-9]+,[a-z_0-9]+" >>?[[:space:]
 TRN_COMMENT_N=$(grep -oE '[0-9]+ transitions\)' "$TRN" | grep -oE '[0-9]+' | head -1)
 SKILL_TOTAL_N=$(grep -oE 'Legal transition pairs \([0-9]+ total' "$SKILL_MD" | grep -oE '[0-9]+' | head -1)
 
-if [ -n "$ACTUAL_PAIRS" ] && [ "$ACTUAL_PAIRS" -ge 49 ]; then
-  ok "TBP1: manifest-transition.sh builds at least 49 pairs ($ACTUAL_PAIRS counted) — the one new amber/reduce-scope pair was actually needed and is present"
+# Asserts the PAIR, not a count that stands in for it. The count was 49 and is now 45 (issue #265
+# removed four unreachable gate_5_review_decision pairs), and a threshold that moves whenever an
+# unrelated pair is added or removed was never evidence that THIS pair is present. The count guard
+# below keeps the derivation from going vacuous.
+if [ -n "$ACTUAL_PAIRS" ] && [ "$ACTUAL_PAIRS" -ge 40 ] \
+   && grep -qF 'ready_for_implementation,gate_2_architecture_review' "$TRN"; then
+  ok "TBP1: the amber/reduce-scope pair ready_for_implementation,gate_2_architecture_review is present ($ACTUAL_PAIRS pairs built)"
 else
-  bad "TBP1: manifest-transition.sh builds only $ACTUAL_PAIRS pairs (< 49) — the new pair is missing"
+  bad "TBP1: the amber/reduce-scope pair is missing, or the pair derivation returned only $ACTUAL_PAIRS"
 fi
 
 if [ -n "$TRN_COMMENT_N" ] && [ "$TRN_COMMENT_N" = "$ACTUAL_PAIRS" ]; then
