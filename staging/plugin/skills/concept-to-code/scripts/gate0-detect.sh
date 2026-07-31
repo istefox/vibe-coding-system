@@ -6,7 +6,11 @@
 # Output (stdout, one key=value per line):
 #   spec_adr_exist=true|false   (SPEC.md + >=1 ADR exist, not slug-disowned)
 #   mode=greenfield|brownfield  (brownfield iff SPEC.md exists and not slug-mismatched)
-#   file_estimate=<N>           (tracked file count, excluding build dirs)
+#   repo_file_count=<N>         (files in the REPOSITORY, excluding build dirs — NOT an estimate of
+#                               how many files the feature will touch. Renamed from file_estimate by
+#                               issue #227: the old name was read as a feature-size estimate, and
+#                               the vote below turns standard at 20 files, so on any real repository
+#                               it is a constant. See ADR-0098.)
 #   file_vote=express|hybrid|standard  (<10 → express, 10-19 → hybrid, >=20 → standard)
 #   keyword_vote=express|hybrid|standard  (derived from topic title, if provided)
 #   spec_topic_match=true|false|unknown  (ONLY when <topic-slug> arg given)
@@ -105,7 +109,7 @@ file_count="$(find "$root" -type f \
   | grep -v '/\.build/' \
   | wc -l | tr -d ' ')"
 
-echo "file_estimate=$file_count"
+echo "repo_file_count=$file_count"
 
 if [ "$file_count" -lt 10 ]; then
   echo "file_vote=express"

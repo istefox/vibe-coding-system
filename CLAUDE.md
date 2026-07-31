@@ -2286,3 +2286,49 @@ further cell is a redesign; the two in-session handlers differ by **one line** a
 thing holding them apart; the unattended-fresh-session cell is documented rather than offered.
 
 Detail: `docs/architecture/ADR-0097-237-gate4-implementation-axes.md`.
+
+## Decisions from the Gate 0 recommendation chain (ADR-0098)
+
+Closes issue #227, second of Wave C and the twin of #237. Gate 0 showed **two "recommended" markers
+that can point at different options** — the question string hardcoded `Recommended: [<path>]`, while
+the global convention has the orchestrator put its own choice first with `(Recommended)` — and
+**nothing declared which wins**. The user saw both in one box and asked which to believe. Neither
+was wrong: the vote is mechanical, the orchestrator knew the run existed to exercise Steps 5 and 6,
+which hybrid never reaches.
+
+- **The orchestrator wins, and a divergence is SHOWN.** Picking a winner and hiding the loser would
+  remove the contradiction from the screen without removing it from the system — the operator would
+  simply stop being told two signals disagreed. What made this a defect was not which signal is
+  better but that neither was declared to.
+- **The second finding is an order of magnitude stronger than the issue states.** #227 says
+  `file_vote` pins to `standard` "past a few hundred files". The threshold is **20**. Feeding a
+  constant `standard` into the majority rule leaves two reachable outcomes, so **`express` can never
+  be auto-recommended on any real repository** — available as a click, never as a suggestion.
+  Corroborated by the corpus: three manifests ever recorded a `file_vote`, all three `standard`
+  (repos of 255, 541, 595 files).
+- **Rename, do not re-tune.** At Gate 0 there is no feature-size signal to be had — no SPEC, no
+  plan, they are what the chain is about to produce — so a repo-size proxy is the only measurable
+  thing at that moment. What was wrong was the NAME. `file_estimate` → `repo_file_count`, with what
+  it measures and its degenerate consequence stated at the gate. Inventing better thresholds without
+  a better signal is the same error with fresher numbers.
+
+**The plant that did NOT fire is the useful one.** `N9`'s first draft grepped for `repo_file_count`
+anywhere in the skill-private harness; the plant changed only the `grep -q` pattern and the
+surrounding `ok()`/`bad()` messages still carried the new name, so the assertion passed a file that
+would have gone red against the renamed script. **A needle must belong to the mechanism, not to the
+prose describing it** — second instance the same day, `spec-archive.test.sh` `SA10` had the
+identical shape hours earlier.
+
+**Sixth instance of the decoration family, met while writing the ADR that cites the other five.**
+`N7b` failed against correct text because its clause contains a backticked word. The flattened copy
+now strips backticks and asterisks as well as line breaks: a clause is the same clause whether it
+wraps, whether a word inside it is code-quoted, and whether it is bolded. Structural markers stay
+line-wise, because there the decoration IS the structure.
+
+Known consequences: `repo_file_count` has three consumers, and the third is the `$HOME`-coupled
+`concept-to-code/tests/run-tests.sh`, which tests the DEPLOYED copy and reads red until sync;
+historical `auto_detect_reason` strings keep the old name deliberately (ADR-0075's principle); the
+routing vote itself is unchanged, so a gate that can only ever suggest two of its four options is a
+real limitation now stated rather than discovered; the divergence line is prose nothing enforces.
+
+Detail: `docs/architecture/ADR-0098-227-gate0-recommendation.md`.
