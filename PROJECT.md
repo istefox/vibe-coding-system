@@ -14,10 +14,14 @@ ever reached Step 5**; every earlier run stopped at an earlier gate, each time o
 cause. #222 shipped in PR #251 with `sync-to-claude.sh --apply` run and a second dry run at zero
 drift.
 
-**It produced twenty-one findings. Three were fixed because they blocked; seventeen are open and
-are Phase 8.** The count matters more than any single defect: everything from Phase 4 onward was
-preventive work verified against planted defects, which proves a guard fires and proves nothing
-about the chain it guards. One real run found more than four phases of inspection.
+**It produced twenty-one findings. Three were fixed because they blocked; seventeen became Phase
+8.** The count matters more than any single defect: everything from Phase 4 onward was preventive
+work verified against planted defects, which proves a guard fires and proves nothing about the chain
+it guards. One real run found more than four phases of inspection.
+
+**Status as of 2026-07-31:** three of the seventeen have shipped, #234 (PR #255), #245 (PR #254)
+and #239 (PR #257), and **#258 was added** by a class sweep run off #239's evidence rather than by
+the chain, so **fifteen remain open**. The ordered plan is §8.7, regenerated after Wave A1.
 
 **Two patterns account for most of them, each seen three or four times:**
 
@@ -621,10 +625,13 @@ earlier). Mitigated by the ordering **inside** the phase, not by splitting it.
 
 #### 8.1 — The chain cannot complete a run
 
-- [ ] **#239 — Step 5.0.1 can never pass.** The chain writes the manifest after Gate 4.0 commits it,
+- [x] **#239 — Step 5.0.1 can never pass.** The chain writes the manifest after Gate 4.0 commits it,
   on both Gate 4 branches; the fresh-session branch is worse, because Form B resume writes it
   unconditionally. "The working tree is clean" and "the manifest is written at every state change"
   are flatly incompatible requirements on the same file. The structural one — do it first.
+  **Shipped, PR #257** (ADR-0089): the manifest leaves the dirty set and only the manifest, bounded
+  by `manifest-validate.sh`; 5.0.1's classification stopped being prose and became a declared,
+  executed fence.
 - [ ] **#248 — `step_5_implementation` has no producer on the default path.** Every occurrence of the
   transition lives inside Step 4.5's tracer-bullet block, which is off by default, so Step 5 cannot
   reach Step 6. Same class as #239 and the same stretch of the chain: one pass over Gate 4 → Step 6.
@@ -683,126 +690,168 @@ Independent of each other and of everything above; no ordering constraint.
   branch has the read-only probe; the attended one does not.
 - [ ] **#250 — RTF gitignores its state file by branch name**, so `.gitignore` grows one dead line
   per branch. One glob fixes it permanently.
-
 #### 8.7 — Execution roadmap
 
 The grouping above says *what*. This says *in which order* and *which fix*, one direction chosen per
-issue. Fifteen PRs in six waves, one PR per issue — the choice made at the start of the phase,
-knowing the overlap cost. Written 2026-07-31, after reading all fifteen issue bodies in full.
+issue. **Regenerated 2026-07-31 after Wave A1 shipped** (#239, ADR-0089, PR #257) — four measurements
+from that wave changed the plan, and one of them added a sixteenth issue.
 
-**Three corrections to the ordering recorded in 8.1–8.6**, all found while choosing the directions:
+##### What Wave A1 measured, and what it changed
 
-1. **#246 moves ahead of #247**, out of 8.6. It is listed above as independent and is not: #247's
-   second option is a plan-side "expected red" declaration, and that consumes exactly the parsing
-   #246 demonstrates broken. #246 is the live warning, and #247's own body cites it as one.
-2. **There are two derived guards, not one.** 8.1's closing note proposes a single check closing
-   #239, #248 and #238 together. ADR-0086's criterion says otherwise: the populations differ
-   (transition pairs against call sites; helper scripts against call sites), so two copies giving
-   different answers would **not** be a defect. Two guards, deliberately not extracted.
-3. **#249's dependency on #244 is stronger than 8.5 states.** The soft-reset needs the ancestry
-   check #244 introduces, or it resets onto an orphaned object — the precise failure #244 records.
+1. **Ten of the fifteen remaining fixes land in one file.** `concept-to-code/SKILL.md` is the fix
+   site for #248, #228, #237, #227, #238, #242, #247, #244, #249 and #233. Only #246, #240, #232,
+   #250 and #258 are outside it. So "one PR per issue" is **ten serial PRs on one file plus five
+   independent ones**, not fifteen parallel ones. Wave E was written last and is the only genuinely
+   conflict-free set — **it moves first**, so that five issues close while the serial queue drains.
+2. **Rewriting an abort-capable block is no longer optional work.** ADR-0083's `F3` fails CI on any
+   abort-capable fence with no declaration, and `F4` on any declared contract no test runs. A1 took
+   the corpus from 12 declared contracts to 13. Every remaining wave that touches a bash block that
+   can stop a run now owes a `fence-contract:` marker **and** an execution — that is enforcement,
+   not a suggestion, and it should be costed into each PR rather than discovered at the CI run.
+3. **The path/symlink class was measured and is closed. No issue.** A1's first draft compared a
+   git-resolved path against a caller-carried one and every artifact misclassified. Swept the rest:
+   `stop-gate.sh` and `triage-state.sh` carry explicit `/var → /private/var` comments,
+   `write-scope-enforce.sh` normalises, and `agent-write-scope.sh` / `test-write-scope.sh` are
+   immune by construction (they match `*/docs/architecture/*`-style globs, not root prefixes).
+   The new code was the only wrong site. Recorded so nobody re-derives it.
+4. **A sweep for "which fences can tell did-not-run from found-nothing" produced #258 — and a
+   correction to its own first number.** The sweep reported *11 of 12 declared contracts have no
+   `exit 3`*. Right number, wrong premise (the ADR-0084 lesson, on my own measurement): an `exit 3`
+   **code** is only needed where a caller branches on it, and eleven of twelve already fail closed
+   by whichever idiom suits them. Classifying all eight `autopilot-build` checks found exactly one
+   that does not.
 
-##### Wave A — 8.1 + 8.2 (three PRs)
+**Carried forward from the first draft of this roadmap, still true: there are TWO derived guards,
+not one.** 8.1's closing note and the "What Phase 8 must not become" block below both propose a
+single check closing #239, #248 and #238 together. ADR-0086's criterion says otherwise — the
+populations differ (transition pairs against call sites; helper scripts against call sites), so two
+copies giving different answers would **not** be a defect. A2 builds the first; #238 builds the
+second. Deliberately not extracted.
 
-- [ ] **A1 — #239.** Exclude the manifest, and **only** the manifest, from 5.0.1's chain-artifact
-  intersection. `SPEC.md`, the ADR and the plan stay in, so the check the assertion exists to make
-  is unchanged; the manifest's provenance is the most known thing in the repository, since the chain
-  is its only writer. Non-negotiable addition: the fence becomes a declared `fence-contract:` under
-  ADR-0083 and is executed by a test against a real manifest fixture. The defect sat in an
-  undeclared fence, which is exactly the class §D3 exists to catch.
-- [ ] **A2 — #248, plus derived guard instance 8.** Step 5's entry — right after the pre-flight
-  passes, before dispatch-mode selection — performs `ready_for_implementation →
-  step_5_implementation`. Step 4.5's **green branch drops its own transition**, or Step 5 retries a
-  same-to-same pair that is not legal; the amber and red-reduce branches keep theirs, which go
-  elsewhere. Then the guard: every legal pair in `manifest-transition.sh` has at least one producer
-  in a `SKILL.md`, exemptions declared in the transition script, count guard on the
-  **denominator** (ADR-0085: zero matches is correct, zero candidates is a broken derivation, and
-  from outside they are identical).
-- [ ] **A3 — #228.** Archive and proceed; heal only what is recoverable. A root `SPEC.md` whose
+##### The sixteenth issue
+
+- [ ] **#258 — `autopilot-build` check 6 reads `test_cmd_placeholder` with a bare `m.get()` and
+  fails OPEN.** `2>/dev/null` turns an unparseable manifest, or a missing PyYAML, into an empty
+  string that is not `"True"`, so the unattended pre-flight proceeds. Reproduced both ways. It is
+  the exact pattern ADR-0076 §THE RULE forbids, four lines above check 7 which ADR-0075 fixed for
+  the same reason — and a **singleton**, like #218 in the same file: five checks read state, four
+  fail closed by four correct idioms, one invented a fifth with the direction reversed.
+
+##### Wave E — the conflict-free set (five PRs, no ordering, **now first**)
+
+Nothing here touches `concept-to-code/SKILL.md`, so these can land in any order, at any time, and
+alongside the serial queue below.
+
+- [ ] **#258.** Replace the one-liner with `manifest-field-state.sh` (check 7 next door already
+  resolves and calls it, so the dependency and its fail-closed-on-missing-helper handling exist in
+  this file). Value domain stays the caller's; `ABSENT` needs a stated decision, since a manifest
+  predating the placeholder mechanism cannot be carrying one. Both directions executed: a valid
+  `false` proceeds, an unparseable manifest aborts. The second is what fails today.
+- [ ] **#246.** Extend the grammar to accept per-file ceilings, the form architects actually write,
+  and add a distinct `MALFORMED` token for anything that still does not parse. ADR-0072's rule: **a
+  form close enough to be partially read is worse than one rejected outright.**
+- [ ] **#240.** Correct `agent_fallback` → `agent_batch` in three places. The 17 historical
+  manifests are **not** rewritten (ADR-0034/ADR-0078 precedent).
+- [ ] **#232.** Drop bare `macos|mac os` from the trigger set, keep `swiftui|appkit|mac app|menu
+  bar` — all UI-target declarations, where "macOS" alone names the host. One narrowing kills both
+  false positives, including the skill name `macos-ux` that every meta-SPEC here cites.
+- [ ] **#250.** `triage-state.sh commit` appends the glob `.claude/.triage-fix-last-*.json`, skips
+  when a line already covers the file, plus a one-time sweep of the dead entry.
+
+##### Wave A — the chain cannot complete a run (two PRs, serial)
+
+- [x] **A1 — #239.** Shipped, PR #257, ADR-0089. The manifest leaves the dirty set and only the
+  manifest; the exemption is bounded by `manifest-validate.sh`; 5.0.1's classification stopped being
+  prose and became a declared, executed fence. **Its own lesson: the block was not merely
+  unexecuted, it was UNEXECUTABLE**, which is what kept it outside the population ADR-0083 guards.
+- [ ] **A2 — #248, plus derived-guard instance 8.** Now genuinely reachable for the first time —
+  until A1, nothing got past 5.0.1 to discover Step 5 could not leave. Step 5's entry performs
+  `ready_for_implementation → step_5_implementation`, immediately after the pre-flight A1 just made
+  passable. Step 4.5's **green branch drops its own transition**, or Step 5 retries a same-to-same
+  pair that is not legal; the amber and red-reduce branches keep theirs, which go elsewhere. Then
+  the guard: every legal pair in `manifest-transition.sh` has at least one producer in a `SKILL.md`,
+  exemptions declared in the transition script, count guard on the **denominator** (ADR-0085).
+  Lands in the block A1 just rewrote, so it should follow immediately rather than after a queue.
+
+##### Wave B — the chain can destroy work (one PR)
+
+- [ ] **#228.** Archive and proceed; heal only what is recoverable. A root `SPEC.md` whose
   `**Topic slug:**` names another topic is copied to `docs/specs/<its-own-slug>.spec.md` and the
   chain proceeds; if that file is dirty or uncommitted, halt with the exact command. Correct Step
   1's `mode=greenfield` comment, which reads "SPEC.md does not exist" when two different states
   reach that branch. One-time cleanup: archive #176's SPEC, the only unarchived one of the 35.
 
-##### Wave B — 8.3 (three PRs)
+##### Wave C — what a gate shows, and what it records (three PRs, serial)
 
-- [ ] **B1 — #237.** Four cells, four options. `AskUserQuestion` accepts exactly four:
+- [ ] **#237.** Four cells, four options. `AskUserQuestion` accepts exactly four:
   attended-this-session, unattended-this-session, fresh-session, abort. The missing cell is added
-  rather than documented as excluded, because it is the one an operator actually wants: context
-  preserved without forfeiting five downstream gates.
-- [ ] **B2 — #227.** The auto-detect line becomes explicitly advisory (`Auto-detect suggests:`), the
+  rather than documented as excluded.
+- [ ] **#227.** The auto-detect line becomes explicitly advisory (`Auto-detect suggests:`), the
   orchestrator's `(Recommended)` marker is the single recommendation, and a divergence is **stated
-  in the gate text** with its reason rather than silently resolved. Separately, rename
-  `file_estimate`: it counts files in the repository, not in the feature, so past a few hundred
-  files the vote degenerates into "keyword_vote, or hybrid on a tie".
-- [ ] **B3 — #238.** Depends on B1: the slot's shape follows what Gate 4 becomes.
-  `manifest-init.sh` gains `- gate: 4`; `concept-to-code/SKILL.md` calls `manifest-set-gate.sh` in
-  each gate's post-click branch. Invariant 9 **does not** read status, deliberately — a chain
-  legitimately sits at `pending` mid-run, and any status invariant would have to be conditional on
-  `current_step`, which is ADR-0076's rule and the same trap. Second derived guard here: every
-  helper declared in §3 has at least one instructed call site.
+  in the gate text**. Separately, rename `file_estimate`: it counts files in the repository, not in
+  the feature.
+- [ ] **#238.** Depends on #237: the slot's shape follows what Gate 4 becomes. `manifest-init.sh`
+  gains `- gate: 4`; each gate's post-click branch calls `manifest-set-gate.sh`. Invariant 9 **does
+  not** read status — any status invariant would have to be conditional on `current_step`, which is
+  ADR-0076's rule and the same trap.
 
-##### Wave C — 8.4, with #246 pulled forward (three PRs)
+##### Wave D — batching (two PRs, serial)
 
-- [ ] **C1 — #246.** Extend the grammar to accept per-file ceilings, the form architects actually
-  write, and add a distinct `MALFORMED` token for anything that still does not parse. The rule is
-  ADR-0072's: **a form close enough to be partially read is worse than one rejected outright.**
-  Today it yields a false SCOPE and a budget wrong by two orders of magnitude.
-- [ ] **C2 — #242.** `plan-tasks.sh --count-openers` exposing `is_task_opener()`; the `≥6` threshold
-  and the batch ranges consume it, the `≥1` guard keeps `--count`. State at the call site which
-  count answers which question, in the style of the CHECKER/REPORTER comment two blocks above. The
-  defect is one number silently serving two questions: 38 against 7 on the shakedown's own plan.
-- [ ] **C3 — #247.** Minimum first, and it is documentation: ADR-0088 §D5 states that rule 1
-  outranks rule 2 when they conflict, and why — evidence quality beats checkpoint tidiness. Then the
-  cheapest mechanism: the checkpoint compares the failing set against the **previous checkpoint's**
-  failing set and reports only new failures. No plan syntax, and it survives a plan that declares
-  nothing. `autopilot-build`'s circuit breaker consumes the same delta.
+- [ ] **#242.** `plan-tasks.sh --count-openers` exposing `is_task_opener()`; the `≥6` threshold and
+  the batch ranges consume it, the `≥1` guard keeps `--count`. State at the call site which count
+  answers which question. The defect is one number silently serving two questions: 38 against 7.
+- [ ] **#247.** Minimum first, and it is documentation: ADR-0088 §D5 states that rule 1 outranks
+  rule 2 when they conflict, and why. Then the cheapest mechanism: the checkpoint compares the
+  failing set against the **previous checkpoint's** and reports only new failures. No plan syntax —
+  and #246 has already landed by now, so its half-parsed-declaration warning is evidence rather
+  than a forecast.
 
-##### Wave D — 8.5 (two PRs)
+##### Wave F — recovery and history (two PRs, serial)
 
-- [ ] **D1 — #244.** Step 5.0.3 gains a resume-time validity check (`git merge-base --is-ancestor`)
-  that **reports** rather than halts: the run is not damaged, only its recovery path is. The
-  merge-not-rebase rule is stated at 5.0.3 and in the paused-run remediation text, where today it
-  exists nowhere. ADR-0050 §D3 gains a clause on "orphaned, not moved" — it currently reads as
-  covering that case and does not.
-- [ ] **D2 — #249.** Step 7 soft-resets to `recovery_baseline_sha` before invoking `commit`, so the
-  whole feature is staged as one diff and the skill composes a real message. The snapshots exist so
-  forking works during Step 5; once Step 5 is over their purpose is spent. The reset refuses to run
-  when the baseline is not an ancestor, which is D1's check.
+- [ ] **#244.** Step 5.0.3 gains a resume-time validity check (`git merge-base --is-ancestor`) that
+  **reports** rather than halts. The merge-not-rebase rule is stated at 5.0.3 and in the paused-run
+  remediation, where today it exists nowhere. ADR-0050 §D3 gains a clause on "orphaned, not moved".
+  **Evidence-driven addition:** 5.0.3 is still prose wrapped around a `sed -i.bak`, the same shape
+  A1 found at 5.0.1 — declare and execute it in the same pass rather than leaving the neighbour of
+  a fixed block unfixed.
+- [ ] **#249.** Step 7 soft-resets to `recovery_baseline_sha` before invoking `commit`. The reset
+  refuses to run when the baseline is not an ancestor, which is #244's check.
 
-##### Wave E — 8.6 remainder (four PRs, no ordering)
+##### Wave G — the last c2c gate (one PR)
 
-- [ ] **#240.** Correct `agent_fallback` → `agent_batch` in three places (`CLAUDE.md`, ADR-0016,
-  `manifest-field-state.sh`). The 17 historical manifests are **not** rewritten (ADR-0034/ADR-0078
-  precedent). The wrong string sits in the header of the helper ADR-0076 introduced so a checker
-  would read a field correctly, and it is that helper's only worked example of a value domain.
-- [ ] **#232.** Drop bare `macos|mac os` from the trigger set and keep `swiftui|appkit|mac app|menu
-  bar`, all of which are UI-target declarations while "macOS" alone names the host. One narrowing
-  kills both false positives, including the one that matters — the skill name `macos-ux`, which
-  every meta-SPEC in this repository cites. The two real lines become fixtures.
-- [ ] **#233.** The attended Gate 2b gets the same read-only probe the autopilot branch already
-  documents. On `TRUSTED`, one line and proceed; on a changed SHA the gate stands. The invariant is
-  untouched: this reads trust that exists, it never grants any.
-- [ ] **#250.** `triage-state.sh commit` appends the glob `.claude/.triage-fix-last-*.json` and
-  skips when a line already covers the file, plus a one-time sweep of the existing dead entry.
+- [ ] **#233.** The attended Gate 2b gets the same read-only probe the autopilot branch documents.
+  On `TRUSTED`, one line and proceed; on a changed SHA the gate stands. The invariant is untouched:
+  this reads trust that exists, it never grants any. Its probe block is abort-capable, so point 2
+  above applies: it needs a `fence-contract:` and an execution.
 
-##### Wave F — verification
+##### Wave H — verification
 
 - [ ] **A second end-to-end shakedown.** Phase 8's product is verified by nothing else.
 - [ ] **Half of every Step 5 fix stays unexercised until `hook_verified` is true.** No run has ever
   taken the Workflow dispatch path, so each fix above lands on one of two paths with the other
-  unmeasured. The smoke test that would feed ADR-0080's still-unfed pre-registered condition is the
-  same one that makes that half verifiable. Naming it here so a green second shakedown is not read
-  as covering both paths.
+  unmeasured. A green second shakedown must not be read as covering both.
+
+##### Rules earned in Wave A1, carried forward
+
+- **A plant that does not fire is evidence about the assertion, not a formality to get past.** Two
+  of nine did not fire. One targeted dead code; the other targeted the untested half of a
+  normalisation, and that is what produced ADR-0089's note distinguishing the evidenced half from
+  the defensive one. Both are recorded rather than quietly re-planted.
+- **Prose is not merely unexecuted, it is unexecutable** — and that is what keeps a block outside
+  every guard built for the executable population. When a fix rewrites a rule, ask whether the rule
+  can be run at all before asking whether it is right.
 
 #### What Phase 8 must not become
 
 - **A second inspection phase.** Sixteen of these seventeen were found by running the chain, not by
   reading it. Each fix needs the same treatment: an assertion seen RED, and where the fix is prose,
   an executed premise rather than a claim.
-- **A phase that re-derives the same guard six times.** #239, #248 and #238 are one class
-  (ADR-0086's criterion applies: would two copies giving different answers be a defect?). A derived
-  check over `manifest-transition.sh`'s legal pairs against their call sites would close it once —
-  and would be instance eight of the derived-guard pattern.
+- **A phase that re-derives the same guard six times.** #239, #248 and #238 share a shape — a
+  consumer and a producer specified in different places, with nothing checking the producer exists.
+  **Superseded in part by §8.7:** applying ADR-0086's criterion to them gives **two** guards, not
+  one, because the populations differ (transition pairs against call sites for #248; helper scripts
+  against call sites for #238). They would be instances eight and nine of the derived-guard pattern.
+  #239 needed neither — its producer existed, and what was missing was that the consumer could be
+  satisfied at all.
 - **A run of its own without a second shakedown.** Phase 8's own product is only verified by another
   end-to-end run, which is also what feeds ADR-0080's still-unfed condition.
