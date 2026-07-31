@@ -337,10 +337,13 @@ RH1_N=$(grep -c '^#### Gate 4.0 — Commit the planning artifacts' "$CC" 2>/dev/
   && ok "RH1: Gate 4.0 is defined exactly once in concept-to-code/SKILL.md" \
   || bad "RH1: expected exactly one Gate 4.0 definition, found $RH1_N"
 
+# Floor raised 3 -> 4 by issue #237 (ADR-0097), which added the attended in-session branch. The
+# floor must track the number of proceeding paths: left at 3 it would report "all three" while four
+# exist, and would tolerate one of them silently losing its reference.
 RH2_N=$(grep -c 'Run \*\*Gate 4.0\*\*' "$CC" 2>/dev/null || true)
-[ "$RH2_N" -ge 3 ] \
-  && ok "RH2: all three proceeding paths reference Gate 4.0 ($RH2_N references)" \
-  || bad "RH2: only $RH2_N path(s) reference Gate 4.0 — autopilot bypass, 'Implement now' and 'Confirmed' all need it"
+[ "$RH2_N" -ge 4 ] \
+  && ok "RH2: all four proceeding paths reference Gate 4.0 ($RH2_N references)" \
+  || bad "RH2: only $RH2_N path(s) reference Gate 4.0 — autopilot bypass, both 'Implement now' branches and 'Confirmed' all need it"
 
 # The abort path must NOT commit. Asserted as absence within the abort block, which is the one
 # place a well-meaning edit would add it "for consistency".

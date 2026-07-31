@@ -3094,22 +3094,48 @@ first (with `--autopilot --no-pr`). Emit: "Gate 4: autopilot — session boundar
 to Step 5 ✓". Transition `step_4_session_boundary → ready_for_implementation`. Immediately proceed to
 Step 5 — do NOT stop, do NOT emit the /clear instructions block.]**
 
+**Two independent choices, four cells, and until issue #237 this gate offered two of them (ADR-0097).**
+WHERE Steps 5-7 run — this session or a fresh one — and HOW they run — attended, with Gates 5,
+5.05, 5.06, 5.1 and 5.6 rendering and asking, or unattended with `autopilot = true` driving each to
+its safe default. They are orthogonal, and collapsing them onto the diagonal meant staying
+in-session was choosing to forfeit every downstream gate, with nothing saying so.
+
+**What a fresh session actually buys is a clean ORCHESTRATOR context**, not a cleaner coder one. A
+dispatched coder is an isolated subagent running in its own worktree (ADR-0068), so it never
+carried this session's conversation either way. The orchestrator's headroom is real and affects the
+briefs it writes — it is simply not the thing the old text named.
+
 Use `AskUserQuestion` (only when `manifest.autopilot = false`):
 ```
 question: "Gate 4 — Implementation (Human action required)\n\n
-  Steps 1–3 complete, manifest at ready_for_implementation. Choose how to run Steps 5-7.\n\n
-  Autopilot now: implement in this session, local commit, no push or PR.\n
-  Fresh session: stop here, /clear or open a new session, then resume for the cleanest coder context.\n\n
+  Steps 1–3 complete, manifest at ready_for_implementation.\n\n
+  Two independent choices: WHERE Steps 5-7 run (this session or a fresh one) and HOW (attended,
+  every downstream gate asks — or unattended, each takes its safe default).\n\n
   Only you can choose."
 header: "Gate 4 · Implement"
 options:
+  - label: "Implement now (attended, this session) (Recommended)"
+    description: "Runs Steps 5-7 here with Gates 5, 5.05, 5.06, 5.1 and 5.6 active. Gives up nothing: the design context stays, every gate still asks. Costs you those clicks. Coders dispatch as isolated subagents in their own worktrees, so staying here does not pollute them."
   - label: "Implement now (autopilot, this session)"
-    description: "Runs Steps 5-7 unattended: implement, local commit via commit --autopilot, no push, no PR. Review the diff and push after. Same-session context, mitigated since coders dispatch as isolated subagents."
+    description: "Same place, unattended: every downstream gate takes its safe default and nobody reviews the review. Local commit via commit --autopilot, no push, no PR. Choose when you will not be watching."
   - label: "Confirmed — I will /clear and resume"
-    description: "The chain stops here. Resume with /skill concept-to-code resume in the new session for the cleanest coder context."
+    description: "The chain stops here. Resume with /skill concept-to-code resume in a new session, which buys a clean orchestrator context — more headroom, briefs written without this session behind them. It does not change coder isolation. Attended by default; set autopilot in the manifest first if you want it unattended."
   - label: "Abort chain"
     description: "Terminate the chain. The manifest stays on disk; you can resume later."
 ```
+
+The recommendation is the attended in-session option because it is the only one that forfeits
+nothing — it keeps the design context and keeps every gate. The other three each trade something
+away, which is a fine trade to make deliberately and a poor one to make by default.
+
+**After the user clicks "Implement now (attended, this session)":**
+0. Run **Gate 4.0** — attended form.
+1. **Do NOT set `autopilot`.** It stays `false`, which is the entire difference between this branch
+   and the one below, and it is one line away from being the same branch. Every downstream gate (5,
+   5.05, 5.06, 5.1, 5.6) renders and asks.
+2. Emit: "Gate 4: implement now — attended, this session ✓".
+3. Transition `step_4_session_boundary → ready_for_implementation`.
+4. Proceed directly to Step 5 in this session. Do NOT emit the `/clear` block. Do NOT stop.
 
 **After the user clicks "Implement now (autopilot, this session)":**
 0. Run **Gate 4.0** — attended form (the flag below is not set yet, and the human is present).
