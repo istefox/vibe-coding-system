@@ -140,8 +140,39 @@ tcf="$project_root/.claude/test-cmd"
 test -f "$tcf" || { echo "✗ test-cmd: .claude/test-cmd not found."; exit 1; }
 content=$(cat "$tcf")
 [ "$content" = "NONE" ] && { echo "✗ test-cmd: value is NONE. Approve a real test command interactively first."; exit 1; }
-placeholder=$(python3 -c "import yaml; m=yaml.safe_load(open('$manifest')); print(m.get('test_cmd_placeholder', False))" 2>/dev/null)
-[ "$placeholder" = "True" ] && { echo "✗ test-cmd: test_cmd_placeholder=true. Run Gate 2b interactively to register the real command."; exit 1; }
+# Field state via the shared helper (issue #195/ADR-0076; this call site is issue #258). The
+# two-tier resolution below is a DELIBERATE second copy of check 7's. ADR-0086's criterion would
+# call it extractable — two copies that could disagree are a defect, and these must agree — but a
+# fence that borrowed a variable bound in an EARLIER fence would stop being independently
+# executable, which is the property ADR-0083 F4/F7 rest on. `fence-contract-coverage.test.sh` E7f
+# asserts the two resolution paths stay identical instead of extracting them.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/manifest-field-state.sh" ]; then
+  _mfs="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/manifest-field-state.sh"
+elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/manifest-field-state.sh" ]; then
+  _mfs="$HOME/.claude/skills/concept-to-code/scripts/manifest-field-state.sh"
+else
+  echo "✗ test-cmd: manifest-field-state.sh not found in either location. Run: bash <repo>/staging/sync-to-claude.sh --apply"; exit 1
+fi
+tcp=$(bash "$_mfs" "$manifest" test_cmd_placeholder 2>/dev/null) || tcp="UNREADABLE"
+# The line this replaces was `placeholder=$(python3 -c "… m.get('test_cmd_placeholder', False)"
+# 2>/dev/null)` tested against "True". An unparseable manifest, or a missing python3/PyYAML,
+# produced an EMPTY string — which is not "True" — so this UNATTENDED pre-flight PASSED (#258).
+# Assert the valid values; never test for one invalid one (ADR-0075 §D4).
+#
+# ABSENT PROCEEDS HERE, which is the OPPOSITE of check 7's rule for hook_verified four lines below,
+# and the asymmetry is deliberate rather than an oversight: this flag is CORROBORATING, not
+# primary. The authoritative signal is the file itself and it is already checked two lines above
+# (`content = NONE`), while a real-looking command that was never approved is caught by the TOFU
+# check below. `hook_verified` has no such fallback — nothing else records the dispatch mode —
+# which is why its absence must abort. Measured: 40 of 41 corpus manifests carry the field, the one
+# ABSENT is `completed` and predates it. Do not "reconcile" the two.
+case "$tcp" in
+  PRESENT\|False) : ;;
+  PRESENT\|True)  echo "✗ test-cmd: test_cmd_placeholder=true. Run Gate 2b interactively to register the real command."; exit 1 ;;
+  ABSENT\|*)      echo "· test-cmd: test_cmd_placeholder absent (current_step=${tcp#ABSENT|}); this manifest predates the field. Proceeding — the NONE check above and the TOFU check below both cover it." ;;
+  UNREADABLE|"")  echo "✗ test-cmd: the manifest could not be read, or the check did not run (python3/PyYAML). That is not the same as a bad value; fix the file or the interpreter and re-run."; exit 1 ;;
+  *)              echo "✗ test-cmd: test_cmd_placeholder is \"${tcp#PRESENT|}\" — must be true or false. The manifest is corrupted or was hand-edited; fix or re-init."; exit 1 ;;
+esac
 # TOFU trust check
 hash=$(shasum -a 256 "$tcf" | awk '{print $1}')
 root_n=$(cd "$project_root" && pwd -P | tr '[:upper:]' '[:lower:]')
