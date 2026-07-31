@@ -232,22 +232,23 @@ fi
 
 # E1 (static, updated by issue #111 / ADR-0057, which legitimately added one new transition pair
 # — Step 4.5's amber / "red -> reduce scope" route. Same reconciliation this section itself
-# exists to enforce, applied again: 48 -> 49, 28 -> 29 standard).
-if grep -qF 'Legal transition pairs (49 total — 29 standard + 6 express + 14 hybrid, including Gate 0d routing, Step 4.5 tracer-bullet routing, and direct-close shortcuts):' "$SKILL_MD"; then
-  ok "E1: SKILL.md pair-count header states 49 total (29+6+14)"
+# exists to enforce, applied again: 48 -> 49, 28 -> 29 standard. Then 49 -> 45, 29 -> 25 by
+# issue #265 / ADR-0105, which deleted four unreachable gate_5_review_decision pairs).
+if grep -qF 'Legal transition pairs (45 total — 25 standard + 6 express + 14 hybrid, including Gate 0d routing, Step 4.5 tracer-bullet routing, and direct-close shortcuts).' "$SKILL_MD"; then
+  ok "E1: SKILL.md pair-count header states 45 total (25+6+14)"
 else
-  bad "E1: SKILL.md pair-count header does not state 49 total (29+6+14)"
+  bad "E1: SKILL.md pair-count header does not state 45 total (25+6+14)"
 fi
 
 # E2 (static, updated by issue #111 / ADR-0057, same reconciliation as E1).
-if grep -qF 'performs legal state transitions atomically (49 pairs).' "$SKILL_MD"; then
-  ok "E2: SKILL.md helper description states (49 pairs)"
+if grep -qF 'performs legal state transitions atomically (45 pairs).' "$SKILL_MD"; then
+  ok "E2: SKILL.md helper description states (45 pairs)"
 else
   bad "E2: SKILL.md helper description does not state (49 pairs)"
 fi
 
 # E3 (static, updated by issue #111 / ADR-0057, same reconciliation as E1).
-if grep -qF '# Build legal transition pairs into temp file (spec §3.3, 49 transitions)' "$TRN"; then
+if grep -qF '# Build legal transition pairs into temp file (spec §3.3, 45 transitions)' "$TRN"; then
   ok "E3: manifest-transition.sh comment states 49 transitions"
 else
   bad "E3: manifest-transition.sh comment does not state 49 transitions"
@@ -279,13 +280,14 @@ else
 fi
 
 # E7 (dynamic, mechanical proof): live recount of manifest-transition.sh's actual PAIRS block --
-# a permanent drift-detector for the script itself. Updated 48 -> 49 by issue #111 / ADR-0057,
-# which legitimately added one new pair (Step 4.5's amber / "red -> reduce scope" route).
+# a permanent drift-detector for the script itself. 48 -> 49 by issue #111 / ADR-0057 (Step 4.5's
+# amber route), 49 -> 45 by issue #265 / ADR-0105 (four unreachable gate_5_review_decision pairs
+# deleted). An exact count on purpose: this is the one assertion that recounts rather than reads.
 actual_pairs="$(awk '/PAIRS="\$\(mktemp\)"/,/if ! grep -Fxq/' "$TRN" | grep -Ec '^ *echo "[a-z_0-9]+,[a-z_0-9]+" >')"
-if [ "$actual_pairs" -eq 49 ]; then
-  ok "E7: manifest-transition.sh's actual PAIRS block has exactly 49 pairs (live recount)"
+if [ "$actual_pairs" -eq 45 ]; then
+  ok "E7: manifest-transition.sh's actual PAIRS block has exactly 45 pairs (live recount)"
 else
-  bad "E7: manifest-transition.sh's actual PAIRS block has $actual_pairs pairs, expected 49"
+  bad "E7: manifest-transition.sh's actual PAIRS block has $actual_pairs pairs, expected 45"
 fi
 
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"

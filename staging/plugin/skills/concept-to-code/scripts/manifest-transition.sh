@@ -51,13 +51,15 @@ fi
 # The guard also runs in reverse: a declared target that acquires a producer fails as a stale
 # waiver, because a stale waiver reads exactly like a clean bill of health.
 #
-# transition-producer-exempt: gate_5_review_decision — nothing enters this state; Step 5 transitions to step_6_review and presents Gate 5 from there, so its four pairs are unreachable. Tracked as issue #265, which must decide whether the gate moves before the state or the state is deleted. Do NOT read this line as audited and fine.
+# There are none. `gate_5_review_decision` was the only entry and issue #265 (ADR-0105) deleted the
+# state rather than giving it a producer: Gate 5 is an inline sub-gate, like Gate 2b, Gate 4.5 and
+# Gate 5.05/5.06, and none of those has a current_step of its own.
 
 # Allow any state → failed or → aborted (unconditionally)
 if [ "$new_step" = "failed" ] || [ "$new_step" = "aborted" ]; then
   : # always legal
 else
-  # Build legal transition pairs into temp file (spec §3.3, 49 transitions)
+  # Build legal transition pairs into temp file (spec §3.3, 45 transitions)
   PAIRS="$(mktemp)"
   echo "step_0_init,step_1_interview" > "$PAIRS"
   echo "step_0_init,gate_0d_scaffolding" >> "$PAIRS"
@@ -80,12 +82,8 @@ else
   echo "step_4_session_boundary,ready_for_implementation" >> "$PAIRS"
   echo "ready_for_implementation,step_5_implementation" >> "$PAIRS"
   echo "step_5_implementation,step_6_review" >> "$PAIRS"
-  echo "step_6_review,gate_5_review_decision" >> "$PAIRS"
   echo "step_6_review,step_7_commit" >> "$PAIRS"
-  echo "gate_5_review_decision,step_7_commit" >> "$PAIRS"
-  echo "gate_5_review_decision,completed" >> "$PAIRS"
   echo "step_7_commit,completed" >> "$PAIRS"
-  echo "step_5_implementation,gate_5_review_decision" >> "$PAIRS"
   echo "step_6_review,completed" >> "$PAIRS"
   # Tracer-bullet probe, Step 4.5 (ADR-0057). Inline sub-gate at ready_for_implementation — same
   # shape as Gate 2b (TOFU) and Gate 5.05/5.06, which also have no dedicated current_step state.
