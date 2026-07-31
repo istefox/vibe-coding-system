@@ -632,7 +632,7 @@ earlier). Mitigated by the ordering **inside** the phase, not by splitting it.
   **Shipped, PR #257** (ADR-0089): the manifest leaves the dirty set and only the manifest, bounded
   by `manifest-validate.sh`; 5.0.1's classification stopped being prose and became a declared,
   executed fence.
-- [ ] **#248 — `step_5_implementation` has no producer on the default path.** Every occurrence of the
+- [x] **#248 — `step_5_implementation` has no producer on the default path.** Every occurrence of the
   transition lives inside Step 4.5's tracer-bullet block, which is off by default, so Step 5 cannot
   reach Step 6. Same class as #239 and the same stretch of the chain: one pass over Gate 4 → Step 6.
 - [x] **#234 — Gate 4.0 cannot stage untracked artifacts.** Upstream of #239: without it Gate 4.0
@@ -647,32 +647,32 @@ earlier). Mitigated by the ordering **inside** the phase, not by splitting it.
   (ADR-0068 §D11): a merge-back escape check plus a WORKING ROOT clause at all four dispatch sites.
   A hook was measured and rejected — the observed escape came through `mkdir`/`cp`, which carry no
   `file_path` for a `PreToolUse` matcher to read.
-- [ ] **#228 — Step 1 overwrites a root `SPEC.md` belonging to another topic.** `gate0-detect.sh`
+- [x] **#228 — Step 1 overwrites a root `SPEC.md` belonging to another topic.** `gate0-detect.sh`
   already reports `spec_topic_match=false` and the detection protects nothing. Destroys a
   human-reviewed artifact.
 
 #### 8.3 — What a gate shows, and what it records
 
-- [ ] **#237 — Gate 4 conflates *where* with *how*.** Four cells, two offered, and no attended
+- [x] **#237 — Gate 4 conflates *where* with *how*.** Four cells, two offered, and no attended
   same-session path.
-- [ ] **#227 — Gate 0 shows two contradictory `Recommended` markers.** Same defect class as #237 in a
+- [x] **#227 — Gate 0 shows two contradictory `Recommended` markers.** Same defect class as #237 in a
   different gate; #227's own body says the two may want one answer. Design them together.
-- [ ] **#238 — the `hitl_gates` trail is written by nobody and has no slot for Gate 4.** Depends on
+- [x] **#238 — the `hitl_gates` trail is written by nobody and has no slot for Gate 4.** Depends on
   #237: the slot's shape follows what Gate 4 becomes.
 
 #### 8.4 — Batching
 
-- [ ] **#242 — the `>=6` threshold consumes a count ADR-0069 documents as not a task count.** 38
+- [x] **#242 — the `>=6` threshold consumes a count ADR-0069 documents as not a task count.** 38
   versus 7 on the shakedown's own plan.
-- [ ] **#247 — the two batch-boundary rules can conflict, and a checkpoint can be legitimately RED.**
+- [x] **#247 — the two batch-boundary rules can conflict, and a checkpoint can be legitimately RED.**
   A correction to ADR-0088 §D5, written during the run. If its fix introduces a plan-declared
   "expected red", it consumes the same parsing #242 needs — so pair them.
 
 #### 8.5 — Recovery and history
 
-- [ ] **#244 — `recovery_baseline_sha` is not rebase-safe**, and a paused chain all but forces a
+- [x] **#244 — `recovery_baseline_sha` is not rebase-safe**, and a paused chain all but forces a
   rebase. Do this first: it is #249's target.
-- [ ] **#249 — Step 7's commit describes nothing.** The merge-back already committed the feature as
+- [x] **#249 — Step 7's commit describes nothing.** The merge-back already committed the feature as
   `chore(step5): snapshot … worktree`. The cheapest fix is a soft-reset to the baseline, which is
   why #244 comes first.
 
@@ -680,15 +680,15 @@ earlier). Mitigated by the ordering **inside** the phase, not by splitting it.
 
 Independent of each other and of everything above; no ordering constraint.
 
-- [ ] **#246 — a per-file `Budget:` line is half-parsed** into a false SCOPE and a false BUDGET
+- [x] **#246 — a per-file `Budget:` line is half-parsed** into a false SCOPE and a false BUDGET
   instead of being treated as absent. Fourth instance of the near-miss class.
-- [ ] **#240 — `step5_mode` documents `agent_fallback`**, which nothing has ever written; 17
+- [x] **#240 — `step5_mode` documents `agent_fallback`**, which nothing has ever written; 17
   manifests carry `agent_batch`.
-- [ ] **#232 — `detect-macos.sh` fires on the skill name `macos-ux`** and on a Stack line naming the
+- [x] **#232 — `detect-macos.sh` fires on the skill name `macos-ux`** and on a Stack line naming the
   host platform, so every meta-SPEC in this repository trips Gate 1c.
-- [ ] **#233 — Gate 2b asks to authorise a test-cmd that is already SHA-pinned.** The autopilot
+- [x] **#233 — Gate 2b asks to authorise a test-cmd that is already SHA-pinned.** The autopilot
   branch has the read-only probe; the attended one does not.
-- [ ] **#250 — RTF gitignores its state file by branch name**, so `.gitignore` grows one dead line
+- [x] **#250 — RTF gitignores its state file by branch name**, so `.gitignore` grows one dead line
   per branch. One glob fixes it permanently.
 #### 8.7 — Execution roadmap
 
@@ -734,7 +734,7 @@ second. Deliberately not extracted.
 
 ##### The sixteenth issue
 
-- [ ] **#258 — `autopilot-build` check 6 reads `test_cmd_placeholder` with a bare `m.get()` and
+- [x] **#258 — `autopilot-build` check 6 reads `test_cmd_placeholder` with a bare `m.get()` and
   fails OPEN.** `2>/dev/null` turns an unparseable manifest, or a missing PyYAML, into an empty
   string that is not `"True"`, so the unattended pre-flight proceeds. Reproduced both ways. It is
   the exact pattern ADR-0076 §THE RULE forbids, four lines above check 7 which ADR-0075 fixed for
@@ -746,20 +746,20 @@ second. Deliberately not extracted.
 Nothing here touches `concept-to-code/SKILL.md`, so these can land in any order, at any time, and
 alongside the serial queue below.
 
-- [ ] **#258.** Replace the one-liner with `manifest-field-state.sh` (check 7 next door already
+- [x] **#258.** Replace the one-liner with `manifest-field-state.sh` (check 7 next door already
   resolves and calls it, so the dependency and its fail-closed-on-missing-helper handling exist in
   this file). Value domain stays the caller's; `ABSENT` needs a stated decision, since a manifest
   predating the placeholder mechanism cannot be carrying one. Both directions executed: a valid
   `false` proceeds, an unparseable manifest aborts. The second is what fails today.
-- [ ] **#246.** Extend the grammar to accept per-file ceilings, the form architects actually write,
+- [x] **#246.** Extend the grammar to accept per-file ceilings, the form architects actually write,
   and add a distinct `MALFORMED` token for anything that still does not parse. ADR-0072's rule: **a
   form close enough to be partially read is worse than one rejected outright.**
-- [ ] **#240.** Correct `agent_fallback` → `agent_batch` in three places. The 17 historical
+- [x] **#240.** Correct `agent_fallback` → `agent_batch` in three places. The 17 historical
   manifests are **not** rewritten (ADR-0034/ADR-0078 precedent).
-- [ ] **#232.** Drop bare `macos|mac os` from the trigger set, keep `swiftui|appkit|mac app|menu
+- [x] **#232.** Drop bare `macos|mac os` from the trigger set, keep `swiftui|appkit|mac app|menu
   bar` — all UI-target declarations, where "macOS" alone names the host. One narrowing kills both
   false positives, including the skill name `macos-ux` that every meta-SPEC here cites.
-- [ ] **#250.** `triage-state.sh commit` appends the glob `.claude/.triage-fix-last-*.json`, skips
+- [x] **#250.** `triage-state.sh commit` appends the glob `.claude/.triage-fix-last-*.json`, skips
   when a line already covers the file, plus a one-time sweep of the dead entry.
 
 ##### Wave A — the chain cannot complete a run (two PRs, serial)
@@ -768,7 +768,7 @@ alongside the serial queue below.
   manifest; the exemption is bounded by `manifest-validate.sh`; 5.0.1's classification stopped being
   prose and became a declared, executed fence. **Its own lesson: the block was not merely
   unexecuted, it was UNEXECUTABLE**, which is what kept it outside the population ADR-0083 guards.
-- [ ] **A2 — #248, plus derived-guard instance 8.** Now genuinely reachable for the first time —
+- [x] **A2 — #248, plus derived-guard instance 8.** Now genuinely reachable for the first time —
   until A1, nothing got past 5.0.1 to discover Step 5 could not leave. Step 5's entry performs
   `ready_for_implementation → step_5_implementation`, immediately after the pre-flight A1 just made
   passable. Step 4.5's **green branch drops its own transition**, or Step 5 retries a same-to-same
@@ -779,7 +779,7 @@ alongside the serial queue below.
 
 ##### Wave B — the chain can destroy work (one PR)
 
-- [ ] **#228.** Archive and proceed; heal only what is recoverable. A root `SPEC.md` whose
+- [x] **#228.** Archive and proceed; heal only what is recoverable. A root `SPEC.md` whose
   `**Topic slug:**` names another topic is copied to `docs/specs/<its-own-slug>.spec.md` and the
   chain proceeds; if that file is dirty or uncommitted, halt with the exact command. Correct Step
   1's `mode=greenfield` comment, which reads "SPEC.md does not exist" when two different states
@@ -787,24 +787,24 @@ alongside the serial queue below.
 
 ##### Wave C — what a gate shows, and what it records (three PRs, serial)
 
-- [ ] **#237.** Four cells, four options. `AskUserQuestion` accepts exactly four:
+- [x] **#237.** Four cells, four options. `AskUserQuestion` accepts exactly four:
   attended-this-session, unattended-this-session, fresh-session, abort. The missing cell is added
   rather than documented as excluded.
-- [ ] **#227.** The auto-detect line becomes explicitly advisory (`Auto-detect suggests:`), the
+- [x] **#227.** The auto-detect line becomes explicitly advisory (`Auto-detect suggests:`), the
   orchestrator's `(Recommended)` marker is the single recommendation, and a divergence is **stated
   in the gate text**. Separately, rename `file_estimate`: it counts files in the repository, not in
   the feature.
-- [ ] **#238.** Depends on #237: the slot's shape follows what Gate 4 becomes. `manifest-init.sh`
+- [x] **#238.** Depends on #237: the slot's shape follows what Gate 4 becomes. `manifest-init.sh`
   gains `- gate: 4`; each gate's post-click branch calls `manifest-set-gate.sh`. Invariant 9 **does
   not** read status — any status invariant would have to be conditional on `current_step`, which is
   ADR-0076's rule and the same trap.
 
 ##### Wave D — batching (two PRs, serial)
 
-- [ ] **#242.** `plan-tasks.sh --count-openers` exposing `is_task_opener()`; the `≥6` threshold and
+- [x] **#242.** `plan-tasks.sh --count-openers` exposing `is_task_opener()`; the `≥6` threshold and
   the batch ranges consume it, the `≥1` guard keeps `--count`. State at the call site which count
   answers which question. The defect is one number silently serving two questions: 38 against 7.
-- [ ] **#247.** Minimum first, and it is documentation: ADR-0088 §D5 states that rule 1 outranks
+- [x] **#247.** Minimum first, and it is documentation: ADR-0088 §D5 states that rule 1 outranks
   rule 2 when they conflict, and why. Then the cheapest mechanism: the checkpoint compares the
   failing set against the **previous checkpoint's** and reports only new failures. No plan syntax —
   and #246 has already landed by now, so its half-parsed-declaration warning is evidence rather
@@ -812,26 +812,26 @@ alongside the serial queue below.
 
 ##### Wave F — recovery and history (two PRs, serial)
 
-- [ ] **#244.** Step 5.0.3 gains a resume-time validity check (`git merge-base --is-ancestor`) that
+- [x] **#244.** Step 5.0.3 gains a resume-time validity check (`git merge-base --is-ancestor`) that
   **reports** rather than halts. The merge-not-rebase rule is stated at 5.0.3 and in the paused-run
   remediation, where today it exists nowhere. ADR-0050 §D3 gains a clause on "orphaned, not moved".
   **Evidence-driven addition:** 5.0.3 is still prose wrapped around a `sed -i.bak`, the same shape
   A1 found at 5.0.1 — declare and execute it in the same pass rather than leaving the neighbour of
   a fixed block unfixed.
-- [ ] **#249.** Step 7 soft-resets to `recovery_baseline_sha` before invoking `commit`. The reset
+- [x] **#249.** Step 7 soft-resets to `recovery_baseline_sha` before invoking `commit`. The reset
   refuses to run when the baseline is not an ancestor, which is #244's check.
 
 ##### Wave G — the last c2c gate (one PR)
 
-- [ ] **#233.** The attended Gate 2b gets the same read-only probe the autopilot branch documents.
+- [x] **#233.** The attended Gate 2b gets the same read-only probe the autopilot branch documents.
   On `TRUSTED`, one line and proceed; on a changed SHA the gate stands. The invariant is untouched:
   this reads trust that exists, it never grants any. Its probe block is abort-capable, so point 2
   above applies: it needs a `fence-contract:` and an execution.
 
 ##### Wave H — verification
 
-- [ ] **A second end-to-end shakedown.** Phase 8's product is verified by nothing else.
-- [ ] **Half of every Step 5 fix stays unexercised until `hook_verified` is true.** No run has ever
+- [~] **A second end-to-end shakedown.** Phase 8's product is verified by nothing else.
+- [~] **Half of every Step 5 fix stays unexercised until `hook_verified` is true.** No run has ever
   taken the Workflow dispatch path, so each fix above lands on one of two paths with the other
   unmeasured. A green second shakedown must not be read as covering both.
 
@@ -919,12 +919,12 @@ defect class that recurred five times while the others were being fixed.
 
 | item | source | state |
 |---|---|---|
-| 9.1 Executable plant registry | this phase | designed, not built |
+| 9.1 Executable plant registry | this phase | **done** — #284, ADR-0108, shipped at `83bad6a` |
 | 9.2 Fence-contract population | ADR-0096/0102/0103/0104 | **done** — #281, ADR-0107 |
-| 9.3 Expected-red mechanism | **#273**, deferred by ADR-0101 | open |
-| 9.4 Second end-to-end shakedown | §8.8 | blocked, see below |
-| 9.5 Instruction-not-enforcement cluster | ADR-0097 `G3b`, ADR-0098, ADR-0099, ADR-0103 | undecided |
-| 9.6 Count stated in 3 files, derived in 1 | ADR-0105 | disclosed |
+| 9.3 Expected-red mechanism | **#273**, deferred by ADR-0101 | open → Phase 10, wave 3 |
+| 9.4 Second end-to-end shakedown | §8.8 | blocked, see below — **not** a Phase 10 feature |
+| 9.5 Instruction-not-enforcement cluster | ADR-0097 `G3b`, ADR-0098, ADR-0099, ADR-0103 | open → Phase 10, wave 3 |
+| 9.6 Count stated in 3 files, derived in 1 | ADR-0105 | open → Phase 10, wave 1 |
 
 #### 9.1 — Executable plant registry, and what the measurement rules out
 
@@ -978,3 +978,105 @@ whether any deserve a mechanism, rather than re-disclosing each time.
   had counted, and the count found a fifth entry older than all four.
 - **A registry that only ever reports success.** The plant runner has to be proven against an
   assertion known to be weak, or it becomes the thing it exists to detect.
+
+---
+
+### Phase 10 — total review closure, executed unattended
+
+Phase 9 left one open GitHub issue. The repository's actual backlog was somewhere else: a sweep of
+all 111 ADRs found **191 genuinely-open residual items** — 68 SAFETY, 72 CORRECTNESS, 51 DOC —
+recorded deliberately under headings like *"Known consequences, recorded rather than fixed"*,
+*"disclosed, not fixed"*, *"instruction, not an enforcement"*. Fourteen more turned out to have been
+closed by a later ADR without the earlier one being updated. That backlog lives at the end of a
+hundred documents, which is exactly where it stays invisible — the same shape as §9's own finding
+about four ADRs disclosing a gap none of them had counted.
+
+This phase turns the actionable part into GitHub issues labelled `prep` and runs them unattended
+through `nightly-autopilot` → `project-conductor nightly` → `concept-to-code`, one feature per
+issue, each ending in a pushed branch and an open PR. **The remainder is closed by one decision ADR,
+not by pretending it will be fixed.**
+
+#### What is deliberately NOT a feature
+
+Named here so a green run is not read as covering it.
+
+- **§9.4, the second shakedown.** `hook_verified` is still `false`; no run has ever taken the
+  Workflow dispatch path. It is a run, not a feature, and a green Phase 10 exercises the Agent-batch
+  path only.
+- **Items whose own ADR argues the fix is worse than the residual.** The threat-model bypasses in
+  ADR-0045/0074/0079 are pinned as *expected-ALLOW* by their own tests: `subprocess.run(["git",
+  "push"])`, `lua -e "os.execute(…)"` and variable splicing defeat a command-position guard by
+  construction. Closing them means building a sandbox, which is a different system.
+- **The 51 DOC-class items** — stale counts, prose-vs-tree drift, cost notes. Wave 3's decision ADR
+  disposes of them in one place.
+- **The run's own machinery** — `project-conductor`, `nightly-autopilot`, `publish-feature.sh`,
+  `nightly-guard.sh`. Nothing in this roadmap edits what is executing it.
+
+#### Ordering, and why it is load-bearing
+
+**7 of 9 failure conditions halt the ENTIRE roadmap** — a weakening-scan finding, a RED suite, an
+RTF BLOCKER, a merge conflict or base-fork mismatch, a spec-coverage `MALFORMED`, a Step 1
+spec-archive `COLLISION`, a manifest that does not resolve. Only a thin issue body and an
+injection-shaped title skip one feature and continue. So the roadmap runs **low-risk first**: a
+night that halts has already produced PRs.
+
+- **Wave 1 — LOW.** Single file, mechanical, no live-guardrail behaviour change.
+- **Wave 2 — MED.** Shared scripts with multiple live callers, and the guard populations.
+- **Wave 3 — HIGH.** Detector precision (needs measurement before design) and the decisions.
+
+#### Two facts about the run, measured rather than assumed
+
+- **Branches stack.** `publish-feature.sh:73` cuts each branch from current HEAD and nothing returns
+  to `main`; `commit/SKILL.md:369` reuses the branch it is on. This is known behaviour, not a
+  defect — the 2026-07-10 run's own report states it in its merge instructions and 13 features
+  merged in order without incident. It is why waves are capped at ~12 with a morning merge between
+  them, and it composes badly with §8.8's finding that ten of Phase 8's fifteen fixes landed in
+  `concept-to-code/SKILL.md` alone.
+- **The run never waits for CI.** `publish-feature.sh:110` hardcodes `CI=pending` and Phase 2 does a
+  single `gh pr checks` pass after the whole roadmap. `main` requires three checks while pre-flight
+  check 8 verifies one. Morning verification is human, and no harness executes `SKILL.md` prose at
+  all.
+
+#### Features
+
+Generated from the `prep`-labelled issues by `roadmap-from-issues.sh`. One issue, one feature, in
+wave order.
+##### Wave 1 — LOW: single file, mechanical, no live-guardrail behaviour change
+
+- [ ] the sixth bare manifest-set-flag.sh mention was left when the other five were fixed  (issue #286)
+- [ ] RTF's gitignore glob and this repo's own entry differ by a dash  (issue #287)
+- [ ] the Express path says No worktree isolation and the Italian guide says the opposite  (issue #288)
+- [ ] the transition-pair count is stated in three files and derived in one  (issue #289)
+- [ ] one real plan shape is recognised by no task predicate  (issue #290)
+- [ ] a bold-wrapped requirement id is invisible to both the checker and the repairer  (issue #291)
+- [ ] the value-domain guard covers step5_mode only  (issue #292)
+- [ ] task_num extracts digits only so a lettered task collides with its sibling  (issue #293)
+- [ ] plan-tasks.sh has two modes with opposite failure directions and nothing stops a caller picking the wrong one  (issue #294)
+- [ ] MALFORMED is dropped silently by any caller filtering BUDGET or SCOPE  (issue #295)
+- [ ] a per-file budget ceiling is parsed and then summed so one file can exceed its own  (issue #296)
+- [ ] the dirty-classify fence reads porcelain v1 so a renamed artifact classifies as OTHER  (issue #297)
+
+##### Wave 2 — MED: shared scripts with multiple live callers, and the guard populations
+
+- [ ] the collapsed snapshot commits live in the reflog only and a git gc destroys them  (issue #298)
+- [ ] fence_is_abort_capable is lexical and four measured fences abort from outside it  (issue #299)
+- [ ] a producer is any line that mentions the target so a target only talked about looks produced  (issue #300)
+- [ ] the transcript-scan population stops at two roots  (issue #301)
+- [ ] the grant-coverage guard matches a bare Bash token so an unrestricted grant in another form passes  (issue #302)
+- [ ] the interpreter enumeration is a fixed list and the escapes are pinned nowhere  (issue #303)
+- [ ] the reason floor is duplicated in seven derived guards and nothing stops one drifting  (issue #304)
+- [ ] the plant registry cannot express an insertion  (issue #305)
+- [ ] the deployed-only registry's reasons are true today and checked by nothing  (issue #306)
+- [ ] hooks.json is outside PAIRS completeness by a deferred decision  (issue #307)
+- [ ] thirteen skill-private test runners exercise the deployed copy and are dark to CI  (issue #308)
+- [ ] settings.json is never synced and five guardrail hooks are wired by hand  (issue #309)
+- [ ] an undefined assertion helper is indistinguishable from a passing assertion  (issue #310)
+
+##### Wave 3 — HIGH: detector precision, and the decisions
+
+- [ ] the weakening scan is blind to an in-place assertion edit  (issue #311)
+- [ ] spec-coverage measures citation not implementation  (issue #312)
+- [ ] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)
+- [ ] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)
+- [ ] The Step 5 checkpoint has no mechanism to tell an expected red from a real one  (issue #273)
+- [ ] seventeen ADRs carry the same instruction-not-an-enforcement paragraph and the class is undecided  (issue #315)

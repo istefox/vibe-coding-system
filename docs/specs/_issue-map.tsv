@@ -32,3 +32,34 @@
 102-requirement-ids-in-spec-and-a-coverage-c	102	Requirement IDs in SPEC and a coverage check
 101-wire-the-anti-test-weakening-detector-in	101	Wire the anti-test-weakening detector into every unattended path
 100-secrets-and-dependency-gate-content-scan	100	Secrets and dependency gate: content scan, lockfile check, CI steps
+315-seventeen-adrs-carry-the-same-instructio	315	seventeen ADRs carry the same instruction-not-an-enforcement paragraph and the class is undecided
+314-literal-assertion-added-shipped-disabled	314	literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it
+313-spec-coverage-is-wholly-inert-for-a-spec	313	spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading
+312-spec-coverage-measures-citation-not-impl	312	spec-coverage measures citation not implementation
+311-the-weakening-scan-is-blind-to-an-in-pla	311	the weakening scan is blind to an in-place assertion edit
+310-an-undefined-assertion-helper-is-indisti	310	an undefined assertion helper is indistinguishable from a passing assertion
+309-settings-json-is-never-synced-and-five-g	309	settings.json is never synced and five guardrail hooks are wired by hand
+308-thirteen-skill-private-test-runners-exer	308	thirteen skill-private test runners exercise the deployed copy and are dark to CI
+307-hooks-json-is-outside-pairs-completeness	307	hooks.json is outside PAIRS completeness by a deferred decision
+306-the-deployed-only-registry-s-reasons-are	306	the deployed-only registry's reasons are true today and checked by nothing
+305-the-plant-registry-cannot-express-an-ins	305	the plant registry cannot express an insertion
+304-the-reason-floor-is-duplicated-in-seven	304	the reason floor is duplicated in seven derived guards and nothing stops one drifting
+303-the-interpreter-enumeration-is-a-fixed-l	303	the interpreter enumeration is a fixed list and the escapes are pinned nowhere
+302-the-grant-coverage-guard-matches-a-bare	302	the grant-coverage guard matches a bare Bash token so an unrestricted grant in another form passes
+301-the-transcript-scan-population-stops-at	301	the transcript-scan population stops at two roots
+300-a-producer-is-any-line-that-mentions-the	300	a producer is any line that mentions the target so a target only talked about looks produced
+299-fence-is-abort-capable-is-lexical-and-fo	299	fence_is_abort_capable is lexical and four measured fences abort from outside it
+298-the-collapsed-snapshot-commits-live-in-t	298	the collapsed snapshot commits live in the reflog only and a git gc destroys them
+297-the-dirty-classify-fence-reads-porcelain	297	the dirty-classify fence reads porcelain v1 so a renamed artifact classifies as OTHER
+296-a-per-file-budget-ceiling-is-parsed-and	296	a per-file budget ceiling is parsed and then summed so one file can exceed its own
+295-malformed-is-dropped-silently-by-any-cal	295	MALFORMED is dropped silently by any caller filtering BUDGET or SCOPE
+294-plan-tasks-sh-has-two-modes-with-opposit	294	plan-tasks.sh has two modes with opposite failure directions and nothing stops a caller picking the wrong one
+293-task-num-extracts-digits-only-so-a-lette	293	task_num extracts digits only so a lettered task collides with its sibling
+292-the-value-domain-guard-covers-step5-mode	292	the value-domain guard covers step5_mode only
+291-a-bold-wrapped-requirement-id-is-invisib	291	a bold-wrapped requirement id is invisible to both the checker and the repairer
+290-one-real-plan-shape-is-recognised-by-no	290	one real plan shape is recognised by no task predicate
+289-the-transition-pair-count-is-stated-in-t	289	the transition-pair count is stated in three files and derived in one
+288-the-express-path-says-no-worktree-isolat	288	the Express path says No worktree isolation and the Italian guide says the opposite
+287-rtf-s-gitignore-glob-and-this-repo-s-own	287	RTF's gitignore glob and this repo's own entry differ by a dash
+286-the-sixth-bare-manifest-set-flag-sh-ment	286	the sixth bare manifest-set-flag.sh mention was left when the other five were fixed
+273-the-step-5-checkpoint-has-no-mechanism-t	273	The Step 5 checkpoint has no mechanism to tell an expected red from a real one
