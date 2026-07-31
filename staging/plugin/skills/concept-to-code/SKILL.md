@@ -2967,6 +2967,39 @@ After the user approves Gate 2a, immediately emit: **"Gate 2 approved ✓ — pr
 If `manifest.test_cmd_candidate` is **absent or == `NONE`**: transition to `step_3_project_memory`. Proceed to Step 3 directly (no Gate 2b).
 If `manifest.test_cmd_candidate` is present (not null) and ≠ `NONE`:
 
+**Probe pre-existing trust FIRST, read-only, before showing anything (issue #233, ADR-0102).** One
+probe, above the branch split, read by the attended and autopilot paths alike — this is the single
+resolution site inside Gate 2b, and the autopilot block at the end of this gate consumes its result
+rather than repeating it. A second copy of a trust probe is a probe that can disagree with itself
+about whether a safety gate fires.
+
+<!-- fence-contract: c2c-gate2b-trust-probe -->
+```bash
+TCF="<project-root>/.claude/test-cmd"
+H=$(shasum -a 256 "$TCF" | awk '{print $1}')
+ROOT_N=$(cd "<project-root>" && pwd -P | tr '[:upper:]' '[:lower:]')
+grep -qxF "${H}	${ROOT_N}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null \
+  && echo "TRUSTED" || echo "NOT_TRUSTED"
+```
+
+- **`TRUSTED` → do NOT show the gate.** Emit one line — `"Gate 2b: test-cmd already trusted, SHA
+  unchanged — gate skipped ✓"` — and transition to `step_3_project_memory`. **Reading existing trust
+  is not granting it**, which is why this is a skip and not a bypass; the same sentence the autopilot
+  branch below has always carried.
+
+  The reason to skip rather than ask is not the click. A gate that fires with a foregone answer,
+  every run, on every brownfield project, is a gate people learn to approve without reading — and
+  this is the gate that guards arbitrary command execution. A safety gate that cries wolf is worse
+  than one that fires rarely.
+
+- **`NOT_TRUSTED` → present the gate below, unchanged.**
+
+**Two invariants this skip does not touch, stated here rather than only in §4's TOFU rules, because
+this is where a reader deciding to skip is standing.** **NEVER call `approve-test-cmd.sh` before the
+user's explicit click** — the probe reads trust and never creates it. And the pin is on **content**:
+if the SHA differs from the trusted one the gate fires even when the command *looks* identical,
+because **a changed file is a new authorisation**.
+
 Use `AskUserQuestion`:
 ```
 question: "Gate 2b — Project test-cmd (Human approval required)\n\nCommand proposed by architect:\n\n`<command>`\n\n
@@ -2998,15 +3031,10 @@ After "Skip": `manifest.test_cmd_placeholder = true`. Transition to `step_3_proj
 After "Abort": terminate the chain.
 
 **[Autopilot default: never call `approve-test-cmd.sh` unconditionally (ADR-0014, ADR-0020 D4 —
-TOFU trust must pre-exist, never auto-granted in autopilot). Probe pre-existing trust read-only,
-the exact same mechanism as the Form-B resume-path guard (**Step 2b — TOFU guard (resume path only)**, unmodified):
-```bash
-TCF="<project-root>/.claude/test-cmd"
-H=$(shasum -a 256 "$TCF" | awk '{print $1}')
-ROOT_N=$(cd "<project-root>" && pwd -P | tr '[:upper:]' '[:lower:]')
-grep -qxF "${H}	${ROOT_N}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null \
-  && echo "TRUSTED" || echo "NOT_TRUSTED"
-```
+TOFU trust must pre-exist, never auto-granted in autopilot). **Consume the probe already run at the
+top of this gate** — it is the same read-only mechanism as the Form-B resume-path guard
+(**Step 2b — TOFU guard (resume path only)**, unmodified), and since issue #233 it runs once for
+both paths rather than being repeated here:
 - `TRUSTED` → the SHA-pinned `(hash, normalized-root)` pair already exists from a prior
   interactive approval; **reading** existing trust is not **granting** it. Proceed silently to
   `step_3_project_memory`. Emit: "Gate 2b: autopilot — pre-existing trust found, proceeding ✓".

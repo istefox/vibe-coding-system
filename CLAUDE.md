@@ -2466,3 +2466,45 @@ classification is a model's judgement nothing verifies; #222's plan text is off 
 `ui-layout-audit` enters the population and is left unchanged as a historical record.
 
 Detail: `docs/architecture/ADR-0101-247-batch-boundary-precedence.md`.
+
+## Decisions from the Gate 2b trust-probe chain (ADR-0102)
+
+Closes issue #233, Wave G. Gate 2b fires whenever `test_cmd_candidate` is present and not `NONE`,
+and had **no branch for "this exact command is already trusted"**. On the shakedown run the command
+was unchanged, the file untouched, the read-only probe returned `TRUSTED` — and the attended path
+presented the gate anyway, asking a human to re-authorise a command whose SHA was already pinned.
+Approving re-ran `approve-test-cmd.sh` on the same hash: a no-op.
+
+- **The mechanism existed and one path used it.** The autopilot branch of the same gate carries the
+  probe and the reasoning (*"reading existing trust is not granting it"*); the attended path never
+  got the branch.
+- **The cost is not the click.** A gate that fires with a foregone answer, every run, on every
+  brownfield project, is a gate people learn to approve without reading — **and this is the gate
+  that guards arbitrary command execution.** A safety gate that cries wolf is worse than one that
+  fires rarely.
+- **One probe, hoisted above the branch split, which REMOVES a copy rather than adding a third.**
+  ADR-0086's criterion has no sharper application: two copies of a trust probe is a probe that can
+  disagree with itself about whether a safety gate fires. Form B's stays — different entry point, no
+  Gate 2b in scope.
+- **Two invariants restated at the gate, because that is where the reader deciding to skip stands.**
+  `NEVER call approve-test-cmd.sh before the click` lived in §4's TOFU rules and in Form B and **not
+  in the Gate 2b block** — found by the assertion, not by reading. And the pin is on **content**: a
+  differing SHA gates even when the command looks identical, because a changed file is a new
+  authorisation.
+
+**The fixture was wrong, not the fence, and the positive twin is the only thing that showed it.**
+`run_probe`'s first draft was `HOME="$1" sed … | bash` — **an environment prefix binds to the first
+command of a pipeline only**, so `bash` inherited the real `$HOME` and read this machine's actual
+trust registry. `G2B9` (empty registry → NOT_TRUSTED) and `G2B11` (edited file → NOT_TRUSTED) both
+**passed** against it, because the real registry holds neither entry; they pinned nothing.
+**`G2B10`, the positive twin, is the only assertion that failed.** Rule 8 executed rather than
+quoted. Third fixture bug this week reporting as a defect in correct code, after ADR-0090's
+`HOME`-redirect and today's `mk_root` subshell.
+
+Known consequences: a HITL gate now fires less often, bounded to same file / same SHA / same
+normalised root; the skip depends on the probe being correct, which is why it is executed in both
+directions rather than asserted to exist; **the fence is declared and `fence_is_abort_capable`
+cannot see it** (no literal `exit 1|2`, no "abort"), so it is executed by its own file — second
+measured example of what sits outside ADR-0083's population, after ADR-0096.
+
+Detail: `docs/architecture/ADR-0102-233-gate2b-trust-probe.md`.
