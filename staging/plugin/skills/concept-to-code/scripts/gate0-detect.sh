@@ -40,6 +40,10 @@ fi
 # spec_topic_match is computed only when the caller opted in (arg 3 present)
 # AND a SPEC.md exists. Values: true | false | unknown.
 spec_topic_match="unknown"
+# spec_topic_slug is the slug the EXISTING SPEC.md claims, not the one the caller asked for. It is
+# emitted so `spec-archive.sh` can name the archive without re-deriving the marker: two extractors
+# that disagree would archive under a name this detector never saw (issue #228, ADR-0096).
+spec_topic_slug="unknown"
 if [ "$have_slug_arg" = "yes" ] && [ "$spec" = "yes" ]; then
   # Extract the first matching marker line: "**Topic slug:** <value>"
   # Label is case-insensitive; first match wins (-m 1).
@@ -55,6 +59,7 @@ if [ "$have_slug_arg" = "yes" ] && [ "$spec" = "yes" ]; then
     slug_norm="$(printf '%s' "$slug_arg" \
       | sed -E 's/^[[:space:]]*//; s/[[:space:]]*$//' \
       | tr '[:upper:]' '[:lower:]')"
+    spec_topic_slug="$marker_norm"
     if [ "$marker_norm" = "$slug_norm" ]; then
       spec_topic_match="true"
     else
@@ -124,6 +129,7 @@ echo "keyword_vote=$keyword_vote"
 # Feature 4 + Bug 1 detection: emitted ONLY when arg 3 was passed.
 if [ "$have_slug_arg" = "yes" ]; then
   echo "spec_topic_match=$spec_topic_match"
+  echo "spec_topic_slug=$spec_topic_slug"
 
   # Informational skill-exists flag. Does not affect mode/spec_adr_exist.
   if [ -f "$HOME/.claude/skills/$slug_arg/SKILL.md" ]; then
