@@ -73,7 +73,9 @@ Behavior:
 4. Verify `docs/manifests/` exists (create it if needed after user ack).
 4. Verify no manifest exists for same topic-slug same day (if exists: error "manifest already in progress, use resume").
 5. Run `scripts/gate0-detect.sh <project-root> "<topic-full-title>" "<topic-slug>"`. Read all output fields:
-   `spec_adr_exist`, `mode`, `file_estimate`, `file_vote`, `keyword_vote`, `spec_topic_match`, `skill_exists`.
+   `spec_adr_exist`, `mode`, `file_estimate`, `file_vote`, `keyword_vote`, `spec_topic_match`,
+   `spec_topic_slug`, `skill_exists`. **Keep `spec_topic_slug`** — it is the slug the EXISTING
+   `SPEC.md` claims, and Step 1's archive fence needs it to name the archive (ADR-0096).
    (`topic-slug` is computed at step 2; passing it as arg 3 enables Bug-1 topic-match detection and the skill-exists guard.)
 
 5b. **PROJECT.md — multi-feature project context (optional):**
@@ -284,7 +286,43 @@ and bump `last_updated_at` themselves.
 
 ### Step 1 — Interview (invoke `interview-driver` skill)
 
-**Greenfield** (`mode=greenfield`, SPEC.md does not exist):
+**Greenfield** — **two different states reach this branch, and only one of them is "no SPEC.md on
+disk".** The other is a root `SPEC.md` that exists and belongs to a *different* topic:
+`gate0-detect.sh` reports `spec_topic_match=false` and disowns it, which settles **routing** and
+nothing else. The file is still sitting at the path the dispatch below writes to (issue #228).
+
+**Archive the outgoing SPEC first (ADR-0096).** Runs before the dispatch, always, on both states —
+it is a no-op on the genuinely-empty one.
+
+<!-- fence-contract: c2c-step1-spec-archive -->
+```bash
+# Free variables, bound by the orchestrator: ROOT (project root), OUT_SLUG (`spec_topic_slug`
+# from the gate0-detect.sh run at Gate 0 — the slug the EXISTING SPEC.md claims, never this
+# chain's slug).
+_sa="$HOME/.claude/skills/concept-to-code/scripts/spec-archive.sh"
+if [ ! -f "$_sa" ]; then
+  echo "SPECARCHIVE_NOSCRIPT"; exit 3
+fi
+_out=$(bash "$_sa" "$ROOT" "${OUT_SLUG:-unknown}"); _rc=$?
+printf '%s\n' "$_out"
+exit "$_rc"
+```
+
+Branch on the exit code — this is a **checker**, not a reporter:
+
+- **`0`** (`NOSPEC`, `ALREADY <path>`, `ARCHIVED <path>`) → proceed to the dispatch. On `ARCHIVED`,
+  emit one line naming the path, so the archive is visible rather than silent; Gate 4.0 commits it
+  with the rest of the planning artifacts.
+- **`1`** (`COLLISION <path>`) → **HALT. Do not dispatch.** The archive already holds a different
+  file under that name, and overwriting it is issue #228 reproduced inside the directory that exists
+  to prevent it. Print: `"Step 1: the outgoing SPEC cannot be archived — <path> exists with
+  different content. Compare them (diff SPEC.md <path>), then move or rename one by hand and
+  re-invoke."`
+- **`3`** → **HALT.** The check did not run, which is not the same as nothing to archive. Print the
+  script's stderr and the sync remedy (`bash staging/sync-to-claude.sh --apply`).
+
+Dispatch (unchanged):
+
 ```
 Use the interview-driver skill to produce SPEC.md for topic: "<topic-full-title>".
 Chain context: concept-to-code (step 1).
@@ -2446,7 +2484,7 @@ Display:
 **Before rendering the gate, prepend any applicable warnings to the question string:**
 - If `skill_exists=true` → prepend: `"⚠ A skill named '<topic-slug>' already exists in ~/.claude/skills/ — is this an upgrade rather than a new build?\n\n"`
 - If `spec_topic_match=unknown` (SPEC.md present but no slug marker) → prepend: `"⚠ SPEC.md present but its topic could not be verified — confirm it belongs to this chain before choosing Standard/brownfield.\n\n"`
-- `spec_topic_match=false` never reaches Gate 0 (gate0-detect.sh already flipped mode=greenfield, so the SPEC is disowned before routing).
+- `spec_topic_match=false` never reaches Gate 0 (gate0-detect.sh already flipped mode=greenfield, so the SPEC is disowned before routing). **"Disowned" settles routing and nothing else — the file itself is handled by Step 1's archive fence (ADR-0096), not here.** Until issue #228 that sentence was the whole of the system's response to a mismatched SPEC, and the file was overwritten in place.
 
 ```yaml
 question: "Gate 0 — Chain routing (Human choice required)\n\nRecommended: [<path>] — <auto_detect_reason>\n\nChoose the orchestration path for: <topic-full-title>"

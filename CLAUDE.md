@@ -2193,3 +2193,57 @@ in a transition context, so a target only ever talked about looks produced. Inst
 derived-guard pattern, not extracted (ADR-0086). Third waiver syntax, deliberately.
 
 Detail: `docs/architecture/ADR-0095-248-transition-producer.md`.
+
+## Decisions from the spec-archive chain (ADR-0096)
+
+Closes issue #228, Wave B. `concept-to-code` Step 1's greenfield branch writes to
+`<project-root>/SPEC.md`, and **two states reach that branch** — only one of them is "no SPEC.md on
+disk". The other is a root SPEC belonging to a different topic: `gate0-detect.sh` reads the
+`**Topic slug:**` marker, reports `spec_topic_match=false`, and flips to greenfield, which
+"disowns" the SPEC **for routing** and leaves the file exactly where the dispatch is about to write.
+Gate 4.0 would then commit the overwrite. **The detection existed, was correct, fired, and protected
+nothing** — not a missing check, a check wired to a decision that does not include the file.
+
+- **Both of the issue's premises were wrong, and the second changed the design.** (1) #176's SPEC
+  was already archived by #229 (`162b019`); the live subject is whatever the slot holds. (2) The
+  archive is NOT named `docs/specs/<slug>.spec.md` — measured, **3 of 41** manifest topic slugs name
+  an existing archive. Archive names come from the SPEC's title; a topic slug is truncated to 40
+  chars (`100-secrets-and-dependency-gate-content` against
+  `100-secrets-and-dependency-gate-content-scan.spec.md`). **A by-name "already archived?" check
+  would have missed 38 archives and written a duplicate beside each, while looking correct and
+  reporting nothing** — ADR-0091's shape in a new place.
+- **Detect by CONTENT, write by NAME.** Content comparison is what makes it idempotent against a
+  corpus named by a convention it does not follow; the slug destination is what makes it
+  deterministic going forward. Nothing else combines both.
+- **It copies, never moves.** Nothing is deleted without a human, and the incoming interview
+  overwrites the slot anyway — a move buys nothing and loses the file if the interview fails.
+- **The slug is an ARGUMENT.** `gate0-detect.sh` gains an additive `spec_topic_slug=` line and
+  `spec-archive.sh` never re-derives the marker: two extractors that disagree would archive under a
+  name the detector never saw (ADR-0086's criterion, applied and honoured).
+- **A checker with `3` distinct from `0`.** Without it, "no SPEC to archive" — the common legitimate
+  case — is indistinguishable from "did not run at all", which is #228 itself one level up.
+  `COLLISION` halts rather than overwrites: writing over an archive is #228 reproduced inside the
+  directory that exists to prevent it.
+- **The fence is declared and ADR-0083's classifier cannot see it.** `fence_is_abort_capable` looks
+  for `exit 1`/`exit 2` or the word "abort"; this fence ends `exit "$_rc"` and its abort belongs to
+  the caller. So it aborts a chain in practice and sits outside the population that would require it
+  to be run. Section `SF` extracts and runs it anyway. **First measured example of what lies outside
+  that classifier**, recorded rather than worked around.
+- **The fix was executed, not just written** (ADR-0081's rule applied to the fix): running it
+  archived the live root slot to `docs/specs/222-vendor-deployed-only-skills.spec.md`, and a second
+  run reported `ALREADY`.
+
+**Two assertions failed against correct code, both worth keeping.** `SA3`/`SA4` failed on a
+**fixture**: `mk_root` incremented a counter, but `r=$(mk_root)` runs it in a **subshell**, so every
+call returned the same directory and the fixtures accumulated into each other — found by reading
+what the fixture produced rather than what the assertion said. And `SA10`'s first draft grepped for
+`topic[[:space:]]+slug` and matched the comment **explaining why the slug is not re-derived** (rule
+12, third instance); it is now behavioural, and a behavioural check cannot be satisfied by prose.
+
+Known consequences: a `COLLISION` halts Step 1 on the unattended paths too (correct direction, new
+stop); the fence is a hard dependency on a deployed script, failing closed until sync;
+`artifacts.spec` still points at the root slot in **all 41** manifests, so 40 name a file holding
+another chain's SPEC — measured here, filed as **#267**, not fixed here; two naming conventions now
+coexist in `docs/specs/`.
+
+Detail: `docs/architecture/ADR-0096-228-spec-archive.md`.
