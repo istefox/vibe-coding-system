@@ -109,11 +109,23 @@ while IFS="$(printf '\t')" read -r tfile payload; do
 import re, sys
 path, needle, repl = sys.argv[1], sys.argv[2], sys.argv[3]
 src = open(path, errors='replace').read()
+# A `# plant:` line CONTAINS its own needle verbatim, so a plant whose target is the very test
+# file that declares it always matched twice and was rejected as malformed — the whole class of
+# self-targeting plants was inexpressible. Mask the declaration lines out, then restore them
+# verbatim. Same skip ADR-0082's xref extractor already makes, for the same reason: a
+# declaration must not satisfy the check it declares.
+NUL = '\x00'
+lines = src.split('\n')
+masked = [l for l in lines if l.startswith('# plant:')]
+work = '\n'.join(NUL if l.startswith('# plant:') else l for l in lines)
 pat = re.compile(r'\s+'.join(re.escape(w) for w in needle.split()))
-hits = pat.findall(src)
+hits = pat.findall(work)
 print(len(hits))
 if len(hits) == 1:
-    open(path, 'w').write(pat.sub(lambda _m: repl, src, count=1))
+    work = pat.sub(lambda _m: repl, work, count=1)
+    for l in masked:                      # restore in order; robust to a multi-line replacement
+        work = work.replace(NUL, l, 1)
+    open(path, 'w').write(work)
 PY
 )
   if [ "$MRES" != "1" ]; then

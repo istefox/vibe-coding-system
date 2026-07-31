@@ -24,6 +24,7 @@
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
 # plant: SP1 | plugin/skills/concept-to-code/SKILL.md | bash ~/.claude/skills/concept-to-code/scripts/spec-archive.sh "<project-root>" "<topic-slug>" | true
+# plant: SP5b | plugin/scripts/tests/spec-pointer-archive.test.sh | INFLIGHT=$((INFLIGHT + 1)); continue | :
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -49,15 +50,28 @@ FLAT=$(tr '\n' ' ' <"$CC" | tr -d '`*' | tr -s ' ')
 # ===========================================================================
 # SP0 — the premise, derived. Both halves: the pointers, and the archive gap.
 # ===========================================================================
-TOT=0; SLOT=0
-for m in "$REPO"/docs/manifests/*.manifest.yml; do
-  [ -f "$m" ] || continue
-  TOT=$((TOT + 1))
-  _s=$(grep -E '^\s+spec:' "$m" | head -1 | sed 's/.*spec:[[:space:]]*//; s/"//g')
-  case "$_s" in */SPEC.md) SLOT=$((SLOT + 1)) ;; esac
-done
+# An IN-FLIGHT manifest carries `spec: null`: manifest-init.sh writes null and Step 1's
+# manifest-set-artifact.sh is what fills it. It is neither historical nor repointed — it has no
+# pointer yet. Counting it made SP5 report a repoint that never happened, and it did so for ANY
+# feature of ANY chain in the window between manifest-init.sh and Step 1. Latent from the day
+# ADR-0106 shipped and found by the first chain run after it, which created a manifest and left
+# the harness red at 67/68 while nothing had been rewritten. The exclusion below is what makes
+# SP5's message true of the thing SP5 counts.
+count_pointers() {   # $1 = manifests dir. Sets TOT, SLOT, INFLIGHT.
+  TOT=0; SLOT=0; INFLIGHT=0
+  for m in "$1"/*.manifest.yml; do
+    [ -f "$m" ] || continue
+    _s=$(grep -E '^[[:space:]]+spec:' "$m" | head -1 | sed 's/.*spec:[[:space:]]*//; s/"//g')
+    case "$_s" in
+      null|"") INFLIGHT=$((INFLIGHT + 1)); continue ;;
+    esac
+    TOT=$((TOT + 1))
+    case "$_s" in */SPEC.md) SLOT=$((SLOT + 1)) ;; esac
+  done
+}
+count_pointers "$REPO/docs/manifests"
 if [ "$TOT" -ge 30 ] && [ "$SLOT" -ge 30 ]; then
-  ok "SP0 $SLOT of $TOT manifests point artifacts.spec at the root slot"
+  ok "SP0 $SLOT of $TOT manifests point artifacts.spec at the root slot ($INFLIGHT in-flight, excluded)"
 else
   bad "SP0 derivation returned $SLOT of $TOT — the premise moved, re-measure before trusting ADR-0106"
 fi
@@ -100,11 +114,26 @@ fi
 # ===========================================================================
 # SP5 — forward guard: no historical manifest is rewritten (ADR-0075's rule).
 # ===========================================================================
-if [ "$SLOT" -eq "$TOT" ]; then
-  ok "SP5 (forward guard) every historical manifest keeps its slot pointer — none was rewritten"
+if [ "$TOT" -lt 30 ]; then
+  bad "SP5 the population collapsed to $TOT manifest(s) — an empty or tiny corpus must not read as agreement"
+elif [ "$SLOT" -eq "$TOT" ]; then
+  ok "SP5 (forward guard) every historical manifest keeps its slot pointer — none was rewritten ($INFLIGHT in-flight, excluded)"
 else
   bad "SP5 $((TOT - SLOT)) historical manifest(s) were repointed; ADR-0075 declined exactly that, and this ADR follows it"
 fi
+
+# SP5b — the exclusion itself, on a fixture, in both directions. SP5 above reads the LIVE corpus,
+# so it cannot demonstrate the exclusion once no chain is in flight; this can, on every run.
+FX="$TMP/mf"; mkdir -p "$FX"
+printf 'artifacts:\n  spec: "/x/SPEC.md"\n' > "$FX/2026-01-01-done.manifest.yml"
+printf 'artifacts:\n  spec: null\n'         > "$FX/2026-01-02-inflight.manifest.yml"
+count_pointers "$FX"
+if [ "$TOT" -eq 1 ] && [ "$SLOT" -eq 1 ] && [ "$INFLIGHT" -eq 1 ]; then
+  ok "SP5b an in-flight manifest (spec: null) is excluded from the population, never counted as a repoint"
+else
+  bad "SP5b fixture returned TOT=$TOT SLOT=$SLOT INFLIGHT=$INFLIGHT — expected 1/1/1"
+fi
+count_pointers "$REPO/docs/manifests"   # restore the live counts for anything downstream
 
 # ===========================================================================
 # SP6 — executed end to end: archive the chain's own SPEC, repoint, and the manifest still validates.
@@ -146,8 +175,8 @@ fi
 # Z1 — assertion-count floor (ADR-0083 §D3).
 # ===========================================================================
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 9 ]; then ok "Z1 assertion-count floor ($_total >= 9)"
-else bad "Z1 assertion count fell to $_total (floor 9) — assertions vanished from this file"; fi
+if [ "$_total" -ge 10 ]; then ok "Z1 assertion-count floor ($_total >= 10)"
+else bad "Z1 assertion count fell to $_total (floor 10) — assertions vanished from this file"; fi
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"
