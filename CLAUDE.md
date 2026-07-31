@@ -1945,3 +1945,48 @@ targeted the untested half of the normalisation, which is what produced the hone
 plant that does not fire is evidence about the assertion, not a step to get past.
 
 Detail: `docs/architecture/ADR-0089-239-step5-preflight-manifest-exemption.md`.
+
+## Decisions from the check-6 fail-open fix (ADR-0090)
+
+Closes issue #258, first of Wave E. `autopilot-build`'s pre-flight runs with no human present.
+Check 6 read `test_cmd_placeholder` with a bare `m.get()` behind `2>/dev/null`, so an unparseable
+manifest or a missing PyYAML produced an empty string that is not `"True"` — and the check
+**passed**. Reproduced both ways before writing anything.
+
+- **It is verbatim the pattern ADR-0076 §THE RULE forbids**, four lines above check 7 which
+  ADR-0075 fixed for the same reason. Now read through `manifest-field-state.sh`, asserting the
+  **valid** values rather than enumerating invalid ones (ADR-0075 §D4).
+- **A singleton, and that is why it is worth recording.** All eight checks were classified, not just
+  the reported one: five read state, four fail closed by four different correct idioms, one invented
+  a fifth with the direction reversed. **Same shape as #218 in the same file** — check 2 invented
+  its own quote handling while seventeen sites elsewhere used the correct `sed` idiom.
+- **`ABSENT` PROCEEDS here, the opposite of check 7, and that asymmetry is the decision.** This flag
+  is corroborating, not primary: the authoritative signal is the file itself (`content = NONE`,
+  tested two lines above) and an unapproved command is caught by the TOFU check below.
+  `hook_verified` has no fallback, which is why its absence aborts. Measured: 40 of 41 corpus
+  manifests carry the field, the one `ABSENT` is `completed` and predates it. Both sites say **"Do
+  not reconcile the two"**.
+- **The two-tier helper resolution is a deliberate second copy.** ADR-0086's criterion calls it
+  extractable, and it stays duplicated because a fence borrowing a variable bound in an **earlier
+  fence** stops being independently executable — the property ADR-0083 F4/F7 rest on. `E7f` pins the
+  two paths to agree instead.
+- **Redirecting `HOME` in a test hides PyYAML.** Python derives per-user site-packages from `$HOME`,
+  so the fixture HOME that fakes the TOFU trust registry makes `import yaml` fail wherever PyYAML
+  came from `pip --user`. The fence then correctly reported "did not run" and correctly aborted —
+  **the fixture was wrong, not the fence.** `PYTHONPATH` is now resolved from the module itself, so
+  a system-installed PyYAML on CI is covered by the same line.
+- **A correction to the sweep that found this:** it first reported "11 of 12 declared fence contracts
+  have no `exit 3`". Right number, wrong premise (ADR-0084's lesson on my own measurement) — an
+  `exit 3` **code** is only needed where a caller branches on it, and eleven of twelve already fail
+  closed by whichever idiom suits them. One wrong check, not a class conversion.
+
+**Plant lessons, both worth keeping.** The first plant bounded the replaced block on ``esac\n``` ``,
+which matched a `esac` in a **different fence far later in the file** and silently deleted check 6's
+TOFU section — the suite then reported nonsense that would have read as "the assertion does not pin
+the bug" had the planted text not been inspected. **Inspect what a plant actually produced before
+believing what it reports.** And E9 was green for the wrong reason for one run: the new dependency
+made the fence abort on an unresolvable helper, also `rc=1`, and E9 asserted only the exit code. It
+now asserts the message names TOFU — rule 8's family, a negative assertion pins nothing when every
+failure looks alike.
+
+Detail: `docs/architecture/ADR-0090-258-check6-placeholder-fail-open.md`.

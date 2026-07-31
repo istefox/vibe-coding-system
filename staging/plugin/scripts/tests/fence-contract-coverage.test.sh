@@ -478,12 +478,29 @@ R6=$(cd "$PR6" && pwd -P | tr '[:upper:]' '[:lower:]')
 printf '%s\t%s\n' "$H6" "$R6" >"$FAKE_HOME/.claude/state/stop-gate/trust"
 TC_OK="$TMPROOT/t-ok.yml"
 mk_manifest "$TC_OK" "m['test_cmd_placeholder']=False" 2>/dev/null
+# `CLAUDE_PLUGIN_ROOT` is bound because check 6 now reads test_cmd_placeholder through
+# `manifest-field-state.sh` (issue #258), and `HOME` is redirected to a fixture — so the second
+# resolution tier cannot find the helper and the first must. Same binding `scope-guards.test.sh`
+# uses for check 7, which has had this dependency since ADR-0075.
+#
+# PYTHONPATH IS PINNED BECAUSE REDIRECTING HOME HIDES PyYAML. Python derives the per-user
+# site-packages directory from $HOME, so a fixture HOME — set here so the TOFU trust registry is
+# not this machine's — makes `import yaml` fail wherever PyYAML was installed with `pip --user`.
+# The helper then correctly reports exit 3 ("the check DID NOT RUN") and check 6 correctly aborts,
+# so the fixture, not the fence, is what is wrong. Discovered by E7/E9/E7d going red on a fence
+# that was behaving exactly as designed. `scope-guards.test.sh` never hit this because its check-7
+# runner does not redirect HOME. Resolve from the module itself rather than guessing a layout, so
+# a system-installed PyYAML (the CI runner) is covered by the same line.
+_YAMLPATH=$(python3 -c "import yaml,os; print(os.path.dirname(os.path.dirname(yaml.__file__)))" 2>/dev/null || true)
 cat >"$TMPROOT/s6" <<EOF
 HOME="$FAKE_HOME"; export HOME
-manifest="$TC_OK"
+PYTHONPATH="$_YAMLPATH\${PYTHONPATH:+:\$PYTHONPATH}"; export PYTHONPATH
+CLAUDE_PLUGIN_ROOT="$STAGING/plugin"; export CLAUDE_PLUGIN_ROOT
+manifest="\$MANIFEST_UNDER_TEST_6"
 project_root="\$PROJECT_ROOT_UNDER_TEST"
 EOF
 PROJECT_ROOT_UNDER_TEST="$PR6"; export PROJECT_ROOT_UNDER_TEST
+MANIFEST_UNDER_TEST_6="$TC_OK"; export MANIFEST_UNDER_TEST_6
 _rc=$(run_fence "autopilot-build-check-6" "$AB" "$TMPROOT/s6")
 if [ "$_rc" = "0" ]; then ok "E7: check 6 passes a real, TOFU-trusted test-cmd"
 else bad "E7: check 6 rejected a trusted test-cmd (rc=$_rc): $(head -2 "$TMPROOT/out-autopilot-build-check-6" 2>/dev/null | tr '\n' ' ')"; fi
@@ -493,9 +510,60 @@ if [ "$_rc" = "1" ]; then ok "E8: check 6 aborts (exit 1) when test-cmd is NONE"
 else bad "E8: check 6 did not abort on test-cmd=NONE (rc=$_rc)"; fi
 printf 'pytest -q\n' >"$PR6/.claude/test-cmd"
 : >"$FAKE_HOME/.claude/state/stop-gate/trust"
+# The message is asserted, not just the exit code. Adding the helper dependency turned this green
+# for the WRONG reason for one run — the fence aborted on an unresolvable helper, which is also
+# rc=1 (rule 8: a negative assertion pins nothing when every failure looks alike).
 _rc=$(run_fence "autopilot-build-check-6" "$AB" "$TMPROOT/s6")
-if [ "$_rc" = "1" ]; then ok "E9: check 6 aborts (exit 1) when the command is not TOFU-trusted"
-else bad "E9: check 6 did not abort on an untrusted test-cmd (rc=$_rc)"; fi
+if [ "$_rc" = "1" ] && grep -q 'TOFU-trusted' "$TMPROOT/out-autopilot-build-check-6" 2>/dev/null; then
+  ok "E9: check 6 aborts (exit 1) when the command is not TOFU-trusted, naming TOFU"
+else bad "E9: check 6 did not abort ON THE TOFU CAUSE (rc=$_rc): $(head -2 "$TMPROOT/out-autopilot-build-check-6" 2>/dev/null | tr '\n' ' ')"; fi
+printf '%s\t%s\n' "$H6" "$R6" >"$FAKE_HOME/.claude/state/stop-gate/trust"
+
+# ---- E7b..E7f: issue #258 — the placeholder read must fail CLOSED ------------------------------
+# The line replaced here was `placeholder=$(python3 -c "… m.get('test_cmd_placeholder', False)"
+# 2>/dev/null)` compared against "True". An unparseable manifest, or a missing PyYAML, produced an
+# empty string that is not "True", so this UNATTENDED pre-flight PASSED.
+#
+# SEEN RED against the restored pre-#258 line: E7c (rc=0 — the unreadable manifest passed),
+# E7e (rc=0 — 'maybe' accepted) and E7f (only one resolution block exists). E7/E7b/E7d/E8/E9
+# are green before and after and are labelled as forward guards, not as evidence of the fix.
+TC_TRUE="$TMPROOT/t-true.yml"; mk_manifest "$TC_TRUE" "m['test_cmd_placeholder']=True" 2>/dev/null
+TC_BROKEN="$TMPROOT/t-broken.yml"; printf 'this: [is: not: valid: yaml\n' >"$TC_BROKEN"
+TC_ABSENT="$TMPROOT/t-absent.yml"
+grep -v '^test_cmd_placeholder:' "$TC_OK" >"$TC_ABSENT" 2>/dev/null
+TC_JUNK="$TMPROOT/t-junk.yml"; mk_manifest "$TC_JUNK" "m['test_cmd_placeholder']='maybe'" 2>/dev/null
+
+MANIFEST_UNDER_TEST_6="$TC_TRUE"
+_rc=$(run_fence "autopilot-build-check-6" "$AB" "$TMPROOT/s6")
+if [ "$_rc" = "1" ]; then ok "E7b (forward guard, green before and after): check 6 aborts when test_cmd_placeholder is true"
+else bad "E7b: check 6 did not abort on test_cmd_placeholder=true (rc=$_rc)"; fi
+
+MANIFEST_UNDER_TEST_6="$TC_BROKEN"
+_rc=$(run_fence "autopilot-build-check-6" "$AB" "$TMPROOT/s6")
+if [ "$_rc" = "1" ]; then ok "E7c (red evidence, #258): check 6 aborts on an UNREADABLE manifest instead of passing"
+else bad "E7c: an unreadable manifest did NOT abort check 6 (rc=$_rc) — the unattended pre-flight still fails open (#258)"; fi
+
+MANIFEST_UNDER_TEST_6="$TC_ABSENT"
+_rc=$(run_fence "autopilot-build-check-6" "$AB" "$TMPROOT/s6")
+if [ "$_rc" = "0" ]; then ok "E7d (forward guard, green before and after): an ABSENT field proceeds — the opposite of check 7, because the NONE and TOFU checks cover it"
+else bad "E7d: check 6 aborted on an absent test_cmd_placeholder (rc=$_rc); 40 of 41 corpus manifests carry it and the one that does not predates the field"; fi
+
+MANIFEST_UNDER_TEST_6="$TC_JUNK"
+_rc=$(run_fence "autopilot-build-check-6" "$AB" "$TMPROOT/s6")
+if [ "$_rc" = "1" ]; then ok "E7e: check 6 aborts on a value that is neither true nor false"
+else bad "E7e: check 6 accepted test_cmd_placeholder='maybe' (rc=$_rc) — asserting the valid values is the ADR-0075 §D4 rule"; fi
+
+# E7f — the two resolution blocks must agree. ADR-0086's criterion calls this extractable and it is
+# deliberately NOT extracted: a fence borrowing a variable bound in an earlier fence stops being
+# independently executable, which is what F4/F7 rest on. So the agreement is asserted instead.
+_res6=$(extract_fence "$AB" "autopilot-build-check-6" | grep -F 'manifest-field-state.sh"' | sed 's/^[[:space:]]*//' | sort)
+_res7=$(extract_fence "$AB" "autopilot-build-check-7" | grep -F 'manifest-field-state.sh"' | sed 's/^[[:space:]]*//' | sort)
+if [ -n "$_res6" ] && [ "$_res6" = "$_res7" ]; then
+  ok "E7f: checks 6 and 7 resolve manifest-field-state.sh by identical paths (two copies, pinned to agree)"
+else
+  bad "E7f: the two manifest-field-state.sh resolution blocks have diverged — check 6 and check 7 must find the same helper"
+fi
+MANIFEST_UNDER_TEST_6="$TC_OK"
 
 # ---- E10/E11: autopilot-build check 8 — git repo at CWD ----------------------------------------
 GITD="$TMPROOT/g"; mkdir -p "$GITD"; git_init "$GITD"
