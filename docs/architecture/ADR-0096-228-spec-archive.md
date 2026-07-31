@@ -137,3 +137,15 @@ the first measured example of what sits outside it.
 - Two slug forms now coexist in `docs/specs/`: 35 named from SPEC titles, and new ones named from
   the 40-character topic slug. Deterministic going forward, inconsistent with the past, and not
   worth renaming 35 historical files over.
+
+## Correction 2026-07-31 (issue #281, ADR-0107)
+
+The consequence above says this fence is outside `fence-contract-coverage.test.sh`'s `F3`/`F4` and
+is "executed by its own file instead". The second half was true; the first is no longer.
+
+`CONTRACT_IDS` was derived from the **abort-capable** subset rather than from the declarations, so
+five declared contracts — this one among them — sat outside `F4`, `F6` and `F7`. ADR-0107 widened
+the derivation to every declaration. The fence is now checked by the guard as well as by its own
+file, and `F9` fails if that derivation ever narrows again.
+
+Body unedited (ADR-0034 precedent).

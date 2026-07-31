@@ -123,3 +123,15 @@ applied again: a plant that does not fire is evidence about the assertion, not a
   no "abort" — so F3/F4 do not reach it; executed by its own file instead. Fourth measured example
   outside ADR-0083's population, after ADR-0096, ADR-0102 and ADR-0103.
 - Inert until sync.
+
+## Correction 2026-07-31 (issue #281, ADR-0107)
+
+The consequence above says this fence is outside `fence-contract-coverage.test.sh`'s `F3`/`F4` and
+is "executed by its own file instead". The second half was true; the first is no longer.
+
+`CONTRACT_IDS` was derived from the **abort-capable** subset rather than from the declarations, so
+five declared contracts — this one among them — sat outside `F4`, `F6` and `F7`. ADR-0107 widened
+the derivation to every declaration. The fence is now checked by the guard as well as by its own
+file, and `F9` fails if that derivation ever narrows again.
+
+Body unedited (ADR-0034 precedent).

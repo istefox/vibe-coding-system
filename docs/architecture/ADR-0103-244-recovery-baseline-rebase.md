@@ -128,3 +128,15 @@ Six planted defects, all fired:
 - `RB11` couples this ADR to a corpus of two. A third baseline changes the ratio and not the
   argument, but the number in the prose will drift from the number in the run.
 - Inert until sync.
+
+## Correction 2026-07-31 (issue #281, ADR-0107)
+
+The consequence above says this fence is outside `fence-contract-coverage.test.sh`'s `F3`/`F4` and
+is "executed by its own file instead". The second half was true; the first is no longer.
+
+`CONTRACT_IDS` was derived from the **abort-capable** subset rather than from the declarations, so
+five declared contracts — this one among them — sat outside `F4`, `F6` and `F7`. ADR-0107 widened
+the derivation to every declaration. The fence is now checked by the guard as well as by its own
+file, and `F9` fails if that derivation ever narrows again.
+
+Body unedited (ADR-0034 precedent).
