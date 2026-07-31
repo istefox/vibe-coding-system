@@ -1644,6 +1644,12 @@ fi
 - Never `n=$(printf '%s\n' "$_db" | grep -c '^BUDGET' || echo 0)` — `grep -c` prints `0` **and**
   exits 1 on no match, so `|| echo 0` appends a second line and `n` becomes the two-line string
   `0\n0`. Use `grep -c '^BUDGET' || true` if a count is needed.
+- **A third token exists: `MALFORMED<TAB>task <N><TAB><declaration text>` (issue #246).** It means
+  the checker found a recognisable budget declaration it could **not read** — not that the task
+  overspent, and not that it declared nothing. Surface it to the human at Gate 5 with the task
+  number and the offending text, and say plainly that this task's budget was **not measured**. A
+  token the caller drops is a producer with no consumer, which is the defect class #238 records;
+  do not leave it unread just because it is advisory.
 
 **Cadence, matching the anti-test-weakening gate above (§D2 — no new checkpoint mechanism, reusing
 the same one).** The Workflow dispatch path runs this once, after the whole workflow completes,
@@ -1653,6 +1659,11 @@ pipeline stage: the orchestrator only regains control after the workflow exits. 
 fallback runs it at every batch checkpoint (see step 4 there), `--tasks` accumulating every task
 dispatched so far, against the same cumulative diff the weakening gate already re-scans at that
 point.
+
+**Record every `MALFORMED` line as its own entry in the same array**, `{task, malformed}` — the
+declaration text verbatim, no `files_*` or `lines_*` keys, because nothing was measured and writing
+zeros there would read as a task that spent nothing. Additive, no schema bump, the same terms as
+every prior extension of this file.
 
 **Record every `BUDGET` line's `files=<exp>/<act>` and `lines=<exp>/<act>`, and every `SCOPE`
 line's file, as one entry per checkpoint call** in `step5-report.json`'s `budget_findings` array

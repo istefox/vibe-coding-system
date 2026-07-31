@@ -1990,3 +1990,47 @@ now asserts the message names TOFU — rule 8's family, a negative assertion pin
 failure looks alike.
 
 Detail: `docs/architecture/ADR-0090-258-check6-placeholder-fail-open.md`.
+
+## Decisions from the per-file budget half-parse (ADR-0091)
+
+Closes issue #246, second of Wave E. ADR-0070 woke `diff-budget-check.sh` up after months of
+inertness; **the first real plan it ran on produced two findings and both were false.** The parser
+matched one paren group anchored at end of line, so a per-file declaration —
+`Budget: a/SKILL.md (~165 lines, new), b/sync.sh (~1 line)` — kept only the LAST ceiling and left
+everything before it in the file list. Three corruptions at once: a false `SCOPE` on a file the plan
+declares explicitly, a ceiling of 1 instead of 166, and an inflated file count from the fragments
+`(~165 lines` and `new)`.
+
+- **One grammar, not two.** A left-to-right walk over paren groups SUBSUMES the documented
+  single-ceiling form rather than branching on it, so there is no second code path to keep in
+  agreement — the failure ADR-0069 removed from the plan-task predicate, not reintroduced. Mixed
+  forms work as a consequence, not as a special case.
+- **`MALFORMED` fires only on a recognisable ATTEMPT, and the discriminator is MEASURED.** At least
+  one paren group carrying both a digit and the word "line". `Budget:` is matched as a
+  case-insensitive **substring**, so the corpus holds `# Performance budget: <10s typical…` (a
+  comment in a fenced code block) and `Budget: none (verification only, … Tasks 1-6 …)` (a prose
+  escape). **A token firing on either would be this issue's own defect one level up.** Both pinned.
+- **It is emitted BEFORE the whole-plan inert check**, because a plan whose only declarations are
+  malformed has an empty budget set and would otherwise return `CLEAN` — the common, documented,
+  legitimate case, indistinguishable from it. Exactly the invisibility ADR-0070 sat inside.
+- **The token has a CONSUMER.** The Step 5 call site reads it, says the task's budget was **not
+  measured**, and records `{task, malformed}` with no `files_*`/`lines_*` keys, since zeros there
+  would read as a task that spent nothing (ADR-0064 §D3). A reporter line nobody reads is #238's
+  shape, and creating a new instance while the roadmap closes that class would be a poor trade.
+- **`BK9` embeds the pre-#246 parser as the specification of what must not change:** 16 declarations
+  compared under both, **exactly 3 differ** (the per-file ones) and **none that the old parser could
+  read has become unreadable.** Its boundary is stated — it compares the FUNCTION, so it is blind to
+  a script that defines it and never calls it; `BK1`/`BK2`/`BK3` are what fail there, and the two
+  must be read as a pair.
+
+**Assertion lesson, three wrong drafts of one check, all planted rather than reasoned.** `BK10`
+asserts the `MALFORMED` consumer exists. Draft 1 was a bare `grep -qF 'MALFORMED'` — the token is
+named twice, so deleting one site left the other satisfying it (`recovery-preflight.test.sh` RI1's
+defect, by the same hand, three days later). Draft 2 was an exact count of 2, which **failed on the
+correct file** because `spec-coverage.sh` — a different checker twenty lines up in the same step —
+emits a `MALFORMED` token of its own. Draft 3 used four needles, of which `not measured` still did
+not fire: it appears twice more in Step 5 for the absent-field rule. **The general form: a needle
+must belong to the block it asserts about and to nothing else, and the only way to know it does is
+to plant it.**
+
+Detail: `docs/architecture/ADR-0091-246-per-file-budget-half-parse.md`.

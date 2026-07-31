@@ -8,6 +8,7 @@
 # already had to write that sentence once; restated here for the third time in this directory).
 #   BUDGET<TAB><tasks-label><TAB>files=<expected>/<actual><TAB>lines=<expected>/<actual><TAB>margin=<N>
 #   SCOPE<TAB><file>
+#   MALFORMED<TAB>task <N><TAB><declaration text>   (issue #246)
 # Caller idiom: never `[ -n "$out" ]` to decide whether something was found — true even on a bare
 # CLEAN. Never `n=$(... | grep -c '^BUDGET' || echo 0)` — grep -c prints 0 AND exits 1 on no
 # match, so the fallback also fires and the substitution yields the two-line string "0\n0"; use
@@ -27,11 +28,21 @@
 # itself — the form this repository's own plans actually use is one dense bullet, not a separate
 # sub-line), the first occurrence of the case-insensitive substring "Budget:" is parsed as:
 #   Budget: <file>[, <file>...] (<~|±><N> line[s])
-# The sign is optional and ignored; "line"/"lines" both accepted. BOTH halves — the file list AND
-# the parenthesised line ceiling — must be present and well-formed TOGETHER. A "Budget:" line that
-# does not fit this shape produces NO budget for that task (§D6/§C: unparseable is absent, never
-# zero — a strict parser defaulting a missing count to 0 would flag every file the task touches as
-# an overshoot on a simple formatting slip).
+# and, since issue #246, also PER-FILE ceilings, which is what architects actually write:
+#   Budget: <file> (<~><N> line[s][, <note>])[, <file> (<~><N> line[s])]...
+# The two are one grammar: a left-to-right walk over paren groups, where each group's preceding
+# text is the file (or comma list) that group's ceiling covers. Ceilings are SUMMED per task. The
+# sign is optional and ignored; "line"/"lines" both accepted; a note after the count is tolerated.
+# A "Budget:" line that does not fully parse produces NO budget for that task (§D6/§C: unparseable
+# is absent, never zero — a strict parser defaulting a missing count to 0 would flag every file the
+# task touches as an overshoot on a simple formatting slip), AND, when it is a recognisable ATTEMPT
+# at a declaration, a MALFORMED line:
+#   MALFORMED<TAB>task <N><TAB><the declaration text>
+# "Recognisable attempt" means at least one paren group carrying both a digit and the word "line".
+# That discriminator is measured, not chosen: `Budget:` is matched as a case-insensitive SUBSTRING,
+# so the corpus contains `# Performance budget: <10s typical, 8s per-harness timeout.` — a comment
+# in a fenced code block — and the prose escape `Budget: none (verification only, ...)`. Reporting
+# on either would be this feature's own defect one level up.
 #
 # PLAN-LEVEL SCOPE DECLARATION (§D4's exclusion for cross-cutting work). A line anywhere BEFORE
 # the first task block, case-insensitive substring "Scope:":
@@ -100,6 +111,7 @@ TMPD=$(mktemp -d) || { printf '%s: cannot create a temp directory\n' "$SELF" >&2
 trap 'rm -rf "$TMPD"' EXIT
 
 BUDGET_FILE="$TMPD/budget.tsv";  : >"$BUDGET_FILE"
+MALFORMED_FILE="$TMPD/malformed.tsv"; : >"$MALFORMED_FILE"
 SCOPE_GLOBS="$TMPD/scope_globs.txt"; : >"$SCOPE_GLOBS"
 
 # --- plan parser: per-task Budget: (files, line ceiling), whole-plan Scope: globs -----------------
@@ -109,6 +121,64 @@ cat >"$TMPD/plan_parse.awk" <<'AWKEOF'
 # is_task_line() in the same file: a checkbox sub-step mentioning a task must not close the
 # previous task's block and steal its Budget.
 function trim(s) { gsub(/^[ \t]+/,"",s); gsub(/[ \t]+$/,"",s); return s }
+
+# parse_budget(rest) -> "<files>\t<total>", or "" when the declaration does not fully parse.
+#
+# A LEFT-TO-RIGHT WALK OVER PAREN GROUPS, which SUBSUMES the documented single-ceiling form rather
+# than branching on it (issue #246). The old parser matched one paren group anchored at end of
+# line, so a PER-FILE declaration —
+#   Budget: a/SKILL.md (~165 lines, new), b/sync.sh (~1 line)
+# — kept only the LAST ceiling (1 instead of 166) and left the first file plus the fragments
+# `(~165 lines` and `new)` in the file list, producing a false SCOPE on a file the plan declares
+# explicitly, an inflated file count, and no BUDGET line at all. Measured over the corpus: 16
+# `Budget:` lines in 3 plans, 12 single-ceiling, 3 per-file — and every one of the three was
+# mis-parsed in all three ways at once.
+#
+# The walk handles both, and mixed forms too: a group's preceding text may itself be a
+# comma-separated list sharing that ceiling, which is exactly the documented form seen as one
+# entry. Ceilings are SUMMED, because the downstream check compares per-task totals.
+function parse_budget(rest,   s, pre, paren, inner, low, num, files, total, rem) {
+  s = rest; files = ""; total = 0
+  while (match(s, /\([^()]*\)/)) {
+    pre   = substr(s, 1, RSTART - 1)
+    paren = substr(s, RSTART, RLENGTH)
+    s     = substr(s, RSTART + RLENGTH)
+    sub(/^[ \t]*,[ \t]*/, "", pre)          # the separator left by the previous entry
+    gsub(/`/, "", pre); pre = trim(pre)
+    sub(/,[ \t]*$/, "", pre)
+    inner = paren; gsub(/[()]/, "", inner); low = tolower(inner)
+    # A note after the count is tolerated — `(~10 lines, comments only)` is in the corpus.
+    if (pre == "" || !match(inner, /[0-9]+/) || index(low, "line") == 0) return ""
+    num = substr(inner, RSTART, RLENGTH)
+    total += num
+    files = (files == "" ? pre : files ", " pre)
+  }
+  # Anything after the last group that is not a separator or markdown emphasis means the line did
+  # NOT fully parse. Without this, `Budget: a.md (~50 lines), b.md` would silently drop b.md — the
+  # half-read this function exists to stop.
+  rem = s; gsub(/[ \t,*_`.]/, "", rem)
+  if (files == "" || rem != "") return ""
+  return files "\t" total
+}
+
+# looks_like_budget(rest) — is this a recognisable ATTEMPT at a declaration? Only then may a parse
+# failure be REPORTED; otherwise it stays silent, exactly as before.
+#
+# The discriminator is measured, not chosen for tidiness. `Budget:` is matched as a case-insensitive
+# SUBSTRING, so the corpus contains `# Performance budget: <10s typical, 8s per-harness timeout.` —
+# a comment inside a fenced code block, never a declaration — and a legitimate prose escape,
+# `Budget: none (verification only, no source files touched beyond what Tasks 1-6 already changed)`.
+# A MALFORMED token firing on either would be this issue's own defect one level up: a detector
+# reporting on text that was never a declaration.
+function looks_like_budget(rest,   s, inner, low) {
+  s = rest
+  while (match(s, /\([^()]*\)/)) {
+    inner = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+    gsub(/[()]/, "", inner); low = tolower(inner)
+    if (match(inner, /[0-9]+/) && index(low, "line") > 0) return 1
+  }
+  return 0
+}
 function task_num(l,   t) {
   match(l, /Task[ \t]+[0-9]+/)
   t = substr(l, RSTART, RLENGTH)
@@ -137,36 +207,43 @@ BEGIN { in_task = 0; cur = ""; got = 0 }
   if (in_task && !got) {
     if (match(line, /[Bb]udget:/)) {
       rest = trim(substr(line, RSTART + RLENGTH))
-      # Trailing markdown emphasis is tolerated: a real plan writes the whole declaration in
-      # italics — `*Budget: `SPEC.md` (~90 lines)*` — and requiring the paren group at strict
-      # end-of-line rejected every declaration in the only plan in the corpus that has any
-      # (ADR-0070 §D4). §D6 of ADR-0052 already calls this syntax "lenient prose, not a rigid
-      # schema"; this is that intent applied, not a widening of it.
-      if (match(rest, /\([^()]*\)[ \t]*[*_`]*[ \t]*$/)) {
-        parenraw = substr(rest, RSTART, RLENGTH)
-        filespart = trim(substr(rest, 1, RSTART - 1))
-        sub(/,[ \t]*$/, "", filespart)
-        gsub(/`/, "", filespart)
-        inner = parenraw
-        gsub(/[()]/, "", inner)
-        lowinner = tolower(inner)
-        if (filespart != "" && match(inner, /[0-9]+/) && index(lowinner, "line") > 0) {
-          numval = substr(inner, RSTART, RLENGTH)
-          print cur "\t" filespart "\t" numval >> BUDGET_FILE
-          got = 1
-        }
+      parsed = parse_budget(rest)
+      if (parsed != "") {
+        print cur "\t" parsed >> BUDGET_FILE
+        got = 1
+      } else if (looks_like_budget(rest)) {
+        # A recognisable ATTEMPT that does not parse. Reported, never half-read (issue #246).
+        print cur "\t" rest >> MALFORMED_FILE
+        got = 1
       }
     }
   }
 }
 AWKEOF
 
-awk -v BUDGET_FILE="$BUDGET_FILE" -v SCOPE_FILE="$SCOPE_GLOBS" \
+awk -v BUDGET_FILE="$BUDGET_FILE" -v SCOPE_FILE="$SCOPE_GLOBS" -v MALFORMED_FILE="$MALFORMED_FILE" \
     -f "$PREDICATE" -f "$TMPD/plan_parse.awk" "$PLAN"
+
+# --- MALFORMED: a recognisable attempt at a declaration that does not parse (issue #246) --------
+# Emitted BEFORE the inert check below, and that ordering is the point: a plan whose only Budget:
+# lines are malformed has an empty BUDGET_FILE, so the inert check would return CLEAN and the
+# operator would read "nothing to report" — which is the common, documented, legitimate case and
+# is indistinguishable from it. That is exactly the failure ADR-0070 spent months not noticing.
+emit_malformed() {
+  [ -s "$MALFORMED_FILE" ] || return 0
+  while IFS="$(printf '\t')" read -r _mt _mline; do
+    [ -n "$_mt" ] || continue
+    printf 'MALFORMED\ttask %s\t%s\n' "$_mt" "$_mline"
+  done <"$MALFORMED_FILE"
+}
 
 # --- whole-plan inert check (§D1/§D4): no task anywhere declared a parseable budget --------------
 if [ ! -s "$BUDGET_FILE" ]; then
-  echo CLEAN
+  if [ -s "$MALFORMED_FILE" ]; then
+    emit_malformed
+  else
+    echo CLEAN
+  fi
   exit 0
 fi
 
@@ -309,6 +386,7 @@ if [ "$BUDGET_LIVE" -eq 1 ]; then
   fi
 fi
 
+emit_malformed >>"$OUT"
 if [ -s "$OUT" ]; then
   cat "$OUT"
 else

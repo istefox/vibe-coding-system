@@ -496,6 +496,231 @@ printf '%s\n' "$BJ6_OUT" | grep -q 'lines=10/400' \
   && ok "BJ6b: the wider file's lines still reach the BUDGET total unchanged" \
   || bad "BJ6b: expected lines=10/400 in [$BJ6_OUT]"
 
+
+# ==================================================================================================
+# BK. Issue #246 — a per-file Budget: line was half-parsed into a false SCOPE and a false BUDGET.
+#
+# The parser matched ONE paren group anchored at end of line, so
+#   Budget: a/SKILL.md (~165 lines, new), b/sync.sh (~1 line)
+# kept only the LAST ceiling (1 instead of 166) and left the first file plus the fragments
+# `(~165 lines` and `new)` in the file list. Three corruptions at once: a false SCOPE on a file the
+# plan declares explicitly, an inflated file count, and NO BUDGET line at all.
+#
+# THE POPULATION IS THE SECOND BUDGET-DECLARING PLAN, and it is asserted by NOTHING today: BJ5
+# excludes it by property (correctly — it declares budgets), and BJ1/BJ2 read the FIRST such plan.
+# So the corpus grew a form the harness had no eyes on, which is the same shape as #235.
+#
+# SEEN RED against the restored pre-#246 call site: BK1, BK2, BK3, BK4, BK5, BK8. BK6/BK7 are
+# forward guards (no MALFORMED token existed to misfire), BK9a/b/c compare the functions and are
+# blind to the call site by construction — see the note above BK9.
+#
+# THE MALFORMED TOKEN'S DISCRIMINATOR IS MEASURED, NOT CHOSEN. `Budget:` is matched as a
+# case-insensitive SUBSTRING, so the corpus contains `# Performance budget: <10s typical, 8s
+# per-harness timeout.` — a comment inside a fenced code block — and a prose escape,
+# `Budget: none (verification only, ...)`. A token firing on either would be this issue's own
+# defect one level up: a detector reporting on text that was never a declaration. BK6/BK7 pin both.
+# ==================================================================================================
+BK_PLAN="$REPO/docs/superpowers/plans/2026-07-30-222-vendor-deployed-only-skills.md"
+if [ ! -f "$BK_PLAN" ]; then
+  bad "BK0: $BK_PLAN not found — BK1..BK3 are meaningless (if the plan was renamed, repoint them)"
+else
+  ok "BK0: the real per-file-budget plan is present"
+
+  # BK1 — RED EVIDENCE. Task 2 declares BOTH files and the diff matches its ceilings exactly.
+  # Against the pre-#246 parser this printed `SCOPE <the first declared file>` and no BUDGET line.
+  printf ' staging/plugin/skills/ui-layout-audit/SKILL.md | 165 ++\n staging/sync-to-claude.sh |   1 +\n' >"$TMP/stat_in"
+  BK1_OUT=$(bash "$DBC" --plan "$BK_PLAN" --tasks 2 <"$TMP/stat_in")
+  [ "$BK1_OUT" = "CLEAN" ] \
+    && ok "BK1 (red evidence): a per-file Budget: no longer produces a false SCOPE on a file the plan declares" \
+    || bad "BK1: the per-file form still misparses — got [$BK1_OUT]"
+
+  # BK2 — the ceilings are SUMMED. 165 + 1 = 166; the old parser reported 1, so an overshoot was
+  # fabricated by two orders of magnitude.
+  printf ' staging/plugin/skills/ui-layout-audit/SKILL.md | 499 ++\n staging/sync-to-claude.sh |   1 +\n' >"$TMP/stat_in"
+  BK2_OUT=$(bash "$DBC" --plan "$BK_PLAN" --tasks 2 <"$TMP/stat_in")
+  printf '%s\n' "$BK2_OUT" | grep -q 'lines=166/500' \
+    && ok "BK2: per-file ceilings are summed (165+1=166), not replaced by the last one" \
+    || bad "BK2: expected lines=166/500 — got [$BK2_OUT]"
+
+  # BK3 — the same, on a different task, so BK2 is not a single lucky line. Task 6: 25 + 45 = 70.
+  printf ' staging/sync-to-claude.sh | 25 ++\n staging/plugin/scripts/tests/sync-manual-steps.test.sh | 400 ++\n' >"$TMP/stat_in"
+  BK3_OUT=$(bash "$DBC" --plan "$BK_PLAN" --tasks 6 <"$TMP/stat_in")
+  printf '%s\n' "$BK3_OUT" | grep -q 'lines=70/425' \
+    && ok "BK3: a second per-file declaration sums correctly too (25+45=70)" \
+    || bad "BK3: expected lines=70/425 — got [$BK3_OUT]"
+fi
+
+# BK4 — a MIXED declaration: one group whose preceding text is itself a comma list sharing that
+# ceiling, followed by a per-file group. The walk must handle both in one line: 50 + 10 = 60 over
+# three files. This is the form neither the old parser nor a naive comma-split can read.
+cat >"$TMP/bk4-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Mixed (R-01)
+
+Budget: a.md, b.md (~50 lines), c.md (~10 lines)
+PLANEOF
+printf ' a.md | 30 ++\n b.md | 20 ++\n c.md | 11 ++\n' >"$TMP/stat_in"
+BK4_OUT=$(bash "$DBC" --plan "$TMP/bk4-plan.md" --tasks 1 <"$TMP/stat_in")
+printf '%s\n' "$BK4_OUT" | grep -q 'files=3/3' && printf '%s\n' "$BK4_OUT" | grep -q 'lines=60/61' \
+  && ok "BK4: a mixed shared-then-per-file declaration reads as 3 files and 50+10=60 lines" \
+  || bad "BK4: expected files=3/3 lines=60/61 — got [$BK4_OUT]"
+
+# BK5 — MALFORMED fires on a recognisable ATTEMPT that does not fully parse: a trailing file with
+# no ceiling. Silently dropping it is the half-read this issue is about.
+cat >"$TMP/bk5-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Broken (R-01)
+
+Budget: a.md (~50 lines), b.md
+PLANEOF
+printf ' a.md | 10 ++\n' >"$TMP/stat_in"
+BK5_OUT=$(bash "$DBC" --plan "$TMP/bk5-plan.md" --tasks 1 <"$TMP/stat_in")
+printf '%s\n' "$BK5_OUT" | grep -q '^MALFORMED' \
+  && ok "BK5: a declaration with a trailing file and no ceiling reports MALFORMED instead of being half-read" \
+  || bad "BK5: expected a MALFORMED line — got [$BK5_OUT]"
+
+# BK6 — and it must NOT fire on prose. This is the real corpus line, verbatim, from
+# 2026-05-20-vibe-status-skill.md: a comment inside a fenced code block, never a declaration.
+cat >"$TMP/bk6-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Thing (R-01)
+
+# Performance budget: <10s typical, 8s per-harness timeout.
+PLANEOF
+printf ' a.md | 10 ++\n' >"$TMP/stat_in"
+BK6_OUT=$(bash "$DBC" --plan "$TMP/bk6-plan.md" --tasks 1 <"$TMP/stat_in")
+[ "$BK6_OUT" = "CLEAN" ] \
+  && ok "BK6 (forward guard, green before and after): prose containing the substring 'budget:' with no parenthesised line count stays CLEAN" \
+  || bad "BK6: MALFORMED fired on prose that was never a declaration — got [$BK6_OUT]"
+
+# BK7 — nor on the deliberate prose escape, also a real corpus line: a task that touches no files.
+# It carries digits ('Tasks 1-6') but no 'line' inside the parens, so it is not an attempt.
+cat >"$TMP/bk7-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Verification only (R-01)
+
+Budget: none (verification only, no source files touched beyond what Tasks 1-6 already changed)
+PLANEOF
+printf ' a.md | 10 ++\n' >"$TMP/stat_in"
+BK7_OUT=$(bash "$DBC" --plan "$TMP/bk7-plan.md" --tasks 1 <"$TMP/stat_in")
+[ "$BK7_OUT" = "CLEAN" ] \
+  && ok "BK7 (forward guard, green before and after): the no-files prose escape stays CLEAN — digits alone are not an attempt, 'line' must be there too" \
+  || bad "BK7: MALFORMED fired on the legitimate no-files prose escape — got [$BK7_OUT]"
+
+# BK8 — a plan whose ONLY declaration is malformed must still REPORT. The whole-plan inert check
+# returns CLEAN on an empty budget set, and CLEAN is the common, documented, legitimate case — so
+# without this the operator reads "nothing to report" for a plan the checker could not read. That
+# is precisely the invisibility ADR-0070 spent months inside.
+cat >"$TMP/bk8-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Only broken (R-01)
+
+Budget: a.md (~50 lines), b.md
+PLANEOF
+printf ' zzz.md | 900 ++\n' >"$TMP/stat_in"
+BK8_OUT=$(bash "$DBC" --plan "$TMP/bk8-plan.md" --tasks 1 <"$TMP/stat_in")
+{ [ "$BK8_OUT" != "CLEAN" ] && printf '%s\n' "$BK8_OUT" | grep -q '^MALFORMED'; } \
+  && ok "BK8: a plan whose only Budget: is malformed reports MALFORMED rather than the inert CLEAN" \
+  || bad "BK8: a wholly-malformed plan reported [$BK8_OUT] — an unreadable declaration must not look like nothing to report"
+
+# BK9 — BACKWARD COMPATIBILITY, DERIVED AGAINST THE PRE-#246 PARSER ITSELF.
+#
+# The old parser is embedded below as the SPECIFICATION of what must not change, and every
+# single-ceiling declaration in the real corpus must parse to the same (files, ceiling) pair under
+# both. Only the per-file declarations may differ, and BK9b bounds how many do — otherwise "the
+# corpus agrees" could be satisfied by a parser that rejects everything.
+#
+# ITS BOUNDARY, STATED: BK9 extracts and compares the parse_budget FUNCTION, so it is blind to a
+# script that defines the function correctly and does not call it. Verified rather than assumed —
+# restoring the pre-#246 CALL SITE while leaving the function in place leaves BK9a/b/c green.
+# BK1/BK2/BK3 are what fail there, which is why the two must be read as a pair.
+cat >"$TMP/bk9-old.awk" <<'AWKEOF'
+function trim(s){gsub(/^[ \t]+/,"",s);gsub(/[ \t]+$/,"",s);return s}
+/[Bb]udget:/ {
+  rest=trim(substr($0, index($0,"udget:")+6))
+  if (match(rest, /\([^()]*\)[ \t]*[*_`]*[ \t]*$/)) {
+    parenraw=substr(rest,RSTART,RLENGTH); filespart=trim(substr(rest,1,RSTART-1))
+    sub(/,[ \t]*$/,"",filespart); gsub(/`/,"",filespart)
+    inner=parenraw; gsub(/[()]/,"",inner); low=tolower(inner)
+    if (filespart!="" && match(inner,/[0-9]+/) && index(low,"line")>0) {
+      printf "%s|%s\n", filespart, substr(inner,RSTART,RLENGTH); next
+    }
+  }
+  print "<none>|-"
+}
+AWKEOF
+sed -n '/^function parse_budget/,/^}$/p' "$DBC" >"$TMP/bk9-new.awk"
+cat >>"$TMP/bk9-new.awk" <<'AWKEOF'
+function trim(s){gsub(/^[ \t]+/,"",s);gsub(/[ \t]+$/,"",s);return s}
+/[Bb]udget:/ {
+  rest=trim(substr($0, index($0,"udget:")+6))
+  r=parse_budget(rest)
+  if (r=="") { print "<none>|-" } else { sub(/\t/,"|",r); print r }
+}
+AWKEOF
+awk -f "$TMP/bk9-old.awk" "$REPO"/docs/superpowers/plans/*.md >"$TMP/bk9-old.out" 2>/dev/null
+awk -f "$TMP/bk9-new.awk" "$REPO"/docs/superpowers/plans/*.md >"$TMP/bk9-new.out" 2>/dev/null
+bk9_n=$(grep -c . "$TMP/bk9-old.out" 2>/dev/null || true); [ -n "$bk9_n" ] || bk9_n=0
+bk9_same=0; bk9_diff=0
+if [ "$bk9_n" -gt 0 ] && [ "$bk9_n" = "$(grep -c . "$TMP/bk9-new.out" 2>/dev/null || true)" ]; then
+  bk9_same=$(paste "$TMP/bk9-old.out" "$TMP/bk9-new.out" | awk -F'\t' '$1==$2' | grep -c . || true)
+  bk9_diff=$((bk9_n - bk9_same))
+fi
+if [ "$bk9_n" -ge 10 ]; then
+  ok "BK9a (count guard): the corpus carries $bk9_n Budget: lines to compare — the sweep is not vacuous"
+else
+  bad "BK9a (count guard): only $bk9_n Budget: line(s) found — the derivation is broken, not the corpus clean"
+fi
+if [ "$bk9_diff" -ge 1 ] && [ "$bk9_diff" -le 5 ]; then
+  ok "BK9b: exactly $bk9_diff of $bk9_n declarations parse differently — the per-file ones, and nothing else"
+else
+  bad "BK9b: $bk9_diff of $bk9_n declarations changed — expected a small, bounded set (the per-file forms); a large number means the rewrite moved the single-ceiling population too"
+fi
+bk9_regress=$(paste "$TMP/bk9-old.out" "$TMP/bk9-new.out" \
+  | awk -F'\t' '$1!=$2 && $2=="<none>|-"' | grep -c . || true)
+if [ "${bk9_regress:-0}" -eq 0 ]; then
+  ok "BK9c: no declaration the OLD parser could read has become unreadable — the widening never narrowed"
+else
+  bad "BK9c: $bk9_regress declaration(s) parsed by the old parser now yield nothing — the rewrite is a regression, not a widening"
+fi
+
+# BK10 — the token must have a CONSUMER. A reporter emitting a line no caller reads is a producer
+# with no consumer, the defect class #238 records — and inventing one while the roadmap is closing
+# that class would be a poor trade. Asserted against the Step 5 call site, on a flattened copy so
+# the assertion does not depend on where markdown wraps (ADR-0073).
+# TWO DISTINCTIVE NEEDLES, not a count of the bare token. Two drafts were wrong here and both are
+# worth recording. First: a bare `grep -qF 'MALFORMED'`, which the token satisfies from either of
+# its two sites, so deleting one let the plant walk through — `recovery-preflight.test.sh` RI1's
+# defect exactly. Second: an exact count of 2, which failed on the real file because
+# `spec-coverage.sh` — a DIFFERENT checker, twenty lines up in the same step — emits a `MALFORMED`
+# token of its own. Counting a bare word across a whole step conflates two checkers that happen to
+# share it. Each needle below belongs to one block and to nothing else — verified by planting all
+# four: a bare 'not measured' was the third draft and did NOT fire, because the phrase appears
+# twice more in Step 5 for the absent-field rule (ADR-0064 §D3). Scoped to its sentence.
+BK10_FLAT=$(tr '\n' ' ' <"$STEP5" 2>/dev/null | tr -s ' ')
+bk10_has() { printf '%s' "$BK10_FLAT" | grep -qF "$1"; }
+if bk10_has 'MALFORMED<TAB>task <N><TAB><declaration text>' \
+   && bk10_has 'Record every `MALFORMED` line as its own entry' \
+   && bk10_has "this task's budget was **not measured**" \
+   && bk10_has '{task, malformed}'; then
+  ok "BK10: Step 5 reads the MALFORMED token, says the budget was not measured, and records it in budget_findings"
+else
+  bad "BK10: the Step 5 call site no longer reads the MALFORMED token (caller-idiom bullet, recording bullet, not-measured wording, or {task, malformed} shape is missing) — a reporter line nobody reads is #238's shape"
+fi
+
+# Z1 — assertion-count floor (ADR-0083 §D3). A floor, not an exact count.
+Z1_TOTAL=$((PASS + FAIL))
+if [ "$Z1_TOTAL" -ge 50 ]; then
+  ok "Z1: assertion-count floor met ($Z1_TOTAL executed)"
+else
+  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 50; assertions have gone missing, not passed"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
