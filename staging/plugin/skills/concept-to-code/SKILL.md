@@ -2347,11 +2347,38 @@ fold a human's separate commit — and its message — into the feature commit; 
 non-ancestor baseline would detach the branch from its own history (issue #244's state, which this
 refuses rather than inherits).
 
+**Step 7.0b — archive this chain's own SPEC and repoint the manifest (issue #267, ADR-0106).**
+Runs after the collapse above and before the invocation below.
+
+ADR-0096 archives the **outgoing** SPEC when a new chain is about to overwrite the root slot —
+archive-on-**displacement**. That means a chain's SPEC is archived only if a LATER chain happens to
+displace it, so **the most recent chain's SPEC is never archived**. This is
+archive-on-**completion**, the other trigger. The two compose safely: `spec-archive.sh` compares by
+content, so the second call on the same SPEC reports `ALREADY` and writes nothing.
+
+```bash
+bash ~/.claude/skills/concept-to-code/scripts/spec-archive.sh "<project-root>" "<topic-slug>"
+```
+
+- `ARCHIVED <path>` or `ALREADY <path>` → repoint the manifest at that path:
+  `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-artifact.sh <manifest-path> spec <path>`.
+  Without this the manifest keeps naming `<project-root>/SPEC.md`, a single mutable slot the next
+  chain overwrites — measured across all 41 existing manifests, which is what #267 records.
+- `NOSPEC`, `COLLISION`, or exit 3 → **leave the pointer as it is** and say which. A pointer at a
+  slot is today's behaviour, not a regression; a pointer at an archive that was never written is.
+
+**Both new paths must be passed to `commit` explicitly.** The collapse above leaves everything
+staged, and `commit`'s Step 1 then takes the staged set only — so the freshly-written archive
+(untracked) and the freshly-repointed manifest (tracked, modified after staging) would both be
+excluded. That is what `--include` exists for (ADR-0071 §D2), and Gate 4.0 already uses it the same
+way.
+
 **IMPORTANT — use the `Skill` tool, NOT the `Agent` tool.** `commit` is a **skill**, not an agent.
 
 ```
 Use the commit skill (invoke via Skill tool, not Agent tool).
 Context hint: "<topic-full-title> (ADR: <manifest.artifacts.adr>)"
+Arguments: --include <archived-spec-path>,<manifest-path>
 ```
 
 The skill manages the HITL gate (AskUserQuestion), Conventional Commits message generation, and the PR option internally. The orchestrator does nothing after invocation: the skill closes the cycle on its own.
