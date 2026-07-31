@@ -188,3 +188,29 @@ lesson met while writing an ADR that cites it. Every prose clause assertion now 
 whitespace-flattened copy, and `count_flat` is separate from `count_lit` because `TM5` must stay
 line-based: the hook greps a single line, so a marker split across two is a marker the hook cannot
 see, and flattening would hide exactly the defect it exists to catch.
+
+## Correction 2026-07-31 (issue #247, ADR-0101)
+
+**§D5 states its two batch-boundary rules as if they were jointly satisfiable. They are not, and
+issue #222's own plan — the worked example this ADR uses — is a case where they conflict.**
+
+Rule 1 (do not put an assertion in the same batch as the task it depends on) forces Task 3 into a
+later batch than Task 2: `C7`'s RED must be *"the vendored file exists but does not name gate
+5.05"*, which the tester cannot observe before Task 2 vendors it. Rule 2 (do not split a red
+assertion from the task that turns it green) wants Tasks 2 and 3 together, because
+`skill-coverage-perimeter.test.sh`'s `S1` reddens at Task 2 and greens at Task 3.
+
+No batching satisfies both. §D5 gave a reader applying it in good faith no way to choose.
+
+**Rule 1 outranks rule 2, and the reason is what to carry forward rather than the verdict: evidence
+quality beats checkpoint tidiness.** Violating rule 1 makes an assertion fail for the wrong reason,
+so the recorded RED proves nothing and writing the test first bought nothing. Violating rule 2
+leaves an intermediate checkpoint red — visible, explainable, resolved by a later batch inside the
+same Step 5.
+
+ADR-0101 also adds what §D5 never said: **what a red intermediate checkpoint means.** ADR-0049's
+flow assumes red-then-green within a batch, and `S1` is neither — it is a third-party guard in a
+file nobody in the batch touched. The reading rule now lives beside the checkpoint instruction.
+
+This ADR's body is not edited in place (ADR-0034 precedent). Detail:
+`docs/architecture/ADR-0101-247-batch-boundary-precedence.md`.

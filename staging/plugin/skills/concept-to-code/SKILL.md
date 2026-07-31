@@ -1851,6 +1851,15 @@ task that turns it green. #222's plan is the worked example — Task 3's `C7` mu
 vendored file, so they belong to different batches, while Task 1's `F10` and Task 2's vendoring
 belong to the same one.
 
+**When the two conflict, the first rule outranks the second (issue #247, ADR-0101).** They are not
+jointly satisfiable on every plan, and #222's is the case: rule 1 forces task 3 into a later batch
+than task 2, while rule 2 wants them together because `S1` reddens at task 2 and greens at task 3.
+The reason for the ordering, and it is the part to carry forward rather than the verdict:
+**evidence quality beats checkpoint tidiness.** Violating rule 1 makes an assertion fail for the
+wrong reason, so the recorded RED proves nothing and the whole point of writing the test first is
+gone. Violating rule 2 only leaves an intermediate checkpoint red — visible, explainable, and
+resolved by a later batch in the same Step 5.
+
 **Batch-dispatch policy (≥6 task blocks in plan):** **the number is `$openers`, from
 `plan-tasks.sh --count-openers`, never `$tasks` (issue #242, ADR-0100).** `$tasks` over-counts by
 design — a `## Tasks` section heading and every checkbox sub-step match it — so batching by it
@@ -1898,6 +1907,26 @@ stderr.
    every task number dispatched so far — advisory only, never a gate here either. Also run the
    `Task-level metrics — Step 5 checkpoints (ADR-0064, issue #118)` block at every batch
    checkpoint — metrics, not findings; never a gate, never surfaced at Gate 5.
+
+   **An intermediate checkpoint can be legitimately red, and the chain had no concept of that until
+   issue #247 (ADR-0101).** ADR-0049's flow assumes the tester reddens and the coder greens *within
+   the same batch*, so a checkpoint should be clean. A third case exists: a **pre-existing guard in
+   a file nobody in this batch touched**, whose premise the implementation changes and which a later
+   task restores. #222's `S1` is the worked example — it reddens when task 2 vendors a skill into
+   the population and greens when task 3 covers it, and the SPEC predicted it in those words.
+
+   When a checkpoint is red, classify before reacting. **A red in a file this batch did not touch,
+   which a later task in the plan restores, is expected**: name it, name the task that will green
+   it, record it, and continue. **A red in this batch's own tests is not expected** and is the case
+   the checkpoint exists for — stop and report. If neither description fits, stop: an unclassifiable
+   red is the one that most needs a human.
+
+   This is a reading rule, not a mechanism. An **expected-red declaration** in the plan, or a
+   comparison against the previous checkpoint's failing set, would let the checkpoint decide rather
+   than the reader — both were considered and deferred: the first needs a plan-side syntax, and
+   issue #246 is the live warning about what a half-parsed one costs. `autopilot-build`'s circuit
+   breaker is deliberately NOT relaxed in the meantime; it reads `step5-report.json` once after
+   dispatch, so a red that greens inside Step 5 never reaches it.
 
    **[IF `manifest.step5_review_mode = checkpoint` (ADR-0039 D5-D9) — otherwise skip:]**
    At this same checkpoint, dispatch the `reviewer` agent scoped to the diff of the batch that

@@ -2420,3 +2420,49 @@ now has two modes with **opposite failure directions** and nothing but its heade
 sites prevents a future caller picking the wrong one.
 
 Detail: `docs/architecture/ADR-0100-242-batch-dispatch-openers.md`.
+
+## Decisions from the batch-boundary precedence chain (ADR-0101)
+
+Closes issue #247, completing Wave D. **A correction to a rule shipped four hours earlier.**
+ADR-0088 §D5 states two batch-boundary rules as if they were jointly satisfiable — *do not put an
+assertion in the same batch as the task it depends on*, and *do not split a red assertion from the
+task that turns it green* — and on #222's plan, the ADR's own worked example, they pull opposite
+ways. Rule 1 forces task 3 into a later batch than task 2 (`C7`'s RED needs task 2's vendored file);
+rule 2 wants them together (`S1` reddens at task 2, greens at task 3). **No batching satisfies
+both**, and a reader applying them in good faith had no way to choose.
+
+- **Rule 1 outranks rule 2, and the reason is what carries forward: evidence quality beats
+  checkpoint tidiness.** Violating rule 1 makes an assertion fail for the *wrong reason*, so the
+  recorded RED proves nothing and writing the test first bought nothing. Violating rule 2 leaves an
+  intermediate checkpoint red — visible, explainable, resolved by a later batch inside the same
+  Step 5. `BP2b` asserts the reason separately from the verdict, because the verdict alone is a coin
+  toss written down.
+- **The measurement shrank the issue.** It claims an unattended run "would stop … and present a
+  correctly-working TDD sequence as a failure". `autopilot-build`'s breaker reads
+  `step5-report.json` **after dispatch** — once, at the end of Step 5, not per checkpoint — and `S1`
+  greens at task 3, inside Step 5. The claim holds only for a red surviving to the END of Step 5,
+  which is a plan already violating rule 2 with no task to green it. `BP6` pins that cadence, so a
+  future change to it fails loudly instead of invalidating this reasoning in silence.
+- **A red intermediate checkpoint is now defined, in three cases**, and the third is what keeps it
+  from being a licence: a red in an untouched file that a later task restores is expected; a red in
+  this batch's own tests is not; **anything else stops**, because an unclassifiable red is the one
+  that most needs a human. `BP4` asserts the negative half — a rule that only says what is excused
+  excuses everything.
+- **The mechanism is deferred to #273 with reasons, not omitted.** A plan-side expected-red
+  declaration needs a syntax, and ADR-0091 is the live warning about a half-parsed one. Comparing
+  against the previous checkpoint's failing set needs none — but it separates *new* from
+  *carried-over*, not *intended* from *unintended*, and `S1` is new at checkpoint 1, so it would
+  still be reported. **The breaker stays strict until one lands** (`BP7`, forward guard).
+
+**Two needles failed against correct text, both decoration.** `test_result = RED → halt` carries
+backticks, so a plant pattern joining the words with `\s+` cannot span `` RED` → halt `` — the
+needle had to be read out of the file rather than guessed. And `BP3` failed on **capitalisation
+alone**: the clause opens a sentence. Prose assertions there now match case-insensitively as well as
+flat and undecorated — **a clause is the same clause whether it opens a sentence or sits inside
+one.** Seventh member of the family.
+
+Known consequences: nothing executable changes, so this is an instruction with no enforcement; the
+classification is a model's judgement nothing verifies; #222's plan text is off by one about when
+`ui-layout-audit` enters the population and is left unchanged as a historical record.
+
+Detail: `docs/architecture/ADR-0101-247-batch-boundary-precedence.md`.
