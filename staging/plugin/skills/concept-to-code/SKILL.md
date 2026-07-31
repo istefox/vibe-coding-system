@@ -73,7 +73,7 @@ Behavior:
 4. Verify `docs/manifests/` exists (create it if needed after user ack).
 4. Verify no manifest exists for same topic-slug same day (if exists: error "manifest already in progress, use resume").
 5. Run `scripts/gate0-detect.sh <project-root> "<topic-full-title>" "<topic-slug>"`. Read all output fields:
-   `spec_adr_exist`, `mode`, `file_estimate`, `file_vote`, `keyword_vote`, `spec_topic_match`,
+   `spec_adr_exist`, `mode`, `repo_file_count`, `file_vote`, `keyword_vote`, `spec_topic_match`,
    `spec_topic_slug`, `skill_exists`. **Keep `spec_topic_slug`** — it is the slug the EXISTING
    `SPEC.md` claims, and Step 1's archive fence needs it to name the archive (ADR-0096).
    (`topic-slug` is computed at step 2; passing it as arg 3 enables Bug-1 topic-match detection and the skill-exists guard.)
@@ -2486,8 +2486,33 @@ Display:
 - If `spec_topic_match=unknown` (SPEC.md present but no slug marker) → prepend: `"⚠ SPEC.md present but its topic could not be verified — confirm it belongs to this chain before choosing Standard/brownfield.\n\n"`
 - `spec_topic_match=false` never reaches Gate 0 (gate0-detect.sh already flipped mode=greenfield, so the SPEC is disowned before routing). **"Disowned" settles routing and nothing else — the file itself is handled by Step 1's archive fence (ADR-0096), not here.** Until issue #228 that sentence was the whole of the system's response to a mismatched SPEC, and the file was overwritten in place.
 
+**Two recommendations used to appear in this box and neither was declared to win (issue #227,
+ADR-0098).** The auto-detect line said one thing; the global `AskUserQuestion` convention has the
+orchestrator put its own choice first with `(Recommended)`, and the two can legitimately differ —
+the vote is mechanical, the orchestrator may hold context the vote cannot see.
+
+**The orchestrator's recommendation wins.** The auto-detect is advisory and is labelled as such.
+**When they disagree, say so in the question** — name both, and give the reason for overriding, in
+one line prepended to the question string:
+
+```text
+Auto-detect suggests [<auto-path>] — <auto_detect_reason>. Recommending [<chosen-path>] instead: <why>.
+```
+
+A silently resolved disagreement is the defect; showing the user two signals and which one you
+followed is the fix. When they agree, prepend nothing.
+
+**What `repo_file_count` measures: repository size, not feature size.** It counts files in the
+repository, which at Gate 0 is the only size signal that exists — there is no SPEC and no plan yet.
+`file_vote` turns `standard` at 20 files, so on any real repository it is a constant, and feeding
+that into the majority rule leaves exactly two reachable auto-recommendations: `standard` when the
+title carries an architecture keyword, `hybrid` otherwise. **So `express` can never be
+auto-recommended on a repository of 20 files or more** — it stays available as a click, never as a
+suggestion. Corroborated by the corpus: three manifests ever recorded a `file_vote`, all three
+`standard`. Weigh the vote accordingly when your own judgement differs.
+
 ```yaml
-question: "Gate 0 — Chain routing (Human choice required)\n\nRecommended: [<path>] — <auto_detect_reason>\n\nChoose the orchestration path for: <topic-full-title>"
+question: "Gate 0 — Chain routing (Human choice required)\n\nAuto-detect suggests: [<path>] — <auto_detect_reason>\n\nChoose the orchestration path for: <topic-full-title>"
 header: "Gate 0 · Chain"
 options:
   - label: "[e] Express — native plan, single session, no docs"

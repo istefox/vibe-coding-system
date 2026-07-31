@@ -352,11 +352,11 @@ grep -q 'auto_detect_reason: null' "$MR1" 2>/dev/null \
   && ok "ADR-0017: manifest-init emits gate0.auto_detect_reason field" \
   || bad "ADR-0017: manifest-init missing gate0.auto_detect_reason field"
 
-# Anchor 3: gate0-detect emits file_estimate and keyword_vote
+# Anchor 3: gate0-detect emits repo_file_count and keyword_vote
 GD_OUT="$(bash "$SKILL_DIR/scripts/gate0-detect.sh" "$TMP" "Simple test app" 2>/dev/null)"
-echo "$GD_OUT" | grep -q '^file_estimate=' \
-  && ok "ADR-0017: gate0-detect emits file_estimate" \
-  || bad "ADR-0017: gate0-detect missing file_estimate"
+echo "$GD_OUT" | grep -q '^repo_file_count=' \
+  && ok "ADR-0017: gate0-detect emits repo_file_count" \
+  || bad "ADR-0017: gate0-detect missing repo_file_count"
 echo "$GD_OUT" | grep -q '^keyword_vote=' \
   && ok "ADR-0017: gate0-detect emits keyword_vote" \
   || bad "ADR-0017: gate0-detect missing keyword_vote"
