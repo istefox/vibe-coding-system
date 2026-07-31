@@ -909,3 +909,72 @@ before designing changed the design seven times out of twelve.
   satisfied at all.
 - **A run of its own without a second shakedown.** Phase 8's own product is only verified by another
   end-to-end run, which is also what feeds ADR-0080's still-unfed condition.
+
+### Phase 9 — what Phase 8 left, and the class it kept re-finding
+
+Phase 8 closed with one GitHub issue open and a handful of consequences the ADRs recorded
+deliberately. Those live as bullets at the end of eight documents, which is where they stay
+invisible. This phase collects them, and builds the one mechanism the measurement says can close the
+defect class that recurred five times while the others were being fixed.
+
+| item | source | state |
+|---|---|---|
+| 9.1 Executable plant registry | this phase | designed, not built |
+| 9.2 Fence-contract population | ADR-0096/0102/0103/0104 | **done** — #281, ADR-0107 |
+| 9.3 Expected-red mechanism | **#273**, deferred by ADR-0101 | open |
+| 9.4 Second end-to-end shakedown | §8.8 | blocked, see below |
+| 9.5 Instruction-not-enforcement cluster | ADR-0097 `G3b`, ADR-0098, ADR-0099, ADR-0103 | undecided |
+| 9.6 Count stated in 3 files, derived in 1 | ADR-0105 | disclosed |
+
+#### 9.1 — Executable plant registry, and what the measurement rules out
+
+Rule 12 — *a scan whose needle is a literal counts itself* — bit **five times in one day**: `SA10`,
+`N9`, `GR1`, `GR5`, `SP1`. Each was an assertion whose needle was the **name** of the thing it
+asserted about, matching a file that legitimately names it while explaining it. All five were caught
+by planting a defect and watching the assertion fail to fail. **The plants worked; nothing made them
+durable** — a plant is typed into a shell, watched, and thrown away.
+
+Three root fixes were measured before choosing:
+
+- **A static detector on multi-match needles.** 77 of 181 statically resolvable assertions (43%)
+  have a needle matching its target more than once, dominated by legitimate cases (`ADR-0049`,
+  `ADR-0063` cross-references). It would flag nearly half the corpus, almost all falsely — and only
+  181 of 543 assertions are resolvable at all, a 67% blind spot on top.
+- **A code-only projection** (strip comments for shell, keep only fences for markdown). Catches
+  **4 of the 5**: `SA10` and `GR1` matched comments, `GR5` and `SP1` matched markdown prose. **`N9`
+  matched inside `ok`/`bad` message strings** — code, not commentary — so it misses the sneakiest.
+  It also collides with ADR-0086: a shared helper breaks 67 files' hermeticity, and duplicating it
+  67 times is what that ADR refused.
+- **What actually distinguishes a rule-12 defect is behavioural**: the assertion still passes when
+  the mechanism is removed. That is mutation testing and nothing else.
+
+So: a plant declared beside its assertion, `# plant: <id> | <path> | <needle> | <replacement>`, run
+by `plant-check.sh` against an isolated copy of the tree. The needle is joined on `\s+`, which puts
+today's wrap-insensitivity lesson **into the mechanism**; the runner requires **exactly one match**,
+because a plant matching zero or many is itself a defect and both happened today. A plant that does
+not fire is reported by name: that assertion pins nothing.
+
+**Scope is the plants already run**, across this session's eight test files — known-good cases whose
+answers are recorded in the ADRs. **No retroactive sweep of the other 543 assertions.** Runtime is a
+risk to measure, not assume: if the total is too slow for the main CI job it gets its own.
+
+#### 9.4 — The shakedown, and the precondition that must not be buried
+
+`hook_verified` is still `false`, so **no run has ever taken the Workflow dispatch path**. Half of
+every Step 5 fix from Phase 8 is unexercised, and a green second shakedown **must not be read as
+covering both paths**. It is also the only thing that can feed ADR-0080's still-unfed drop
+condition.
+
+#### 9.5 — One decision, not four
+
+ADR-0097's two in-session branches differing by one line, ADR-0098's divergence line, ADR-0099's
+gate recording, ADR-0103's merge-not-rebase rule: all prose nothing enforces. Worth deciding once
+whether any deserve a mechanism, rather than re-disclosing each time.
+
+#### What Phase 9 must not become
+
+- **A phase that trusts its own issues.** Phase 8's record is that measuring changed the direction
+  or the premise on **seven of twelve**. #281 continued it: four ADRs disclosed a gap none of them
+  had counted, and the count found a fifth entry older than all four.
+- **A registry that only ever reports success.** The plant runner has to be proven against an
+  assertion known to be weak, or it becomes the thing it exists to detect.
