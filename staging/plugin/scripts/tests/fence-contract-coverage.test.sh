@@ -248,7 +248,18 @@ fi
 #
 # Neither needle can be satisfied by this file's own marker-parsing code, which builds the string
 # by interpolation and contains no literal id (rule 12).
-CONTRACT_IDS=$(grep -oE 'fence-contract:[[:space:]]*[A-Za-z0-9_-]+' "$ABORT_LIST" \
+# Derived from ALL_FENCES — every DECLARATION — not from ABORT_LIST (issue #281, ADR-0107).
+#
+# It read the abort-capable subset, so a fence that declared itself and then ended `exit 3` or
+# `exit "$_rc"` sat outside `fence_is_abort_capable` and therefore outside its own guard. Measured:
+# **18 declarations, 13 in the population, 5 invisible** — four added in one day (ADR-0096,
+# ADR-0102, ADR-0103, ADR-0104, each of which disclosed it by hand) and one,
+# `concept-to-code-step5-plan-structure`, that predates all of them and nobody had noticed.
+#
+# All five were in fact executed and did parse. The defect was never coverage; it was that nothing
+# CHECKED the coverage, which is the same shape as the producer/consumer class #248 records —
+# an assertion that is true and unverified reads exactly like one that is verified.
+CONTRACT_IDS=$(grep -oE 'fence-contract:[[:space:]]*[A-Za-z0-9_-]+' "$ALL_FENCES" \
   | sed 's/.*fence-contract:[[:space:]]*//' | sort -u)
 CONTRACT_N=$(printf '%s\n' "$CONTRACT_IDS" | grep -c . )
 UNRUN=""
@@ -289,7 +300,7 @@ fi
 # F6: ids must be unique, or two fences share one execution and one of them is uncovered while
 # looking covered.
 DUP=$(printf '%s\n' "$CONTRACT_IDS" | grep -c . )
-RAW=$(grep -oE 'fence-contract:[[:space:]]*[A-Za-z0-9_-]+' "$ABORT_LIST" | grep -c . )
+RAW=$(grep -oE 'fence-contract:[[:space:]]*[A-Za-z0-9_-]+' "$ALL_FENCES" | grep -c . )
 if [ "$DUP" -eq "$RAW" ]; then
   ok "F6: all $DUP contract ids are unique"
 else
@@ -320,6 +331,35 @@ if [ "$ILL_N" -ge 1 ] && [ "$ILL_N" -le 3 ]; then
   ok "F8: $ILL_N illustration declaration(s) — the escape hatch is exercised and still narrow"
 else
   bad "F8: $ILL_N illustration declarations — expected 1..3; either F5 is vacuous or the hatch is widening"
+fi
+
+# F9: the population is EVERY declaration, not the abort-capable subset (ADR-0107).
+#
+# This is the regression guard for the widening above, stated as a property rather than as a count
+# so it cannot rot: every `fence-contract:` marker that exists must be in the set F4/F6/F7 check.
+# Reverting the derivation to ABORT_LIST makes this fail naming the five it drops.
+#
+# F5 and F8 deliberately keep reading ABORT_LIST. F8 measures the escape hatch from F3, which only
+# applies to abort-capable fences, so widening it would change what it means; F5 rides on F8's
+# population and there is exactly one illustration in the corpus, inside that subset. Measured, not
+# assumed — a second illustration outside it would need F5 widened, and F8 would still not move.
+MISSING=""
+for _m in $(grep -oE 'fence-contract:[[:space:]]*[A-Za-z0-9_-]+' "$ALL_FENCES" \
+              | sed 's/.*fence-contract:[[:space:]]*//' | sort -u); do
+  printf '%s\n' "$CONTRACT_IDS" | grep -qxF "$_m" || MISSING="$MISSING $_m"
+done
+if [ -z "$MISSING" ]; then
+  ok "F9: the contract population is every declaration ($CONTRACT_N), not the abort-capable subset"
+else
+  bad "F9: declared contract(s) missing from the checked population — the derivation narrowed:$MISSING"
+fi
+
+# F10: count guard on that population (ADR-0085 — guard the denominator). An enumeration that
+# quietly stops matching empties F4, F6, F7 and F9 at once, and four silent passes read as coverage.
+if [ "$CONTRACT_N" -ge 15 ]; then
+  ok "F10: contract population non-vacuous ($CONTRACT_N declarations)"
+else
+  bad "F10: only $CONTRACT_N declared contracts found — expected >= 15; the marker parse is broken, not clean"
 fi
 
 # =====================================================================================

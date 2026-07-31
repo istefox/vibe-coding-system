@@ -2673,3 +2673,40 @@ slot, new ones an archive — documented rather than reconciled; the repoint's o
 in-chain reader is load-bearing and unasserted.
 
 Detail: `docs/architecture/ADR-0106-267-spec-pointer-archive.md`.
+
+## Decisions from the fence-contract population chain (ADR-0107)
+
+Closes issue #281, found by sweeping Phase 8's ADRs for a disclosure repeated four times.
+`fence-contract-coverage.test.sh` derived `CONTRACT_IDS` from `ABORT_LIST` — the **abort-capable**
+subset — so a fence that declares itself and then ends `exit 3` or `exit "$_rc"` sat outside `F4`,
+`F6` and `F7`. **Measured: 18 declarations, 13 in the population, 5 invisible.**
+
+- **The defect was never coverage.** All five were executed by a test and all five parsed, checked
+  before proposing anything. **What was missing is that nothing checked it** — four ADRs (0096,
+  0102, 0103, 0104) assert coverage by hand, in prose, and each was telling the truth. **A hand
+  assertion that is true reads exactly like one that is verified**, which is ADR-0095's
+  producer/consumer shape one level up.
+- **The fifth entry is why it matters.** `concept-to-code-step5-plan-structure` had been outside its
+  own guard since before the session, and no ADR noticed. Four disclosures were written about a
+  population none of them had counted.
+- **`F3`, `F5` and `F8` deliberately keep the narrow population.** `F3` asks "must an abort-capable
+  fence declare itself", so that subset **is** its question; `F8` measures the escape hatch from
+  `F3` and would change meaning if widened; `F5` rides on `F8` and there is exactly one illustration
+  in the corpus, inside that subset — measured, with what would have to change if a second appeared
+  outside it written at the site.
+- **`F9` states a property, not a number**, so it cannot rot: every marker that exists must be in
+  the checked set. `F10` guards the denominator — an enumeration that stops matching would empty
+  `F4`, `F6`, `F7` and `F9` at once, and four silent passes read as coverage.
+
+**An honest note about the RED evidence.** Reverting the derivation makes `F9` fail naming all five,
+which is the evidence. `F6` also failed there with a nonsense message ("an id is reused") because
+the plant reverted `CONTRACT_IDS` and not `RAW`, comparing two populations that never coexisted —
+**an artifact of an incomplete plant, not a finding.** ADR-0090's "inspect what the plant actually
+produced" rule, applied to my own plant.
+
+Known consequences: four ADRs now carry a dated `## Correction` because their consequence bullets
+became false (bodies unedited, ADR-0034 precedent); a declared fence that is genuinely not executed
+now fails where it was invisible, which is a new way for the harness to redden on a file nobody
+touched.
+
+Detail: `docs/architecture/ADR-0107-281-fence-contract-population.md`.
