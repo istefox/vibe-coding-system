@@ -28,6 +28,18 @@
 # sub-step inside a task counts. Use this for a `>= 1` guard. Do not use the number as a task
 # count, and do not use it to delimit a task block — issue #184 is what that needs.
 #
+# --count-openers IS THAT SECOND ANSWER (issue #242, ADR-0100). It exposes is_task_opener(), which
+# ADR-0070 added to the shared predicate for exactly this distinction: "is there a task here"
+# versus "does a task BLOCK START here". Measured over the 58 plans in docs/superpowers/plans/, the
+# two answers differ on 51, and every one of those 51 is >= 6 and over-counted — so a caller that
+# batches by ranges gets ranges over tasks that do not exist. On #222's plan: 38 lines, 7 openers.
+#
+# THE TWO MODES ARE NOT INTERCHANGEABLE IN EITHER DIRECTION. --count over-counts, which is safe for
+# a guard and wrong for arithmetic. --count-openers returns 0 on the two corpus plans that use a
+# different word for a task (`### T1 —`, `### Step 0 —`, exempted by name in ADR-0070 §PTG9 and
+# ADR-0069 §PTE2), which is safe for arithmetic that checks for zero and wrong for a guard. A
+# caller picks the one matching its question and says which, at the call site.
+#
 # Bash 3.2 clean: no assoc arrays, no mapfile, no process substitution, no <<<.
 set -u
 
@@ -39,8 +51,12 @@ usage() {
   [ "${1:-}" = "" ] || printf '%s: %s\n' "$SELF" "$1" >&2
   cat >&2 <<'EOF'
 usage: plan-tasks.sh --count <plan-file>
+       plan-tasks.sh --count-openers <plan-file>
 
-stdout: one integer — the number of plan task lines (see ADR-0069 §D1 for the form).
+--count          one integer: task LINES, the loose predicate. For a `>= 1` malformed-plan guard.
+--count-openers  one integer: task BLOCK OPENERS, the strict predicate. For anything that batches,
+                 ranges or attributes content to a task. See ADR-0069 §D1 for the forms.
+
 Exit: 0 counted | 2 bad invocation or unreadable plan | 3 awk could not run the predicate.
 EOF
   exit 2
@@ -51,13 +67,14 @@ MODE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --count) MODE="count"; shift; [ $# -gt 0 ] || usage "--count needs a plan file"; PLAN="$1"; shift ;;
+    --count-openers) MODE="openers"; shift; [ $# -gt 0 ] || usage "--count-openers needs a plan file"; PLAN="$1"; shift ;;
     -h|--help) usage "" ;;
     *) usage "unknown argument: $1" ;;
   esac
 done
 
-[ "$MODE" = "count" ] || usage "missing --count <plan-file>"
-[ -n "$PLAN" ] || usage "--count needs a plan file"
+[ "$MODE" = "count" ] || [ "$MODE" = "openers" ] || usage "missing --count or --count-openers <plan-file>"
+[ -n "$PLAN" ] || usage "a plan file is required"
 [ -f "$PLAN" ] && [ -r "$PLAN" ] || { printf '%s: plan not found or unreadable: %s\n' "$SELF" "$PLAN" >&2; exit 2; }
 [ -f "$PREDICATE" ] && [ -r "$PREDICATE" ] || { printf '%s: predicate not found: %s\n' "$SELF" "$PREDICATE" >&2; exit 3; }
 
@@ -68,10 +85,17 @@ done
 # targets.
 TMPD=$(mktemp -d) || { printf '%s: cannot create a temp directory\n' "$SELF" >&2; exit 3; }
 trap 'rm -rf "$TMPD"' EXIT
-cat >"$TMPD/count.awk" <<'AWKEOF'
+if [ "$MODE" = "openers" ]; then
+  cat >"$TMPD/count.awk" <<'AWKEOF'
+{ if (is_task_opener($0)) n++ }
+END { print n + 0 }
+AWKEOF
+else
+  cat >"$TMPD/count.awk" <<'AWKEOF'
 { if (is_task_line($0)) n++ }
 END { print n + 0 }
 AWKEOF
+fi
 
 N=$(awk -f "$PREDICATE" -f "$TMPD/count.awk" "$PLAN" 2>/dev/null) \
   || { printf '%s: awk failed on %s — the check did not run\n' "$SELF" "$PLAN" >&2; exit 3; }

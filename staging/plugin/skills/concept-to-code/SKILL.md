@@ -940,7 +940,17 @@ If either path is missing on disk: do NOT dispatch coder. Present to user:
 # CLEAN). Do not copy one block's branching into the other.
 tasks=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count "<manifest.artifacts.plan>")
 rc=$?
+openers=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count-openers "<manifest.artifacts.plan>")
+orc=$?
 ```
+
+**Two counts, two questions, and using one for the other is issue #242 (ADR-0100).** `$tasks` is
+the loose predicate and answers *"is there any task at all"* — it is for the `>= 1` guard below and
+for nothing else. `$openers` is the strict predicate and answers *"how many task blocks are there"*
+— it is for the batch-dispatch policy in the Agent-tool fallback and for nothing else. Measured
+over the 58 corpus plans, the two differ on 51, all of them `>= 6` and over-counted; on #222's plan
+they are 38 and 7, and batches of 2-3 over 38 dispatch against tasks that do not exist. **Do not
+substitute one for the other in either direction.**
 If `rc = 2` or `rc = 3`: do NOT dispatch coder — **the check did not run**, which is not the same as
 finding no tasks. Report the script's stderr verbatim and stop.
 
@@ -1841,10 +1851,25 @@ task that turns it green. #222's plan is the worked example — Task 3's `C7` mu
 vendored file, so they belong to different batches, while Task 1's `F10` and Task 2's vendoring
 belong to the same one.
 
-**Batch-dispatch policy (≥6 tasks in plan):** if the plan contains ≥6 tasks, do NOT
-dispatch the coder as a single monolithic block — the dispatch can silently truncate
-halfway (context overflow, timeout) without a final report and without running the
-closing gates. Split the dispatch into **batches of 2-3 tasks**:
+**Batch-dispatch policy (≥6 task blocks in plan):** **the number is `$openers`, from
+`plan-tasks.sh --count-openers`, never `$tasks` (issue #242, ADR-0100).** `$tasks` over-counts by
+design — a `## Tasks` section heading and every checkbox sub-step match it — so batching by it
+produces ranges over tasks that do not exist; on #222's plan it says 38 where there are 7.
+
+If `$openers ≥ 6`, do NOT dispatch the coder as a single monolithic block — the dispatch can
+silently truncate halfway (context overflow, timeout) without a final report and without running
+the closing gates. Split the dispatch into **batches of 2-3 task blocks**, numbered by their
+`Task N` designations.
+
+**If `$openers = 0` while `$tasks ≥ 1`: dispatch as a single block**, and say so:
+> "Batch dispatch: the plan's tasks are not in the `Task N` form (`plan-tasks.sh --count-openers`
+> returned 0), so batch ranges cannot be numbered. Dispatching as one block."
+
+Two corpus plans are in exactly that state — they write `### T1 —` and `### Step 0 —`, the forms
+ADR-0070 §PTG9 and ADR-0069 §PTE2 exempt by name. Consuming `$openers` without this branch would
+turn an over-batching bug into a batch-nothing one, which is #242 committed in the other direction.
+If `$orc` is 2 or 3 the count did not run: treat it as this same case, single block, and report the
+stderr.
 
 1. Dispatch `tester` for batch 1 (tasks 1-N, where N ≤ 3), BEFORE this batch's coder
    (ADR-0049 §D1 — same ordering as the Workflow path's Stage 1). Pin `subagent_type: "tester"`,
