@@ -2635,3 +2635,41 @@ manifest hand-edited to that state (zero existing ones affected, measured); the 
 in three files and derived in one, so three chances to drift against one detector.
 
 Detail: `docs/architecture/ADR-0105-265-gate5-state-removal.md`.
+
+## Decisions from the SPEC pointer / archive-on-completion chain (ADR-0106)
+
+Closes issue #267, measured while fixing #228 and filed rather than bundled. All 41 manifests record
+`artifacts.spec: <project-root>/SPEC.md`, a **single mutable slot** every chain overwrites — so the
+pointer resolves to whatever the slot holds today, right for at most one manifest and that one by
+coincidence.
+
+- **The second gap the issue does not name.** ADR-0096 archives the OUTGOING SPEC when a new chain
+  is about to overwrite the slot — archive-on-**displacement**. So a chain's SPEC is archived only
+  if a **later** chain happens to displace it, and **the most recent chain's SPEC is never
+  archived**. This repository is the proof: #176's was archived by hand by #229, #222's by hand
+  today, and `120-accessibility-i18n` still has none under its slug. 36 archives, 41 manifests.
+- **Step 7.0b is archive-on-completion, the other trigger, and the two compose rather than
+  duplicate** — a property of `spec-archive.sh` comparing by **content**, so a second call reports
+  `ALREADY` and writes nothing.
+- **On failure the pointer is left alone.** A pointer at a slot is today's behaviour; a pointer at
+  an archive that was never written is a new defect. The failure direction matters more than the
+  success.
+- **Historical manifests are not rewritten** (ADR-0075's rule: falsifying a record for no consumer
+  is worse than leaving it accurate-for-its-moment). `SP5` guards the 41 slot pointers.
+- **Found while writing the block, not afterwards:** the ADR-0104 collapse leaves everything staged,
+  and `commit`'s Step 1 then takes the staged set only — so the freshly-written archive (untracked)
+  and the freshly-repointed manifest (modified *after* staging) would **both** be silently excluded.
+  `--include` exists for precisely this caller shape (ADR-0071 §D2).
+
+**`SP1`'s first form matched the prose**: `grep -q 'spec-archive.sh'`, while Step 7 legitimately
+names the script explaining how the triggers compose — so the plant that deleted the actual
+invocation walked straight through. **Rule 12, fifth instance in one day**, after `SA10`, `N9`, and
+`GR1`/`GR5`. `SP6`–`SP6d` passed *before* the wiring existed, deliberately: they prove the helpers
+work independently of whether anything calls them.
+
+Known consequences: every completed chain writes and commits one more file; **`artifacts.spec` now
+means two different things depending on when the manifest was written** — historical ones name a
+slot, new ones an archive — documented rather than reconciled; the repoint's ordering after every
+in-chain reader is load-bearing and unasserted.
+
+Detail: `docs/architecture/ADR-0106-267-spec-pointer-archive.md`.
