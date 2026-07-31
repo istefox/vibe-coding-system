@@ -2332,3 +2332,49 @@ routing vote itself is unchanged, so a gate that can only ever suggest two of it
 real limitation now stated rather than discovered; the divergence line is prose nothing enforces.
 
 Detail: `docs/architecture/ADR-0098-227-gate0-recommendation.md`.
+
+## Decisions from the HITL audit-trail chain (ADR-0099)
+
+Closes issue #238, last of Wave C. Two defects in one subject, each making the other's fix useless.
+**`manifest-set-gate.sh` had no instructed call site anywhere in the chain** — correct, tested,
+deployed, unreachable — and **the template had no `gate: 4` slot**, so recording the one gate that
+matters most exited 3. Third instance this month of a producer specified in one place and consumed
+in another with nothing checking the two meet (#173, #248, this).
+
+- **The measurement is also the baseline: 39 of 164 gate entries approved across 41 manifests, and
+  the distribution is bimodal** — four manifests at 4/4, thirteen at 1/4. That is not gates being
+  answered differently, it is orchestrators remembering differently. Invariant 9 counts entries and
+  never reads status, so an all-`pending` trail validates clean: the trail passed the check by
+  existing.
+- **Gate 4 is the one that mattered, because `autopilot: true` is ambiguous by construction.**
+  `project-conductor`'s nightly mode sets the identical flag with no human at Gate 4 at all
+  (ADR-0022), so afterwards the flag cannot distinguish a human choosing unattended implementation
+  from a roadmap pre-authorising the whole run. The chosen option name in `notes` is the only thing
+  that separates them — and it is labelled `implementation_mode`, not `session_boundary`, because
+  after ADR-0097 the gate asks two things and the cell is what is worth recording.
+- **No status invariant, and the reason is the issue's own.** A chain legitimately sits `pending`
+  mid-run and a completed chain with a pending Gate 5 is real (the `step_6_review → completed`
+  direct close skips it). A status check conditional on `current_step` is ADR-0076's rule and the
+  same trap.
+- **Invariant 9's minimum stays 4 with five slots written.** It is a MINIMUM; raising it to 5 fails
+  all 41 historical manifests for a change they predate (ADR-0078's rule applied to a count). That
+  the template writes five is asserted against the TEMPLATE, not against every manifest ever
+  produced.
+
+**Planting found two things reading did not.** `min_gates=4` was assigned **twice** and the first
+was **dead** — a bare assignment above a `case` whose `*)` overwrote it on every path. Found by
+raising it and watching nothing change, which is exactly how a future edit meaning to raise it would
+fail: silently, while looking correct. And the second plant replaced a sentence by literal string
+while **the same sentence appears twice and one wraps after the word "cannot"**, so it hit one site
+and the survivor still satisfied the assertion. **A plant needle must be wrap-insensitive for the
+same reason an assertion needle must be** — otherwise a failed plant reads as a weak assertion and
+gets "fixed" in the wrong place. Seventh member of the decoration family here, and the first on the
+plant side.
+
+Known consequences: this ships an instruction, not an enforcement — nothing makes an orchestrator
+call the helper, only there is now something to call at a named place; every pre-ADR-0099 manifest
+returns exit 3 for gate 4 (reported, not fatal); the trail records what the orchestrator SAYS
+happened, a self-report, so it is a record and never a gate (ADR-0047 §A3); Express and Hybrid have
+their own gates and the same question, measured on Standard only and left there.
+
+Detail: `docs/architecture/ADR-0099-238-hitl-gate-audit-trail.md`.
