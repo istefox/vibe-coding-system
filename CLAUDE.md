@@ -2247,3 +2247,42 @@ another chain's SPEC — measured here, filed as **#267**, not fixed here; two n
 coexist in `docs/specs/`.
 
 Detail: `docs/architecture/ADR-0096-228-spec-archive.md`.
+
+## Decisions from the Gate 4 axes chain (ADR-0097)
+
+Closes issue #237, first of Wave C. Gate 4 offered three options encoding **two orthogonal axes** —
+WHERE Steps 5-7 run (this session or fresh) and HOW (attended, every downstream gate asking, or
+unattended with `autopilot = true` driving each to its safe default). Four cells, two offered, on
+the diagonal. **Staying in-session was therefore choosing to forfeit Gates 5, 5.05, 5.06, 5.1 and
+5.6, and nothing at the gate said so.** Found by a run whose explicit purpose was to exercise those
+gates: taking the offered option meant the gates under observation stopped firing.
+
+- **The block contradicted itself in the same box, and that is what kept the missing cell hidden.**
+  Option 1 said the context risk is *"mitigated since coders dispatch as isolated subagents"*;
+  option 2 sold itself on *"the cleanest coder context"*. The first is right — a dispatched coder is
+  an isolated subagent in its own worktree (ADR-0068) and never carried this session's conversation.
+  What a fresh session buys is a clean **orchestrator** context: headroom, and briefs written
+  without the whole chain behind them. ADR-0042's shape, and "cleanest coder context" is precisely
+  the sentence that made the fresh session look necessary.
+- **Add the cell, do not document its absence.** The only argument for forcing a fresh session was
+  coder pollution, which ADR-0068 settles. An option that gives up nothing should not be
+  unavailable. Four options is exactly the `AskUserQuestion` ceiling, so the matrix is spanned with
+  no room left — a fifth would force a split into two questions.
+- **The recommendation moves to attended-in-session**, because it is the only cell that forfeits
+  nothing. **Gate 4 carried no `(Recommended)` marker at all** while every other gate does and the
+  global convention requires it — found by the assertion, not by reading.
+- **`RH2`'s floor raised 3 → 4 in the same change.** Left at 3 it passed while reporting "all three
+  proceeding paths" (true before, false after) and would have tolerated one of the four silently
+  losing its `Gate 4.0` call. **A floor that no longer tracks its population has stopped measuring.**
+- **The shared principle with #227, recorded here as the first of the two:** *a gate must not
+  present a choice whose options fail to span the decision, and must not present two signals as if
+  they were one.* #237 is the first failure, #227 the second (two "recommended" markers that can
+  disagree, no stated precedence). Both at the chain's two entry gates, both from the same run.
+  #227 needs a precedence rule rather than a missing option, so one edit cannot serve both.
+
+Known consequences: the default changes, so an operator clicking the first option without reading
+now gets five gates they did not get yesterday; the gate is at its four-option ceiling, and any
+further cell is a redesign; the two in-session handlers differ by **one line** and `G3b` is the only
+thing holding them apart; the unattended-fresh-session cell is documented rather than offered.
+
+Detail: `docs/architecture/ADR-0097-237-gate4-implementation-axes.md`.
