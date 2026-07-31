@@ -178,7 +178,15 @@ if [ -z "$gate_count" ]; then
   gate_count=0
 fi
 chain_path_val="$(grep '^chain_path:' "$MANIFEST" | sed 's/^chain_path: *//;s/"//g' | head -1)"
-min_gates=4
+# The bare `min_gates=4` that used to sit here was DEAD: the case below has a `*)` catch-all, so it
+# was overwritten on every path. Found by planting a raised minimum on it and watching nothing
+# change (issue #238) — which is exactly how a future edit meaning to raise it would fail, silently
+# and while looking correct. Raise the `*)` arm, not a default above it.
+#
+# The minimum stays 4 with five slots written since ADR-0099: it is a MINIMUM, and raising it to 5
+# would fail all 41 historical manifests for a change they predate (ADR-0078's rule, applied to a
+# count instead of a path). That the template writes five is asserted against the template itself,
+# in hitl-gate-audit-trail.test.sh, not against every manifest ever produced.
 case "$chain_path_val" in
   express) min_gates=2 ;;
   hybrid)  min_gates=3 ;;

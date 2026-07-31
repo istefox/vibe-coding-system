@@ -2773,6 +2773,8 @@ Brownfield regenerate: set `mode: greenfield`, invoke `interview-driver`. Covers
 
 Reject/greenfield behavior: transition back to `step_1_interview`; re-invoke `interview-driver` with notes as prefix.
 
+**Record the gate outcome** — see *Gate approval recording* in §5: `manifest-set-gate.sh <manifest-path> 1 approved "<spec accepted>"`, or `rejected` with the reason, before the transition.
+
 **[Autopilot default: "Approve and proceed" (both greenfield and brownfield). Emit: "Gate 1: autopilot — spec auto-approved ✓"]**
 
 ---
@@ -2867,6 +2869,8 @@ options:
 ```
 
 Reject behavior: transition back to `step_2_architecture`; re-dispatch architect with the feedback as addendum.
+
+**Record the gate outcome** — see *Gate approval recording* in §5: `manifest-set-gate.sh <manifest-path> 2 approved "<architecture accepted>"`, or `rejected` with the reason, before the transition.
 
 **[Autopilot default: "Approve". Emit: "Gate 2: autopilot — architecture auto-approved ✓"]**
 
@@ -3068,6 +3072,8 @@ options:
 Skip behavior: `manifest.artifacts.project_claude_md = null`, transition to `step_4_session_boundary`.
 Reject behavior: re-invoke `claude-md-generator` with feedback prefix.
 
+**Record the gate outcome** — see *Gate approval recording* in §5: `manifest-set-gate.sh <manifest-path> 3 approved "<applied|skipped>"`, or `rejected` with the reason, before the transition.
+
 **[Autopilot default: "Approve (create/overwrite CLAUDE.md)". Execute `mv CLAUDE.md.proposed CLAUDE.md` automatically. Emit: "Gate 3: autopilot — CLAUDE.md auto-applied ✓". Transition to `step_4_session_boundary`.]**
 
 ---
@@ -3075,6 +3081,36 @@ Reject behavior: re-invoke `claude-md-generator` with feedback prefix.
 **Gate 4 — Session boundary (BLOCKING)**
 
 Trigger: post Gate 3, manifest in `step_4_session_boundary`.
+
+#### Gate approval recording (issue #238, ADR-0099)
+
+**Named once here; every gate branch below references it.** `manifest-set-gate.sh` shipped correct,
+tested and deployed with **no instructed call site anywhere in the chain**, so every approval a
+human gave was recorded nowhere and the trail stayed `pending` for the life of the manifest.
+Measured before the fix: 39 of 164 gate entries across 41 manifests were `approved`, and the
+distribution is bimodal — four manifests at 4/4, thirteen at 1/4. That is not gates being answered
+differently, it is orchestrators remembering differently.
+
+**Record the gate outcome** immediately after each gate's click, before the transition:
+
+```bash
+bash ~/.claude/skills/concept-to-code/scripts/manifest-set-gate.sh <manifest-path> <N> <status> "<notes>"
+```
+
+`<status>` is `approved` or `rejected`. `<notes>` is short and factual — which option was chosen,
+or why it was rejected. Exit 3 means the gate has no slot in this manifest, which for gates 1–5 on a
+Standard chain means the manifest predates ADR-0099; report it and proceed rather than halting, since
+a missing audit line is not a reason to stop a chain a human is standing in front of.
+
+**Gate 4's notes are load-bearing in a way the others' are not.** `autopilot: true` alone **cannot
+distinguish a human choosing unattended implementation from a roadmap pre-authorising the whole
+run** — `project-conductor`'s nightly mode sets the identical flag with no human at Gate 4 at all
+(ADR-0022). The chosen option name in `notes` is the only thing that tells them apart afterwards.
+
+No status invariant is added to `manifest-validate.sh`, deliberately. A chain legitimately sits at
+`pending` mid-run, and a completed chain with a pending Gate 5 is a real state — the
+`step_6_review → completed` direct close skips it. Any status check would have to be conditional on
+`current_step`, which is ADR-0076's rule and the same trap.
 
 #### Gate 4.0 — Commit the planning artifacts (ADR-0071)
 
@@ -3193,6 +3229,8 @@ Run these two commands now:
 The manifest is now at `ready_for_implementation`. The fresh session will detect this state and restart from Step 5.
 
 Note: `/clear` cannot be triggered automatically from within the skill — it is a UI-only command. The two-line block above is the closest possible automation.
+
+**Record the gate outcome for all four branches** — see *Gate approval recording* in §5: `manifest-set-gate.sh <manifest-path> 4 approved "<the option label the user clicked>"`, and `rejected "aborted at Gate 4"` on the abort branch. **The option name is the load-bearing part**: `autopilot: true` alone cannot distinguish a human choosing unattended implementation from a roadmap pre-authorising the whole run, and this note is the only thing that tells them apart afterwards.
 
 **After the user clicks "Abort chain":**
 Emit: "Gate 4: chain aborted. Manifest left at `step_4_session_boundary` — run `/skill concept-to-code resume <manifest-path>` to continue later."
@@ -3335,6 +3373,8 @@ options:
 "Run review-triage-fix": emit "Gate 5: review cycle ✓ — dispatching review-triage-fix...". Dispatch `review-triage-fix`. **Immediately after review-triage-fix returns (do NOT wait for user input), evaluate Gate 5.05.**
 
 **[Autopilot default: "Skip review". Emit: "Gate 5: autopilot — review skipped ✓"]**
+
+**Record the gate outcome** — see *Gate approval recording* in §5: `manifest-set-gate.sh <manifest-path> 5 approved "<run review|skip review>"`. Under autopilot record the default that was taken, so the trail shows the decision was made by the flag rather than by a person.
 
 ---
 
