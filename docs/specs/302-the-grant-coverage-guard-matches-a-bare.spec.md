@@ -21,7 +21,7 @@ Out: the hook `staging/plugin/scripts/agent-command-scope.sh` itself is not wide
 — the threat model (a guardrail against a shortcut, not a sandbox) is unchanged; no agent's grants
 are narrowed or widened; `J1`–`J5` (the grant-coverage classification, the behavioural check and the
 residual expected-ALLOW limit) keep their current meaning; the interpreter enumeration is issue
-#303's subject, not this one.
+Issue #303's subject, not this one.
 
 ## Stack
 Bash 3.2 (macOS-portable) shell scripts under `staging/plugin/scripts/` and

@@ -57,7 +57,7 @@ The declaration, one line in `sync-to-claude.sh`:
 
 `# deployed-only: <skill-name> — <reason>`
 
-Parsed today by stripping the `# deployed-only: ` prefix and taking the first whitespace-delimited
+Parsed today by stripping the `# deployed-only:` prefix and taking the first whitespace-delimited
 field as the skill name, with the remainder as the reason. This feature adds a way to distinguish a
 mechanically-checkable reason from a human claim; whether that is a new field, a marker within the
 reason, or a separate declaration form is an implementation decision.

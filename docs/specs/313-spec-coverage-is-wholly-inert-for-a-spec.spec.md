@@ -20,7 +20,7 @@ path; the corpus sweep over `docs/specs/`; the reported-versus-silent distinctio
 with detection if ADR-0072's pattern applies.
 
 Out: the citation-versus-implementation weakness of the coverage predicate itself, which is issue
-#312's subject; the plain-bullet near-miss, already repaired by `spec-normalize-ids.sh` under
+Issue #312's subject; the plain-bullet near-miss, already repaired by `spec-normalize-ids.sh` under
 ADR-0072; widening the checker to "any `R-NN` anywhere", which ADR-0048 rejected by name.
 
 ## Stack
