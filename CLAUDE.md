@@ -1889,3 +1889,59 @@ deployed set is fully accounted for" reads something this feature does not claim
 coverage beyond `HOME`-override fixtures, the same asymmetry ADR-0084 already accepted.
 
 Detail: `docs/architecture/ADR-0087-222-deployed-only-skills.md`.
+
+## Decisions from the Step 5.0.1 manifest exemption (ADR-0089)
+
+Closes issue #239, Wave A1 of Phase 8. ADR-0050's pre-flight asserts a clean tree at Step 5 entry.
+The chain writes the manifest at every state change, and two of those writes land **between**
+Gate 4.0's commit and that assertion — so the assertion had never been satisfied by a real run.
+The Phase 7.1 shakedown reached it with a clean tree and a successful Gate 4.0 behind it and was
+refused, with a message saying the planning artifacts were uncommitted. They were not.
+
+- **No ordering fixes it, and that is what decides the design.** "Implement now" could be repaired
+  by moving Gate 4.0 after the flag and the transition. The fresh-session branch cannot: Form B
+  resume step 3 writes `session_boundary.resumed_at` unconditionally, after any commit the old
+  session could have made. And 5.0.3 writes `recovery_baseline_sha` into the same file **on
+  purpose**, three assertions later. *"The working tree is clean"* and *"the manifest is written at
+  every state change"* are flatly incompatible requirements on one file; neither side is wrong,
+  which is why it survived review on both.
+- **The manifest leaves the dirty set, and only the manifest.** ADR-0050 §D2's purpose is work of
+  **unknown provenance**; the chain is the manifest's only writer. `SPEC.md`, the ADR, the plan and
+  `CLAUDE.md` stay in, each still refusing individually (`RJ3`).
+- **The exemption is bounded by `manifest-validate.sh`, not by trust** — ADR-0075 measured
+  hand-edited manifests as real. What is exempt is the file's **dirtiness**, never its **content**,
+  and the skill says so, because the exemption reads at a glance exactly like a weakened check.
+- **The block was not merely unexecuted, it was UNEXECUTABLE**, and that is the sharper form of
+  rule 11. 5.0.1's classification was prose ("decide by intersecting…"), so it could not be an
+  ADR-0083 contract and nothing guarded it. It is now `fence-contract:
+  c2c-step5-preflight-dirty-classify`, with a token per branch and **exit 3 for "did not run"** —
+  without which an unrunnable classifier is indistinguishable from a clean tree, which is #239 one
+  level down.
+- **The first draft was broken in the direction that looks like success.** `git rev-parse
+  --show-toplevel` returns a *physical* path while the chain's manifest path is whatever `$PWD` was
+  at Gate 0, so a raw prefix match shortened nothing, every artifact classified as `OTHER` —
+  **including the manifest**, making the exemption silently inert while the fence still exited
+  non-zero and still looked right. Eleven fixtures caught it on the first execution. Live on macOS:
+  `/tmp` is a symlink to `/private/tmp` and this checkout is reachable through two differently-cased
+  paths.
+- **Only half the normalisation is evidenced, and the fence says which half.** Reverting `ROOT` to
+  the unresolved value fires **no assertion** (git already returns a physical path); reverting the
+  argument side fires five. Both are in the code, one is defence. Conflating them would be the
+  claim this repository keeps catching.
+- **`*.bak` is gitignored, and that is load-bearing for TWO checks.** 5.0.3 uses `sed -i.bak`; were
+  it not ignored, the debris would dirty the tree at this assertion **and** trip ADR-0068 §D11's
+  merge-back escape check on every stage. Verified, not assumed, and recorded so a `.gitignore` edit
+  cannot break two unrelated checks in silence.
+
+Known consequences: a pre-flight guard now passes on strictly more inputs (bounded to one file);
+`manifest-validate.sh` becomes a hard dependency of the in-session Gate 4 branch, failing closed on
+an un-synced machine (ADR-0076's rule); porcelain v1 means a **renamed** artifact classifies as
+`OTHER` and a quoted path will not match; **#248 is not fixed by this** — entering Step 5 and
+leaving it for Step 6 are two missing producers in the same stretch of chain.
+
+**Plant lesson worth keeping:** two of nine plants did not fire, and both were informative rather
+than formalities. One targeted dead code (the exclusion is upstream of the `case`); the other
+targeted the untested half of the normalisation, which is what produced the honesty note above. A
+plant that does not fire is evidence about the assertion, not a step to get past.
+
+Detail: `docs/architecture/ADR-0089-239-step5-preflight-manifest-exemption.md`.
