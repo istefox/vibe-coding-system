@@ -682,29 +682,107 @@ Four assertions, run once, at the very top of Step 5 — before dispatch-mode se
 
 **ADR-0050 §D4 — the reconciliation, updated by ADR-0068 §D6.** This pre-flight guards entry to Step 5, before anything in Step 5 has executed: a dirty tree here is uncommitted human work of unknown provenance, so it refuses to dispatch. ADR-0049 §D2's dirty-tree condition, which used to guard each coder dispatch *inside* Step 5 by tolerating a tree the tester stage had deliberately left dirty and dropping isolation to a second, worktree-less mode, is retired: the tester now runs in its own worktree and its output is committed and merged into the feature branch before the coder's worktree is created (ADR-0068 §D6), so the condition it tested for cannot arise. The two conditions were sequential, not contradictory, while both existed; the surviving invariant is narrower and is what replaces them both: at Step 5 entry the tree is clean, and every stage's output is committed and merged before the next stage's worktree is created.
 
-**Step 5.0.1 — Working tree clean.**
+**Step 5.0.1 — Working tree clean, APART FROM THE MANIFEST (ADR-0050 §D2, amended by issue #239).**
+
+<!-- fence-contract: c2c-step5-preflight-dirty-classify -->
 ```bash
-git status --porcelain
+# Free variables, bound by the orchestrator before this block runs:
+#   MANIFEST        absolute path to the manifest (the value manifest-init.sh printed)
+#   SPEC ADR PLAN   absolute paths from manifest.artifacts.*; ADR/PLAN may be empty on Express
+# Exit contract: 0 = clean, proceed to 5.0.2 · 1 = refuse to dispatch · 3 = the check DID NOT RUN.
+# The third exists for the same reason it does in spec-coverage.sh and plan-tasks.sh: a checker
+# that could not run must not be readable as a checker that found nothing.
+_top=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "PREFLIGHT_NOREPO"; exit 3; }
+[ -n "${MANIFEST:-}" ] || { echo "PREFLIGHT_NOMANIFEST"; exit 3; }
+# rel() RESOLVES ITS ARGUMENT before comparing. `git rev-parse --show-toplevel` returns a physical
+# path while the manifest path the chain carries is whatever `$PWD` was at Gate 0, so a raw prefix
+# match shortens nothing and EVERY artifact then classifies as OTHER — including the manifest,
+# which makes the exemption below silently inert. That was this fence's first draft, found by
+# running it. Not hypothetical on macOS: `/tmp` is a symlink to `/private/tmp`, and a checkout is
+# reachable through differently-cased paths on APFS. Pinned by `recovery-preflight.test.sh` RJ9.
+# The `cd … && pwd -P` on ROOT is belt-and-braces for a git that returns a logical path; no failing
+# case could be constructed for it, so it is defence, not a tested property — do not read the two
+# as equally evidenced.
+ROOT=$(cd "$_top" && pwd -P)
+rel() {
+  [ -n "${1:-}" ] || return 0
+  _d=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) || { printf '%s' "$1"; return 0; }
+  _p="$_d/$(basename "$1")"
+  case "$_p" in "$ROOT"/*) printf '%s' "${_p#$ROOT/}" ;; *) printf '%s' "$_p" ;; esac
+}
+
+# The manifest leaves the dirty set BEFORE anything is classified. Do not put it back — see the
+# paragraph below this fence for why, and read #239 before deciding the exemption looks careless.
+DIRTY=$(git status --porcelain | sed 's/^...//' | grep -vxF "$(rel "$MANIFEST")" || true)
+[ -n "$DIRTY" ] || { echo "PREFLIGHT_CLEAN"; exit 0; }
+
+SPEC_REL=$(rel "${SPEC:-}"); ADR_REL=$(rel "${ADR:-}"); PLAN_REL=$(rel "${PLAN:-}")
+CHAIN=""; OTHER=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  case "$f" in
+    "$SPEC_REL"|"$ADR_REL"|"$PLAN_REL"|CLAUDE.md) CHAIN="$CHAIN$f " ;;
+    *) OTHER="$OTHER$f " ;;
+  esac
+done <<DIRTY_EOF
+$DIRTY
+DIRTY_EOF
+
+if [ -n "$CHAIN" ] && [ -n "$OTHER" ]; then echo "PREFLIGHT_BOTH chain: $CHAIN| other: $OTHER"; exit 1
+elif [ -n "$CHAIN" ]; then echo "PREFLIGHT_CHAIN $CHAIN"; exit 1
+else echo "PREFLIGHT_OTHER $OTHER"; exit 1
+fi
 ```
-Non-empty output → refuse to dispatch. Do not proceed to dispatch-mode selection.
 
-**The remediation depends on WHAT is dirty, and the two cases pull in opposite directions
-(ADR-0071 §D3).** Decide by intersecting `git status --porcelain` with the chain's own artifacts —
-`SPEC.md`, `manifest.artifacts.adr`, `manifest.artifacts.plan`, the manifest itself, `CLAUDE.md`:
+**Why the manifest is exempt, and why removing the exemption breaks every run (issue #239).** The
+chain writes the manifest at every state change, and two of those writes land between Gate 4.0's
+commit and this assertion: `manifest-set-flag.sh <m> autopilot true` and `manifest-transition.sh <m>
+ready_for_implementation`. On the fresh-session branch it is worse — Form B resume step 3 updates
+`session_boundary.resumed_at` unconditionally, after any commit the old session could have made, so
+no ordering avoids it. Then 5.0.3 below writes `recovery_baseline_sha` into the same file **on
+purpose**, three assertions later. "The working tree is clean" and "the manifest is written at every
+state change" are flatly incompatible requirements on the same file; the pre-flight asserted one
+while the state machine implemented the other, so this assertion had never been satisfied by a real
+chain run. ADR-0050 §D2's purpose survives intact: it refuses on work of **unknown provenance**, and
+the manifest's provenance is the most known thing in the repository, since the chain is its only
+writer. `SPEC.md`, the ADR and the plan stay in the set, so the check this assertion exists for is
+unchanged. Reordering Gate 4.0 was considered and rejected: it fixes the in-session branch and
+cannot fix the resume branch at all.
 
-- **Any chain artifact is uncommitted** → the producer did not run, or ran and was declined.
-  Print: "Recovery-readiness pre-flight: the chain's own planning artifacts are uncommitted. Gate 4.0
-  should have committed them. Run `/skill commit '<topic> — planning artifacts' --no-pr`, then
-  re-invoke Step 5." **Never advise `git stash` here**: `-u` would stash `SPEC.md`, the ADR and the
-  plan, which are exactly what the coder and tester dispatches read, producing a Step 5 that runs
-  against missing inputs. Until ADR-0071 this was the printed advice, and it was wrong on the only
-  path that ever reached it.
-- **Only unrelated files are dirty** → this is the deliberately-dirty resume ADR-0050 §D2 negative
-  consequence 2 describes. Print: "Recovery-readiness pre-flight: working tree has uncommitted
-  changes unrelated to the chain. Run `git stash push -u -m 'c2c-step5-preflight'` (or commit them)
-  and re-invoke Step 5."
-- **Both** → prescribe the commit first, then the stash, in that order, and say why: committing the
-  artifacts is what makes the stash safe.
+**The exemption is bounded by a validity check, not by trust.** Excluding the file from the dirty
+set would otherwise let a hand-edited manifest through — and ADR-0075 measured hand-edits as real,
+not hypothetical. So run the validator that actually applies to that file, on both Gate 4 branches
+(Form B resume already does this at its step 1; the in-session branch never did):
+```bash
+bash ~/.claude/skills/concept-to-code/scripts/manifest-validate.sh "<manifest>"
+```
+Non-zero → refuse to dispatch and print the validator's own stderr verbatim. What is exempt is the
+manifest's **dirtiness**, never its **content**.
+
+**Remediation, keyed to the token the fence printed:**
+
+- **`PREFLIGHT_CHAIN`** → a chain artifact is uncommitted: the producer did not run, or ran and was
+  declined. Print: "Recovery-readiness pre-flight: the chain's own planning artifacts are
+  uncommitted. Gate 4.0 should have committed them. Run `/skill commit '<topic> — planning
+  artifacts' --no-pr`, then re-invoke Step 5." **Never advise `git stash` here**: `-u` would stash
+  `SPEC.md`, the ADR and the plan, which are exactly what the coder and tester dispatches read,
+  producing a Step 5 that runs against missing inputs. Until ADR-0071 this was the printed advice,
+  and it was wrong on the only path that ever reached it.
+- **`PREFLIGHT_OTHER`** → this is the deliberately-dirty resume ADR-0050 §D2 negative consequence 2
+  describes. Print: "Recovery-readiness pre-flight: working tree has uncommitted changes unrelated
+  to the chain. Run `git stash push -u -m 'c2c-step5-preflight'` (or commit them) and re-invoke
+  Step 5."
+- **`PREFLIGHT_BOTH`** → prescribe the commit first, then the stash, in that order, and say why:
+  committing the artifacts is what makes the stash safe.
+- **`PREFLIGHT_NOREPO` / `PREFLIGHT_NOMANIFEST` (exit 3)** → the check did not run. Refuse to
+  dispatch and say so in those words. Do not report it as a clean tree.
+
+Known limits, stated rather than discovered later: the fence reads porcelain v1, so a **renamed**
+chain artifact arrives as `old -> new` and classifies as `OTHER`, and a path containing a space or
+a quote is quoted by git and will not match. Neither shape occurs for the four artifacts this
+classifies, and `*.bak` is gitignored, so 5.0.3's `sed -i.bak` debris is invisible to both this
+fence and to the merge-back escape check (ADR-0068 §D11) — a fact that is load-bearing for both and
+was verified, not assumed.
 
 **Step 5.0.2 — A feature branch is checked out, not the default branch.**
 ```bash

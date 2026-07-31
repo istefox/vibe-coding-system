@@ -466,6 +466,207 @@ else
   bad "RI6: Gate 4.0 does not say why CLAUDE.md is excluded from --include — the list will drift (#234)"
 fi
 
+# ==================================================================================================
+# RJ. Issue #239 — Step 5.0.1 could never pass, because the chain dirties the manifest AFTER
+# Gate 4.0 commits it, on both Gate 4 branches.
+#
+# `manifest-set-flag.sh <m> autopilot true` and `manifest-transition.sh <m>
+# ready_for_implementation` both run between Gate 4.0's commit and this assertion; on the
+# fresh-session branch Form B resume step 3 writes `session_boundary.resumed_at` unconditionally,
+# so NO ordering avoids it. Then 5.0.3 writes `recovery_baseline_sha` into the same file on
+# purpose, three assertions later. The pre-flight asserted a clean tree while the state machine
+# wrote the manifest at every state change: incompatible requirements on one file.
+#
+# THE FENCE IS EXECUTED, NOT READ (rule 11). 5.0.1's classification used to be prose — "decide by
+# intersecting `git status --porcelain` with … the manifest itself" — so there was nothing to run
+# and nothing to declare. It is now a `fence-contract:` block, extracted here by its own marker
+# (ADR-0083 §D3: a heading anchor rots, a marker moves with the fence).
+#
+# RJ1 IS THE RED EVIDENCE AND IT IS DERIVED, NOT HAND-WRITTEN. The pre-#239 rule is reconstructed
+# from the shipped fence by sed — dropping the exclusion and putting the manifest back in the
+# chain-artifact set — so it cannot drift into testing some other script. On the manifest-only
+# fixture it must still produce the false `PREFLIGHT_CHAIN`, which is the exact message the
+# Phase 7.1 shakedown saw with a clean tree and a successful Gate 4.0 behind it.
+# ==================================================================================================
+RJ_ID='c2c-step5-preflight-dirty-classify'
+rj_extract() {
+  awk '
+    index($0, "fence-contract: c2c-step5-preflight-dirty-classify -->") { grab=1; next }
+    grab && /^```bash/ { infence=1; next }
+    grab && infence && /^```/ { exit }
+    grab && infence { print }
+  ' "$CC"
+}
+RJ_FENCE="$TMP/rj_fence.sh"
+rj_extract >"$RJ_FENCE"
+
+# RJ0 — an empty extraction is a FAILURE, never a quietly passing skip. Deleting the marker must
+# break this section loudly; that is the whole reason the marker is the anchor.
+if [ -s "$RJ_FENCE" ]; then
+  ok "RJ0: the 5.0.1 classifier fence is extractable by its fence-contract marker"
+else
+  bad "RJ0: no fence-contract: $RJ_ID block in $CC — every RJ assertion below is meaningless"
+fi
+
+if bash -n "$RJ_FENCE" 2>/dev/null; then
+  ok "RJ0b: the extracted 5.0.1 fence parses as bash"
+else
+  bad "RJ0b: the extracted 5.0.1 fence does not parse — a declared contract must at minimum parse (ADR-0083 F7)"
+fi
+
+# The pre-#239 variant, derived from the shipped fence.
+RJ_PREFIX="$TMP/rj_fence_prefix.sh"
+sed -e 's#^DIRTY=.*#DIRTY=$(git status --porcelain | sed "s/^...//")#' \
+    -e 's#"\$SPEC_REL"|"\$ADR_REL"|"\$PLAN_REL"|CLAUDE.md)#"$SPEC_REL"|"$ADR_REL"|"$PLAN_REL"|"$(rel "$MANIFEST")"|CLAUDE.md)#' \
+    "$RJ_FENCE" >"$RJ_PREFIX"
+
+# rj_repo <dir> — a real throwaway git repo carrying the four chain artifacts plus one unrelated
+# tracked file. Real, because the classifier reads `git status --porcelain` and nothing else.
+rj_repo() {
+  mkdir -p "$1/docs/manifests" "$1/docs/architecture" "$1/docs/superpowers/plans"
+  ( cd "$1" || exit 1
+    git init -q . >/dev/null 2>&1
+    git config user.email t@example.invalid; git config user.name t
+    printf 'current_step: "x"\n' >docs/manifests/m.yml
+    printf 'spec\n' >SPEC.md; printf 'adr\n' >docs/architecture/A.md
+    printf 'plan\n' >docs/superpowers/plans/p.md
+    printf 'other\n' >unrelated.txt; printf 'cm\n' >CLAUDE.md
+    git add -A >/dev/null 2>&1; git commit -qm base >/dev/null 2>&1 )
+}
+# rj_run <fence> <repo> — execute with the four free variables bound, print "<rc> <stdout>".
+rj_run() {
+  _o=$( cd "$2" && MANIFEST="$2/docs/manifests/m.yml" SPEC="$2/SPEC.md" \
+        ADR="$2/docs/architecture/A.md" PLAN="$2/docs/superpowers/plans/p.md" \
+        bash "$1" 2>&1 ); _r=$?
+  printf '%s %s' "$_r" "$_o"
+}
+
+RJ_REPO="$TMP/rj"; rj_repo "$RJ_REPO"
+
+# RJ1 — RED EVIDENCE. Only the manifest is dirty: issue #239's exact observed state.
+printf 'current_step: "y"\n' >>"$RJ_REPO/docs/manifests/m.yml"
+RJ1_OUT=$(rj_run "$RJ_PREFIX" "$RJ_REPO")
+case "$RJ1_OUT" in
+  "1 PREFLIGHT_CHAIN"*) ok "RJ1 (red evidence): the pre-#239 rule refuses on a manifest-only dirty tree, naming the chain-artifact branch" ;;
+  *) bad "RJ1: the pre-#239 rule did NOT reproduce the defect (got: $RJ1_OUT) — section RJ is not pinning the bug it claims to" ;;
+esac
+
+# RJ2 — THE FIX, same fixture, same moment in the chain.
+RJ2_OUT=$(rj_run "$RJ_FENCE" "$RJ_REPO")
+case "$RJ2_OUT" in
+  "0 PREFLIGHT_CLEAN"*) ok "RJ2: a manifest-only dirty tree is CLEAN — Step 5.0.1 can now pass on both Gate 4 branches (#239)" ;;
+  *) bad "RJ2: manifest-only dirty tree did not classify clean (got: $RJ2_OUT) — #239 is not fixed" ;;
+esac
+( cd "$RJ_REPO" && git checkout -q -- . )
+
+# RJ3 — the exemption did NOT widen. Each of the three real artifacts still refuses, individually,
+# so a future "simplification" that exempts the whole planning set fails here rather than in a run.
+RJ3_BAD=""
+for _a in SPEC.md docs/architecture/A.md docs/superpowers/plans/p.md CLAUDE.md; do
+  printf 'x\n' >>"$RJ_REPO/$_a"
+  _o=$(rj_run "$RJ_FENCE" "$RJ_REPO")
+  case "$_o" in "1 PREFLIGHT_CHAIN"*) : ;; *) RJ3_BAD="$RJ3_BAD $_a(got:$_o)" ;; esac
+  ( cd "$RJ_REPO" && git checkout -q -- . )
+done
+if [ -z "$RJ3_BAD" ]; then
+  ok "RJ3: SPEC, ADR, plan and CLAUDE.md each still refuse individually — the exemption is the manifest and only the manifest"
+else
+  bad "RJ3: the manifest exemption leaked to other chain artifacts:$RJ3_BAD"
+fi
+
+# RJ4 — the unrelated-dirty branch ADR-0050 §D2 negative consequence 2 describes still exists.
+printf 'x\n' >>"$RJ_REPO/unrelated.txt"
+RJ4_OUT=$(rj_run "$RJ_FENCE" "$RJ_REPO")
+case "$RJ4_OUT" in
+  "1 PREFLIGHT_OTHER"*) ok "RJ4: an unrelated dirty file still refuses, on the OTHER branch" ;;
+  *) bad "RJ4: unrelated dirty file misclassified (got: $RJ4_OUT)" ;;
+esac
+( cd "$RJ_REPO" && git checkout -q -- . )
+
+# RJ5 — the BOTH branch, whose remediation ordering (commit, then stash) is the one ADR-0071 §D3
+# fixed. A classifier that cannot reach it leaves that remediation unreachable prose.
+printf 'x\n' >>"$RJ_REPO/SPEC.md"; printf 'x\n' >>"$RJ_REPO/unrelated.txt"
+RJ5_OUT=$(rj_run "$RJ_FENCE" "$RJ_REPO")
+case "$RJ5_OUT" in
+  "1 PREFLIGHT_BOTH"*) ok "RJ5: a mixed dirty tree reaches the BOTH branch, so ADR-0071 §D3's ordering advice is reachable" ;;
+  *) bad "RJ5: mixed dirty tree did not reach the BOTH branch (got: $RJ5_OUT)" ;;
+esac
+( cd "$RJ_REPO" && git checkout -q -- . )
+
+# RJ6 — the manifest must not COLOUR the classification either: dirty manifest plus one unrelated
+# file is OTHER, not BOTH. Otherwise every run would take the commit-then-stash advice for free.
+printf 'x\n' >>"$RJ_REPO/docs/manifests/m.yml"; printf 'x\n' >>"$RJ_REPO/unrelated.txt"
+RJ6_OUT=$(rj_run "$RJ_FENCE" "$RJ_REPO")
+case "$RJ6_OUT" in
+  "1 PREFLIGHT_OTHER"*) ok "RJ6: a dirty manifest does not colour the classification — manifest+unrelated is OTHER, not BOTH" ;;
+  *) bad "RJ6: dirty manifest leaked into the classification (got: $RJ6_OUT)" ;;
+esac
+( cd "$RJ_REPO" && git checkout -q -- . )
+
+# RJ7/RJ8 — "did not run" must be distinguishable from "found nothing" (ADR-0043's direction
+# lesson, applied to the classifier itself). Exit 3, not 0 and not 1.
+RJ7_OUT=$( cd "$TMP" && MANIFEST=x bash "$RJ_FENCE" 2>&1; printf ' rc=%s' "$?" )
+case "$RJ7_OUT" in
+  "PREFLIGHT_NOREPO"*rc=3) ok "RJ7: outside a git repo the classifier exits 3 and says so — not a clean tree" ;;
+  *) bad "RJ7: no-repo case did not exit 3 with PREFLIGHT_NOREPO (got: $RJ7_OUT)" ;;
+esac
+RJ8_OUT=$( cd "$RJ_REPO" && unset MANIFEST; bash "$RJ_FENCE" 2>&1; printf ' rc=%s' "$?" )
+case "$RJ8_OUT" in
+  "PREFLIGHT_NOMANIFEST"*rc=3) ok "RJ8: an unbound MANIFEST exits 3 — the exemption cannot silently apply to nothing" ;;
+  *) bad "RJ8: unbound MANIFEST did not exit 3 with PREFLIGHT_NOMANIFEST (got: $RJ8_OUT)" ;;
+esac
+
+# RJ9 — BOTH SIDES SYMLINK-RESOLVED. The first draft compared `git rev-parse --show-toplevel`
+# (resolved) against the caller's path (not), so `rel()` shortened nothing and EVERY artifact
+# classified as OTHER — including the manifest, which meant the exemption silently did nothing.
+# Found by running the fence, not by reading it. Live on macOS: /tmp is a symlink to /private/tmp,
+# and this machine reaches its own checkout through two differently-cased paths.
+RJ9_LINK="$TMP/rj-link"
+ln -sf "$RJ_REPO" "$RJ9_LINK" 2>/dev/null
+printf 'current_step: "z"\n' >>"$RJ_REPO/docs/manifests/m.yml"
+RJ9_OUT=$(rj_run "$RJ_FENCE" "$RJ9_LINK")
+case "$RJ9_OUT" in
+  "0 PREFLIGHT_CLEAN"*) ok "RJ9: the exemption survives a symlinked project path — both sides are pwd -P resolved" ;;
+  *) bad "RJ9: symlinked path broke the exemption (got: $RJ9_OUT) — rel() is comparing an unresolved path again"
+esac
+( cd "$RJ_REPO" && git checkout -q -- . )
+
+# RJ10 — the exemption is bounded by a validity check, not by trust. Excluding the file from the
+# dirty set would otherwise let a hand-edited manifest through, and ADR-0075 measured hand-edits
+# as real. What is exempt is the manifest's dirtiness, never its content.
+if [ "$(ri_flat 'manifest-validate.sh' "$STEP5")" -ge 1 ]; then
+  ok "RJ10: Step 5 bounds the manifest exemption by running manifest-validate.sh"
+else
+  bad "RJ10: nothing validates the manifest in Step 5 — the #239 exemption is unbounded (a hand-edited manifest would pass)"
+fi
+
+# RJ11 — the reason must travel with the exemption. An exemption whose argument is only in an ADR
+# reads as carelessness to the next person, and this one looks exactly like a weakened check.
+if [ "$(ri_flat 'the manifest is exempt' "$STEP5")" -ge 1 ] \
+   && [ "$(ri_flat 'the most known thing in the repository' "$STEP5")" -ge 1 ]; then
+  ok "RJ11: Step 5 states why the manifest is exempt and why the §D2 purpose survives"
+else
+  bad "RJ11: the manifest exemption carries no stated reason — the next reader will 'fix' it back (#239)"
+fi
+
+# RJ12 — the *.bak fact is load-bearing for TWO checks and was verified rather than assumed: if
+# `*.bak` were not gitignored, 5.0.3's `sed -i.bak` would dirty the tree here AND trip ADR-0068
+# §D11's merge-back escape check on every stage.
+if [ "$(ri_flat '`*.bak` is gitignored' "$STEP5")" -ge 1 ]; then
+  ok "RJ12: Step 5 records that 5.0.3's sed -i.bak debris is gitignored, for this fence and for the escape check"
+else
+  bad "RJ12: the *.bak fact is unrecorded — a change to .gitignore would break two checks with no warning"
+fi
+
+# Z1 — assertion-count floor (ADR-0083 §D3: six assertions vanished from a suite once and the
+# suite still read as passing). A floor, not an exact count, so adding assertions needs no bump.
+Z1_TOTAL=$((PASS + FAIL))
+if [ "$Z1_TOTAL" -ge 60 ]; then
+  ok "Z1: assertion-count floor met ($Z1_TOTAL executed)"
+else
+  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 60; assertions have gone missing, not passed"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
