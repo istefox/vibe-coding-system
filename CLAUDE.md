@@ -2552,3 +2552,48 @@ the chain's turn is not a boundary this system has anywhere; **the check is decl
 file — third measured example outside ADR-0083's population, after ADR-0096 and ADR-0102.
 
 Detail: `docs/architecture/ADR-0103-244-recovery-baseline-rebase.md`.
+
+## Decisions from the Step 7 snapshot-collapse chain (ADR-0104)
+
+Closes issue #249, completing Wave F and the Phase 8 fix roadmap. When Step 7 runs, **the feature is
+already fully committed** — by the orchestrator, under `chore(step5): snapshot <stage> worktree
+(<agent_type>)`. Ten commits on #222's branch, 1260 insertions, **not one describing the feature**.
+The staged set is then the manifest and `.gitignore`, so `commit` reads `git diff --staged` and
+faithfully describes a manifest state change. **The commit the whole skill exists to produce has
+nothing left to describe.**
+
+- **Nobody chose this.** ADR-0068 §D5 made the orchestrator the committer so the next stage could
+  fork from a `HEAD` containing the previous stage's output; ADR-0049 §D1 ordered
+  tester-before-coder, doubling the snapshots. Two correct decisions composing into a third
+  behaviour. Survivable here only because this repository squash-merges — on a repo that merges,
+  changelogs from `git log`, or bisects, the history is seven "snapshot worktree" entries.
+- **Step 7.0 soft-resets to `recovery_baseline_sha`, and the argument is that the snapshots' purpose
+  is spent:** they exist so the NEXT stage can fork, and Step 5 is over. Without that sentence this
+  is rewriting history because the log looks untidy. **A soft reset keeps tree and index exactly as
+  they are** — only the tip moves, the old tips stay in the reflog — which is why it needs no gate
+  of its own; `commit`'s Step 4 gate still shows the resulting diff.
+- **Four guarded refusals, each leaving HEAD untouched.** `foreignCommit` (a commit the chain did
+  not make — folding it away would take **its message** with it), `notAncestor` (**#244's state**,
+  refused rather than inherited — which is why #249 depended on #244), `baselineGone`/`noCommits`,
+  and exit 3 outside a repo.
+- **The alternatives lose for a stated reason.** Richer snapshot messages leave no commit describing
+  the whole; documenting Step 7 as bookkeeping with the PR body as the record is honest but makes
+  **squash-merge a hard requirement of the chain**, which nothing says, on repositories whose merge
+  policy the chain does not choose.
+
+**The plant that did not fire is the one worth keeping.** Removing the ancestry guard left `SC5`
+passing: the fixture's default-branch commit was `-qm c`, which after the rebase sits in the range
+where the **foreign-commit** guard caught it first. `SC5` passed for a reason it does not name.
+**An assertion covered by two guards isolates neither** — the fixture's commit now carries a
+chain-shaped message so only the ancestry guard can refuse, and the plant fires with `COLLAPSED 4`
+onto an orphaned object. ADR-0089's rule again: a plant that does not fire is evidence about the
+assertion.
+
+Known consequences: the chain now rewrites its own branch history once, at Step 7, under four
+guards; **`SC8` is a cross-file contract** — rewording the merge-back message makes the collapse
+stop recognising its own commits and refuse quietly on every run, since `COLLAPSE_SKIP` is a normal
+outcome; the collapsed commits live in the reflog only, so a later `git gc` removes the intermediate
+history for good; the fence is declared and `fence_is_abort_capable` cannot see it, so it is executed
+by its own file — fourth measured example outside ADR-0083's population.
+
+Detail: `docs/architecture/ADR-0104-249-step7-snapshot-collapse.md`.

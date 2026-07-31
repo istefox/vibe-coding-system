@@ -2295,6 +2295,58 @@ or it is not), which is exactly why it is allowed to block where a heuristic fin
 
 ### Step 7 — Commit (invoke `commit` skill, always)
 
+**Step 7.0 — collapse the Step 5 snapshots first (issue #249, ADR-0104).**
+
+By the time Step 7 runs, the feature is **already fully committed** — by the orchestrator, under
+messages chosen for a mechanical purpose (`chore(step5): snapshot <stage> worktree (<agent_type>)`,
+one per stage per task group). The staged set is then the manifest and little else, so the `commit`
+skill reads `git diff --staged` and faithfully describes a manifest state change. **The commit the
+whole skill exists to produce has nothing left to describe.**
+
+Nobody chose that. ADR-0068 §D5 made the orchestrator the committer so the next stage's worktree
+could fork from a `HEAD` containing the previous stage's output; ADR-0049 §D1 ordered
+tester-before-coder, which doubled the snapshots. Two correct decisions composing into a third
+behaviour.
+
+**Step 5 is over, so their purpose is spent** — nothing forks from these commits again. Collapse
+them back into the index so `commit` sees the whole feature as one diff:
+
+<!-- fence-contract: c2c-step7-snapshot-collapse -->
+```bash
+# Free variable: <baseline> is manifest.recovery_baseline_sha.
+git rev-parse --git-dir >/dev/null 2>&1 || { echo "COLLAPSE_NOREPO"; exit 3; }
+_b="<baseline>"
+case "${_b:-}" in ""|null) echo "COLLAPSE_SKIP noBaseline"; exit 0 ;; esac
+git cat-file -e "$_b" 2>/dev/null || { echo "COLLAPSE_SKIP baselineGone"; exit 0; }
+git merge-base --is-ancestor "$_b" HEAD 2>/dev/null || { echo "COLLAPSE_SKIP notAncestor"; exit 0; }
+_n=$(git rev-list --count "$_b"..HEAD 2>/dev/null || echo 0)
+[ "${_n:-0}" -gt 0 ] || { echo "COLLAPSE_SKIP noCommits"; exit 0; }
+_foreign=$(git log --format='%H %s' "$_b"..HEAD \
+  | grep -vE '^[0-9a-f]+ chore\(step5\): snapshot .* worktree \(' \
+  | grep -vE '^[0-9a-f]+ chore\([^)]*\): (record|snapshot) ' | head -1)
+[ -z "$_foreign" ] || { echo "COLLAPSE_SKIP foreignCommit ${_foreign%% *}"; exit 0; }
+git reset --soft "$_b" || { echo "COLLAPSE_NOREPO"; exit 3; }
+echo "COLLAPSED $_n $_b"
+exit 0
+```
+
+- `COLLAPSED <n> <sha>` → emit `"Step 7: collapsed <n> Step 5 snapshot commit(s) — the feature is
+  now one staged diff."` and invoke `commit` below.
+- `COLLAPSE_SKIP <reason>` → say which reason and invoke `commit` unchanged. **`foreignCommit` is
+  the one worth reading**: the range holds a commit the chain did not make, and folding it away
+  would take its message with it.
+- exit 3 → report; do not retry, and invoke `commit` unchanged.
+
+**A soft reset keeps the working tree and the index exactly as they are** — no content is created,
+changed or deleted, only the branch tip moves, and the collapsed tips stay in the reflog. That is
+why this is safe to do without a gate; `commit`'s own Step 4 gate still shows the resulting diff
+before anything is written.
+
+**The guards are the design, not caution.** Resetting past a commit the chain did not make would
+fold a human's separate commit — and its message — into the feature commit; resetting to a
+non-ancestor baseline would detach the branch from its own history (issue #244's state, which this
+refuses rather than inherits).
+
 **IMPORTANT — use the `Skill` tool, NOT the `Agent` tool.** `commit` is a **skill**, not an agent.
 
 ```
