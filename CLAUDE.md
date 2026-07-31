@@ -2071,3 +2071,41 @@ Known consequence: the guard covers `step5_mode` only — `hook_verified` and `s
 named in the same sentence and are not derived, since their producers are shaped differently.
 
 Detail: `docs/architecture/ADR-0092-240-step5-mode-value-domain.md`.
+
+## Decisions from the macOS-detection false positives (ADR-0093)
+
+Closes issue #232, fourth of Wave E. `detect-macos.sh` gates Gate 1c, which offers a HIG design step
+for windows, navigation, Settings and menu bar. Measured over all 36 SPECs here: **it fired on six,
+and not one was a macOS UI target.**
+
+- **Two classes, and the issue named one.** (1) The keyword inside a longer **identifier**:
+  `macos-ux` is a skill name every meta-SPEC about this chain mentions. **Measuring found a second,
+  `swiftui-pro`, which SURVIVES the narrowing #232 itself proposed** — dropping bare `macos` keeps
+  `swiftui`, so the second collision would have remained. (2) The keyword naming the **host**:
+  `Bash 3.2 (macOS-portable, …)` says which shell, not which UI.
+- **Two boundary sets, deliberately different.** Keyword boundaries treat `-` as part of a word, so
+  `macos-ux` and `swiftui-pro` are single tokens. Noun boundaries treat `-` as a separator, because
+  `window-based` is ordinary English. Using the keyword set for both lost `A window-based macOS
+  tool` — **the two halves of the fix interfering**, caught by the fixtures, invisible in the regex.
+- **Bare `macos` must keep company; `swiftui`/`appkit`/`menu bar` need none.** The platform name
+  counts only within 60 characters, either side of a UI noun. Corpus false positives **6 → 0**, with
+  every genuine macOS-UI fixture still detected.
+- **The cost is an assertion, not a discovery.** A headless `macOS daemon` is deliberately NOT
+  detected — Gate 1c offers window and menu design a daemon cannot use. Pinned as `M7`.
+- **`mac app` never matched `macOS app`**, only the literal "Mac app". The keyword was nearly dead
+  before this change; kept, and neither it nor the proximity rule is load-bearing alone.
+- **A new CI-runnable harness, because the existing one is CI-dark.** Four `detect-macos` assertions
+  lived in `concept-to-code/tests/run-tests.sh`, which resolves `SKILL_DIR="$HOME/.claude/skills/…"`
+  — **fourth instance of the class ADR-0032 named.** All four still hold and are re-homed into
+  section `P`, running in CI for the first time; the original file is byte-untouched.
+
+**Two lessons from running it.** An empty ERE alternative `(…|)` is rejected by BSD grep, and the
+failure is silent in the worst direction: every SPEC then reads `NOT_MACOS`, so **the corpus sweep
+reported zero false positives while the rule was not running at all** — a check that did not run
+reading as a check that found nothing, inside the measurement built to verify the fix. `bash -n`
+cannot see it; the pattern is a string until grep reads it. `M20b` now counts errors as a **third**
+sweep outcome and `M21` pins the construct out of the source. And **`M21`'s own first draft failed
+on a correct file**, because its needle `|)` matched the header comment explaining why not to use
+the construct — rule 12, in a test written the same hour as an ADR citing rule 12.
+
+Detail: `docs/architecture/ADR-0093-232-macos-detection-false-positives.md`.
