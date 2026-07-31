@@ -21,8 +21,9 @@ In: the wiring status of every hook and settings key the system depends on; the 
 deploy-time report for the `$HOME`-dependent half; the `worktree.baseRef` user-scope settings key
 recorded in ADR-0068 §D2.
 
-Out: changing what any guardrail hook enforces; owning a global Claude Code event (ADR-0068 §D2
-rejected owning `WorktreeCreate` for exactly the blast-radius reason this issue must re-state);
+Out: changing what any guardrail hook enforces; owning a global Claude Code event. No
+`WorktreeCreate` hook is registered by this feature and none will be — ADR-0068 §D2 rejected
+owning that event for a blast-radius reason this issue does not revisit;
 making CI depend on the deploy state of `~/.claude` (ADR-0084 refused that, ADR-0087 established the
 split instead).
 
