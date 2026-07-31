@@ -130,3 +130,33 @@ Step 5 entry, a boundary ADR-0068 does not touch, and it remains the condition t
 tester's subsequent worktree-and-merge protocol safe to run against.
 
 See `docs/architecture/ADR-0068-176-worktree-isolation-contract.md` §D5, §D6 for the full account.
+
+## Correction 2026-07-31 (issue #244, ADR-0103)
+
+**§D3 says `recovery_baseline_sha` is written once and never rewritten — "a baseline that moves is
+not a baseline". It reads as covering the case where the sha becomes wrong, and it does not.**
+
+It guarantees the *field* does not move. It says nothing about the *history under it* moving. A
+rebase leaves the recorded object alive in the reflog while removing it from the branch's ancestry:
+the sha is still the right **state** and no longer the right **object**, and §D3 has no answer for
+that.
+
+Observed on the Phase 7.1 shakedown run, and measured across this repository's two recorded
+baselines — one is orphaned, and it is the one whose chain was paused:
+
+```text
+2026-07-30-222-…  dfa9a6ff…  object exists  ORPHANED
+2026-07-28-176-…  129d5e09…  object exists  ancestor
+```
+
+The sequence that produces it is the paused-run workflow, not an exotic one: Step 5 records the
+baseline, something halts the run, fixing the blocker means a PR to `main`, and resuming means
+bringing the feature branch up to date. **The operational rule — merge `main` in, do not rebase,
+once the baseline is set — was written nowhere.** It is now stated at Step 5.0.3 alongside an
+ancestry check that reports rather than halts.
+
+**§D3 is not weakened and the field is still never corrected**, including when the check reports it
+orphaned. The write-once rule is worth more than any single record.
+
+This ADR's body is not edited in place (ADR-0034 precedent). Detail:
+`docs/architecture/ADR-0103-244-recovery-baseline-rebase.md`.
