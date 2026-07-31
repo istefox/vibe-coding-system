@@ -2378,3 +2378,45 @@ happened, a self-report, so it is a record and never a gate (ADR-0047 §A3); Exp
 their own gates and the same question, measured on Standard only and left there.
 
 Detail: `docs/architecture/ADR-0099-238-hitl-gate-audit-trail.md`.
+
+## Decisions from the batch-dispatch openers chain (ADR-0100)
+
+Closes issue #242, Wave D. Step 5's pre-dispatch computes `tasks=$(plan-tasks.sh --count …)` for a
+`>= 1` guard, and twelve lines later the Agent-tool fallback opens a **second, different** decision
+— "≥6 tasks → batches of 2-3" — naming no source. The only count in scope is `$tasks`, and
+ADR-0069 §D2 says in terms that this is the one thing it must not be used for. **One number
+silently served two questions;** the batching arithmetic is the symptom.
+
+- **Measured, and wider than the issue states.** It calls the case "benign on this plan by luck".
+  Across the 58 corpus plans the two counts **diverge on 51, and all 51 are ≥6 and over-counted**.
+  On #222's plan: **38 and 7** — batches of 2-3 over 38 dispatch a tester and a coder against tasks
+  8 through 38, which do not exist. The threshold branch is identical either way, so only the
+  arithmetic diverges, one step later.
+- **`is_task_opener()` already existed** (ADR-0070, for `diff-budget-check.sh`). This is the THIRD
+  consumer to need it, so it becomes a `--count-openers` mode of the shared script rather than a
+  third private copy — ADR-0069's own rule applied to its own script.
+- **Neither substitution is safe, and both call sites say so.** `--count` over-counts: safe for a
+  guard, wrong for arithmetic. `--count-openers` returns **0** on plans using a different word for a
+  task: safe for arithmetic that checks zero, wrong for a guard.
+- **The obvious fix introduces a failure the issue does not mention.** Two corpus plans have
+  `openers = 0` with a non-zero `--count` (`### T1 —`, `### Step 0 —`, the forms ADR-0070 §PTG9 and
+  ADR-0069 §PTE2 exempt by name); `deep-refactor-skill.md` counts 36 and opens 0. Consuming openers
+  naively turns over-batching into **batch-nothing**. The zero case dispatches as a single block and
+  says why; exit 2/3 takes the same branch.
+- **The Workflow path was checked, not assumed:** it derives task GROUPS by reading the plan for
+  file-path mentions and invokes no counter. `BO9b` pins it so the answer is not re-derived.
+
+**A measurement failed silently on the way, in this repository's signature manner.** The first
+corpus sweep ran `awk -f predicate.awk '{…}' plan` — with `-f`, awk treats the positional program
+as a **file**, so it read nothing, printed nothing, and raised no error. Trusted, it would have
+reported that the two counts agree everywhere, inside the measurement built to prove they do not.
+Fixed with a temp file, which is what `plan-tasks.sh` itself already does and documents.
+
+Known consequences: batching behaviour changes on 51 of 58 plan shapes (threshold unmoved, ranges
+corrected), so the first Step 5 after deploy produces visibly fewer batches than the old instruction
+implied; `task_num()` extracts digits only, so `## Task 1b` cannot be a batch range (ADR-0070's
+carried limit); the two zero-opener forms are handled by a fallback, not recognised; `plan-tasks.sh`
+now has two modes with **opposite failure directions** and nothing but its header and the two call
+sites prevents a future caller picking the wrong one.
+
+Detail: `docs/architecture/ADR-0100-242-batch-dispatch-openers.md`.
