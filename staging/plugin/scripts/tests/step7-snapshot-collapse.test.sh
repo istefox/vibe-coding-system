@@ -26,6 +26,11 @@
 # reflog holds the old tips), but a record is. So: reset only when the baseline is an ancestor AND
 # every commit in range matches a chain-produced pattern. SC4 and SC5 are those two refusals,
 # executed.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: SC4 | plugin/skills/concept-to-code/SKILL.md | echo "COLLAPSE_SKIP foreignCommit ${_foreign%% *}"; exit 0; | :;
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

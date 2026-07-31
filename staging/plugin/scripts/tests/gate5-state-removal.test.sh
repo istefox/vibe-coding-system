@@ -20,6 +20,11 @@
 # The four pairs go, so the count moves 49 → 45. Five assertions across three files pinned 49; they
 # are updated rather than relaxed, and GR3 re-derives the number from the script rather than trusting
 # any of them.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: GR4 | plugin/skills/concept-to-code/SKILL.md | Trigger: post Step 5 (coder complete), `current_step = step_6_review` | Trigger: post Step 5 (coder complete), `current_step = gate_5_review_decision`
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

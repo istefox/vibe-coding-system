@@ -24,6 +24,11 @@
 # trust that already exists and never grants any. G2B5 and G2B6 are the forward guards that keep it
 # that way — approve-test-cmd.sh is still never called before a click, and a changed SHA still
 # gates even when the command text looks identical, because the pin is on content.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: G2B3 | plugin/skills/concept-to-code/SKILL.md | already trusted, SHA unchanged | awaiting approval
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

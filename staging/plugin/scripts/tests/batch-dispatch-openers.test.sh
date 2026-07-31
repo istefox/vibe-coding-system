@@ -30,6 +30,11 @@
 # name. `deep-refactor-skill.md` counts 36 and opens 0. Consuming openers naively turns an
 # over-batching bug into a batch-nothing bug, so the zero case dispatches as a single block and
 # says why (BO7).
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: BO1 | plugin/skills/concept-to-code/scripts/plan-task-predicate.awk | return rest ~ /^[Tt]ask[ \t]+[0-9]+/ | return 1
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

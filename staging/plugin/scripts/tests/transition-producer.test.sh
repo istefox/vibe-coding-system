@@ -33,6 +33,11 @@
 # the file it excuses, count guard on the DENOMINATOR (ADR-0085). Not extracted into a helper —
 # ADR-0086's criterion is "extract only when two copies giving different answers would be a
 # defect", and this asks its own question about its own population.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: TP6 | plugin/skills/concept-to-code/SKILL.md | bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh "<manifest>" step_5_implementation | true
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -213,8 +218,16 @@ else
 fi
 
 _pre=$(awk -v a="${PRE_A:-0}" -v b="${PRE_B:-0}" 'NR>a && NR<b' "$C2C")
-if printf '%s\n' "$_pre" | grep -qE "manifest-transition\.sh|[Tt]ransition" \
-   && printf '%s\n' "$_pre" | grep -q 'step_5_implementation'; then
+# The needle is the INVOCATION, not the two words around it.
+#
+# The first form was `grep -E "manifest-transition\.sh|[Tt]ransition"` AND `grep 'step_5_implementation'`,
+# which the prose introducing the block satisfies on its own — "Step 5.0.5 — enter
+# `step_5_implementation`", "the chain's only unconditional producer of that state". Replacing the
+# actual `bash …manifest-transition.sh` call with `true` left it GREEN.
+#
+# Found by `plant-check.sh` on its FIRST run, which is the whole argument for that file existing:
+# rule 12's sixth instance, caught by the mechanism built for the first five.
+if printf '%s\n' "$_pre" | grep -qE '^bash .*manifest-transition\.sh .*step_5_implementation'; then
   ok "TP6 Step 5's recovery-readiness pre-flight produces ready_for_implementation → step_5_implementation"
 else
   bad "TP6 Step 5's entry does not transition into step_5_implementation — the default path cannot reach step_6_review (#248)"

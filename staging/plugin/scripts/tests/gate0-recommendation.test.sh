@@ -31,6 +31,13 @@
 # a lazy choice, it is the only measurable thing at that moment. What was wrong was the NAME
 # claiming to estimate something else. Inventing better thresholds without a better signal would be
 # the same error with fresher numbers.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: N5 | plugin/skills/concept-to-code/scripts/gate0-detect.sh | echo "repo_file_count=$file_count" | echo "file_estimate=$file_count"
+# plant: N1 | plugin/skills/concept-to-code/SKILL.md | Auto-detect suggests: [<path>] | Recommended: [<path>]
+# plant: N3 | plugin/skills/concept-to-code/SKILL.md | The orchestrator's recommendation wins | Pick one
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
