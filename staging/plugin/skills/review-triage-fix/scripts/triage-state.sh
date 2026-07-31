@@ -84,10 +84,30 @@ commit)
     top=$(git -C "$d" rev-parse --show-toplevel 2>/dev/null)
     pref=$(git -C "$d" rev-parse --show-prefix 2>/dev/null)
     if [ -n "$top" ]; then
-      rel="${pref}$(basename "$SF")"
       gi="$top/.gitignore"
-      if ! { [ -f "$gi" ] && grep -F -x -q -- "$rel" "$gi" 2>/dev/null; }; then
-        printf '%s\n' "$rel" >> "$gi"
+      # A GLOB, never the resolved per-branch path (issue #250). The state file is per-branch by
+      # design, so appending its literal name left one entry behind per branch, forever: the branch
+      # is deleted at merge, the .gitignore line is not. It also defeated its own purpose — a
+      # per-branch line protects exactly one branch, and the NEXT branch is unprotected until its
+      # own cycle appends its own line. One glob covers every branch including the first cycle on a
+      # new one, and never grows.
+      glob="${pref}.triage-fix-last-*.json"
+      # `git check-ignore` answers "is this path already ignored", by ANY rule, in any file — a
+      # literal grep for the glob only recognises the one line this script writes, and would append
+      # a duplicate next to a broader rule a human had already added by hand. That is not
+      # hypothetical: this repository's own .gitignore carried `.claude/.triage-fix-last*.json`
+      # before the glob below existed.
+      #
+      # EXIT-CODE CONTRACT: 1 means "not ignored" and is a CLEAN result, not a failure; only 128 is
+      # an error. Anything non-zero takes the append branch, which is the safe direction — the
+      # append is idempotent, so the worst case is a no-op.
+      # The path is passed as a BASENAME because `git -C "$d"` runs from "$d": a relative $SF would
+      # be resolved against "$d" a second time and match nothing, so the check would report
+      # "not ignored" for a file that is ignored. Seen live against the broader-rule fixture.
+      if git -C "$d" check-ignore -q -- "$(basename "$SF")" 2>/dev/null; then
+        :   # already covered by some rule — nothing to add
+      elif ! { [ -f "$gi" ] && grep -F -x -q -- "$glob" "$gi" 2>/dev/null; }; then
+        printf '%s\n' "$glob" >> "$gi"
       fi
     fi
   fi
