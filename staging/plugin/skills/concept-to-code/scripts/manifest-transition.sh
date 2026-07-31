@@ -43,6 +43,16 @@ if [ "$current_step" = "$new_step" ]; then
   exit 0
 fi
 
+# --- Producer exemptions (issue #248, ADR-0095) -----------------------------
+# `transition-producer.test.sh` asserts that every target below is entered by SOMETHING: a
+# transition instruction naming it somewhere in a staged SKILL.md. A target that is not gets
+# declared here, in the file that declares the pair, and nowhere else. Format is ONE line:
+#   # transition-producer-exempt: <target> — <reason>
+# The guard also runs in reverse: a declared target that acquires a producer fails as a stale
+# waiver, because a stale waiver reads exactly like a clean bill of health.
+#
+# transition-producer-exempt: gate_5_review_decision — nothing enters this state; Step 5 transitions to step_6_review and presents Gate 5 from there, so its four pairs are unreachable. Tracked as issue #265, which must decide whether the gate moves before the state or the state is deleted. Do NOT read this line as audited and fine.
+
 # Allow any state → failed or → aborted (unconditionally)
 if [ "$new_step" = "failed" ] || [ "$new_step" = "aborted" ]; then
   : # always legal

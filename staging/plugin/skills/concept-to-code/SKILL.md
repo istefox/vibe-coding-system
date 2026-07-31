@@ -148,6 +148,15 @@ Behavior:
    - `ready_for_implementation` → run TOFU guard (step 2b below), then evaluate the Step 4.5
      tracer-bullet probe (§4 Step 4.5) if `manifest.tracer_bullet_mode = probe` (no-op if `skip`,
      the default), then proceed to Step 5 dispatch coder.
+   - `step_5_implementation` → **a Step 5 that was entered and interrupted.** Run the TOFU guard,
+     skip Step 4.5 (it routes out of `ready_for_implementation` and this manifest has left that
+     state), and re-enter Step 5 at its recovery-readiness pre-flight. The four assertions are
+     re-run in full and Step 5.0.5 is a same-to-same no-op; Step 5.0.3 already refuses to rewrite a
+     non-null `recovery_baseline_sha`, so the baseline survives the re-entry (ADR-0050 §D3).
+     **This branch exists because of issue #248's fix** (ADR-0095): before Step 5.0.5, a chain sat
+     at `ready_for_implementation` for the whole of Step 5 and matched the branch above. Without it
+     an interrupted Step 5 matches no branch at all — the fix would have closed a transition hole by
+     opening a recovery one.
    - Any step before `step_4_session_boundary` → error: "resume not necessary, continue in current session".
    - `completed` or `aborted` → error: "chain terminated, create a new manifest".
    - `failed` → error: "chain in failure state, manual recovery required".
@@ -815,6 +824,28 @@ python3 -c "import json,os,sys; p=os.path.expanduser('~/.claude/settings.json');
 Non-zero — including a missing or unparseable `settings.json` — counts as **not verified**. **This assertion fails closed**, and that is deliberate: every hook in this repository follows the opposite convention, allow-on-every-failure-mode, so a reader who pattern-matches on that convention will guess this one should fail open too and "fix" it into doing so. It does not, because it is a pre-flight assertion, not a hook, and it sits beside ADR-0050's other three assertions above, which also fail closed. On refusal, print the literal remediation: "Recovery-readiness pre-flight: set "worktree": { "baseRef": "head" } in ~/.claude/settings.json and re-invoke Step 5. Without it every modification agent's worktree forks from the default branch and cannot see this feature branch's commits (ADR-0068 F15)." Do not proceed to dispatch-mode selection. On success, record `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> worktree_baseref_verified true`; on refusal, leave it at the `manifest-init.sh` default of `false`.
 
 **Autopilot (`manifest.autopilot = true`) refuses identically — no leniency branch (ADR-0050 §D6).** A dirty tree, a default-branch checkout, or an unverified `worktree.baseRef` halts the unattended path exactly as it halts the attended one. There is no `AskUserQuestion` on this path, so the remediation command above is recorded in the report rather than prompted to a terminal nobody is watching.
+
+**Step 5.0.5 — enter `step_5_implementation` (issue #248, ADR-0095). Runs only after all four
+assertions above have passed, and is the LAST thing before dispatch-mode selection.**
+
+```bash
+bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh "<manifest>" step_5_implementation
+```
+
+This is the chain's only unconditional producer of that state, and without it Step 5 can be entered
+but never left: every "transition to `step_6_review`" further down needs `step_5_implementation` as
+its source, and the manifest was still at `ready_for_implementation`. Step 4.5's `green` branch also
+performs this transition, but Step 4.5 runs only when `tracer_bullet_mode = probe` and
+`manifest-init.sh` writes `skip`, so on a default run nothing performed it at all.
+
+**Running after Step 4.5 is a no-op, not an error** — `manifest-transition.sh` returns 0 on a
+same-to-same call. That is what lets both producers coexist instead of one having to guard against
+the other; do not add a conditional here.
+
+**Placement is load-bearing in the other direction too.** Every refusal above prints "Do not proceed
+to dispatch-mode selection" and leaves the manifest at `ready_for_implementation` — the state a Form
+B resume is defined for. Transitioning earlier would strand a refused pre-flight in a state its own
+recovery path does not accept.
 
 #### Pattern seed handoff (ADR-0057 §D5, only if Step 4.5 ran and computed `green`)
 

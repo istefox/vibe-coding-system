@@ -2140,3 +2140,56 @@ wrong by reading. **An assertion that cannot be made to fail is pinning nothing,
 be chosen against the failure mode rather than merely be plausible.**
 
 Detail: `docs/architecture/ADR-0094-250-triage-state-gitignore-glob.md`.
+
+## Decisions from the transition-producer chain (ADR-0095)
+
+Closes issue #248, Wave A2. At the end of Step 5 the chain transitioned to `step_6_review` and was
+refused, correctly: the graph is `ready_for_implementation → step_5_implementation → step_6_review`
+and **nothing on the default path performed the first hop.** Every producer of
+`step_5_implementation` sits inside the Step 4.5 tracer-bullet block, which runs only when
+`tracer_bullet_mode = probe`; `manifest-init.sh` writes `skip`. Step 5 could be entered and never
+left. Third instance of the class after #173 and #238.
+
+- **ADR-0057's own wording is the giveaway** — *"exactly as before this feature existed"*. The pair
+  sat in the legal-pairs table with **no caller at all**, and the tracer-bullet feature became its
+  only caller, behind a flag that defaults off. The feature that reads as if it inherited the
+  transition is the only thing that ever performed it.
+- **Step 5.0.5 produces the state, and its placement is load-bearing in both directions.** Later
+  leaves the gap open; earlier strands a *refused* pre-flight in `step_5_implementation`, when every
+  refusal above says "do not proceed" precisely so the manifest stays at `ready_for_implementation`
+  — the state a Form B resume is defined for. Step 4.5's producer stays and needs no guard: a
+  same-to-same call returns 0, and `TP9` pins that idempotence because it is what lets two producers
+  coexist and nothing in either block says so.
+- **The fix breaks Form B resume, so Form B is fixed in the same edit.** Its branch list accepted
+  `ready_for_implementation` and nothing else in that stretch, which worked only because the chain
+  never left it. ADR-0050's own 5.0.3 (*"already non-null … a resumed Step 5 run"*) anticipates a
+  resumed Step 5 explicitly: the recovery path was specified and the state that reaches it was not.
+  **Closing a transition hole by opening a recovery one is not a fix.**
+- **The class guard does NOT catch #248, and that boundary is the design.** It catches the #238
+  shape (a target with no producer anywhere); it cannot catch a target whose only producers are
+  behind a default-off flag, because conditionality is not mechanical from prose. #248 is pinned
+  **instance-level** (`TP6`/`TP7`); the guard is justified by what it found instead.
+- **It found a real one on its first run, before any of this was written: `gate_5_review_decision`
+  is entered by nothing** (issue #265). Step 5 transitions to `step_6_review` and presents Gate 5
+  from there, while Gate 5 asserts `Trigger: … current_step = gate_5_review_decision`, the roll-up
+  speaks of "the transition to" it, and Step 7 lists it as a valid source. Four unreachable pairs,
+  no symptom — Step 7's `step_6_review → step_7_commit` is legal — which is why it survived.
+  ADR-0027's Gates-0c/0d lesson, fourth instance. **Declared, not fixed:** the state sits *after*
+  `step_6_review` while Gate 5 decides *whether* to review, so resolving it is a design question.
+- **§3's exclusion fails CLOSED, and the safe direction is not the obvious one.** §3 names every
+  pair and performs none, so including it makes every target trivially covered. If the heading range
+  does not resolve, concept-to-code contributes nothing and 26 targets report producerless — loud,
+  with `TP0c` naming the cause. Dropping the guard and including the file whole fails *open*; the
+  test says so at that line.
+- **The predicate needed the arrow form, and only running it showed why.** Gate 0d's routing block
+  puts the verb on the **preceding** line (`Transition: … then immediately transition based on
+  chain_path:` followed by a bullet list), so a same-line "transition" keyword reported `step_e1_plan`
+  as producerless. A false positive of the guard, corrected before shipping.
+
+Known consequences: a chain interrupted in `step_6_review` still matches no Form B branch
+(pre-existing, named rather than half-fixed); the population stops at staged `SKILL.md`, so a
+producer in a skill `scripts/` helper is invisible; a "producer" is a line that *mentions* the target
+in a transition context, so a target only ever talked about looks produced. Instance 9 of the
+derived-guard pattern, not extracted (ADR-0086). Third waiver syntax, deliberately.
+
+Detail: `docs/architecture/ADR-0095-248-transition-producer.md`.
