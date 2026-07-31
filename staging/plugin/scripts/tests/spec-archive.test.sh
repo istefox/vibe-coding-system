@@ -23,6 +23,11 @@
 #
 # The archive is detected by CONTENT and written by NAME, which is the only combination that is
 # both idempotent against the existing corpus and deterministic going forward.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: SA7 | plugin/skills/concept-to-code/scripts/spec-archive.sh | cp "$spec" "$dest" | mv "$spec" "$dest"
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

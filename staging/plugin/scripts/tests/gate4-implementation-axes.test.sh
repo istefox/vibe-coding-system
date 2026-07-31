@@ -26,6 +26,11 @@
 # actually buys is a clean ORCHESTRATOR context: better briefs, more headroom. Real, and not what
 # the text said. Same shape as ADR-0042: a file whose prose disagrees with itself, with no way to
 # tell which half is authoritative.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: G7 | plugin/skills/concept-to-code/SKILL.md | It does not change coder isolation | It gives the cleanest coder context
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

@@ -24,6 +24,12 @@
 #
 # So what is left is the documentation defect, and it is real: two rules presented as compatible,
 # with no precedence and no account of what a red checkpoint means.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: BP2 | plugin/skills/concept-to-code/SKILL.md | the first rule outranks the second | both rules apply
+# plant: BP2b | plugin/skills/concept-to-code/SKILL.md | evidence quality beats checkpoint tidiness | that is the convention
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

@@ -23,6 +23,11 @@
 #
 # THE MANIFEST IS DELIBERATELY NOT CORRECTED. §D3 forbids rewriting the field and the invariant is
 # worth more than one record; RB5 is the forward guard that keeps this fix from starting to.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: RB1 | plugin/skills/concept-to-code/SKILL.md | merge `main` into the feature branch; do not rebase it | keep the branch up to date
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

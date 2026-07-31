@@ -2710,3 +2710,49 @@ now fails where it was invisible, which is a new way for the harness to redden o
 touched.
 
 Detail: `docs/architecture/ADR-0107-281-fence-contract-population.md`.
+
+## Decisions from the plant registry (ADR-0108)
+
+Closes issue #284, Phase 9.1. **Rule 12 — a scan whose needle is a literal counts itself — bit five
+times in one day** (`SA10`, `N9`, `GR1`, `GR5`, `SP1`): each an assertion whose needle was the NAME
+of the thing it asserted about, matching a file that legitimately names it while explaining it.
+Every one was caught by planting a defect and watching the assertion fail to fail. **The plants
+worked; nothing made them durable** — a plant is typed into a shell, watched, and thrown away.
+
+**THE MECHANISM — a plant is declared beside its assertion and executed by the harness:**
+`# plant: <assertion-id> | <path-relative-to-staging> | <needle> | <replacement>`, run by
+`plant-check.sh` against an isolated `cp -R` of the tree.
+
+- **Two cheaper root fixes were measured and ruled out.** A static detector on multi-match needles
+  flags **77 of 181** resolvable assertions (43%), dominated by legitimate cross-references, and is
+  blind to the **362 of 543** that are not statically resolvable at all. A code-only projection
+  catches **4 of the 5** — `N9` matched inside `ok`/`bad` **message strings**, which is code, not
+  commentary — and collides with ADR-0086's refusal to share a helper across 67 hermetic files.
+  **What distinguishes a rule-12 defect is behavioural**: the assertion still passes when the
+  mechanism is removed. That is mutation testing and nothing else.
+- **Three properties, each earned by a past failure.** The needle's words are joined on `\s+` so a
+  wrapped clause is still matched (ADR-0099). **Exactly one match is required** — zero means the
+  needle rotted, more than one means the plant hits sites it did not intend, and both happened the
+  day this was designed (ADR-0099 `P4`/`P5`, ADR-0104 `P2`). Each plant runs against an isolated
+  copy, so nothing can touch the real tree.
+- **Replacement only in v1.** Two of the session's plants were insertions and are not expressible.
+  Named as a limit rather than worked around.
+
+**The registry found a real defect on its first run, which is the whole argument for it existing.**
+14 of 15 plants fired; **`TP6` did not.** It checked that Step 5's pre-flight contains a
+transition-ish word *and* the string `step_5_implementation` — and the prose introducing the block
+satisfies both on its own, so replacing the actual `bash …manifest-transition.sh` call with `true`
+left it green. **Rule 12's sixth instance, caught by the mechanism built for the first five**, on a
+file written earlier the same day and reviewed twice.
+
+The plan called for manufacturing a deliberately weak assertion to prove the runner reports a
+non-firing plant. **That fixture was not needed** — the runner did it live, and `PC1` named it.
+Live evidence beats a synthetic case built to pass.
+
+Known consequences: CI gains a step that re-runs other harnesses against mutated copies, kept
+separate because "an assertion pins nothing" is a different signal from a harness going red; ~0.8s
+per plant, so 100 plants would want their own job; **the registry is itself an assertion corpus with
+no plants of its own** — `PC0`/`PC3` guard its denominator, but the regress stops there, one level
+higher than yesterday.
+
+Detail: `docs/architecture/ADR-0108-284-plant-registry.md`.

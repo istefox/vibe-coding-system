@@ -19,6 +19,11 @@
 # HISTORICAL MANIFESTS ARE NOT REWRITTEN. ADR-0075 declined exactly that for the five dead
 # `project_root` paths, on the ground that falsifying a record for no consumer is worse than leaving
 # it accurate-for-its-moment. SP5 is the forward guard: the corpus keeps its slot pointers.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: SP1 | plugin/skills/concept-to-code/SKILL.md | bash ~/.claude/skills/concept-to-code/scripts/spec-archive.sh "<project-root>" "<topic-slug>" | true
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)

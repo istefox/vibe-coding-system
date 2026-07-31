@@ -47,6 +47,12 @@ jobs:
             printf '::endgroup::\n'
           done
 
+      # The plant registry runs LAST and separately: it is not a *.test.sh, and it re-runs other
+      # harnesses against mutated copies of the tree. A failure here means an assertion somewhere
+      # pins nothing, which is a different signal from a harness going red. ~12s for 15 plants.
+      - name: Run the plant registry
+        run: bash staging/plugin/scripts/tests/plant-check.sh
+
   links:
     name: links
     runs-on: ubuntu-latest

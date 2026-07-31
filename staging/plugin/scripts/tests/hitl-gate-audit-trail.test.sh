@@ -28,6 +28,11 @@
 # completed chain with a pending Gate 5 is a real state (the `step_6_review → completed` direct
 # close skips it). Any status check would have to be conditional on `current_step`, which is
 # ADR-0076's rule and the same trap. H7 pins the absence.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: H3 | plugin/skills/concept-to-code/scripts/manifest-init.sh | label: \"implementation_mode\" | label: \"session_boundary\"
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
