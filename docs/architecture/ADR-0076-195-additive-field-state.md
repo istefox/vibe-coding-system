@@ -187,3 +187,24 @@ same function, and §D3 makes this one loud rather than silent.
 - `docs/architecture/ADR-0069-172-plan-task-form.md` — one place decides, loaded not pasted
 - `docs/architecture/ADR-0047-101-weakening-scan-wiring.md` — the cross-skill `scripts/` precedent
 - `staging/plugin/scripts/tests/manifest-field-state.test.sh`
+
+## Correction 2026-07-31 (issue #240) — the worked example named a value nothing writes
+
+§D2's sentence *"`step5_mode` is `workflow|agent_fallback|null`"* is **wrong**, and has been since
+this ADR shipped. Nothing has ever written `agent_fallback`. Measured over the 41-manifest corpus:
+18 `agent_batch`, 2 `workflow`, 19 `null`, 2 without the field, **0 `agent_fallback`**. Both
+producers write `agent_batch` (`concept-to-code/SKILL.md`, at the Workflow-refusal branch and at the
+fallback activation).
+
+The body is left unedited, per the ADR-0034 precedent for historical records. What is corrected
+forward is everything derived from it: `manifest-field-state.sh`'s header — the live worked example
+§D2 tells the next author to follow — and both `CLAUDE.md` summaries.
+
+**ADR-0016 §Manifest fields had it right all along**, writing `"workflow" | "agent_batch"`. The
+error entered in a **summary** of that ADR and spread from the summary, which is why the issue's own
+description named ADR-0016 as a carrier and was wrong. A derived guard now asserts the documented
+domain against the values the producers actually write, in both directions, so this class of drift
+fails CI instead of waiting for a corpus sweep — see `manifest-field-state.test.sh` section V.
+
+Nothing about the rule changes: absence stays distinct from invalid and from unreadable, and the
+value domain stays the caller's.

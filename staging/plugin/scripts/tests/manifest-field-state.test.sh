@@ -199,6 +199,125 @@ else
   bad "R1: expected >= 30 manifests, found $_n — R1 would pass vacuously"
 fi
 
+
+# ==================================================================================================
+# V. Issue #240 — the documented value domain named a value nothing has ever written.
+#
+# ADR-0076 §D2 says the value domain belongs to the CALLER, and offers `step5_mode` as its worked
+# example: "workflow|agent_fallback|null". Nothing has ever written `agent_fallback`. Measured over
+# the corpus: 18 `agent_batch`, 2 `workflow`, 19 `null`, 2 absent, 0 `agent_fallback`. Both
+# producers write `agent_batch`.
+#
+# THE ISSUE'S OWN DESCRIPTION WAS WRONG ABOUT WHERE IT CAME FROM, and that is the useful part.
+# ADR-0016 §Manifest fields had it right all along — `"workflow" | "agent_batch"`. The error entered
+# in a SUMMARY of that ADR and spread from the summary. A source and its restatements drifted, and
+# nothing compared them.
+#
+# SO THE FIX IS NOT FOUR CORRECTED STRINGS. It is this section: derive the WRITTEN set from the
+# producers, derive the DOCUMENTED set from the helper's own header, and compare in BOTH
+# directions. The reverse direction is the one that catches #240 — a documented value nothing
+# writes — and it is the ADR-0043 direction lesson applied to a value domain.
+#
+# SEEN RED: reverting the header to the #240 wording fails V1 AND V2; dropping a written value
+# fails V1; a producer writing an undocumented value fails V1; breaking the header derivation
+# fails V0b. V3/V4 are forward guards, labelled as such.
+#
+# DERIVED-GUARD PATTERN — instance 8 (ADR-0086). Derives: the value set on both sides. Waiver: none,
+# deliberately; a value domain with an exemption is not a domain. Copied, not shared, per §D1.
+# ==================================================================================================
+MFS_SH="$STAGING/plugin/skills/concept-to-code/scripts/manifest-field-state.sh"
+INIT_SH="$STAGING/plugin/skills/concept-to-code/scripts/manifest-init.sh"
+
+# WRITTEN set: every literal a producer assigns, plus manifest-init.sh's default.
+V_WRITTEN=$(grep -rhoE 'step5_mode: "[a-z_]+"' "$STAGING"/plugin/skills/*/SKILL.md \
+              "$STAGING"/plugin/skills/*/scripts/*.sh 2>/dev/null \
+            | sed 's/.*: "//; s/"//' | sort -u)
+if grep -q 'step5_mode: null' "$INIT_SH" 2>/dev/null; then
+  V_WRITTEN=$(printf '%s\nnull\n' "$V_WRITTEN" | sed '/^$/d' | sort -u)
+fi
+V_WRITTEN_N=$(printf '%s\n' "$V_WRITTEN" | grep -c . || true); [ -n "${V_WRITTEN_N:-}" ] || V_WRITTEN_N=0
+
+# DOCUMENTED set: from the helper's own header, FLATTENED. The sentence wraps across two comment
+# lines, so a line-based grep returns nothing — and an empty documented set would make V2 below
+# vacuously true. Fourth appearance of this lesson family (ADR-0073 line wrap, ADR-0076 comment
+# marker, ADR-0080 backticks, ADR-0082 one-line marker), met here while deriving it.
+V_DOC=$(tr '\n' ' ' <"$MFS_SH" 2>/dev/null | tr -s ' ' | sed 's/# //g' \
+        | grep -oE 'step5_mode is [a-z_|]+' | head -1 | sed 's/step5_mode is //' \
+        | tr '|' '\n' | sed '/^$/d' | sort -u)
+V_DOC_N=$(printf '%s\n' "$V_DOC" | grep -c . || true); [ -n "${V_DOC_N:-}" ] || V_DOC_N=0
+
+# V0/V0b — count guards on BOTH derivations. Either one silently returning nothing makes the
+# comparison below pass while measuring nothing; that is this repository's most-repeated defect.
+if [ "$V_WRITTEN_N" -ge 2 ]; then
+  ok "V0 (count guard): $V_WRITTEN_N step5_mode value(s) derived from the producers"
+else
+  bad "V0 (count guard): only $V_WRITTEN_N value(s) derived from the producers — the grep has stopped matching, the producers have not stopped writing"
+fi
+if [ "$V_DOC_N" -ge 2 ]; then
+  ok "V0b (count guard): $V_DOC_N step5_mode value(s) derived from the helper header"
+else
+  bad "V0b (count guard): only $V_DOC_N value(s) derived from $MFS_SH — the header derivation is broken (it wraps across comment lines and needs flattening), not the header clean"
+fi
+
+# V1 — forward: every value a producer writes must be documented.
+V1_MISSING=""
+for _v in $V_WRITTEN; do
+  printf '%s\n' "$V_DOC" | grep -qxF "$_v" || V1_MISSING="$V1_MISSING $_v"
+done
+if [ -z "$V1_MISSING" ]; then
+  ok "V1: every step5_mode value a producer writes is named in the documented domain"
+else
+  bad "V1: producers write value(s) the documented domain omits:$V1_MISSING — a checker built on that header would reject real manifests (ADR-0075/#123 replayed)"
+fi
+
+# V2 — REVERSE, and this is the assertion that catches #240: a documented value nothing writes.
+# Without it, the header could name anything at all and V1 would still pass.
+V2_PHANTOM=""
+for _v in $V_DOC; do
+  printf '%s\n' "$V_WRITTEN" | grep -qxF "$_v" || V2_PHANTOM="$V2_PHANTOM $_v"
+done
+if [ -z "$V2_PHANTOM" ]; then
+  ok "V2: the documented domain names no value that no producer writes"
+else
+  bad "V2: the documented domain names phantom value(s):$V2_PHANTOM — nothing writes them, and the next author of a step5_mode checker will assert them (issue #240)"
+fi
+
+# V3 — the corpus agrees with the producers. A value in a real manifest that no producer writes
+# means either an undiscovered writer or a hand-edit; either way the domain above is incomplete.
+V3_UNKNOWN=""
+V3_N=0
+for _m in "$REPO"/docs/manifests/*.manifest.yml; do
+  [ -f "$_m" ] || continue
+  _val=$(grep -m1 '^step5_mode:' "$_m" 2>/dev/null | sed 's/^step5_mode:[[:space:]]*//; s/"//g')
+  [ -n "$_val" ] || continue
+  V3_N=$((V3_N + 1))
+  printf '%s\n' "$V_WRITTEN" | grep -qxF "$_val" || V3_UNKNOWN="$V3_UNKNOWN $_val"
+done
+if [ "$V3_N" -ge 10 ] && [ -z "$V3_UNKNOWN" ]; then
+  ok "V3 (forward guard, green before and after): all $V3_N corpus manifests carrying step5_mode hold a value some producer writes"
+elif [ "$V3_N" -lt 10 ]; then
+  bad "V3 (count guard): only $V3_N manifest(s) carry step5_mode — the corpus sweep is not measuring anything"
+else
+  bad "V3: corpus manifests hold value(s) no producer writes:$V3_UNKNOWN"
+fi
+
+# V4 — ADR-0016 is the SOURCE and it was never wrong. Pinned because the drift ran source -> summary,
+# so a future "correction" applied to the source would be fixing the wrong file.
+ADR16="$REPO/docs/architecture/ADR-0016-dynamic-workflows-step5.md"
+if [ -f "$ADR16" ] && grep -q 'agent_batch' "$ADR16" && ! grep -q 'agent_fallback' "$ADR16"; then
+  ok "V4 (forward guard, green before and after): ADR-0016, the source, names agent_batch and never agent_fallback — the drift was in the summaries"
+else
+  bad "V4: ADR-0016 no longer reads as the correct source — check before 'fixing' it; the error entered in a summary of it (#240)"
+fi
+
+# Z1 — assertion-count floor (ADR-0083 §D3).
+Z1_TOTAL=$((PASS + FAIL))
+if [ "$Z1_TOTAL" -ge 30 ]; then
+  ok "Z1: assertion-count floor met ($Z1_TOTAL executed)"
+else
+  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 30; assertions have gone missing, not passed"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

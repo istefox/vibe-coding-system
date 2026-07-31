@@ -27,7 +27,11 @@
 # for it. It returns a FACT instead, and each caller keeps its own rule visible at its own site.
 #
 # The value domain is the caller's too, and it has to be: hook_verified is a boolean, step5_mode is
-# workflow|agent_fallback|null, step5_review_mode is none|checkpoint. There is no general "valid".
+# workflow|agent_batch|null, step5_review_mode is none|checkpoint. There is no general "valid".
+# (`agent_batch`, not `agent_fallback`: issue #240. The wrong name stood here from ADR-0076 until
+# 2026-07-31 while 18 manifests carried the real one, and this comment is the worked example the
+# next author of a step5_mode checker would have copied. ADR-0016 §Manifest fields had it right
+# all along; the error entered in a SUMMARY of it and spread from there.)
 #
 # CONTRACT
 #   stdout, exactly one line:

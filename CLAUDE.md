@@ -125,7 +125,7 @@ Key constraints:
   instead of relying on an in-context coder report. Schema: `tasks_completed`, `tasks_failed`,
   `test_result`, `files_modified`, `harness_deltas`.
 - **Manifest fields.** `hook_verified` (bool, default false) and `step5_mode`
-  (`workflow|agent_fallback|null`) added to `manifest-init.sh` as additive fields.
+  (`workflow|agent_batch|null`) added to `manifest-init.sh` as additive fields.
   No schema version bump required.
 
 **Addendum 2026-07-25 (orchestrator effort).** The session `effortLevel` moves to `high`. Since
@@ -1321,7 +1321,7 @@ with a bare `m.get()`.**
 - **The helper REPORTS, it never DECIDES** — `PRESENT|<value>` / `ABSENT|<current_step>` /
   `UNREADABLE`, exit 3 for "could not run" (environment) as distinct from `UNREADABLE` (input).
   The value domain is the caller's and has to be: `hook_verified` is a boolean, `step5_mode` is
-  `workflow|agent_fallback|null`, `step5_review_mode` is `none|checkpoint`. There is no general
+  `workflow|agent_batch|null`, `step5_review_mode` is `none|checkpoint`. There is no general
   "valid".
 - **The two call sites apply OPPOSITE policies to the same ABSENT state and both are right.**
   nightly check 6 sweeps a corpus of long-completed chains whose dispatch mode cannot affect
@@ -2034,3 +2034,40 @@ must belong to the block it asserts about and to nothing else, and the only way 
 to plant it.**
 
 Detail: `docs/architecture/ADR-0091-246-per-file-budget-half-parse.md`.
+
+## Decisions from the step5_mode value domain (ADR-0092)
+
+Closes issue #240, third of Wave E. ADR-0076 §D2 makes the value domain the **caller's** and offers
+`step5_mode` as its worked example: `workflow|agent_fallback|null`. **Nothing has ever written
+`agent_fallback`** — measured over 41 manifests: 18 `agent_batch`, 2 `workflow`, 19 `null`, 2 absent,
+**0**. Both producers write `agent_batch`.
+
+- **Latent, and that is what makes it a trap.** `manifest-validate.sh` has no invariant for the
+  field, so nothing catches it. But the wrong string sits in `manifest-field-state.sh`'s header, the
+  live worked example ADR-0076 tells the next author to follow: a checker built on it passes on a
+  fresh manifest (`null`) and rejects all 18 historical ones the first time it meets one. ADR-0075 /
+  #123 replayed exactly.
+- **The issue was wrong about the origin, and that is the useful part. ADR-0016 is CORRECT** and
+  always was (`"workflow" | "agent_batch"`). The error entered in a **summary** of that ADR in
+  `CLAUDE.md` and spread from the summary into ADR-0076 and thence into the helper header. Four
+  wrong sites, not three, and the source was not among them.
+- **The fix is not four corrected strings.** Section `V` of `manifest-field-state.test.sh` derives
+  the WRITTEN set from the producers and the DOCUMENTED set from the helper header and compares them
+  **in both directions**. The reverse direction is what catches this — a documented value nothing
+  writes — the ADR-0043 direction lesson applied to a value domain. `V4` pins ADR-0016 as the
+  correct source, because the drift ran source → summary and a later "correction" would otherwise
+  fix the wrong file. Instance 8 of the derived-guard pattern, **with no waiver mechanism: a value
+  domain with an exemption is not a domain.**
+- **ADR-0076's body is not edited** (ADR-0034 precedent); it gains a dated `## Correction`. The 18
+  historical manifests are untouched — they are accurate.
+
+**Lesson, fourth of its family, met while deriving the guard itself:** the helper's sentence wraps
+across two comment lines, so the first line-based derivation of the documented set returned
+**nothing** — which would have made `V2` vacuously true, the exact shape it exists to catch. Both
+derivations are count-guarded now. ADR-0073 line wrap, ADR-0076 comment marker, ADR-0080 backticks,
+ADR-0082 one-line marker, and now a derivation reading its own source.
+
+Known consequence: the guard covers `step5_mode` only — `hook_verified` and `step5_review_mode` are
+named in the same sentence and are not derived, since their producers are shaped differently.
+
+Detail: `docs/architecture/ADR-0092-240-step5-mode-value-domain.md`.
