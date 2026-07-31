@@ -2109,3 +2109,34 @@ on a correct file**, because its needle `|)` matched the header comment explaini
 the construct — rule 12, in a test written the same hour as an ADR citing rule 12.
 
 Detail: `docs/architecture/ADR-0093-232-macos-detection-false-positives.md`.
+
+## Decisions from the RTF gitignore glob (ADR-0094)
+
+Closes issue #250, last of Wave E. `review-triage-fix`'s state file is per-branch by design, and
+`triage-state.sh commit` gitignored it by appending its **resolved** name. The branch is deleted at
+merge; the line is not. One dead entry per branch, forever — and on a public repo, a list of every
+feature branch ever reviewed.
+
+- **It defeated its own purpose too.** A per-branch line protects exactly one branch; the next
+  branch is unprotected until its own cycle appends its own line. Now one glob, permanent, covering
+  the first cycle on a new branch as well.
+- **`git check-ignore`, not a literal grep for the script's own line.** A human may have written a
+  broader rule by hand, and **this repository's `.gitignore` is the proof** — it carried
+  `.claude/.triage-fix-last*.json` before the glob existed. Exit-code contract as `commit/SKILL.md`
+  already documents it: **1 means "not ignored", a clean result, not a failure**; non-zero takes the
+  append branch, the safe direction, and the append is idempotent.
+- **A basename is passed, because `git -C` moves the cwd.** A relative `$SF` would be resolved
+  against the file's own directory a second time, yielding `.claude/.claude/…` and a "not ignored"
+  answer for a file that is ignored. RTF passes an absolute path, so this is defensive — pinned
+  anyway, because *defensive* and *untested* together make a later simplification look free.
+
+**The lesson is the assertion, not the fix.** `T10b` exists to pin the basename, and its first two
+drafts **passed and caught nothing**: seeded with the script's own glob, the literal-grep fallback
+suppressed the append so the `check-ignore` branch never ran; seeded with `.claude/`, that rule
+covers the *doubled* path the bug produces, so `check-ignore` said "ignored" for the wrong reason.
+The seed had to differ from the script's own glob **and** not cover the doubled path — verified by
+running `check-ignore` against both paths before writing the assertion. Neither draft was detectably
+wrong by reading. **An assertion that cannot be made to fail is pinning nothing, and a fixture must
+be chosen against the failure mode rather than merely be plausible.**
+
+Detail: `docs/architecture/ADR-0094-250-triage-state-gitignore-glob.md`.
