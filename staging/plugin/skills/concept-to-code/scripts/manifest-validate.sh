@@ -51,12 +51,30 @@ fi
 # manifest is validated on the machine that produced it. Five of this repository's own manifests
 # carry a path from a different machine and failed this invariant for that reason alone.
 #
-# TERMINAL MEANS ABSORBING, and that was verified against the state machine rather than assumed:
-# no transition pair in manifest-transition.sh has completed, failed or aborted as its SOURCE, so a
+# TERMINALITY LIVES IN TWO FIELDS, AND THEY ARE EXEMPT FOR TWO DIFFERENT REASONS (issue #331,
+# ADR-0113). Reading `current_step` alone was the third site of one defect — ADR-0109 built
+# manifest-entry-state.sh to read both fields for exactly this reason, ADR-0111 applied the same
+# reading to project-conductor branch C. Form C (abort) sets `status: aborted` and leaves
+# `current_step` untouched, so an aborted chain is terminal by one field and live by the other; the
+# orphan manifest of 2026-07-31 carries `current_step: step_0_init`, `status: aborted` and failed
+# this invariant on CI for that reason alone.
+#
+# AXIS 1 — current_step: ABSORBING, verified against the state machine rather than assumed. No
+# transition pair in manifest-transition.sh has completed, failed or aborted as its SOURCE, so a
 # manifest in one of them can never move again. Wider than ADR-0075's `completed`-only tolerance
 # for hook_verified, and for a stated reason — that rule's argument ("a finished chain cannot
 # affect a future run") covers all three absorbing states, and narrowing to one would be following
 # its letter past its reason.
+#
+# AXIS 2 — status: A DECLARED END, NOT A PROVEN-ABSORBING ONE, and the difference is the point.
+# manifest-transition.sh does not read the current status at all — it validates a NEW status passed
+# as its third argument and never inspects the one on disk — so `status` appears nowhere in the pair
+# table and the axis-1 proof does not cover it. What it rests on instead is the same reading
+# ADR-0109 makes for its TERMINAL token and ADR-0111 acts on: `completed|failed|aborted` is a chain
+# whose end was DECLARED, by the chain itself or by a human running Form C, and a declared end is
+# what makes project_root a historical record. Do not restate axis 1's proof over this axis; it is
+# not true of it. The residual — a status-terminal manifest can still be hand-transitioned, because
+# the state machine does not refuse it — is disclosed in ADR-0113 and belongs to its own issue.
 #
 # IT CANNOT WEAKEN A LIVE PATH. Every consumer reads a manifest that is in flight:
 # manifest-transition.sh validates pre-transition and a terminal manifest never transitions;
@@ -66,18 +84,26 @@ fi
 # PRESENCE is still required in every state — a missing project_root is corruption at any point.
 project_root_val="$(grep '^project_root:' "$MANIFEST" | sed 's/^project_root: *//;s/"//g' | head -1)"
 project_root_step="$(grep '^current_step:' "$MANIFEST" | sed 's/^current_step: *//;s/"//g' | head -1)"
+project_root_status="$(grep '^status:' "$MANIFEST" | sed 's/^status: *//;s/"//g' | head -1)"
+
+# Either axis terminal exempts. The two arms MUST list the same three states — they are one
+# question asked of two fields, not two questions — and manifest-project-root-terminal.test.sh
+# asserts they agree, and that both agree with manifest-entry-state.sh's TERMINAL set.
+project_root_terminal=0
+case "$project_root_step" in
+  completed|failed|aborted) project_root_terminal=1 ;;
+esac
+case "$project_root_status" in
+  completed|failed|aborted) project_root_terminal=1 ;;
+esac
+
 if [ -z "$project_root_val" ]; then
   fail "project_root field missing or empty"
-elif [ ! -d "$project_root_val" ]; then
-  case "$project_root_step" in
-    completed|failed|aborted)
-      # Terminal: the path is a record of where this chain ran, and nothing will run again.
-      # Silent rather than a note — this script's only output channel is fail(), and its main
-      # caller (manifest-transition.sh) discards stderr, so a note would reach nobody.
-      : ;;
-    *)
-      fail "project_root '$project_root_val' is not an existing directory" ;;
-  esac
+elif [ ! -d "$project_root_val" ] && [ "$project_root_terminal" -eq 0 ]; then
+  # Not terminal on either axis: the directory is a live precondition and must exist.
+  # The terminal case is silent rather than a note — this script's only output channel is fail(),
+  # and its main caller (manifest-transition.sh) discards stderr, so a note would reach nobody.
+  fail "project_root '$project_root_val' is not an existing directory"
 fi
 
 # Invariant 5: current_step must be in valid enum
