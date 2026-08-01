@@ -981,6 +981,42 @@ whether any deserve a mechanism, rather than re-disclosing each time.
 
 ---
 
+### Phase 10.0 — the blockers that stop Phase 10 from starting (attended, issues #319–#324)
+
+Phase 10's inputs were prepared and verified, and the launch on 2026-07-31 still did not produce a
+single implemented feature. It reached the chain's **first Gate 0 write** and stopped. Everything
+below was found by trying to run the chain, not by reading it — which is the only reason none of it
+appears in the 191-item ADR sweep Phase 10 is built on. A residual is something an author wrote
+down; these are things nobody knew.
+
+**Why this phase is attended, and why it is a table rather than a checklist.**
+`project-conductor` takes the first `- [ ]` line in this file. Every item here lives inside the
+runner's own machinery, and the first two are precisely what prevents the runner from starting, so
+the unattended runner cannot be the thing that fixes them. A table is invisible to the conductor by
+construction — the same device §9 already uses.
+
+| # | Issue | The measurement | Done means |
+|---|---|---|---|
+| 1 | #319 — a chain interrupted before Step 4 is unreachable by both entry points | `manifest-init.sh` exits **2** saying *use resume*; the Form B branch table refuses any step before `step_4_session_boundary`. Script-enforced at both ends. A live orphan is on disk. | One documented entry point reaches it; the other's error names it. Nothing is silently overwritten. |
+| 2 | #320 — the launch precondition that killed the run is the one Phase 0 does not check | `nightly-autopilot/SKILL.md:37` states it; grepping the skill for `permissionMode\|defaultMode\|acceptEdits\|bypass` returns that one line. Phase 0's eight checks verify it nowhere. `defaultMode` is `auto`. | A blocking mode aborts pre-flight before the guard arms, naming `/permissions` as the remedy. |
+| 3 | #324 — a feature that fails at chain entry halts the whole roadmap | Branch C writes the **run-level** `needs-human` for any unexpected state. ADR-0060 §D3 already split known-and-contained from run-level, for a different set of writers. | A known per-feature entry failure marks `[~]` and continues; a genuinely unknown state still halts. Both directions tested. |
+| 4 | #321 — an interrupted run leaves the guard armed and nothing documents how to disarm it | `active` is removed only in Phase 2, which a dead session never reaches. The RUNBOOK has no recovery section. This blocked a legitimate push on 2026-07-31. | A stale marker is distinguishable from a live one, and a one-command disarm exists where a blocked human will look for it. |
+| 5 | #323 — the guard's push-to-main rule reads the whole command, not the push segment | Probed live: `git push -u origin feat/x` allows, `gh pr create --base main` allows, the two joined by `&&` **halts as push-to-main**. The sibling force-flag rule two lines above is already segment-scoped, with a comment explaining why. | The rule is scoped like its sibling; every genuine push-to-main form still halts, seen RED first. |
+| 6 | #322 — pre-flight check 8 verifies one of the three checks `main` actually requires | `main` requires `markdownlint`, `links`, `ci`; check 8 verifies `ci`. PR #317 failed `markdownlint` on three real errors this week. | Pre-flight covers what `main` requires, or states which subset it covers and why. Count-guarded. |
+
+**The order is not by severity.** 1 and 2 are what stopped the run. 3 comes third because until it
+lands, one wedged feature in a twelve-feature wave still costs the eleven behind it — fixing the
+blast radius is worth more than fixing any single cause. 4 makes an overnight failure cheap to clean
+up in the morning. 5 and 6 are correctness of the gate rather than ability to run at all.
+
+**One manual act is not an issue.** The orphaned manifest
+`docs/manifests/2026-07-31-the-sixth-bare-manifest-set-flag-sh-ment.manifest.yml` has to be cleared
+before any run starts. #319 is about the mechanism; this one file predates it and needs a human.
+
+**Exit criterion.** Not "six PRs merged" — a launch that reaches at least one `NIGHTLY-PUBLISH`
+line. Phase 10 wave 1 does not start before that, because a wave that halts on feature 1 costs a
+night and teaches nothing.
+
 ### Phase 10 — total review closure, executed unattended
 
 Phase 9 left one open GitHub issue. The repository's actual backlog was somewhere else: a sweep of
