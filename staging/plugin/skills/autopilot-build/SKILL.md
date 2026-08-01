@@ -46,7 +46,7 @@ and left the manifest at `ready_for_implementation`. This skill picks up from th
 
 ## 2. Three-phase execution
 
-### Phase 0 — Hard pre-flight (eight checks, all read-only Bash)
+### Phase 0 — Hard pre-flight (nine checks, all read-only Bash)
 
 **Any failure → write an `aborted` morning report and stop. No dispatch, no file changes.**
 
@@ -76,6 +76,58 @@ if [ "$in_scope" = false ]; then
   echo "SCOPE ERROR: manifest project_root ($project_root) is not this session's CWD ($cwd) and is not a subdirectory of it. Open a new session inside a directory at or above $project_root and run autopilot-build from there."
   exit 1
 fi
+```
+
+**Check 1b — Permission posture (issue #320, ADR-0110):**
+
+Placed here and not first because Check 1 genuinely must be: the scope guard is what stops this
+skill operating outside its session's CWD, and nothing may precede it. Placed here and not last
+because a blocking mode can deny or prompt on the checks below, so learning about it after six more
+of them wastes the diagnosis.
+
+This runs with no human present, exactly like `nightly-autopilot` Phase M, and reads the **same**
+checker for the same reason: two unattended entry points that disagreed about whether a run may
+start would be a defect, not a difference.
+
+<!-- fence-contract: autopilot-build-check-1b -->
+```bash
+_pms=""
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/permission-mode-state.sh" ]; then
+  _pms="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/permission-mode-state.sh"
+elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/permission-mode-state.sh" ]; then
+  _pms="$HOME/.claude/skills/concept-to-code/scripts/permission-mode-state.sh"
+else
+  echo "✗ permission posture: permission-mode-state.sh not found — the check DID NOT RUN."
+  echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 1
+fi
+_pm=$(bash "$_pms" 2>&1); _pmrc=$?
+if [ "$_pmrc" -ne 0 ]; then
+  echo "✗ permission posture: the check DID NOT RUN (rc=$_pmrc) — $_pm"
+  exit 1
+fi
+case "${_pm%%|*}" in
+  NONBLOCKING)
+    echo "✓ permission posture: ${_pm#*|} — no per-tool prompt will fire." ;;
+  BLOCKING)
+    echo "✗ permission posture: this session is in '${_pm#*|}', which can prompt or deny, and"
+    echo "  autopilot-build runs with nobody to answer. Set a non-blocking mode and relaunch."
+    echo "  /permissions does NOT set the mode (it manages allow/ask/deny rules); hooks are a"
+    echo "  separate axis and stay enabled. Shift+Tab cycles the modes (from 'auto', two"
+    echo "  presses to acceptEdits), or launch with: claude --permission-mode acceptEdits."
+    exit 1 ;;
+  UNCLASSIFIED)
+    echo "✗ permission posture: mode '${_pm#*|}' is UNCLASSIFIED — not known-bad, just unmeasured."
+    echo "  A pre-flight refuses the unknown rather than gamble an unattended run on it."
+    exit 1 ;;
+  UNOBSERVABLE)
+    echo "✗ permission posture: the effective mode could not be observed — ${_pm#*|}"
+    echo "  A fact about this build, not a bad mode: the transcript field is CC 2.1.220+."
+    echo "  This gate fails closed on purpose; verify the mode by hand before relaunching."
+    exit 1 ;;
+  *)
+    echo "✗ permission posture: unrecognised token '${_pm%%|*}'"; exit 1 ;;
+esac
 ```
 
 **Check 2 — Manifest state:**

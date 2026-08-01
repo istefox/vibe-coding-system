@@ -2805,3 +2805,63 @@ purpose. `MES0`/`MES1`/`MESX4`/`MESW` pass before and after — forward guards. 
 `MES2`, `MES4`, `MES8`, `MESF2`, `MESB1`.
 
 Detail: `docs/architecture/ADR-0109-319-manifest-entry-state.md`.
+
+## Decisions from the permission-posture pre-flight (ADR-0110)
+
+Closes issue #320, second of Phase 10.0. `nightly-autopilot` states its first launch precondition
+**three times in prose** — set a non-blocking permission mode — and Phase 0's eight checks verified
+it **nowhere**. On 2026-07-31 pre-flight printed `PASSED`, the guard armed, the roadmap started, and
+the chain died at its first Gate 0 write with nobody to answer the prompt. Every other precondition
+fails loudly and early; this one failed silently and late, and it is the only one whose failure is
+**guaranteed** fatal rather than conditional.
+
+- **`settings.json` is the wrong source, and wrong in the direction that matters.** It holds
+  `permissions.defaultMode` — the STORED DEFAULT. A session started with `--permission-mode` or
+  switched with Shift+Tab never writes there, so a stored `acceptEdits` would **pass** while the
+  session runs `auto` and dies. Proven live: settings said `auto` while the session was in `plan`.
+  The environment carries nothing either — none of the nine `CLAUDE*` vars has a permission field.
+- **The effective mode IS observable: `permissionMode` in the session transcript**, a top-level key
+  on `user` entries and on a `type: "permission-mode"` entry emitted on change, with the transcript
+  located from `CLAUDE_CODE_SESSION_ID` (ADR-0029's name). **The LAST value wins** — reading a first
+  or stored value is the same defect in different clothes.
+- **Build-stamped, and the field is NEW.** 39 of 42 local transcripts carry it; the two real
+  exceptions are CC 2.1.219. So `UNOBSERVABLE` is a first-class token, and the gate **fails closed**
+  on it: before 2.1.220 the unattended paths will not start. Stated in the message, chosen
+  deliberately, because the alternative is the silent `PASSED` that cost the run.
+- **A top-level JSON key, not a grep, and the reason is not the obvious one.** Measured on a
+  transcript quoting the field inside a tool result: grep 114, parser 114 — no divergence. The naive
+  grep survives *only* because JSON escapes nested quotes, an accidental property of the format.
+  Relying on it would be rule 12 at run time.
+- **`dontAsk` is refused as UNCLASSIFIED, and both messages say "not known-bad, just unmeasured".**
+  For a pre-flight the safe direction is to refuse the unknown; telling an operator their mode is
+  unsafe when nobody measured it sends them hunting a problem that may not exist.
+- **Two call sites, one script** (ADR-0086): `nightly-autopilot` gets a **Phase M above Phase P** —
+  Phase P writes files, so a check inside Phase 0 would let a blocking mode stall it first — and
+  Phase 0 gains a sentence that the check **must not be added as a ninth** there. `autopilot-build`
+  gets **check 1b**: not first (check 1 is the scope guard), not last (a blocking mode can deny the
+  checks in between), with that rationale written at the site so nobody moves it.
+- **`/permissions` does not set the mode**, and hooks are a third axis it does not touch. The launch
+  order now names Shift+Tab, `--permission-mode`, and `permissions.defaultMode` — an instruction
+  whose remedy names no runnable command is the defect ADR-0109 closed one level up.
+
+Known consequences: whether `acceptEdits` is *sufficient* is unmeasured — Bash outside the allowlist
+still prompts, so a green posture check is not "no prompt is possible"; `dontAsk` blocks runs until
+someone measures it; inert **and worse than inert** until sync, since both fences abort with "the
+check DID NOT RUN"; a pre-flight is a snapshot and cannot see a mode changed mid-run. `PM0`/`PM10`/
+`PM11`/`PMF9` pass before and after; the five seen RED are `PM2`, `PM3`, `PM4`, `PMF3`, `PMF7`.
+
+**A false positive that found a true defect**, recorded because ADR-0051 tracks this detector's
+precision. `weakening-scan.sh` flagged the per-line `except Exception: continue` around
+`json.loads` — a **correct** swallow, since an append-only transcript can have a half-flushed last
+line. But looking at it surfaced a real defect two statements below: the `python3` call had
+`2>/dev/null` and no status check, so an interpreter failure produced an empty result and reported
+*"a pre-2.1.220 build does not write it"* — **a cause that is not the cause**, inside the file whose
+whole subject is reporting the right reason for a state. `PM9b` pins it. The finding was wrong; the
+investigation it triggered was not.
+
+**Harness lesson, third fixture bug of its family this week:** `PMF2`–`PMF7` first failed against
+*correct* fences because the stub generator mis-quoted a `printf`, and its first draft named the
+stub directory from a counter incremented inside `$(...)` — a subshell, so every call would return
+the same directory. ADR-0096's `mk_root` bug, met again ten days later by the same hand.
+
+Detail: `docs/architecture/ADR-0110-320-permission-mode-preflight.md`.
