@@ -136,6 +136,47 @@ lines in the transcript are the authoritative record.
 - Interrupt the session (Esc / stop) to end the current turn.
 - The working tree and whatever was already committed and pushed are intact. No feature is left
   half-merged into `main`, because the run never merges.
+- **There is one thing left to do: disarm the guard.** Stopping the session skips Phase 2, which is
+  the only step that clears the run's state, so the guard stays armed and will keep refusing
+  publishes in your own later sessions. See the next section.
+
+  ```bash
+  bash ~/.claude/hooks/nightly-disarm.sh "$PWD"
+  ```
+
+---
+
+## The guard is still armed and I cannot push
+
+Symptom: `NIGHTLY-GUARD HALT: ...` on a push, a PR, or a merge — in an ordinary session, with no
+nightly run going on. The guard keys off `.claude/nightly-state/active`, and a run that was
+interrupted, crashed, or ran out of context never reached the step that removes it.
+
+The fix, from the repo root:
+
+```bash
+bash ~/.claude/hooks/nightly-disarm.sh "$PWD"
+```
+
+It prints what it cleared. Exit codes: `0` cleared (or nothing was armed), `1` refused because the
+marker belongs to *this* session — a run does not disarm itself — `2` bad arguments, `3` it could not
+look, which is **not** the same as "nothing was armed" and means you are still blocked.
+
+It clears the whole transient set, because the marker is only one of five ways to be stuck:
+
+| file | what it does while present |
+| --- | --- |
+| `.claude/nightly-state/active` | arms the guard; alone it blocks only merges, force-pushes, `--no-verify` and pushes to `main` |
+| `.claude/nightly-state/build-status` reading `RED` | halts every publish, marker or not |
+| `.claude/needs-human` | halts every publish, and prints its first line as the reason |
+| `.claude/nightly-state/rtf-blocker` | halts every publish |
+| `.claude/nightly-state/token-budget` with `spent >= limit` | halts every publish |
+
+When the marker was armed by another session, the halt message names the owner, the time, and this
+command — so you should not need this page twice.
+
+To check without changing anything: `cat .claude/nightly-state/active`. An empty file is a marker
+from before this was recorded; that is normal for old runs and the disarm handles it.
 
 ---
 

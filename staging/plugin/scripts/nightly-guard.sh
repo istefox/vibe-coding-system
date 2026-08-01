@@ -43,11 +43,32 @@
 
 STATE_SUBDIR=".claude/nightly-state"
 
+# marker_field <root> <key>: read `key=value` from the active marker. Empty when the marker is
+# absent, unreadable, or predates issue #321 (a bare `touch`, which is still a valid armed marker —
+# presence is what arms the guard, never contents). Absent, foreign and unreadable are three
+# different states and the caller must not collapse them (ADR-0076 §THE RULE).
+marker_field() {
+  _mf="$1/$STATE_SUBDIR/active"
+  [ -f "$_mf" ] || return 0
+  grep "^$2=" "$_mf" 2>/dev/null | head -1 | sed "s/^$2=//"
+}
+
+# STALE_HINT: appended to a halt message ONLY when the marker was armed by a DIFFERENT session
+# (issue #321, ADR-0112). Set by the hook path below, before any print_halt can fire.
+#
+# A different session id is not proof the owner is dead, and this deliberately claims no more than
+# it knows: it reports who armed the marker and names the exit. When the ids MATCH — a live run
+# halting normally — the message is byte-identical to what it was before this feature, because
+# inviting a running roadmap to disarm itself is the one thing R-04 forbids. Same fallback when
+# either id is unreadable: say nothing rather than guess.
+STALE_HINT=""
+
 # print_halt: emit the machine-readable halt line the /goal evaluator keys off, plus a human
 # line on stderr, then exit 2 (block).
 print_halt() {
   printf 'NIGHTLY-GUARD HALT: %s\n' "$1"
   printf 'nightly-guard: publish blocked — %s\n' "$1" >&2
+  [ -n "$STALE_HINT" ] && printf '%s\n' "$STALE_HINT" >&2
   exit 2
 }
 
@@ -78,8 +99,21 @@ is_forbidden_publish() {
       printf '%s' "$c" | grep -Eq 'git push[^|;&]*[[:space:]](-f([[:space:]]|$)|--force)' && return 0
       # Any +<ref> force-refspec after `git push` (+main, +master, +refs/heads/x).
       printf '%s' "$c" | grep -Eq 'git push[^|;&]*[[:space:]]\+[^[:space:]]' && return 0
-      # Destination main/master (space-, slash-, colon- or plus-delimited ref).
-      printf '%s' "$c" | grep -Eq '(^|[ :/+])(main|master)([ ]|$)' && return 0
+      # Destination main/master (space-, slash-, colon- or plus-delimited ref), SCOPED TO THE PUSH
+      # SEGMENT exactly like the two rules above (issue #323, ADR-0112). It used to run over the
+      # whole command, so `git push -u origin feat/x && gh pr create --base main` read the PR's
+      # `--base main` as the push's destination and was refused — the most ordinary publish shape
+      # there is. `publish-feature.sh` issues push and PR as separate commands, which is why the
+      # nightly path never tripped it and it stayed invisible.
+      #
+      # The `(^|` alternative is GONE, not merely unused: under segment scoping the match starts at
+      # `git push`, so a command beginning with `main` is unreachable and leaving the branch would
+      # be dead pattern that reads as coverage.
+      #
+      # Third recorded instance of fixing a boundary in one rule and not its sibling — ADR-0074 on
+      # `agent-command-scope.sh` R1, ADR-0079 on R2, this. **If you add a fourth rule here, scope it
+      # to the segment too.**
+      printf '%s' "$c" | grep -Eq 'git push[^|;&]*[ :/+](main|master)([ ]|$)' && return 0
       ;;
   esac
   return 1
@@ -172,6 +206,18 @@ fi
 
 # Publish-shaped command, but no active nightly run: guard is inert (do not block manual work).
 [ -f "$CWD/$STATE_SUBDIR/active" ] || exit 0
+
+# The marker is present. Decide whether THIS session is the one that armed it (issue #321).
+# A session that dies never reaches Phase 2, so the marker outlives it and the guard stays live in
+# the human's own working sessions with nothing pointing at the file to remove. This does not
+# disarm anything and cannot: it only decides whether the halt message is allowed to name the exit.
+SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+OWNER=$(marker_field "$CWD" session_id)
+ARMED_AT=$(marker_field "$CWD" started_at)
+if [ -n "$OWNER" ] && [ -n "$SID" ] && [ "$OWNER" != "$SID" ]; then
+  STALE_HINT="nightly-guard: this marker was armed by session $OWNER${ARMED_AT:+ at $ARMED_AT}, not by this session.
+nightly-guard: if that run is over, clear it:  bash ~/.claude/hooks/nightly-disarm.sh \"$CWD\""
+fi
 
 # Active nightly run. A forbidden publish is blocked unconditionally.
 if is_forbidden_publish "$CMD"; then
