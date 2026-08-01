@@ -324,16 +324,23 @@ the `NIGHTLY-PUBLISH` status line → advance to the next `[ ]`.
   feature. A halted feature keeps its local commit but has no ready PR.
 - **Per-feature `skipped-features`** (`<root>/.claude/nightly-state/skipped-features`,
   append-only): this *one* feature cannot proceed for a known, contained reason, and the roadmap
-  continues to the next `[ ]`. Three writers: `spec-from-issue`'s thin-issue skip (Step 2),
-  `spec-from-issue`'s injection-suspect skip (Step 1.5, ADR-0059), and Gate 2c's G13
-  unprovisioned-dependency skip (ADR-0060 §D2 — see the "Marker" prose in
-  `concept-to-code/SKILL.md`'s Gate 2c Autopilot-default block; it fires at each feature's own
-  Gate 2c inside the per-feature chain this section drives, not literally inside §1.5 Phase P,
-  since dependencies are not declared until that feature's architect has run — noted here because
-  it is this phase's skip mechanism being reused). `nightly-guard.sh` never reads this file: its
-  presence has no effect on `--check`, by design (see the script's own v1.3 header comment). Every
-  writer also marks the feature `[~]` in PROJECT.md with the same reason. The morning report lists
-  these under `features_skipped[]` (schema v2.2, §4), separate from `guard_halts[]`.
+  continues to the next `[ ]`. **Five writers**, the last two added by ADR-0111 (issue #324):
+  `spec-from-issue`'s thin-issue skip (Step 2), `spec-from-issue`'s injection-suspect skip
+  (Step 1.5, ADR-0059), Gate 2c's G13 unprovisioned-dependency skip (ADR-0060 §D2 — see the
+  "Marker" prose in `concept-to-code/SKILL.md`'s Gate 2c Autopilot-default block; it fires at each
+  feature's own Gate 2c inside the per-feature chain this section drives, not literally inside §1.5
+  Phase P, since dependencies are not declared until that feature's architect has run — noted here
+  because it is this phase's skip mechanism being reused), `project-conductor` Step 4's
+  **no-generated-SPEC skip**, and `project-conductor` Step 5 branch C's **`TERMINAL` entry-state
+  skip**. `nightly-guard.sh` never reads this file: its presence has no effect on `--check`, by
+  design (see the script's own v1.3 header comment). Every writer also marks the feature `[~]` in
+  PROJECT.md with the same reason. The morning report lists these under `features_skipped[]`
+  (schema v2.2, §4), separate from `guard_halts[]`.
+
+  **Branch C is a split, not a downgrade** (ADR-0111): only a `TERMINAL` entry state — a chain that
+  reached a *decided* end, its reason recorded in the manifest — takes the skip path. Every other
+  state a feature can be left in is still a run-level `needs-human` halt, including the
+  anti-test-weakening halt described below, which never transitions and so is never `TERMINAL`.
 
 Before this ADR (issue #114), both writer classes above shared the run-level `needs-human` file, so
 one thin issue silently halted every other feature in the roadmap — a latent defect, not a design
