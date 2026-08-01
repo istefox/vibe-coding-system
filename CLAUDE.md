@@ -2921,3 +2921,57 @@ unattended chain stalls at its first gate and the `[auto]` SPEC pre-flight is ne
 filed as **#329**, because what the safe default *is* needs its own decision.
 
 Detail: `docs/architecture/ADR-0111-324-conductor-entry-failure-split.md`.
+
+## Decisions from the stale guard marker (ADR-0112)
+
+Closes issues #321 and #323 together. `nightly-autopilot` arms `nightly-guard` in Phase 1 and
+disarms in Phase 2 **only**, so a session that dies leaves the guard live in the human's own later
+sessions with nothing pointing at the file to remove.
+
+- **They ship together because neither explains the 2026-07-31 incident alone.** A stale marker
+  blocks only *forbidden* publishes; an ordinary `git push` passes the halt checks. What turned an
+  ordinary publish into a forbidden one is #323 — `is_forbidden_publish`'s destination rule ran over
+  the **whole command** while the two rules above it are scoped to the push segment, so
+  `git push -u origin feat/x && gh pr create --base main` read the PR's `--base` as the push's
+  destination. **Third recorded instance of fixing a boundary in one rule and not its sibling**
+  (ADR-0074 R1, ADR-0079 R2); the site now says *if you add a fourth rule here, scope it too.*
+- **The pid #321 proposes is the one signal that cannot work.** The marker is written from a Bash
+  tool call whose subprocess exits within milliseconds, so a recorded `$$` is always dead and a
+  liveness check on it would report every live run as stale. Session id and timestamp are the two
+  real signals; `.session_id` is already read by three hooks.
+- **`.claude/nightly-state/started-at` exists in this repo and NOTHING writes it.** §3.1 said
+  *"record `started_at`"* without naming a location, so an orchestrator invented one. **A value with
+  no specified home gets one anyway, chosen by whoever runs the step** — which is why the marker's
+  format is now written out rather than described.
+- **The RUNBOOK's one grep hit was worse than a gap.** It sits in `## Aborting a run` — the section
+  a human lands on after stopping a run — and says the tree "is intact", reading as *nothing left to
+  do* at the exact moment the marker is being abandoned.
+- **`nightly-disarm.sh` refuses the OWNING session**, so R-04 is a property of the mechanism rather
+  than a sentence. It claims **no liveness oracle**: a different session id is not proof the owner is
+  dead, and a transcript-mtime threshold would be a heuristic sold as proof. **The recovery path
+  never fails closed** — a legacy ownerless marker and an unknown current session both disarm, with
+  a note, because refusing there strands exactly the people it exists for.
+- **It clears all five blockers, not just the marker.** A stale `build-status` reading `RED` halts
+  `--check` regardless of the marker, so a marker-only disarm looks like it worked while the human
+  stays blocked. Exit 3 (did not run) is separate from 0 because a blocked human reads 0 as "you are
+  free now".
+- **The guard names the exit only when it is NOT the owner.** Same session, or an unreadable id →
+  message byte-identical to before. Inviting a running roadmap to disarm itself is what R-04 forbids.
+
+**Plant lessons, two, both reusable.** Five of fifteen plants did not fire for one shared reason:
+**they were negative assertions, and deleting a mechanism cannot break "X must not happen."** The
+mutation must invert the condition or reintroduce the banned thing. Then `O5` survived that fix and
+needed ADR-0090 applied literally: **a replacement cannot contain a newline**, so
+`echo "..." >&2 exit 0` collapsed to one line makes `exit 0` two *arguments* to `echo` — no exit, and
+the fall-through branch still exits 2, so the assertion kept passing. It matched exactly one site and
+passed `PC2`; **`PC2` cannot see this class at all**, because the needle was fine and the mutation
+simply was not the mutation it described.
+
+Known consequences: the guard denies strictly less on one rule (every genuine push-to-main form is
+asserted to still halt); the RUNBOOK names a command that does not exist until sync — the same defect
+ADR-0109 closed, in a new place; the arming half is an instruction, so a run writing a bare `touch`
+still arms an unattributable marker, which is why the legacy path is a tested first-class state.
+**Recorded not fixed:** nothing detects a stale marker proactively — a human must be blocked once
+before learning the command exists.
+
+Detail: `docs/architecture/ADR-0112-321-323-stale-guard-marker.md`.

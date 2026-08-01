@@ -283,13 +283,30 @@ stalls the run. Keep hooks enabled or `/goal` cannot evaluate and the guard cann
 
 ### 3.1 Arm the nightly state
 
+The marker **records who armed it and when** (issue #321, ADR-0112). Its *presence* is still what
+activates the guard — contents change nothing about that — but a marker that names its owner is the
+difference between a stale one being diagnosable and being a mystery.
+
 ```bash
 mkdir -p "$PWD/.claude/nightly-state"
-touch "$PWD/.claude/nightly-state/active"          # activates nightly-guard for this repo
+# activates nightly-guard for this repo, and records the owner so a stale marker is identifiable
+printf 'session_id=%s\nstarted_at=%s\n' \
+  "${CLAUDE_CODE_SESSION_ID:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  > "$PWD/.claude/nightly-state/active"
 : > "$PWD/.claude/nightly-state/build-status"      # cleared; set GREEN/RED after each test run
 ```
 
-Record `started_at` via `date -u +%Y-%m-%dT%H:%M:%SZ`.
+`started_at` for the morning report is read back from that marker. **Do not invent a separate file
+for it.** Before ADR-0112 this step said only *"record `started_at`"* without naming a location, and
+an orchestrator improvised `.claude/nightly-state/started-at` — a real file, in this repository right
+now, written by nothing in the codebase and read by nothing either. A value with no specified home
+gets one anyway, chosen by whoever runs the step.
+
+**This marker outlives a run that dies.** Phase 2 is the only place that removes it, and a session
+killed by context exhaustion, a crash, or the human pressing stop never reaches Phase 2 — so the
+guard stays armed in the human's own later sessions. That is not a defect in the guard, which is
+right to fail closed; the exit is `nightly-disarm.sh`, documented in the RUNBOOK under
+*"The guard is still armed and I cannot push"*.
 
 ### 3.2 Print the `/goal` template
 
@@ -373,10 +390,22 @@ not findings (ADR-0064 §D2): nothing in this Phase branches on them, they are n
 requiring action, and a feature whose `step5-report.json` carries no `task_metrics` leaves all
 four fields absent on that feature entry — never `0` (ADR-0064 §D3).
 
-Disarm the guard:
+Disarm the guard. This clears the whole transient set, not just the marker (ADR-0112): a
+`build-status` left reading `RED` halts the in-script `--check` gate **regardless of the marker**,
+and a `needs-human` left behind halts every publish — so removing only `active` leaves the next
+session blocked by a file the disarm appeared to have handled.
+
 ```bash
-rm -f "$PWD/.claude/nightly-state/active"
+bash ~/.claude/hooks/nightly-disarm.sh "$PWD"
 ```
+
+It refuses (exit 1) if the marker was armed by a *different* session than the one running it. On this
+path that cannot happen — this is the session that armed it — so a refusal here means the marker was
+rewritten mid-run and is worth reporting rather than working around. Exit 3 means the disarm did not
+run: report it, and do not treat the guard as cleared.
+
+**Do not replace this with `rm -f`.** The plain remove is what this step used to be, and it is how a
+`RED` build-status from a finished run reaches the next morning still halting things.
 
 Emit one terminal line:
 ```
