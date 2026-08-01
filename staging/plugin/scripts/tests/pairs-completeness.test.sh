@@ -329,5 +329,73 @@ done < "$tmp/deployed-only-fixture"
 [ -n "$_do4_bad" ] && ok "DO4: self-test — stale waiver on a real staged skill (commit) is flagged" \
                    || bad "DO4: self-test — a declared name that IS vendored was NOT flagged (the check would pass vacuously)"
 
+# =================================================================================================
+# CI — the harness list in .github/workflows/docs-ci.yml, both directions (issue #331, ADR-0113).
+#
+# THIS FILE'S SUBJECT, ONE LIST OVER. ADR-0043's lesson was that a check asserting "every entry in
+# the list resolves to a file" is blind by construction to a file the list omits. `docs-ci.yml`'s
+# `shell-tests` job enumerates the harnesses by name, and that enumeration had drifted: FOUR test
+# files from the last four merged PRs were absent from it, so four features' assertions ran on the
+# author's machine and nowhere else. Nothing reported it, because the omitted direction is exactly
+# the one nobody was checking — the omission looked like a full run.
+#
+# The reverse direction is loud on its own (the job runs under `set -e`, so a name with no file
+# exits 127) and is asserted anyway: cheap, and "loud today" is not a property to rely on silently.
+#
+# A file that genuinely must not run in CI declares it in its own header, one line, and the waiver
+# travels with the file rather than sitting in a list here (ADR-0077):
+#   # ci-dark-exempt: <reason, >= 40 chars>
+#
+# NO PLANT DECLARED, AND THIS IS THE REASON RATHER THAN AN OVERSIGHT. `plant-check.sh` mutates an
+# isolated copy of `staging/` and `docs/`; `.github/workflows/docs-ci.yml` is in neither, so CI1's
+# mechanism cannot be reached by a plant and a sandbox run reads the real workflow file. What CI1
+# has instead is LIVE red evidence: on its first run it failed naming conductor-entry-failure-split,
+# manifest-entry-state, nightly-guard-disarm and permission-mode-state — four real harnesses that
+# had never run in CI. Live evidence beats a synthetic case built to pass (ADR-0108 §PC1).
+CIWF="$STAGING/../.github/workflows/docs-ci.yml"
+CI_LIST="$tmp/ci-list"; : >"$CI_LIST"
+if [ -f "$CIWF" ]; then
+  grep -o 'for t in [^;]*' "$CIWF" | head -1 | sed 's/^for t in //' | tr ' ' '\n' \
+    | sed '/^$/d' | sort -u >"$CI_LIST"
+fi
+_nci=$(grep -c . "$CI_LIST" 2>/dev/null || true); _nci=${_nci:-0}
+
+CI_FILES="$tmp/ci-files"
+ls "$STAGING"/plugin/scripts/tests/*.test.sh 2>/dev/null \
+  | sed 's|.*/||; s|\.test\.sh$||' | sort -u >"$CI_FILES"
+_nf=$(grep -c . "$CI_FILES" 2>/dev/null || true); _nf=${_nf:-0}
+
+# CI0/CI0b — count guards on BOTH denominators. A `for t in` line that stops matching yields an
+# empty list, every file then reads as uncovered (loud); an empty FILE glob yields nothing to
+# check and reads as full coverage (silent). The second is the dangerous one and is why both are
+# guarded rather than just the list.
+[ "$_nci" -ge 40 ] && ok "CI0: parsed $_nci harness names out of docs-ci.yml (guard: >= 40)" \
+                   || bad "CI0: parsed only $_nci names from $CIWF — the derivation is broken, not clean"
+[ "$_nf" -ge 40 ]  && ok "CI0b: found $_nf *.test.sh files under staging (guard: >= 40)" \
+                   || bad "CI0b: found only $_nf test files — CI1 would pass vacuously"
+
+# CI1 — every harness runs in CI, or says in its own header why it does not.
+_ci_missing=""
+while IFS= read -r _t; do
+  [ -n "$_t" ] || continue
+  grep -qxF "$_t" "$CI_LIST" && continue
+  _r=$(grep -m1 '^# ci-dark-exempt:' "$STAGING/plugin/scripts/tests/$_t.test.sh" 2>/dev/null \
+       | sed 's/^# ci-dark-exempt:[[:space:]]*//')
+  [ "${#_r}" -ge 40 ] && continue
+  _ci_missing="$_ci_missing $_t"
+done < "$CI_FILES"
+[ -z "$_ci_missing" ] && ok "CI1: every staged harness is in the docs-ci.yml shell-tests list" \
+                      || bad "CI1: harness(es) that never run in CI and declare no reason —$_ci_missing"
+
+# CI2 — the reverse: a listed name with no file. `set -e` makes this exit 127 in CI, so this
+# assertion buys an earlier and clearer message, not a new guarantee.
+_ci_stale=""
+while IFS= read -r _t; do
+  [ -n "$_t" ] || continue
+  [ -f "$STAGING/plugin/scripts/tests/$_t.test.sh" ] || _ci_stale="$_ci_stale $_t"
+done < "$CI_LIST"
+[ -z "$_ci_stale" ] && ok "CI2: every name in the docs-ci.yml list resolves to a harness file" \
+                    || bad "CI2: listed but absent from staging —$_ci_stale"
+
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -133,9 +133,13 @@ Behavior:
    esac
    ```
 
-   **Unattended callers.** What a `nightly` run does with a non-`NONE` answer — mark the feature
-   `[~]` and continue, or halt the roadmap — is issue #324's subject and is deliberately not
-   decided here. Do not add that policy to this block without reading #324 first.
+   **Unattended callers.** What a `nightly` run does with a non-`NONE` answer was decided by
+   ADR-0111 (issue #324), and it is decided in `project-conductor`, not here: a `TERMINAL` token
+   marks the feature `[~]` with a reason and the roadmap continues; every other token writes the
+   run-level `needs-human` marker and halts the run. The policy lives at the two conductor call
+   sites (Step 4's entry-init guard, Step 5 branch C) because only the conductor owns PROJECT.md
+   and the roadmap. Do not duplicate it into this block — a second copy is how the two would come
+   to disagree about whether a safety marker fires.
 5. Run `scripts/gate0-detect.sh <project-root> "<topic-full-title>" "<topic-slug>"`. Read all output fields:
    `spec_adr_exist`, `mode`, `repo_file_count`, `file_vote`, `keyword_vote`, `spec_topic_match`,
    `spec_topic_slug`, `skill_exists`. **Keep `spec_topic_slug`** — it is the slug the EXISTING

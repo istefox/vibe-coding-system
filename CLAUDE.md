@@ -2865,3 +2865,165 @@ stub directory from a counter incremented inside `$(...)` — a subshell, so eve
 the same directory. ADR-0096's `mk_root` bug, met again ten days later by the same hand.
 
 Detail: `docs/architecture/ADR-0110-320-permission-mode-preflight.md`.
+
+## Decisions from the conductor entry-failure split (ADR-0111)
+
+Closes issue #324. `project-conductor` Step 5 branch C wrote the **run-level** `needs-human` marker
+for every feature that did not reach `completed`, and `nightly-guard` blocks that publish and every
+subsequent one. ADR-0060 §D3 removed exactly this blast radius from `spec-from-issue`'s two skips
+eleven days earlier; **it survived through a second door.**
+
+- **#319 had already built the classifier and deferred this policy BY NAME**, in two places
+  (`manifest-entry-state.sh`'s header, c2c step 4b). So the issue's central question — can branch C
+  tell the causes apart from where it stands — answers **yes for the manifest-shaped causes**, and
+  the token vocabulary existed. Both deferral notes are now the decision, because a stale "not
+  decided here" sends the next investigation to a closed question (the ADR-0016 rot, recorded above).
+- **The issue's cause 1 is stale in its stated form.** `manifest-init.sh` exit 2 is no longer how a
+  same-day collision reaches branch C from inside c2c — step 4b intercepts first and it surfaces as
+  `ENTRY-ROUTE: TERMINAL`. But **the conductor calls `manifest-init.sh` itself**, outside that
+  guard: cause 1's remaining door, and why `conductor-step4-init-guard` exists.
+- **Cause 2's evidence is NOT at branch C.** The conductor's own comment claimed *"the c2c autopilot
+  pre-flight hard-aborts at Gate 0 for a missing SPEC.md"*. Measured: it does not — the chain routes
+  greenfield and Step 1 dispatches `interview-driver`, **interactive**, unattended. The manifest is
+  left `step_0_init`/`in_progress`, which reads `ADOPTABLE`, indistinguishable from any mid-flight
+  state. Settled at Step 4 instead, where the conductor already knows — the issue's own instruction,
+  applied. The sentence routing it to "Step 5C" is deleted: it pointed at a branch with no mechanism
+  to act on it, the producer/consumer shape #173, #248 and #319 each recorded in turn.
+- **A third contained cause nobody named:** Gate 4.5's autopilot default is *"Hand-code (abort)"* on
+  a red tracer probe, transitioning `aborted aborted` with the reason recorded. A chain that wrote
+  down exactly why it stopped is the clearest possible *known and contained*, and it halted the
+  whole roadmap.
+- **The token alone decides, and no timestamp is compared.** Separating "a previous run's terminal
+  manifest" from "this run's chain aborted" buys nothing — both are decided ends — and breaks on any
+  `git checkout`. What leaves an undecided state is a crash, and a crash leaves a **non-terminal**
+  manifest. **ADR-0047 §D5's weakening halt never transitions, so it stays run-level with no
+  carve-out** — a property of the rule rather than an exception in it. `B6` is the assertion that
+  goes red if anyone widens the skip path.
+- **Branch C's message was wrong on the live case**: it read `current_step` only, so a Form-C
+  manifest (`status: aborted`, step untouched) reported `step_0_init`. ADR-0076 §THE RULE forbids
+  that read; ADR-0109 built the classifier to read both fields for precisely this.
+
+**The plant registry earned its keep on its first outside use.** Seventeen plants, **sixteen fired**;
+`B9` did not. Inspecting what the plant produced (ADR-0090) showed the fence guards "did not run"
+**twice** — missing file, and non-zero exit — and the fixture deleted the file, so the first guard
+exited before the planted line ran. **An assertion covered by two guards isolates neither**
+(ADR-0104, met again). Split into `B9` and `B9b`, one fixture per guard, eighteen plants all firing.
+And `W8`'s needle was `manifest-entry-state.sh`, the script's **name**, which also appears in the
+`_mes=` assignment — deleting the invocation would have left it green. **Rule 12, in the assertion
+written to guard the mechanism it names**, the sixth instance in two days.
+
+Known consequences: a run-level guard now passes on strictly more inputs (bounded to one token), so
+the first nightly run past a previously-halting feature will look like a regression; this ships an
+**instruction, not an enforcement**; inert until sync and **worse than inert** for branch C, whose
+fence exits 3 when the classifier does not resolve — an un-synced machine halts rather than
+mis-routes. **Recorded not fixed:** Gate 0 has no `[Autopilot default: …]` block at all, so an
+unattended chain stalls at its first gate and the `[auto]` SPEC pre-flight is never reached —
+filed as **#329**, because what the safe default *is* needs its own decision.
+
+Detail: `docs/architecture/ADR-0111-324-conductor-entry-failure-split.md`.
+
+## Decisions from the stale guard marker (ADR-0112)
+
+Closes issues #321 and #323 together. `nightly-autopilot` arms `nightly-guard` in Phase 1 and
+disarms in Phase 2 **only**, so a session that dies leaves the guard live in the human's own later
+sessions with nothing pointing at the file to remove.
+
+- **They ship together because neither explains the 2026-07-31 incident alone.** A stale marker
+  blocks only *forbidden* publishes; an ordinary `git push` passes the halt checks. What turned an
+  ordinary publish into a forbidden one is #323 — `is_forbidden_publish`'s destination rule ran over
+  the **whole command** while the two rules above it are scoped to the push segment, so
+  `git push -u origin feat/x && gh pr create --base main` read the PR's `--base` as the push's
+  destination. **Third recorded instance of fixing a boundary in one rule and not its sibling**
+  (ADR-0074 R1, ADR-0079 R2); the site now says *if you add a fourth rule here, scope it too.*
+- **The pid #321 proposes is the one signal that cannot work.** The marker is written from a Bash
+  tool call whose subprocess exits within milliseconds, so a recorded `$$` is always dead and a
+  liveness check on it would report every live run as stale. Session id and timestamp are the two
+  real signals; `.session_id` is already read by three hooks.
+- **`.claude/nightly-state/started-at` exists in this repo and NOTHING writes it.** §3.1 said
+  *"record `started_at`"* without naming a location, so an orchestrator invented one. **A value with
+  no specified home gets one anyway, chosen by whoever runs the step** — which is why the marker's
+  format is now written out rather than described.
+- **The RUNBOOK's one grep hit was worse than a gap.** It sits in `## Aborting a run` — the section
+  a human lands on after stopping a run — and says the tree "is intact", reading as *nothing left to
+  do* at the exact moment the marker is being abandoned.
+- **`nightly-disarm.sh` refuses the OWNING session**, so R-04 is a property of the mechanism rather
+  than a sentence. It claims **no liveness oracle**: a different session id is not proof the owner is
+  dead, and a transcript-mtime threshold would be a heuristic sold as proof. **The recovery path
+  never fails closed** — a legacy ownerless marker and an unknown current session both disarm, with
+  a note, because refusing there strands exactly the people it exists for.
+- **It clears all five blockers, not just the marker.** A stale `build-status` reading `RED` halts
+  `--check` regardless of the marker, so a marker-only disarm looks like it worked while the human
+  stays blocked. Exit 3 (did not run) is separate from 0 because a blocked human reads 0 as "you are
+  free now".
+- **The guard names the exit only when it is NOT the owner.** Same session, or an unreadable id →
+  message byte-identical to before. Inviting a running roadmap to disarm itself is what R-04 forbids.
+
+**Plant lessons, two, both reusable.** Five of fifteen plants did not fire for one shared reason:
+**they were negative assertions, and deleting a mechanism cannot break "X must not happen."** The
+mutation must invert the condition or reintroduce the banned thing. Then `O5` survived that fix and
+needed ADR-0090 applied literally: **a replacement cannot contain a newline**, so
+`echo "..." >&2 exit 0` collapsed to one line makes `exit 0` two *arguments* to `echo` — no exit, and
+the fall-through branch still exits 2, so the assertion kept passing. It matched exactly one site and
+passed `PC2`; **`PC2` cannot see this class at all**, because the needle was fine and the mutation
+simply was not the mutation it described.
+
+Known consequences: the guard denies strictly less on one rule (every genuine push-to-main form is
+asserted to still halt); the RUNBOOK names a command that does not exist until sync — the same defect
+ADR-0109 closed, in a new place; the arming half is an instruction, so a run writing a bare `touch`
+still arms an unattributable marker, which is why the legacy path is a tested first-class state.
+**Recorded not fixed:** nothing detects a stale marker proactively — a human must be blocked once
+before learning the command exists.
+
+Detail: `docs/architecture/ADR-0112-321-323-stale-guard-marker.md`.
+
+## Decisions from the invariant-4 two-field terminality chain (ADR-0113)
+
+Closes issue #331. `manifest-validate.sh` invariant 4 exempts a dead `project_root` when the chain
+is terminal and decided terminal by reading **`current_step` alone**. Form C sets `status: aborted`
+and leaves `current_step` untouched, so an aborted chain is terminal by one field and live by the
+other — the 2026-07-31 orphan validates on the machine that produced it and fails on CI, which is
+the machine-dependence ADR-0078 exists to remove. **Third site of one defect**, after ADR-0109 built
+`manifest-entry-state.sh` to read both fields and ADR-0111 applied the same reading to conductor
+branch C.
+
+- **The widening is smaller than it looks and the ADR says so.** All 41 corpus manifests are
+  `completed | completed`, so every one already takes the exemption through `current_step`. Exactly
+  one file's verdict changes: the 42nd. Invariants 7 and 8 also read one field, but their condition
+  *is about that field by name* — invariant 4 is the only one asking "is this chain over", so there
+  is no fourth site.
+- **The two axes are exempt for two DIFFERENT reasons, and restating one over the other would be
+  the defect.** ADR-0078's proof is that the exempt states never appear as a SOURCE in
+  `manifest-transition.sh`'s pair table. `status` is not in that table at all — the script validates
+  a **new** status passed as an argument and never inspects the one on disk — so a status-terminal
+  manifest can still be hand-transitioned. Axis 2 rests instead on it being a **declared end**,
+  ADR-0109's reading. The source instructs the next reader not to restate axis 1's proof over it.
+- **Two copies, pinned by a derived guard, because ADR-0086's criterion meets a cycle.**
+  `manifest-entry-state.sh` already reads both fields but DERIVES its state enum from
+  `manifest-validate.sh`; a dependency the other way closes a loop. `A6` derives the terminal set
+  from both files at run time and requires them equal, count-guarded on both sides.
+- **An existing fixture was corrected, not an assertion relaxed.** Every fixture inherited BASE's
+  `status: "completed"` while patching `current_step` alone, so a fixture *named* in-flight was
+  terminal on the axis nothing was reading yet. `B4` went red the moment the second field was read:
+  the assertion was right, the fixture was under-specified, and its coupling had never been stated.
+  `mk()` now takes the status explicitly.
+- **Found on the way, same class one list over — four harnesses had NEVER run in CI.**
+  `docs-ci.yml`'s `shell-tests` job enumerates harnesses by name and had drifted by four, one from
+  each of the last four merged PRs. `pairs-completeness.test.sh` — the file whose subject is *a file
+  that exists but is in no list* (ADR-0043) — gains `CI0`/`CI0b`/`CI1`/`CI2`, with
+  `# ci-dark-exempt:` travelling in the harness's own header. **Both denominators are guarded for
+  asymmetric reasons:** an unmatched `for t in` line empties the list and makes everything read as
+  uncovered (loud); an empty file glob leaves nothing to check and reads as full coverage (silent).
+- **`CI1` carries no plant and the reason is written at the site.** `plant-check.sh` mutates
+  `staging/` and `docs/`; the workflow file is in neither. Its evidence is live instead — the first
+  run failed naming the four real harnesses. A missing plant that is not explained reads as an
+  oversight.
+- **`A1`'s derivation needed `s/).*//` rather than `s/)//`** once the case arm carried its body on
+  the same line, or three assertions compared against `abortedproject_root_terminal=1;;` and
+  reported a disagreement that did not exist. ADR-0077's `compliant()` lesson in a new place.
+
+Known consequences: the exemption passes on strictly more inputs (bounded, with `B4`/`D2` asserting
+both live axes still fail); `manifest-transition.sh` still does not refuse a status-terminal
+manifest — disclosed, follow-up issue, ADR-0047 §A2's blast radius; nothing asserts the two fields
+agree and nothing should, since Form C makes them disagree on purpose.
+
+Detail: `docs/architecture/ADR-0113-331-invariant-4-two-field-terminal.md`.

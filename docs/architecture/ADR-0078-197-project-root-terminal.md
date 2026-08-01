@@ -135,6 +135,23 @@ unrelated invariants (artifacts on a completed status, `hitl_gates` count, `chai
 draft did exactly that — reporting "still invalid" with an empty `project_root` reason, a failure
 about everything except the thing under test.
 
+## Correction (2026-08-01, issue #331, ADR-0113)
+
+This ADR reads terminality out of **`current_step` alone**, and that is half the state. Form C
+(abort) sets `status: aborted` and leaves `current_step` untouched, so an aborted chain is terminal
+by one field and live by the other and does **not** take this exemption. Found by committing the
+2026-07-31 orphan manifest: it validates on the machine that produced it and fails on CI, which is
+precisely the machine-dependence this ADR exists to remove.
+
+Invariant 4 now exempts on `current_step` **or** `status`. **The two axes are exempt for two
+different reasons**, and §"Terminal means absorbing" above covers only the first: `status` appears
+nowhere in `manifest-transition.sh`'s pair table, because that script validates a *new* status
+passed as an argument and never inspects the one on disk. The status axis rests on it being a
+**declared end** instead — the reading ADR-0109 makes for its `TERMINAL` token. Do not restate this
+ADR's absorbing proof over that axis; it is not true of it.
+
+Body unedited (ADR-0034 precedent). Detail: `docs/architecture/ADR-0113-331-invariant-4-two-field-terminal.md`.
+
 ## References
 
 - Issue #197, including the argument against backfilling that §D5 implements

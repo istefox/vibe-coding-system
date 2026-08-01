@@ -80,6 +80,7 @@ plugin/skills/swift-vibe/SKILL.md|skills/swift-vibe/SKILL.md
 plugin/scripts/auto-format.sh|hooks/auto-format.sh
 plugin/scripts/chain-memory-capture.sh|hooks/chain-memory-capture.sh
 plugin/scripts/nightly-guard.sh|hooks/nightly-guard.sh
+plugin/scripts/nightly-disarm.sh|hooks/nightly-disarm.sh
 plugin/scripts/protect-files.sh|hooks/protect-files.sh
 plugin/scripts/publish-feature.sh|hooks/publish-feature.sh
 plugin/scripts/set-branch-protection.sh|hooks/set-branch-protection.sh
@@ -240,7 +241,8 @@ if [ "$APPLY" -eq 1 ]; then
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
     "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
-    "$DEST/hooks/agent-command-scope.sh" "$DEST/hooks/vendor-checks.sh" 2>/dev/null || true
+    "$DEST/hooks/agent-command-scope.sh" "$DEST/hooks/vendor-checks.sh" \
+    "$DEST/hooks/nightly-disarm.sh" 2>/dev/null || true
 fi
 
 # DEPLOYED SKILL REPORT (issue #222, ADR-0087, R-06). Every directory (or symlink resolving to a

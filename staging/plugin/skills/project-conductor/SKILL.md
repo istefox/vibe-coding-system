@@ -230,28 +230,111 @@ Emit: `"── Starting chain for: <next-feature> (autopilot: <on|off>) ──"`
 generated spec **by its issue number** (never by re-deriving the slug from the feature text, which
 would not match the roadmap's number-prefixed slug) and copy it to the single path c2c autopilot
 reads. Features run sequentially, so there is no collision, and this feature's SPEC is committed in
-its PR:
+its PR.
+
+**A missing spec is a KNOWN, CONTAINED, per-feature problem and is settled HERE (ADR-0111, issue
+#324) — not passed downstream.** Before this feature existed, this block printed a log line and
+invoked the chain anyway, on the stated belief that *"the c2c autopilot pre-flight hard-aborts at
+Gate 0 for a missing SPEC.md"*. Measured: it does not. With no SPEC, `gate0-detect.sh` reports
+`spec_adr_exist=false`, the chain routes greenfield, and Step 1 dispatches `interview-driver`, which
+is interactive — on a path with nobody to answer it (the gate's own missing autopilot default is
+issue #329). The chain then failed to complete, Step 5 branch C called that an unknown state, and one
+feature with a thin issue halted every feature behind it. **The evidence lives here and only here**:
+by the time branch C runs, the manifest reads `step_0_init`/`in_progress`, indistinguishable from any
+other mid-flight state. This is the issue's own instruction — move the classification to where the
+evidence is — applied.
+
+This is a **CHECKER**: branch on its exit code. (`weakening-scan.sh`, invoked from `commit` Step 1,
+is a REPORTER — it always exits 0 and signals `CLEAN` on stdout. Do not copy one block's branching
+into the other.)
+
+<!-- fence-contract: conductor-step4-nospec-skip -->
 ```bash
+# Free variables, bound by the orchestrator: _root (project root), _feature (the PROJECT.md feature
+# line's text, without the "- [ ] " marker). Runs only when _nightly=true.
 # Extract the issue number from the "(issue #N)" suffix of the feature line.
-_issue=$(printf '%s' "<next-feature>" | sed -n 's/.*(issue #\([0-9][0-9]*\)).*/\1/p')
-if [ -n "$_issue" ]; then
-  _spec=$(ls "$_root"/docs/specs/"$_issue"-*.spec.md 2>/dev/null | head -1)
-  if [ -n "$_spec" ] && [ -f "$_spec" ]; then
-    cp "$_spec" "$_root/SPEC.md"
-  else
-    echo "── no generated spec for issue #$_issue (thin-skipped in Phase P) — feature not implemented ──"
-  fi
+_issue=$(printf '%s' "$_feature" | sed -n 's/.*(issue #\([0-9][0-9]*\)).*/\1/p')
+if [ -z "$_issue" ]; then
+  # No "(issue #N)" suffix = pre-designed mode: SPEC.md is already at the root, leave it untouched.
+  echo "SPEC-COPY: PREDESIGNED — no issue suffix; leaving SPEC.md as it is."
+  exit 0
 fi
-# No "(issue #N)" suffix = pre-designed mode: SPEC.md is already at the root, leave it untouched.
+_spec=$(ls "$_root"/docs/specs/"$_issue"-*.spec.md 2>/dev/null | head -1)
+if [ -n "$_spec" ] && [ -f "$_spec" ]; then
+  cp "$_spec" "$_root/SPEC.md" || { echo "SPEC-COPY: DID-NOT-RUN — could not copy $_spec"; exit 3; }
+  echo "SPEC-COPY: OK $_spec"
+  exit 0
+fi
+[ -f "$_root/PROJECT.md" ] || { echo "SPEC-COPY: DID-NOT-RUN — no PROJECT.md at $_root"; exit 3; }
+# Per-feature skip note (ADR-0060 §D3), NEVER the run-level .claude/needs-human marker.
+mkdir -p "$_root/.claude/nightly-state"
+printf 'issue #%s "%s" skipped: no generated SPEC at docs/specs/%s-*.spec.md\n' \
+  "$_issue" "$_feature" "$_issue" >> "$_root/.claude/nightly-state/skipped-features"
+# Mark [~] by EXACT string match, never a sed regex: a feature title is arbitrary GitHub text and
+# can carry any sed metacharacter or delimiter.
+awk -v f="$_feature" '{ if ($0 == "- [ ] " f) print "- [~] " f "  (skipped)"; else print }' \
+  "$_root/PROJECT.md" > "$_root/PROJECT.md.tmp" && mv "$_root/PROJECT.md.tmp" "$_root/PROJECT.md"
+echo "SPEC-COPY: SKIP no generated SPEC for issue #$_issue"
+exit 1
 ```
-If no spec is found (issue was skipped as thin), the c2c autopilot pre-flight hard-aborts at Gate 0
-for a missing SPEC.md; treat that as a feature-level skip in Step 5C, and the log line above (not a
-silent no-op) tells the morning report why.
+
+Branch on the exit code:
+- **`0`** (`OK`, `PREDESIGNED`) → proceed to the autopilot/manual invocation below.
+- **`1`** (`SKIP`) → the feature is marked `[~]`, the reason is in `skipped-features`, and the morning
+  report picks it up under `features_skipped[]`. Emit
+  `"project-conductor #<n> · SKIP · no generated SPEC"` and **return to Step 2** for the next `[ ]`.
+  Do NOT invoke `concept-to-code`, and do NOT write `needs-human`.
+- **`3`** (`DID-NOT-RUN`) → the check did not run, which is not the same as nothing to skip. Treat as
+  run-level: write `needs-human` with the printed reason and go to Step 6B.
 
 If `_autopilot=true`:
-1. Set `autopilot: true` in the manifest via bash sed (create manifest first via `manifest-init.sh` if not yet created, or update if already exists).
-2. Emit: `"Autopilot mode ON — all HITL gates will be auto-approved."`
-3. Invoke: `Skill(skill="concept-to-code", args="<next-feature>")`.
+1. **Entry-state guard before creating anything (ADR-0111).** `concept-to-code` step 4b classifies an
+   existing manifest before `manifest-init.sh` runs (ADR-0109), but this skill calls `manifest-init.sh`
+   **itself**, outside that guard — so a same-day slug collision here still returned a bare exit 2 with
+   no token. Same classifier, same shape, one step earlier. **CHECKER.**
+
+   <!-- fence-contract: conductor-step4-init-guard -->
+   ```bash
+   # Free variables: _root (project root), _slug (this feature's topic-slug).
+   _mes="$HOME/.claude/skills/concept-to-code/scripts/manifest-entry-state.sh"
+   if [ ! -f "$_mes" ]; then
+     echo "ENTRY-INIT: DID-NOT-RUN — classifier missing: $_mes"
+     echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+     exit 3
+   fi
+   # Constructed here because it must be known BEFORE manifest-init.sh runs, which is the one thing
+   # that construction is for; manifest-init.sh's own exit 2 stays the backstop for a date roll.
+   _man="$_root/docs/manifests/$(date +%Y-%m-%d)-$_slug.manifest.yml"
+   _out=$(bash "$_mes" "$_man" 2>&1); _rc=$?
+   [ "$_rc" -eq 0 ] || { echo "ENTRY-INIT: DID-NOT-RUN — $_out"; exit 3; }
+   case "${_out%%|*}" in
+     NONE)
+       echo "ENTRY-INIT: CREATE — no manifest for this slug today; manifest-init.sh may run."
+       exit 0 ;;
+     TERMINAL)
+       echo "ENTRY-INIT: TERMINAL (${_out#*|}) — this slug already ran to a decided end today."
+       exit 1 ;;
+     UNKNOWN|UNREADABLE)
+       echo "ENTRY-INIT: ${_out%%|*} (${_out#*|}) — the manifest does not parse, or names a state"
+       echo "  the validator does not recognise. Do not route it."
+       exit 2 ;;
+     *)
+       echo "ENTRY-INIT: ADOPT ($_out) — a manifest for this slug is in flight today."
+       echo "  Update it in place; do NOT call manifest-init.sh, it would exit 2."
+       exit 0 ;;
+   esac
+   ```
+   - **`0`** → continue with step 2 below (`CREATE` → call `manifest-init.sh`; `ADOPT` → update the
+     existing manifest in place).
+   - **`1`** → contained per-feature skip: append the reason to
+     `<root>/.claude/nightly-state/skipped-features`, mark the feature `[~]` (the exact-match `awk`
+     idiom above, never a sed regex), emit `"project-conductor · SKIP · <token>"`, and **return to
+     Step 2**. Never `needs-human`.
+   - **`2`** or **`3`** → run-level: write `needs-human` with the printed reason and go to Step 6B.
+2. Set `autopilot: true` in the manifest via bash sed (create the manifest via `manifest-init.sh` on
+   `CREATE`; update it in place on `ADOPT`).
+3. Emit: `"Autopilot mode ON — all HITL gates will be auto-approved."`
+4. Invoke: `Skill(skill="concept-to-code", args="<next-feature>")`.
 
 If `_autopilot=false`:
 1. Invoke: `Skill(skill="concept-to-code", args="<next-feature>")`.
@@ -348,15 +431,68 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
 
 **C — manifest not found or unexpected state:**
 - Emit: `"Warning: could not determine outcome for '<next-feature>' (manifest state: <current_step>). PROJECT.md not updated."`
-- **Roadmap-autopilot (ADR-0022):** if `_nightly=true`, this feature did not reach a clean
-  `completed`, so it is not publishable. Write the run-level marker and STOP the roadmap (do not
-  prompt, do not advance):
+- **Roadmap-autopilot (ADR-0022, split by ADR-0111 / issue #324):** if `_nightly=true`, this feature
+  did not reach a clean `completed`, so it is not publishable — but *not publishable* and *the run
+  cannot be trusted* are different claims, and this branch used to make only the second one. Writing
+  the run-level `needs-human` marker unconditionally meant one wedged feature in a twelve-feature
+  wave cost the eleven behind it, which is the blast radius ADR-0060 §D3 already removed from
+  `spec-from-issue`'s two skips and from Gate 2c's. Classify first, then decide.
+
+  **The token alone decides, and no timestamp is compared.** A `TERMINAL` manifest is a *decided*
+  end with its reason recorded in the manifest — a pre-existing chain for this slug, Gate 4.5's
+  autopilot hand-code abort on a red tracer probe, Express Gate E3's abort. A crash leaves a
+  **non-terminal** state, so it is caught by the fallthrough below; ADR-0047 §D5's weakening halt
+  never transitions and therefore stays run-level with no special case for it here. Separating "a
+  previous run's terminal manifest" from "this run's chain aborted" would need an mtime comparison
+  that buys nothing (both are decided ends) and breaks on any `git checkout`.
+
+  Read the state through `manifest-entry-state.sh`, never with a bare `grep current_step` — Form C
+  sets `status: aborted` and leaves `current_step` untouched, so reading one field reports a
+  terminal chain as `step_0_init` (ADR-0109; ADR-0076 §THE RULE). **CHECKER.**
+
+  <!-- fence-contract: conductor-branch-c-entry-classify -->
   ```bash
-  printf 'RED' > "$_root/.claude/nightly-state/build-status"
-  printf 'feature "<next-feature>" did not reach completed (state: <current_step>)\n' \
-    > "$_root/.claude/needs-human"
+  # Free variables: _root (project root), _slug (this feature's topic-slug), _feature (the
+  # PROJECT.md feature line's text), _manifest (the resolved manifest path, MAY BE EMPTY).
+  _mes="$HOME/.claude/skills/concept-to-code/scripts/manifest-entry-state.sh"
+  if [ ! -f "$_mes" ]; then
+    echo "BRANCH-C: DID-NOT-RUN — classifier missing: $_mes"
+    echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+    exit 3
+  fi
+  _target="$_manifest"
+  [ -n "$_target" ] || _target="$_root/docs/manifests/$(date +%Y-%m-%d)-$_slug.manifest.yml"
+  _out=$(bash "$_mes" "$_target" 2>&1); _rc=$?
+  [ "$_rc" -eq 0 ] || { echo "BRANCH-C: DID-NOT-RUN — $_out"; exit 3; }
+  case "${_out%%|*}" in
+    TERMINAL)
+      # Known, contained, per-feature: the chain reached a decided end. Roadmap continues.
+      mkdir -p "$_root/.claude/nightly-state"
+      printf '%s skipped: chain reached a terminal state without completing (%s)\n' \
+        "$_feature" "${_out#*|}" >> "$_root/.claude/nightly-state/skipped-features"
+      if [ -f "$_root/PROJECT.md" ]; then
+        awk -v f="$_feature" '{ if ($0 == "- [ ] " f) print "- [~] " f "  (skipped)"; else print }' \
+          "$_root/PROJECT.md" > "$_root/PROJECT.md.tmp" && mv "$_root/PROJECT.md.tmp" "$_root/PROJECT.md"
+      fi
+      echo "BRANCH-C: SKIP TERMINAL (${_out#*|}) — decided end, roadmap continues."
+      exit 1 ;;
+    *)
+      # Everything else — NONE, ADOPTABLE, BOUNDARY, RESUMABLE, LATE, UNRESUMABLE, UNKNOWN,
+      # UNREADABLE — is a state nobody decided. Run-level halt, exactly as before this split.
+      mkdir -p "$_root/.claude/nightly-state"
+      printf 'RED' > "$_root/.claude/nightly-state/build-status"
+      printf 'feature "%s" did not reach completed (entry state: %s)\n' \
+        "$_feature" "$_out" > "$_root/.claude/needs-human"
+      echo "BRANCH-C: HALT ${_out%%|*} (${_out#*|}) — not a decided end; the outcome cannot be trusted."
+      exit 2 ;;
+  esac
   ```
-  Go to Step 6B and let `nightly-autopilot` write the morning report.
+  - **`1`** (`SKIP`) → emit `"project-conductor · SKIP · <reason>"` and **return to Step 2** for the
+    next `[ ]`. The reason reaches `features_skipped[]` in the morning report, not `guard_halts[]`.
+  - **`2`** (`HALT`) → go to Step 6B and let `nightly-autopilot` write the morning report. Do not
+    prompt, do not advance — a poisoned run-level marker would halt every subsequent publish anyway.
+  - **`3`** (`DID-NOT-RUN`) → an unrun check is not a clean result. Write `needs-human` with the
+    printed reason (the fence could not) and go to Step 6B.
 - Otherwise (interactive): return to Step 3 (let user decide).
 
 ---
