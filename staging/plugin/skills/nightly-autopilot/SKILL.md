@@ -35,11 +35,82 @@ each roadmap feature, or a roadmap of features whose chains will run in autopilo
 
 **Launch order (see `docs/RUNBOOK-nightly-autopilot.md`):**
 1. Set a non-blocking permission mode (`acceptEdits` or bypass) so no per-tool prompt fires.
+   **Three ways, and `/permissions` is not one of them** — that command manages allow/ask/deny
+   rules, and hooks are a third axis it does not touch either:
+   - **Shift+Tab** cycles `default → acceptEdits → plan → bypassPermissions → auto → default`.
+     From `auto`, which is Claude Code's own shipping default, that is two presses.
+   - `claude --permission-mode acceptEdits` at launch.
+   - `permissions.defaultMode` in `~/.claude/settings.json` for the durable default.
 2. Set the outer loop: paste the `/goal` template this skill prints (Phase 1).
 3. Invoke this skill.
 
 `/goal` is the outer keep-alive; this skill runs with or without it, but without `/goal` the session
 will not re-enter after a turn ends.
+
+---
+
+## 1.4 Phase M — Permission posture (issue #320, ADR-0110)
+
+**Runs FIRST, before Phase P.** Phase P writes `.claude/test-cmd`, `PROJECT.md` and per-feature
+SPECs; a blocking mode stalls all of that before Phase 0 would ever get a turn, which is the same
+silent-and-late failure this check exists to close, one phase up.
+
+Item 1 of the launch order above was stated in prose three times in this file and **verified
+nowhere**. On 2026-07-31 pre-flight printed `PASSED`, the guard armed, the roadmap started, and the
+chain died at its first Gate 0 write with nobody present to answer the prompt. Every other
+precondition fails loudly and early; this one is also the only one whose failure is *guaranteed*
+fatal rather than conditional.
+
+<!-- fence-contract: nightly-permission-posture -->
+```bash
+_pms=""
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/permission-mode-state.sh" ]; then
+  _pms="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/permission-mode-state.sh"
+elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/permission-mode-state.sh" ]; then
+  _pms="$HOME/.claude/skills/concept-to-code/scripts/permission-mode-state.sh"
+else
+  echo "✗ permission posture: permission-mode-state.sh not found — the check DID NOT RUN."
+  echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 1
+fi
+_pm=$(bash "$_pms" 2>&1); _pmrc=$?
+if [ "$_pmrc" -eq 3 ]; then
+  echo "✗ permission posture: the check DID NOT RUN — $_pm"
+  echo "  An unrun check is not a clean result. Fix the environment and relaunch."
+  exit 1
+fi
+[ "$_pmrc" -eq 0 ] || { echo "✗ permission posture: bad invocation — $_pm"; exit 1; }
+_pmtok="${_pm%%|*}"; _pmval="${_pm#*|}"
+case "$_pmtok" in
+  NONBLOCKING)
+    echo "✓ permission posture: $_pmval — no per-tool prompt will fire." ;;
+  BLOCKING)
+    echo "✗ permission posture: this session is in '$_pmval', which can prompt or deny."
+    echo "  Nobody is here to answer it, so the run would stall with state half-written."
+    echo "  Set a non-blocking mode and relaunch. /permissions does NOT do this — it manages"
+    echo "  allow/ask/deny rules. Hooks are a separate axis and stay enabled either way:"
+    echo "    Shift+Tab cycles default → acceptEdits → plan → bypassPermissions → auto → default"
+    echo "    (from 'auto', two presses), or launch with: claude --permission-mode acceptEdits,"
+    echo "    or set permissions.defaultMode in ~/.claude/settings.json."
+    exit 1 ;;
+  UNCLASSIFIED)
+    echo "✗ permission posture: mode '$_pmval' is UNCLASSIFIED — not known-bad, just unmeasured."
+    echo "  Nobody has established whether it prompts, so a pre-flight refuses it rather than"
+    echo "  gamble a night on it. Use acceptEdits or bypassPermissions, or measure '$_pmval'"
+    echo "  and add it to permission-mode-state.sh's enumeration."
+    exit 1 ;;
+  UNOBSERVABLE)
+    echo "✗ permission posture: the effective mode could not be observed — $_pmval"
+    echo "  This is a fact about this build, not a bad mode: the transcript field is CC 2.1.220+."
+    echo "  Verify the mode by hand before relaunching; this gate fails closed on purpose,"
+    echo "  because the alternative is the silent PASSED that cost the 2026-07-31 run."
+    exit 1 ;;
+  *)
+    echo "✗ permission posture: unrecognised token '$_pmtok'"; exit 1 ;;
+esac
+```
+
+On pass, fall into Phase P.
 
 ---
 
@@ -86,6 +157,11 @@ reason) via the same per-feature `skipped-features` note §3.3 describes, never 
 ## 2. Phase 0 — Hard pre-flight (read-only, script-level)
 
 Any failure writes an `aborted` report and stops. No dispatch, no push. Emit one line per check.
+
+**The permission posture is NOT one of these eight, and must not be added as a ninth.** It is
+checked in Phase M, above Phase P, because Phase P writes files and a blocking mode would stall it
+before this section ran at all (ADR-0110). Adding a copy here would be a second answer to "may this
+run start" — see `permission-mode-state.sh`'s header for why there is exactly one.
 
 1. **Scope guard (first):** resolve `$PWD`. Every downstream action is scoped to it. If a later
    manifest names a `project_root` outside `$PWD`, abort (same rule as autopilot-build check 1).
