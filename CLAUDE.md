@@ -2865,3 +2865,59 @@ stub directory from a counter incremented inside `$(...)` — a subshell, so eve
 the same directory. ADR-0096's `mk_root` bug, met again ten days later by the same hand.
 
 Detail: `docs/architecture/ADR-0110-320-permission-mode-preflight.md`.
+
+## Decisions from the conductor entry-failure split (ADR-0111)
+
+Closes issue #324. `project-conductor` Step 5 branch C wrote the **run-level** `needs-human` marker
+for every feature that did not reach `completed`, and `nightly-guard` blocks that publish and every
+subsequent one. ADR-0060 §D3 removed exactly this blast radius from `spec-from-issue`'s two skips
+eleven days earlier; **it survived through a second door.**
+
+- **#319 had already built the classifier and deferred this policy BY NAME**, in two places
+  (`manifest-entry-state.sh`'s header, c2c step 4b). So the issue's central question — can branch C
+  tell the causes apart from where it stands — answers **yes for the manifest-shaped causes**, and
+  the token vocabulary existed. Both deferral notes are now the decision, because a stale "not
+  decided here" sends the next investigation to a closed question (the ADR-0016 rot, recorded above).
+- **The issue's cause 1 is stale in its stated form.** `manifest-init.sh` exit 2 is no longer how a
+  same-day collision reaches branch C from inside c2c — step 4b intercepts first and it surfaces as
+  `ENTRY-ROUTE: TERMINAL`. But **the conductor calls `manifest-init.sh` itself**, outside that
+  guard: cause 1's remaining door, and why `conductor-step4-init-guard` exists.
+- **Cause 2's evidence is NOT at branch C.** The conductor's own comment claimed *"the c2c autopilot
+  pre-flight hard-aborts at Gate 0 for a missing SPEC.md"*. Measured: it does not — the chain routes
+  greenfield and Step 1 dispatches `interview-driver`, **interactive**, unattended. The manifest is
+  left `step_0_init`/`in_progress`, which reads `ADOPTABLE`, indistinguishable from any mid-flight
+  state. Settled at Step 4 instead, where the conductor already knows — the issue's own instruction,
+  applied. The sentence routing it to "Step 5C" is deleted: it pointed at a branch with no mechanism
+  to act on it, the producer/consumer shape #173, #248 and #319 each recorded in turn.
+- **A third contained cause nobody named:** Gate 4.5's autopilot default is *"Hand-code (abort)"* on
+  a red tracer probe, transitioning `aborted aborted` with the reason recorded. A chain that wrote
+  down exactly why it stopped is the clearest possible *known and contained*, and it halted the
+  whole roadmap.
+- **The token alone decides, and no timestamp is compared.** Separating "a previous run's terminal
+  manifest" from "this run's chain aborted" buys nothing — both are decided ends — and breaks on any
+  `git checkout`. What leaves an undecided state is a crash, and a crash leaves a **non-terminal**
+  manifest. **ADR-0047 §D5's weakening halt never transitions, so it stays run-level with no
+  carve-out** — a property of the rule rather than an exception in it. `B6` is the assertion that
+  goes red if anyone widens the skip path.
+- **Branch C's message was wrong on the live case**: it read `current_step` only, so a Form-C
+  manifest (`status: aborted`, step untouched) reported `step_0_init`. ADR-0076 §THE RULE forbids
+  that read; ADR-0109 built the classifier to read both fields for precisely this.
+
+**The plant registry earned its keep on its first outside use.** Seventeen plants, **sixteen fired**;
+`B9` did not. Inspecting what the plant produced (ADR-0090) showed the fence guards "did not run"
+**twice** — missing file, and non-zero exit — and the fixture deleted the file, so the first guard
+exited before the planted line ran. **An assertion covered by two guards isolates neither**
+(ADR-0104, met again). Split into `B9` and `B9b`, one fixture per guard, eighteen plants all firing.
+And `W8`'s needle was `manifest-entry-state.sh`, the script's **name**, which also appears in the
+`_mes=` assignment — deleting the invocation would have left it green. **Rule 12, in the assertion
+written to guard the mechanism it names**, the sixth instance in two days.
+
+Known consequences: a run-level guard now passes on strictly more inputs (bounded to one token), so
+the first nightly run past a previously-halting feature will look like a regression; this ships an
+**instruction, not an enforcement**; inert until sync and **worse than inert** for branch C, whose
+fence exits 3 when the classifier does not resolve — an un-synced machine halts rather than
+mis-routes. **Recorded not fixed:** Gate 0 has no `[Autopilot default: …]` block at all, so an
+unattended chain stalls at its first gate and the `[auto]` SPEC pre-flight is never reached —
+filed as **#329**, because what the safe default *is* needs its own decision.
+
+Detail: `docs/architecture/ADR-0111-324-conductor-entry-failure-split.md`.

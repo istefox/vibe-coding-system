@@ -30,6 +30,14 @@
 # silently halted the other nineteen. If you are about to add a new writer for a per-feature,
 # known-cause skip: it goes to skipped-features, never here. See
 # `nightly-autopilot/SKILL.md` §3.3 "Marker contract" for the full writer list.
+# v1.4 (2026-08-01, issue #324, ADR-0111): still no logic change here, comment only. The writer
+# list grew from three to five — `project-conductor` Step 4's no-generated-SPEC skip and Step 5
+# branch C's `TERMINAL` entry-state skip. Branch C used to write needs-human for EVERY feature that
+# did not reach `completed`, so the ADR-0060 blast radius survived through a second door: one
+# wedged manifest in a twelve-feature wave cost the eleven behind it. Only a decided end (`TERMINAL`
+# from `manifest-entry-state.sh`, which reads `current_step` AND `status`) takes the skip path; a
+# crash, a mid-flight stop, an unparseable manifest and the anti-test-weakening halt all still land
+# here as run-level halts.
 #
 # Bash 3.2 clean: no assoc array, no mapfile, no ${v^^}, no process substitution.
 

@@ -25,7 +25,10 @@
 #
 # IT REPORTS A FACT. IT DOES NOT DECIDE. The token says which entry point CAN reach the manifest;
 # what an unattended run then does with a non-`ADOPTABLE` answer — per-feature skip versus
-# run-level halt — is issue #324's subject and is deliberately not decided here.
+# run-level halt — was decided by ADR-0111 (issue #324) and is applied by `project-conductor`, not
+# here: `TERMINAL` marks that one feature `[~]` and the roadmap continues, every other token writes
+# the run-level `needs-human` marker and halts. That policy stays at the caller because only the
+# conductor owns PROJECT.md and the roadmap; this script still decides nothing.
 #
 # IT NEVER WRITES. No transition, no overwrite, no deletion, no temp file in the project tree.
 # R-02 of the issue is held by construction rather than by care.
