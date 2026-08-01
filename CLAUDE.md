@@ -2975,3 +2975,55 @@ still arms an unattributable marker, which is why the legacy path is a tested fi
 before learning the command exists.
 
 Detail: `docs/architecture/ADR-0112-321-323-stale-guard-marker.md`.
+
+## Decisions from the invariant-4 two-field terminality chain (ADR-0113)
+
+Closes issue #331. `manifest-validate.sh` invariant 4 exempts a dead `project_root` when the chain
+is terminal and decided terminal by reading **`current_step` alone**. Form C sets `status: aborted`
+and leaves `current_step` untouched, so an aborted chain is terminal by one field and live by the
+other — the 2026-07-31 orphan validates on the machine that produced it and fails on CI, which is
+the machine-dependence ADR-0078 exists to remove. **Third site of one defect**, after ADR-0109 built
+`manifest-entry-state.sh` to read both fields and ADR-0111 applied the same reading to conductor
+branch C.
+
+- **The widening is smaller than it looks and the ADR says so.** All 41 corpus manifests are
+  `completed | completed`, so every one already takes the exemption through `current_step`. Exactly
+  one file's verdict changes: the 42nd. Invariants 7 and 8 also read one field, but their condition
+  *is about that field by name* — invariant 4 is the only one asking "is this chain over", so there
+  is no fourth site.
+- **The two axes are exempt for two DIFFERENT reasons, and restating one over the other would be
+  the defect.** ADR-0078's proof is that the exempt states never appear as a SOURCE in
+  `manifest-transition.sh`'s pair table. `status` is not in that table at all — the script validates
+  a **new** status passed as an argument and never inspects the one on disk — so a status-terminal
+  manifest can still be hand-transitioned. Axis 2 rests instead on it being a **declared end**,
+  ADR-0109's reading. The source instructs the next reader not to restate axis 1's proof over it.
+- **Two copies, pinned by a derived guard, because ADR-0086's criterion meets a cycle.**
+  `manifest-entry-state.sh` already reads both fields but DERIVES its state enum from
+  `manifest-validate.sh`; a dependency the other way closes a loop. `A6` derives the terminal set
+  from both files at run time and requires them equal, count-guarded on both sides.
+- **An existing fixture was corrected, not an assertion relaxed.** Every fixture inherited BASE's
+  `status: "completed"` while patching `current_step` alone, so a fixture *named* in-flight was
+  terminal on the axis nothing was reading yet. `B4` went red the moment the second field was read:
+  the assertion was right, the fixture was under-specified, and its coupling had never been stated.
+  `mk()` now takes the status explicitly.
+- **Found on the way, same class one list over — four harnesses had NEVER run in CI.**
+  `docs-ci.yml`'s `shell-tests` job enumerates harnesses by name and had drifted by four, one from
+  each of the last four merged PRs. `pairs-completeness.test.sh` — the file whose subject is *a file
+  that exists but is in no list* (ADR-0043) — gains `CI0`/`CI0b`/`CI1`/`CI2`, with
+  `# ci-dark-exempt:` travelling in the harness's own header. **Both denominators are guarded for
+  asymmetric reasons:** an unmatched `for t in` line empties the list and makes everything read as
+  uncovered (loud); an empty file glob leaves nothing to check and reads as full coverage (silent).
+- **`CI1` carries no plant and the reason is written at the site.** `plant-check.sh` mutates
+  `staging/` and `docs/`; the workflow file is in neither. Its evidence is live instead — the first
+  run failed naming the four real harnesses. A missing plant that is not explained reads as an
+  oversight.
+- **`A1`'s derivation needed `s/).*//` rather than `s/)//`** once the case arm carried its body on
+  the same line, or three assertions compared against `abortedproject_root_terminal=1;;` and
+  reported a disagreement that did not exist. ADR-0077's `compliant()` lesson in a new place.
+
+Known consequences: the exemption passes on strictly more inputs (bounded, with `B4`/`D2` asserting
+both live axes still fail); `manifest-transition.sh` still does not refuse a status-terminal
+manifest — disclosed, follow-up issue, ADR-0047 §A2's blast radius; nothing asserts the two fields
+agree and nothing should, since Form C makes them disagree on purpose.
+
+Detail: `docs/architecture/ADR-0113-331-invariant-4-two-field-terminal.md`.

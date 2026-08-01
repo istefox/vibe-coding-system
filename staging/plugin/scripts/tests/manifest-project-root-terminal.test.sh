@@ -47,7 +47,14 @@ for _c in "$REPO"/docs/manifests/*.manifest.yml; do
 done
 [ -n "$BASE" ] || { echo "FAIL: no manifest validates even with a live project_root — fixtures cannot be built"; exit 1; }
 
-# mk <name> <current_step> <root | __NONE__ | __EMPTY__>
+# mk <name> <current_step> <root | __NONE__ | __EMPTY__> [<status>]
+#
+# The 4th argument arrived with issue #331 and is not cosmetic: before it, every fixture inherited
+# BASE's `status: "completed"` while patching `current_step` alone, so a fixture *named* in-flight
+# was terminal on the axis nothing was reading yet. B4 caught that the moment invariant 4 started
+# reading both fields — the assertion was right, the fixture was under-specified, and the coupling
+# it relied on was never stated. Pass the status explicitly whenever the fixture's name makes a
+# claim about the chain's state.
 mk() {
   sed -e "s|^current_step: .*|current_step: \"$2\"|" "$BASE" > "$TMP/$1.yml"
   case "$3" in
@@ -55,6 +62,9 @@ mk() {
     __EMPTY__) sed -i.bak 's|^project_root: .*|project_root: ""|' "$TMP/$1.yml" ;;
     *)         sed -i.bak "s|^project_root: .*|project_root: \"$3\"|" "$TMP/$1.yml" ;;
   esac
+  if [ "$#" -ge 4 ]; then
+    sed -i.bak "s|^status: .*|status: \"$4\"|" "$TMP/$1.yml"
+  fi
   rm -f "$TMP/$1.yml.bak"
 }
 
@@ -79,9 +89,14 @@ _np=$(wc -l < "$SOURCES" | tr -d ' ')
 
 # The states invariant 4 exempts, read out of the validator rather than typed here. A fourth state
 # added to that case arm is automatically checked by A2.
+#
+# `s/).*//` and not `s/)//`: since #331 the arm carries its body on the same line
+# (`completed|failed|aborted) project_root_terminal=1 ;;`), and dropping only the paren left the
+# body glued to the last state name — three assertions then compared a state list against a list
+# containing `abortedproject_root_terminal=1;;` and reported a disagreement that did not exist.
 EXEMPT=$(sed -n '/Invariant 4:/,/^fi$/p' "$VALIDATE" \
   | grep -E '^[[:space:]]*(completed|failed|aborted)[a-z|]*\)' | head -1 \
-  | sed 's/[[:space:]]*//g; s/)//' | tr '|' ' ')
+  | sed 's/[[:space:]]*//g; s/).*//' | tr '|' ' ')
 _ne=$(printf '%s\n' $EXEMPT | sed '/^$/d' | wc -l | tr -d ' ')
 [ "$_ne" -ge 1 ] && ok "A1: invariant 4 declares $_ne exempt state(s): $EXEMPT" \
                  || bad "A1: could not read the exempt states out of the validator"
@@ -103,12 +118,69 @@ case " $EXEMPT " in
   *) ok "A3: a live state (step_5_implementation) is not in the exempt list" ;;
 esac
 
+# --- The SECOND axis (issue #331, ADR-0113) ------------------------------------------------------
+#
+# Invariant 4 now exempts on `current_step` OR `status`. A2 above proves the axis-1 list is
+# absorbing against the pair table; that proof DOES NOT COVER axis 2 and must not be restated over
+# it — `status` appears nowhere in the pair table, because manifest-transition.sh validates a NEW
+# status passed as an argument and never reads the one on disk. Deriving axis 2's soundness from
+# the same table would certify a premise that does not apply to it, which is the failure this
+# section exists to prevent one level up.
+#
+# So axis 2 is checked two ways instead: the two case arms must agree (A4), and the source must
+# state axis 2's own, different premise (A5).
+STATUS_EXEMPT=$(sed -n '/case "\$project_root_status" in/,/esac/p' "$VALIDATE" \
+  | grep -oE '(^|[[:space:]])(completed|failed|aborted)[a-z|]*\)' | head -1 \
+  | sed 's/[[:space:]]//g; s/)//' | tr '|' ' ')
+_ns=$(printf '%s\n' $STATUS_EXEMPT | sed '/^$/d' | wc -l | tr -d ' ')
+
+if [ "$_ns" -lt 1 ]; then
+  bad "A4: could not read a second exempt-state list out of invariant 4 — the derivation is broken"
+elif [ "$(printf '%s\n' $EXEMPT | sort | tr '\n' ' ')" = "$(printf '%s\n' $STATUS_EXEMPT | sort | tr '\n' ' ')" ]; then
+  ok "A4: both invariant-4 axes exempt the same $_ns states ($STATUS_EXEMPT)"
+else
+  bad "A4: the two axes disagree — current_step exempts [$EXEMPT], status exempts [$STATUS_EXEMPT]"
+fi
+# plant: A4 | plugin/skills/concept-to-code/scripts/manifest-validate.sh | case "$project_root_status" in completed|failed|aborted) project_root_terminal=1 | case "$project_root_status" in completed) project_root_terminal=1
+
+# A5: axis 2's premise is stated, and stated as DIFFERENT from axis 1's. The needle is the fact
+# that makes the axis-1 proof inapplicable — that manifest-transition.sh never reads the current
+# status — not the word "terminal", which the axis-1 paragraph is full of (rule 12). Matched
+# against a flattened copy so a line wrap or a backticked word cannot fail a correct file.
+_flat_v=$(tr '\n' ' ' < "$VALIDATE" | tr -s ' ' | tr -d '`*')
+if printf '%s' "$_flat_v" | grep -q 'never inspects the one on disk'; then
+  ok "A5: invariant 4 states why the axis-1 absorbing proof does not cover the status axis"
+else
+  bad "A5: the status axis carries no premise of its own — it is inheriting a proof that is not true of it"
+fi
+# plant: A5 | plugin/skills/concept-to-code/scripts/manifest-validate.sh | and never inspects the one on disk | and reads the one on disk too
+
+# A6: the two files that decide terminality must agree, and neither may be derived from the other.
+# manifest-entry-state.sh already reads both fields, but it DERIVES its state enum from
+# manifest-validate.sh — a dependency the other way closes a loop, so ADR-0113 keeps two copies and
+# pins them here instead (ADR-0086's criterion answered by a cycle, ADR-0092 §V's shape).
+ENTRY="$CC/manifest-entry-state.sh"
+if [ ! -f "$ENTRY" ]; then
+  bad "A6: manifest-entry-state.sh not found — the cross-file agreement check DID NOT RUN"
+else
+  ENTRY_TERMINAL=$(grep -E "^[[:space:]]*(completed|failed|aborted)[a-z|]*\)[[:space:]]*printf 'TERMINAL" "$ENTRY" \
+    | head -1 | sed 's/[[:space:]]*//g; s/).*//' | tr '|' ' ')
+  _nt=$(printf '%s\n' $ENTRY_TERMINAL | sed '/^$/d' | wc -l | tr -d ' ')
+  if [ "$_nt" -lt 1 ]; then
+    bad "A6: could not derive the TERMINAL set from manifest-entry-state.sh — A6 would pass vacuously"
+  elif [ "$(printf '%s\n' $EXEMPT | sort | tr '\n' ' ')" = "$(printf '%s\n' $ENTRY_TERMINAL | sort | tr '\n' ' ')" ]; then
+    ok "A6: invariant 4 and manifest-entry-state.sh agree on the terminal set ($ENTRY_TERMINAL)"
+  else
+    bad "A6: they disagree — invariant 4 exempts [$EXEMPT], the classifier calls terminal [$ENTRY_TERMINAL]"
+  fi
+fi
+
 # =====================================================================================
 # B. The verdicts.
 mk done_dead    completed             "$DEAD"
 mk failed_dead  failed                "$DEAD"
 mk abort_dead   aborted               "$DEAD"
-mk flight_dead  step_5_implementation "$DEAD"
+mk flight_dead  step_5_implementation "$DEAD" in_progress
 mk done_live    completed             "$TMP"
 mk done_missing completed             __NONE__
 mk done_empty   completed             __EMPTY__
@@ -175,6 +247,70 @@ done
 [ "$_hist" -ge 1 ] && ok "C2: $_hist manifest(s) carry a historical project_root — C1 is exercising the exemption" \
                    || bad "C2: no manifest has a dead project_root; C1 no longer tests anything (were the five rewritten?)"
 
+# =====================================================================================
+# D. The second axis, both directions (issue #331, ADR-0113).
+#
+# Form C (abort) sets `status: aborted` and leaves `current_step` untouched, so a manifest can be
+# terminal on one axis and live on the other. Reading `current_step` alone made the exemption miss
+# exactly that shape — the orphan of 2026-07-31 validated on the machine that produced it and
+# failed on CI, which is the machine-dependence ADR-0078 exists to remove.
+mk formc_dead     step_0_init           "$DEAD" aborted
+mk formc_live     step_0_init           "$TMP"  aborted
+mk formc_missing  step_0_init           __NONE__ aborted
+mk formc_empty    step_0_init           __EMPTY__ aborted
+mk statusdone     step_5_implementation "$DEAD" completed
+mk inflight       step_1_interview      "$DEAD" in_progress
+
+# D1: the live orphan's exact shape. This is the assertion the issue was filed for.
+valid formc_dead && ok "D1: terminal by status, live by current_step, dead root — VALID (#331)" \
+                 || bad "D1: still invalid — $(why formc_dead)"
+# plant: D1 | plugin/skills/concept-to-code/scripts/manifest-validate.sh | case "$project_root_status" in completed|failed|aborted) project_root_terminal=1 ;; esac | :
+
+# D2: THE OTHER DIRECTION, and it is what keeps this from being a weakening. A manifest live on
+# BOTH axes with a dead root still fails, naming the field. B4 covers the same property from the
+# current_step side; this one moves the status field off its BASE value so neither axis can excuse
+# it, which is the combination the widening could have opened.
+if valid inflight; then
+  bad "D2: an in-flight manifest (both axes live) with a dead project_root now passes — weakened"
+else
+  printf '%s' "$(why inflight)" | grep -q 'not an existing directory' \
+    && ok "D2: both axes live + dead root still FAILS, naming project_root" \
+    || bad "D2: it fails, but not on project_root — $(why inflight)"
+fi
+# plant: D2 | plugin/skills/concept-to-code/scripts/manifest-validate.sh | elif [ ! -d "$project_root_val" ] && [ "$project_root_terminal" -eq 0 ]; then | elif false; then
+
+# D3: the status axis carries the exemption on its own, with a live current_step. Without this,
+# D1 would also pass under a rule that merely added `step_0_init` to the exempt list.
+valid statusdone && ok "D3: terminal by status alone (live current_step) exempts the dead root" \
+                 || bad "D3: the status axis does not carry the exemption — $(why statusdone)"
+
+# D4/D5: PRESENCE is unconditional on the new axis too. A widened exemption must relax existence
+# and nothing else.
+if valid formc_missing; then
+  bad "D4: a status-terminal manifest with NO project_root passes — presence stopped being required"
+else
+  printf '%s' "$(why formc_missing)" | grep -q 'missing or empty' \
+    && ok "D4: a missing project_root still fails on the status axis" \
+    || bad "D4: fails for the wrong reason — $(why formc_missing)"
+fi
+valid formc_empty && bad "D5: an EMPTY project_root passes when terminal by status" \
+                  || ok "D5: an empty project_root still fails on the status axis"
+
+# D6: and the ordinary case is not broken — a status-terminal manifest with a real directory.
+valid formc_live && ok "D6: terminal by status with a real project_root is still valid" \
+                 || bad "D6: broke the ordinary case — $(why formc_live)"
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
+# Z1: assertion-count floor. A file that silently stops running six assertions reports fewer of
+# them and nothing reads the total (ADR-0083 §D3) — a floor, not an exact count, so an addition
+# does not need a bump.
+_total=$((PASS + FAIL))
+if [ "$_total" -ge 21 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 21)"
+  PASS=$((PASS+1))
+else
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 21; assertions vanished"
+  FAIL=$((FAIL+1))
+fi
 [ "$FAIL" -eq 0 ]
