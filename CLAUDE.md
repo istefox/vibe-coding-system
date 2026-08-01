@@ -2756,3 +2756,52 @@ no plants of its own** — `PC0`/`PC3` guard its denominator, but the regress st
 higher than yesterday.
 
 Detail: `docs/architecture/ADR-0108-284-plant-registry.md`.
+
+## Decisions from the manifest entry-state chain (ADR-0109)
+
+Closes issue #319, first of Phase 10.0 — the blockers found by trying to RUN the chain rather than
+by reading it. The 2026-07-31 launch left a manifest at `step_0_init` and nothing could touch it:
+Form A exits 2 saying *use resume*, Form B answers *resume not necessary, continue in current
+session*. Both enforced by code.
+
+**The whole issue reduces to one sentence: Form B's remedy named a command that does not exist.**
+The in-session entry point is Form A, and Form A refused. Neither half was wrong about its own job;
+nothing owned the seam.
+
+- **Measured before designing, and the issue was under-stated four ways.** Form A's guard is on
+  **file existence**, never state, so no transition can unblock it and Form C (abort) preserves the
+  file, so it does not either. Form B resolved **2 of 13** standard states. **Three matched no
+  branch at all** — `step_4_session_boundary`, `step_6_review`, `step_7_commit` — and ADR-0095 had
+  disclosed only the second. Express/Hybrid can never resume. A **completed** chain was deadlocked
+  too, with the two errors pointing at each other.
+- **`step_4_session_boundary` was the one that mattered and was disclosed nowhere.** Gate 4's own
+  "Abort chain" message tells the operator to resume from it, and `project-conductor` Step 3 and
+  Step 5 branch B both act on it by invoking Form B — so the conductor's primary resume path
+  targeted a state the table could not serve.
+- **"No file" and "unparseable" are TOKENS, not exit 3, and the first draft got this wrong.**
+  Folding them into *could not run* makes "nothing is there, create one" — the overwhelmingly
+  common case — indistinguishable from "this machine has no PyYAML". **That is #319 reproduced one
+  level down.** Absence and corruption are facts about the INPUT; exit 3 is a fact about the
+  ENVIRONMENT (ADR-0076's line, drawn again).
+- **The state enum is DERIVED from `manifest-validate.sh`, count-guarded at `>= 25`** — two copies
+  would answer differently the day either gains a state, which is ADR-0086's criterion for
+  extracting. But validity is judged on `current_step` **alone**, never by running the validator:
+  its 28 invariants include ones a routable manifest can legitimately fail (ADR-0078's dead
+  `project_root`, on five of this repository's own), and refusing an adoptable chain over an
+  unrelated invariant would be a stricter defect than the one being fixed.
+- **`status` is read as well as `current_step`, and that is the Form C case.** Form C sets `status:
+  aborted` and leaves `current_step` where it was, so reading one field would restart a chain a
+  human deliberately stopped. `MES8` is the negative twin of `MES2`: same fixture, one field apart,
+  opposite verdicts.
+- **`manifest-init.sh`'s exit-2 contract is untouched by design** (R-04). It became the backstop for
+  the one case a classifier cannot cover: the date rolling between the check and the call.
+
+Known consequences: **the manifest corpus cannot validate this value domain** — 42 manifests yield
+41 `TERMINAL` and 1 `ADOPTABLE`, because a stored corpus is terminal by nature, so ADR-0092's
+technique does not apply and the tokens are pinned by fixtures instead; the routing is an
+instruction, not an enforcement; inert until sync, with `MES0b` as the only `PAIRS` guard since
+`pairs-completeness.test.sh` cannot see a skill `scripts/` file; the near-midnight race survives on
+purpose. `MES0`/`MES1`/`MESX4`/`MESW` pass before and after — forward guards. The five seen RED are
+`MES2`, `MES4`, `MES8`, `MESF2`, `MESB1`.
+
+Detail: `docs/architecture/ADR-0109-319-manifest-entry-state.md`.
