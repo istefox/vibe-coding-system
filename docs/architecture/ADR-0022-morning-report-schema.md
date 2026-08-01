@@ -73,6 +73,17 @@ report is the roll-up a human reads in the morning.
   ready `pr_url`.
 - `ci_status` starts `pending` at publish time; a later pass may reconcile it to `green` or `red` from
   `gh pr checks`. `unknown` when CI could not be queried.
+  **Since issue #322 / ADR-0114 it is the AGGREGATE over the branch's REQUIRED context set**, not
+  one check's colour: `red` if any required context is red, `pending` if any is pending, `green`
+  only when all are green. On a repo requiring a single check that is byte-identical to the
+  original behaviour; on one requiring several it is the difference between a correct value and a
+  misleading one. The semantics changed only where the old value was simply wrong.
+- `required_checks` (additive, conditional-if-present, **no schema bump**, ADR-0114): an object
+  mapping each required context to `green|red|pending|unknown` — the per-context detail behind
+  `ci_status`. Absent entirely on a report written before this feature, and on any run where the
+  required set could not be read. The set comes from the branch protection the pre-flight already
+  audited, never from `gh pr checks` output, which lists every check that ran whether required or
+  not.
 - `next_action` is the one-line morning instruction, for example: "Review N open PRs and merge the
   green ones" or "Feature <slug> halted: <reason>. Resume interactively."
 - `test_count_delta`, `deleted_lines`, `iteration_count`, `elapsed_wall_seconds` (ADR-0064, issue

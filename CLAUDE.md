@@ -3027,3 +3027,55 @@ manifest — disclosed, follow-up issue, ADR-0047 §A2's blast radius; nothing a
 agree and nothing should, since Form C makes them disagree on purpose.
 
 Detail: `docs/architecture/ADR-0113-331-invariant-4-two-field-terminal.md`.
+
+## Decisions from the required-checks audit (ADR-0114)
+
+Closes issue #322, the last Phase 10.0 chain blocker. `nightly-autopilot` pre-flight check 8 ended
+*"verify the `ci` check is required on `main`"* while `main` requires **three** contexts —
+`set-branch-protection.sh` unions exactly one into whatever is already there, so the other two
+arrived by a route the pre-flight never knew about.
+
+- **The issue understates it: check 8 had NO MECHANISM AT ALL.** Checks 3 and 6 carry fence
+  contracts; check 8 was prose, and grepping `staging/` for a protection API call returns one hit,
+  inside `set-branch-protection.sh`. It did not verify one context of three — it verified nothing,
+  and nothing had ever executed it.
+- **Authority: the LIVE required set, derived, never declared in the opt-in marker.** A declaration
+  cannot lower what GitHub enforces, so one that disagrees is stale rather than lighter. The
+  "a silently-added check should be a FINDING" concern is answered by **satisfiability** instead —
+  nothing produces it, so the audit aborts — which keeps the property without a config field that
+  can drift.
+- **Three of five outcomes mean "nothing was found to be broken", and they are different
+  sentences:** `PASS` (every one verified), `NO-REQUIRED-CHECKS` (nothing to verify),
+  `DID-NOT-RUN` (nobody could look). Collapsing any pair is this feature's own defect one level
+  down — ADR-0076's line drawn twice rather than once.
+- **Producer evidence is a UNION of two sources, and the reason is the failure direction.**
+  Observed check-runs on the branch HEAD ∪ job identifiers in `.github/workflows/*.yml`. Zero
+  evidence from both is `DID-NOT-RUN`, never `UNSATISFIABLE`: a false PASS costs what the system
+  already had (nothing verified), a false ABORT costs the whole night. Step-level `name:` values
+  are deliberately excluded — a context called `Checkout` must not be satisfied by every checkout
+  step in the repo.
+- **`rc=3` ABORTS check 8.** Distinguishing "could not look" from "found nothing wrong" exists
+  precisely so that branch can exist; a pre-flight starting a roadmap on an unknown merge gate has
+  verified nothing while printing `PASSED` (ADR-0110's posture).
+- **`ci_status` becomes the AGGREGATE over the required set**, with an additive `required_checks`
+  detail object. Byte-identical on a repo requiring one check; correct rather than misleading on
+  one requiring three. Never derived from `gh pr checks` output, which lists every check that ran
+  whether required or not.
+- **Measured and reported, not fixed: `shell-tests` is not a required check on `main`.** The job
+  that runs the whole harness and the plant registry does not gate a merge. The audit reports it
+  every run as `not-required:`; making it required is a repo-admin decision.
+
+**Three plant lessons, all in the plants rather than the assertions.** `A2`'s plant aimed one line
+off — it removed the `note:` header while the assertion reads the line below it. `A4`'s fixture ran
+the wrong way round: the substring danger is a context contained IN a producer (`ci` in `cid`), not
+the reverse, and dropping `-x` changed nothing under the inverted fixture. And **three plants were
+silently truncated by the declaration syntax**: ` | ` is the field separator and *"cannot appear
+inside a field"*, which every shell pipeline contains — `A3` and `C3` reported as **fired** from a
+mutation that was not the one they described. **A plant that fires is not evidence until you have
+seen what it produced** (ADR-0090, earned three times in one feature).
+
+Known consequences: the pre-flight aborts on strictly more inputs; the fence is a hard dependency
+on a deployed script and is **worse than inert** until sync; `PASS` means every required context has
+a PRODUCER and never that it will be green; the `Workflow / job` context form is not decomposed.
+
+Detail: `docs/architecture/ADR-0114-322-required-checks-audit.md`.

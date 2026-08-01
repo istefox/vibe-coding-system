@@ -83,6 +83,7 @@ plugin/scripts/nightly-guard.sh|hooks/nightly-guard.sh
 plugin/scripts/nightly-disarm.sh|hooks/nightly-disarm.sh
 plugin/scripts/protect-files.sh|hooks/protect-files.sh
 plugin/scripts/publish-feature.sh|hooks/publish-feature.sh
+plugin/scripts/required-checks-audit.sh|hooks/required-checks-audit.sh
 plugin/scripts/set-branch-protection.sh|hooks/set-branch-protection.sh
 plugin/skills/nightly-autopilot/SKILL.md|skills/nightly-autopilot/SKILL.md
 plugin/skills/nightly-autopilot/tests/run-tests.sh|skills/nightly-autopilot/tests/run-tests.sh
@@ -242,7 +243,7 @@ if [ "$APPLY" -eq 1 ]; then
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
     "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
     "$DEST/hooks/agent-command-scope.sh" "$DEST/hooks/vendor-checks.sh" \
-    "$DEST/hooks/nightly-disarm.sh" 2>/dev/null || true
+    "$DEST/hooks/nightly-disarm.sh" "$DEST/hooks/required-checks-audit.sh" 2>/dev/null || true
 fi
 
 # DEPLOYED SKILL REPORT (issue #222, ADR-0087, R-06). Every directory (or symlink resolving to a
