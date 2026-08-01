@@ -71,7 +71,71 @@ Behavior:
 2. Generate `topic-slug` from `topic-full-title` (lowercase, kebab, max 40 chars).
 3. Determine `project_root` as current `$PWD`.
 4. Verify `docs/manifests/` exists (create it if needed after user ack).
-4. Verify no manifest exists for same topic-slug same day (if exists: error "manifest already in progress, use resume").
+4b. **Existing-manifest routing (issue #319, ADR-0109).** A manifest may already sit at today's
+   path for this slug. Until this block existed the chain refused it — `manifest-init.sh` exits 2
+   saying *use resume*, and Form B's table answers *resume not necessary, continue in current
+   session*, **naming a command that does not exist**: the in-session entry point is this form,
+   which is what just refused. Run the classifier and route on its token. It reads and routes; it
+   never writes, never overwrites, never deletes.
+
+   <!-- fence-contract: c2c-form-a-existing-manifest -->
+   ```bash
+   _root="<project-root>"; _slug="<topic-slug>"
+   # The path is constructed here because it must be known BEFORE manifest-init.sh runs, which is
+   # the one thing that construction is for. `manifest-init.sh` computes the same path the same
+   # way; if the date rolls between this check and that call, its exit-2 is the backstop, which is
+   # why that contract is deliberately left untouched by this feature.
+   _man="$_root/docs/manifests/$(date +%Y-%m-%d)-$_slug.manifest.yml"
+   _out=$(bash ~/.claude/skills/concept-to-code/scripts/manifest-entry-state.sh "$_man" 2>&1); _rc=$?
+   if [ "$_rc" -eq 3 ]; then
+     echo "ENTRY-ROUTE: DID-NOT-RUN — $_out"
+     echo "  The classifier could not run. Do NOT guess: an unrun check is not a clean result."
+     echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+     exit 3
+   fi
+   [ "$_rc" -eq 0 ] || { echo "ENTRY-ROUTE: DID-NOT-RUN — bad invocation: $_out"; exit 3; }
+   case "${_out%%|*}" in
+     NONE)
+       echo "ENTRY-ROUTE: NONE — no manifest for this slug today; proceed to step 5."; exit 0 ;;
+     ADOPTABLE)
+       echo "ENTRY-ROUTE: ADOPTABLE (${_out#*|}) — adopt this manifest and continue IN THIS SESSION."
+       echo "  Do not create a second one. Do not send the operator to resume: this state is"
+       echo "  exactly what Form B refuses. Read the manifest, skip to the step it names, continue."
+       exit 0 ;;
+     BOUNDARY)
+       echo "ENTRY-ROUTE: BOUNDARY (${_out#*|}) — Gate 4 was presented and never answered."
+       echo "  Re-present Gate 4 in this session. Nothing before Gate 4 needs redoing."
+       exit 0 ;;
+     RESUMABLE)
+       echo "ENTRY-ROUTE: RESUMABLE (${_out#*|}) — planning is done; this is Form B's job."
+       echo "  Run: /skill concept-to-code resume $_man"
+       exit 0 ;;
+     LATE)
+       echo "ENTRY-ROUTE: LATE (${_out#*|}) — implementation is past review entry."
+       echo "  Continue in this session from that step. Form B has no branch for it."
+       exit 0 ;;
+     UNRESUMABLE)
+       echo "ENTRY-ROUTE: UNRESUMABLE (${_out#*|}) — an express or hybrid chain in flight."
+       echo "  Those paths never cross a session boundary, so resume is not an option at all."
+       echo "  Continue in this session from that step."
+       exit 0 ;;
+     TERMINAL)
+       echo "ENTRY-ROUTE: TERMINAL (${_out#*|}) — this topic already ran to a terminal state today."
+       echo "  STOP. Starting a second chain on the same slug is an explicit human decision:"
+       echo "  present it as a gate, or use a different topic slug. Never overwrite the record."
+       exit 1 ;;
+     UNKNOWN|UNREADABLE)
+       echo "ENTRY-ROUTE: ${_out%%|*} (${_out#*|}) — the manifest does not parse, or names a state"
+       echo "  the validator does not recognise. STOP and show it to a human; do not route it."
+       exit 1 ;;
+     *)
+       echo "ENTRY-ROUTE: DID-NOT-RUN — unrecognised token '${_out%%|*}'"; exit 3 ;;
+   esac
+   ```
+
+   **Unattended callers.** What a `nightly` run does with a non-`NONE` answer — mark the feature
+   `[~]` and continue, or halt the roadmap — is issue #324's subject and is deliberately not
+   decided here. Do not add that policy to this block without reading #324 first.
 5. Run `scripts/gate0-detect.sh <project-root> "<topic-full-title>" "<topic-slug>"`. Read all output fields:
    `spec_adr_exist`, `mode`, `repo_file_count`, `file_vote`, `keyword_vote`, `spec_topic_match`,
    `spec_topic_slug`, `skill_exists`. **Keep `spec_topic_slug`** — it is the slug the EXISTING
@@ -159,8 +223,26 @@ Behavior:
      at `ready_for_implementation` for the whole of Step 5 and matched the branch above. Without it
      an interrupted Step 5 matches no branch at all — the fix would have closed a transition hole by
      opening a recovery one.
-   - Any step before `step_4_session_boundary` → error: "resume not necessary, continue in current session".
-   - `completed` or `aborted` → error: "chain terminated, create a new manifest".
+   - `step_4_session_boundary` → **Gate 4 was presented and never answered.** Re-present Gate 4;
+     nothing before it needs redoing. **This branch was missing entirely until issue #319**, and it
+     is the one that mattered most: Gate 4's own "Abort chain" message tells the operator to resume
+     from this state, and `project-conductor` Step 3 and Step 5 branch B both act on it by invoking
+     this form. Three states matched no branch at all; ADR-0095 had disclosed only `step_6_review`.
+   - `step_6_review` or `step_7_commit` → **implementation is past review entry.** Re-enter at that
+     step in this session. Named here rather than left to fall through the table, which is what
+     both did before #319.
+   - Any step before `step_4_session_boundary` → refuse, **and name the command that exists**:
+     "resume is not the entry point for this state — re-invoke Form A on the same topic
+     (`/skill concept-to-code <topic-full-title>`) and its step 4b will adopt this manifest and
+     continue in this session." The refusal itself is correct: an interview is not resumable across
+     a session boundary. What was wrong for the whole life of this file is that its remedy named no
+     command — Form A was the in-session entry point and it refused on file existence (#319).
+   - `chain_path` is `express` or `hybrid`, in any non-terminal state → error: "express and hybrid
+     chains never cross a session boundary (see *Resume semantics*), so resume is not an option at
+     all. Re-invoke Form A on the same topic to continue in this session."
+   - `completed` or `aborted` → error: "chain terminated. A second chain on the same slug the same
+     day is an explicit decision: use a different topic slug, or start one deliberately tomorrow.
+     Form A will not silently create a second manifest, and nothing here overwrites the record."
    - `failed` → error: "chain in failure state, manual recovery required".
 3. Update `session_boundary.resumed_at` and `last_updated_at`.
 

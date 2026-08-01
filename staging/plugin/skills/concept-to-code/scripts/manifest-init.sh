@@ -4,6 +4,14 @@
 # Usage: manifest-init.sh <topic-slug> <topic-full-title> <project-root> [<mode>]
 #   <mode>: greenfield (default) | brownfield
 # Exit: 0 ok | 1 invalid args/root | 2 manifest already exists (use resume)
+#
+# The exit-2 contract below is DELIBERATELY UNCHANGED by issue #319 (ADR-0109). It stopped being
+# the decision and became the backstop: `SKILL.md` Form A step 4b now classifies an existing
+# manifest with `manifest-entry-state.sh` and routes on the answer, so this script is reached only
+# when there is nothing there — or when the date rolled between that check and this call, which is
+# the one case the file-existence guard still has to catch on its own. Removing it would delete the
+# only protection against that race, and would make "manifest already exists" indistinguishable
+# from "the classifier did not run".
 set -u
 
 if [ "$#" -lt "3" ] || [ "$#" -gt "4" ]; then
