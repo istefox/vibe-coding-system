@@ -361,7 +361,14 @@ grep -q 'plugin/scripts/nightly-disarm.sh|hooks/nightly-disarm.sh' "$SYNC" \
 
 # P2: and it is made executable on deploy, like its siblings. A non-executable hook fails at the
 # moment someone is already blocked, which is the worst possible time to find out.
-grep -q 'hooks/nightly-disarm.sh" 2>/dev/null' "$SYNC" \
+#
+# MEMBERSHIP IN THE chmod LIST, NOT POSITION IN IT. The first form of this assertion matched
+# `hooks/nightly-disarm.sh" 2>/dev/null`, which only held because this file happened to be the LAST
+# name in the list. Issue #322 appended `required-checks-audit.sh` after it and P2 went red on a
+# deploy that was still perfectly correct — an assertion pinning an incidental adjacency rather than
+# the property it names. Extract the statement, then look inside it.
+_chmod_block=$(sed -n '/chmod +x /,/|| true/p' "$SYNC")
+printf '%s\n' "$_chmod_block" | grep -q 'hooks/nightly-disarm.sh' \
   && ok "P2: the deploy preserves the executable bit on nightly-disarm.sh" \
   || bad "P2: nightly-disarm.sh is deployed without +x"
 

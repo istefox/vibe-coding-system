@@ -263,8 +263,46 @@ run start" — see `permission-mode-state.sh`'s header for why there is exactly 
 8. **CI + branch protection:** if `.github/workflows/ci.yml` is absent, drop the template
    (`~/.claude/templates/ci.yml` at runtime; source `staging/project-templates/ci/ci.yml`),
    substituting `__TEST_CMD__` with the trusted `.claude/test-cmd`, then run
-   `~/.claude/hooks/set-branch-protection.sh`. If present, verify the `ci` check is required on
-   `main`.
+   `~/.claude/hooks/set-branch-protection.sh`.
+
+   **Then audit the WHOLE required set, not the `ci` context alone (issue #322, ADR-0114).** This
+   step used to end *"verify the `ci` check is required on `main`"*, which was prose with no
+   mechanism and named one context out of however many the branch requires — this repository's own
+   `main` requires three, because `set-branch-protection.sh` unions exactly ONE into whatever is
+   already there. A pre-flight that knows a third of the merge gate can pass while a PR the run
+   opens is unmergeable.
+
+   The authority is the **live** required set, derived, never a list declared in the opt-in marker:
+   a declaration cannot lower what GitHub enforces, so one that disagrees is stale rather than
+   lighter. A silently-added required check is caught by SATISFIABILITY instead — nothing produces
+   it, so the audit aborts.
+
+   <!-- fence-contract: nightly-autopilot-check-8 -->
+   ```bash
+   _rca="$HOME/.claude/hooks/required-checks-audit.sh"
+   if [ ! -f "$_rca" ]; then
+     echo "✗ check 8: required-checks-audit.sh not found at $_rca — the check DID NOT RUN."
+     echo "  Run: bash staging/sync-to-claude.sh --apply"
+     exit 1
+   fi
+   _out=$(bash "$_rca" --root "$PWD" 2>&1); _rc=$?
+   printf '%s\n' "$_out"
+   case "$_rc" in
+     0) echo "✓ check 8: every required status check has a producer" ;;
+     1) echo "✗ check 8: a required status check has no producer — a PR opened tonight would sit"
+        echo "  pending forever and could not be merged in the morning."
+        exit 1 ;;
+     *) echo "✗ check 8: the audit DID NOT RUN (rc=$_rc). A roadmap does not start on an unknown"
+        echo "  merge gate — an unread gate is not a clean gate."
+        exit 1 ;;
+   esac
+   ```
+
+   **`rc=3` aborts, and that is deliberate.** The audit reports "could not look" separately from
+   "found nothing wrong" precisely so this branch can exist; treating them alike is the defect this
+   check was rewritten to close. **`PASS` means every required context has a PRODUCER, never that
+   it will be green** — nothing at launch time can know whether tomorrow's markdown lints. That
+   half is the morning report's per-context reconciliation in §4.
 
 On all checks passing:
 ```
@@ -412,8 +450,30 @@ Emit one terminal line:
 nightly-autopilot · <status> · report: <project_root>/.claude/nightly-report.json
 ```
 
-Reconcile CI where possible: for each open PR, `gh pr checks <url>` maps the check to
-`green|red|pending` in the report.
+Reconcile CI where possible: for each open PR, `gh pr checks <url>` maps **every required context**
+to `green|red|pending`.
+
+**`ci_status` is the AGGREGATE over the required set, not one check's colour (issue #322,
+ADR-0114).** `red` if any required context is red, `pending` if any is pending, `green` only when
+all are green, `unknown` when CI could not be queried. On a repo requiring a single check this is
+byte-identical to what it has always been; on one requiring three it is the difference between a
+correct value and a misleading one. This repository requires `markdownlint`, `links` and `ci`, and
+before this a red `markdownlint` — real, PR #317 — reported as `green` and surfaced only when the
+human tried to merge.
+
+The per-context detail goes in an additive sibling, `required_checks`, so nothing that reads
+`ci_status` has to change:
+
+```json
+"ci_status": "red",
+"required_checks": { "ci": "green", "markdownlint": "red", "links": "green" }
+```
+
+The required set is the same live list pre-flight check 8 audited — read it with
+`bash ~/.claude/hooks/required-checks-audit.sh --root "$PWD"`, whose `required:` lines carry it.
+Do not re-derive it from `gh pr checks` output: that reports every check that ran, required or
+not, and aggregating over those would let a non-blocking red check report the PR as unmergeable
+when it is not.
 
 ---
 
