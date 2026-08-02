@@ -226,12 +226,63 @@ else
   bad "T14: ci.yml does not glob staging/plugin/scripts/tests/*.test.sh"
 fi
 
+# ==================================================================================================
+# T15. This repository's own .gitignore holds exactly ONE .triage-fix-last covering rule, not two.
+# Commit a482dbb (PR #251, the #222 dogfood chain) hand-added the script's own glob without
+# checking that the broader rule at line 7 (present since the initial commit) already covered it —
+# ADR-0118. COUNT ONLY NON-COMMENT LINES, deliberately: a plausible explanatory comment near the
+# surviving rule could easily mention "triage-fix-last" by name (the wording chosen for Task 2's fix
+# happens not to, but a future edit might), and a naive `grep -c` over the whole file would then
+# read 2 again after the fix (1 rule + 1 comment) — falsely reporting the bug as still open. That is
+# the exact rule-12 shape ("a scan whose needle also matches an explanatory comment about itself")
+# this repository's own history keeps finding (SA10, N9, GR1/GR5, SP1). Excluding comment lines
+# closes it regardless of what any future comment says.
+# ==================================================================================================
+T15_N=$(grep -v '^#' "$REPO/.gitignore" | grep -c 'triage-fix-last')
+if [ "${T15_N:-0}" -eq 1 ]; then
+  ok "T15: this repository's .gitignore holds exactly one triage-fix-last covering rule"
+else
+  bad "T15: $T15_N triage-fix-last covering rule(s) in $REPO/.gitignore — expected 1 (see ADR-0118)"
+fi
+
+# ==================================================================================================
+# T16. Forward guard: the surviving rule still covers a REALISTIC per-branch filename, on the real,
+# committed .gitignore — not a fixture. Protects against a future edit that narrows or removes the
+# rule entirely while "cleaning up" the file. No plant: this checks byte content of one specific
+# real file, not a re-creatable mechanism (same precedent as T12/T15 — see ADR-0118 Alternative 4).
+# ==================================================================================================
+if git -C "$REPO" check-ignore -q -- ".claude/.triage-fix-last-zzz-regression-probe.json"; then
+  ok "T16: the real .gitignore still ignores a realistic per-branch state filename"
+else
+  bad "T16: a realistic per-branch state filename is NOT ignored by $REPO/.gitignore"
+fi
+
+# ==================================================================================================
+# T17. TWO pre-existing, differently-shaped covering rules together — the shape this repository's
+# own history actually produced (ADR-0118) — still suppress the append; no third line is added.
+# SEED CHOICE, explicitly: neither line is the script's own literal glob
+# (.claude/.triage-fix-last-*.json). Seeding that exact string would let the elif's literal-grep
+# fallback mask a disabled check-ignore branch — ADR-0094's named dead draft, one level up. See the
+# `# plant:` declaration below: it reverts check-ignore to `if false` and MUST still be caught,
+# because neither seed line equals the literal fallback string either.
+# ==================================================================================================
+R17=$(mk_repo '.claude/.triage-fix-last*.json
+.claude/')
+cycle "$R17" feat_probe
+T17_N=$(gi_lines "$R17")
+if [ "${T17_N:-0}" -eq 2 ]; then
+  ok "T17: two differently-shaped pre-existing rules together suppress the append (no third line)"
+else
+  bad "T17: appended beside two pre-existing rules: $(tr '\n' '|' <"$R17/.gitignore")"
+fi
+# plant: T17 | plugin/skills/review-triage-fix/scripts/triage-state.sh | if git -C "$d" check-ignore -q -- "$(basename "$SF")" 2>/dev/null; then | if false; then
+
 # Z1 — assertion-count floor (ADR-0083 §D3).
 Z1_TOTAL=$((PASS + FAIL))
-if [ "$Z1_TOTAL" -ge 15 ]; then
+if [ "$Z1_TOTAL" -ge 18 ]; then
   ok "Z1: assertion-count floor met ($Z1_TOTAL executed)"
 else
-  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 15; assertions have gone missing, not passed"
+  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 18; assertions have gone missing, not passed"
 fi
 
 echo "----"
