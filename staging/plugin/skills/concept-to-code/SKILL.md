@@ -155,7 +155,7 @@ Behavior:
      Store `_project_context` for injection into Steps 2 and 5.
    - If absent: `_project_context = ""`. Silent — no UX impact.
 
-6. Invoke `scripts/manifest-init.sh` with args: `topic-slug`, `topic-full-title`, `project-root`, `<mode>` — where `<mode>` is the `mode` field from `gate0-detect.sh` output (`greenfield` or `brownfield`). **NOT** the `chain_path` (`standard`/`express`/`hybrid`) which is determined later at Gate 0.
+6. Invoke `~/.claude/skills/concept-to-code/scripts/manifest-init.sh` with args: `topic-slug`, `topic-full-title`, `project-root`, `<mode>` — where `<mode>` is the `mode` field from `gate0-detect.sh` output (`greenfield` or `brownfield`). **NOT** the `chain_path` (`standard`/`express`/`hybrid`) which is determined later at Gate 0.
    **Capture the manifest path from stdout** — the script prints the created path on success. Use it for all subsequent references. Example:
    ```bash
    MANIFEST=$(bash ~/.claude/skills/concept-to-code/scripts/manifest-init.sh "$slug" "$title" "$root" "$mode")
@@ -288,7 +288,7 @@ Step E1 / Step H1), reached via the routing transition in step 8c above.
 Example: `/skill concept-to-code resume /Users/stefanoferri/Developer/pricing-markup-cli/docs/manifests/2026-05-22-rate-limiter.manifest.yml`
 
 Behavior:
-1. Invoke `scripts/manifest-validate.sh <manifest-path>`. Non-zero exit → abort with parse error.
+1. Invoke `~/.claude/skills/concept-to-code/scripts/manifest-validate.sh <manifest-path>`. Non-zero exit → abort with parse error.
 1b. **Session scope guard (IMPORTANT — runs before any other step):** read `project_root` from the manifest. Resolve the session CWD (`$PWD`). If `project_root` is NOT equal to CWD and is NOT a subdirectory of CWD, abort immediately with:
    > "SCOPE ERROR: manifest project_root (`<project_root>`) is outside this session's working directory (`<CWD>`). This session is scoped to `<CWD>` and must not operate on a different project. Open a new Claude Code session inside `<project_root>` and resume the chain from there."
    Never proceed past this guard on a scope mismatch — not even to read the manifest further.
@@ -419,6 +419,13 @@ Helper scripts:
 > **PATH RULE — all scripts use the absolute prefix `~/.claude/skills/concept-to-code/scripts/`.
 > NEVER derive the path from the manifest location (`<manifest-dir>/scripts/` does NOT exist).
 > Every bash call below must use the full absolute path.**
+>
+> Bare mentions: prose may name a helper as a bare code span, e.g. `<helper>.sh`, with no arguments and no path prefix — that is compliant prose, not a call site. A relative `scripts/<helper>.sh`
+> path, an unquoted `<helper>.sh` in running text, a name followed by arguments, or a name preceded
+> by an invocation verb (via, call, invoke, run, use, execute, …) is read as a call site and must
+> carry the absolute prefix above. A line that is genuinely prose in one of those shapes declares a
+> `path-rule-exempt` HTML comment on that same line, in the exact form stated in
+> `path-rule-check.sh`'s header.
 
 - `~/.claude/skills/concept-to-code/scripts/manifest-init.sh` — creates manifest at `step_0_init` (schema 1.3, adds `chain_path`, `gate0.chain_path`, `gate0.auto_detect_reason`)
 - `~/.claude/skills/concept-to-code/scripts/manifest-validate.sh` — validates schema 1.0|1.1|1.2|1.3 + state invariants + optional fields
@@ -947,7 +954,7 @@ fi
 
 **Why the manifest is exempt, and why removing the exemption breaks every run (issue #239).** The
 chain writes the manifest at every state change, and two of those writes land between Gate 4.0's
-commit and this assertion: `manifest-set-flag.sh <m> autopilot true` and `manifest-transition.sh <m>
+commit and this assertion: `manifest-set-flag.sh <m> autopilot true` and `manifest-transition.sh <m> <!-- path-rule-exempt: names which two manifest writes land here rather than instructing; one marker covers both occurrences on this line -->
 ready_for_implementation`. On the fresh-session branch it is worse — Form B resume step 3 updates
 `session_boundary.resumed_at` unconditionally, after any commit the old session could have made, so
 no ordering avoids it. Then 5.0.3 below writes `recovery_baseline_sha` into the same file **on
@@ -1013,7 +1020,7 @@ If both are empty, fall back to the literal `main` — documented here, never a 
 ```bash
 git rev-parse HEAD
 ```
-Record as `BASELINE_COMMIT`. Write it once to the manifest via bash sed substitution on the additive field (NOT via Edit tool, NOT via `manifest-set-flag.sh`, which is boolean-only):
+Record as `BASELINE_COMMIT`. Write it once to the manifest via bash sed substitution on the additive field (NOT via Edit tool, NOT via `manifest-set-flag.sh`, which is boolean-only): <!-- path-rule-exempt: negated -- tells the reader NOT to use this helper for this write, never invokes it -->
 ```bash
 sed -i.bak 's/^recovery_baseline_sha: null$/recovery_baseline_sha: "<BASELINE_COMMIT>"/' "<manifest>"
 ```
@@ -1218,7 +1225,7 @@ Record by exit code:
   workflow agent reported `workflow-subagent` (the dispatch omitted `agentType: 'coder'` — a
   workflow-script bug, not a platform limitation), or every decision after the marker belongs to a different, concurrent Claude Code session
   (`CLAUDE_CODE_SESSION_ID` was set and filtered them out — issue #33).
-- **exit 3 (INCONCLUSIVE)** → record NOTHING, do not call `manifest-set-flag.sh`. Either the audit log
+- **exit 3 (INCONCLUSIVE)** → record NOTHING, do not call `manifest-set-flag.sh`. Either the audit log <!-- path-rule-exempt: negated -- instructs skipping this helper on the INCONCLUSIVE branch, not invoking it -->
   is missing (`pre-flight-pattern-enforce.sh` is not installed — fix the install, then re-run), or
   `CLAUDE_CODE_SESSION_ID` was unavailable and the post-marker window mixed rows from more than one
   concurrent Claude Code session, so the check cannot tell which one is this session's (re-run when no
@@ -1237,7 +1244,7 @@ all subsequent Step 5 runs on the same manifest.
 
 **[Autopilot default (`manifest.autopilot = true`): do NOT display the smoke-test procedure and do NOT
 wait for a human. If `hook_verified` is `true`, take the Workflow path; otherwise record
-`hook_verified = false` via `manifest-set-flag.sh` and take the Agent-tool fallback. Emit:
+`hook_verified = false` via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh` and take the Agent-tool fallback. Emit:
 "Step 5: autopilot — workflow smoke test skipped, using <workflow|fallback> ✓". This prevents an
 unattended run from stalling on the smoke-test prompt, and never takes the Workflow path unless hooks
 were already verified true.]**
@@ -2245,7 +2252,7 @@ After each batch, before running controller-side verification:
 After all batches complete and controller-side verification passes, transition to
 `step_6_review`. Present Gate 5.
 
-Set `step5_mode: "agent_batch"` in the manifest when the fallback activates (via bash sed substitution on the additive field — NOT via Edit tool, NOT via manifest-set-flag.sh which is boolean-only).
+Set `step5_mode: "agent_batch"` in the manifest when the fallback activates (via bash sed substitution on the additive field — NOT via Edit tool, NOT via manifest-set-flag.sh which is boolean-only). <!-- path-rule-exempt: negated -- says NOT to use this helper for the step5_mode write, describing what not to do -->
 
 ### Step 6 — Review cycle (conditional on hook_verified)
 
@@ -2770,7 +2777,7 @@ After completing each plan task, emit a one-line progress update before starting
 After all plan tasks are complete:
 - Run the project test command if `test_cmd != NONE`.
 - **REQUIRED — two separate manifest-transition calls, not one:**
-  1. Transition `step_h3_execute → gate_h3_verify` (call manifest-transition.sh now).
+  1. Transition `step_h3_execute → gate_h3_verify` (call `~/.claude/skills/concept-to-code/scripts/manifest-transition.sh` now).
   2. Present Gate H3 (AskUserQuestion below).
   3. Based on user response, transition `gate_h3_verify → step_h5_commit` or `gate_h3_verify → step_h4_review`.
   Collapsing these into a single `step_h3_execute → step_h5_commit` call is an illegal transition and will exit 1.
@@ -2806,7 +2813,7 @@ Invoke `commit` skill (Skill tool). Transition `step_h5_commit → completed`.
 ## 5. HITL gates
 
 **Immediate feedback rule (all gates):** after each HITL response (AskUserQuestion), immediately emit
-**a brief text before any tool call** (manifest-transition.sh, Bash, Skill, Agent).
+**a brief text before any tool call** (manifest-transition.sh, Bash, Skill, Agent). <!-- path-rule-exempt: enumerates kinds of tool call (transition, Bash, Skill, Agent), not a command to run -->
 Recommended format: `"Gate N approved ✓ — <what happens next>..."`.
 This prevents the prolonged silence that makes the user think the chain is blocked.
 
@@ -3082,7 +3089,7 @@ options:
 
 **Gate 0d transition block:**
 
-Transition: set `current_step` to `gate_0d_scaffolding` via `scripts/manifest-transition.sh`, then immediately transition based on `chain_path`:
+Transition: set `current_step` to `gate_0d_scaffolding` via `~/.claude/skills/concept-to-code/scripts/manifest-transition.sh`, then immediately transition based on `chain_path`:
 - `chain_path = standard` (or null) → `gate_0d_scaffolding → step_1_interview`
 - `chain_path = express` → `gate_0d_scaffolding → step_e1_plan`
 - `chain_path = hybrid` → `gate_0d_scaffolding → step_h1_interview`
@@ -3124,7 +3131,7 @@ Brownfield regenerate: set `mode: greenfield`, invoke `interview-driver`. Covers
 
 Reject/greenfield behavior: transition back to `step_1_interview`; re-invoke `interview-driver` with notes as prefix.
 
-**Record the gate outcome** — see *Gate approval recording* in §5: `manifest-set-gate.sh <manifest-path> 1 approved "<spec accepted>"`, or `rejected` with the reason, before the transition.
+**Record the gate outcome** — see *Gate approval recording* in §5: `~/.claude/skills/concept-to-code/scripts/manifest-set-gate.sh <manifest-path> 1 approved "<spec accepted>"`, or `rejected` with the reason, before the transition.
 
 **[Autopilot default: "Approve and proceed" (both greenfield and brownfield). Emit: "Gate 1: autopilot — spec auto-approved ✓"]**
 
@@ -3223,7 +3230,7 @@ options:
 
 Reject behavior: transition back to `step_2_architecture`; re-dispatch architect with the feedback as addendum.
 
-**Record the gate outcome** — see *Gate approval recording* in §5: `manifest-set-gate.sh <manifest-path> 2 approved "<architecture accepted>"`, or `rejected` with the reason, before the transition.
+**Record the gate outcome** — see *Gate approval recording* in §5: `~/.claude/skills/concept-to-code/scripts/manifest-set-gate.sh <manifest-path> 2 approved "<architecture accepted>"`, or `rejected` with the reason, before the transition.
 
 **[Autopilot default: "Approve". Emit: "Gate 2: autopilot — architecture auto-approved ✓"]**
 
@@ -3453,7 +3460,7 @@ options:
 Skip behavior: `manifest.artifacts.project_claude_md = null`, transition to `step_4_session_boundary`.
 Reject behavior: re-invoke `claude-md-generator` with feedback prefix.
 
-**Record the gate outcome** — see *Gate approval recording* in §5: `manifest-set-gate.sh <manifest-path> 3 approved "<applied|skipped>"`, or `rejected` with the reason, before the transition.
+**Record the gate outcome** — see *Gate approval recording* in §5: `~/.claude/skills/concept-to-code/scripts/manifest-set-gate.sh <manifest-path> 3 approved "<applied|skipped>"`, or `rejected` with the reason, before the transition.
 
 **[Autopilot default: "Approve (create/overwrite CLAUDE.md)". Execute `mv CLAUDE.md.proposed CLAUDE.md` automatically. Emit: "Gate 3: autopilot — CLAUDE.md auto-applied ✓". Transition to `step_4_session_boundary`.]**
 
@@ -3611,7 +3618,7 @@ The manifest is now at `ready_for_implementation`. The fresh session will detect
 
 Note: `/clear` cannot be triggered automatically from within the skill — it is a UI-only command. The two-line block above is the closest possible automation.
 
-**Record the gate outcome for all four branches** — see *Gate approval recording* in §5: `manifest-set-gate.sh <manifest-path> 4 approved "<the option label the user clicked>"`, and `rejected "aborted at Gate 4"` on the abort branch. **The option name is the load-bearing part**: `autopilot: true` alone cannot distinguish a human choosing unattended implementation from a roadmap pre-authorising the whole run, and this note is the only thing that tells them apart afterwards.
+**Record the gate outcome for all four branches** — see *Gate approval recording* in §5: `~/.claude/skills/concept-to-code/scripts/manifest-set-gate.sh <manifest-path> 4 approved "<the option label the user clicked>"`, and `rejected "aborted at Gate 4"` on the abort branch. **The option name is the load-bearing part**: `autopilot: true` alone cannot distinguish a human choosing unattended implementation from a roadmap pre-authorising the whole run, and this note is the only thing that tells them apart afterwards.
 
 **After the user clicks "Abort chain":**
 Emit: "Gate 4: chain aborted. Manifest left at `step_4_session_boundary` — run `/skill concept-to-code resume <manifest-path>` to continue later."
@@ -3769,7 +3776,7 @@ options:
 
 **[Autopilot default: "Skip review". Emit: "Gate 5: autopilot — review skipped ✓"]**
 
-**Record the gate outcome** — see *Gate approval recording* in §5: `manifest-set-gate.sh <manifest-path> 5 approved "<run review|skip review>"`. Under autopilot record the default that was taken, so the trail shows the decision was made by the flag rather than by a person.
+**Record the gate outcome** — see *Gate approval recording* in §5: `~/.claude/skills/concept-to-code/scripts/manifest-set-gate.sh <manifest-path> 5 approved "<run review|skip review>"`. Under autopilot record the default that was taken, so the trail shows the decision was made by the flag rather than by a person.
 
 ---
 

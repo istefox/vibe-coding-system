@@ -290,5 +290,247 @@ else
   bad "E7: manifest-transition.sh's actual PAIRS block has $actual_pairs pairs, expected 45"
 fi
 
+# =====================================================================================
+# Section F -- issue #286 / ADR-0117: path-rule-check.sh, a derived guard for concept-to-code's
+# own stated PATH RULE.
+# DERIVED-GUARD PATTERN — instance 11 (ADR-0086). Derives: helper basenames from a scripts
+# directory, occurrences inside one file. Waiver: a same-line path-rule-exempt HTML comment,
+# which the scanner must TRUNCATE at.
+#
+# Disclosures (Task 8, ADR-0117 §4 Negative/Neutral) -- what a green run here does and does not mean:
+#
+# - RESIDUAL BLIND SPOT: the verb set is a judgement encoded as data. A call site written with an
+#   invocation verb outside that set is invisible to the checker -- e.g. a helper named only in
+#   prose beside `<helper>.sh` with no recognised verb attached. Read a green run as "no recognised
+#   invocation shape is bare", never as "no bare call site exists".
+# - COMMENT-LINE EXEMPTION BREADTH: any line whose first non-blank character is `#` is skipped
+#   entirely, which includes markdown headings, not only fenced code. Harmless today because no
+#   heading names a helper; a hole the day one does.
+# - POPULATION BOUNDARY: this checker reads concept-to-code/SKILL.md only, by design, not by
+#   oversight -- it takes the file as an argument precisely so a later issue can point it at one of
+#   the others without editing it. autopilot-build (9 bare of 15), project-conductor (8 of 8),
+#   nightly-autopilot (5 of 7), commit (1) and deep-refactor (1) sit outside it. A green run here
+#   says nothing about any of them.
+# - DERIVED-GUARD NUMBERING, reported not fixed: instance 10 is claimed twice, once by
+#   conductor-entry-failure-split.test.sh and once in prose by
+#   concept-to-code-bsd-autopilot-gates.test.sh; instance 7 (ADR-0087) carries no marker at all.
+#   This section is instance 11 regardless of how that collision is eventually resolved.
+# - DURABLE RECORD: five of the ten converted call sites were created by ADR-0099 (issue #238)
+#   three weeks after ADR-0028 counted the population -- that gap, not the one call site ADR-0028
+#   deferred, is why the SPEC's instruction was to re-derive the population rather than confirm the
+#   old count. The population has since grown again: 8 helpers / 63 occurrences at the time this
+#   section was written, up from the SPEC's own snapshot of 7/62 (manifest-entry-state.sh,
+#   ADR-0109, entered already in compliant form) -- which is why every count guard below is a
+#   `>=` floor and never an exact number.
+# =====================================================================================
+
+PRC="$(dirname "$0")/path-rule-check.sh"
+
+# F1 (static/dynamic): the checker exists and is invocable by bash -- not just present, actually
+# runnable, returning one of its own contract's exit codes rather than a bash execution error.
+if [ -f "$PRC" ] && [ -r "$PRC" ]; then
+  bash "$PRC" "$SKILL_MD" "$SKILL_DIR/scripts" >/dev/null 2>&1
+  f1_rc=$?
+  case "$f1_rc" in
+    0|1|2|3) ok "F1: path-rule-check.sh exists and is invocable by bash (rc=$f1_rc)" ;;
+    *) bad "F1: path-rule-check.sh exists but exited unexpectedly (rc=$f1_rc)" ;;
+  esac
+else
+  bad "F1: path-rule-check.sh is missing or unreadable at $PRC"
+fi
+# plant: F1 | plugin/scripts/tests/path-rule-check.sh | if [ "$#" -ne 2 ]; then | exit 42; if [ "$#" -ne 2 ]; then
+
+# F2 (dynamic, EXPECTED RED until Task 4): the real SKILL.md must be clean under
+# path-rule-check.sh -- exit 0, empty stdout. Task 3 converts the ten call sites and Task 4
+# declares the six prose occurrences; until then this stays red with findings=16, and that is
+# this task's declared deliverable (ADR-0101 case 1), not a defect to fix here.
+f2_out="$(bash "$PRC" "$SKILL_MD" "$SKILL_DIR/scripts" 2>/dev/null)"
+f2_rc=$?
+if [ "$f2_rc" -eq 0 ] && [ -z "$f2_out" ]; then
+  ok "F2: the real SKILL.md is clean under path-rule-check.sh (exit 0, empty stdout)"
+else
+  bad "F2: SKILL.md is not yet clean under path-rule-check.sh (rc=$f2_rc) -- EXPECTED RED until Task 4"
+fi
+# plant: F2 | plugin/skills/concept-to-code/SKILL.md | hook_verified = false` via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh` and take the Agent-tool fallback. | hook_verified = false` via `manifest-set-flag.sh` and take the Agent-tool fallback.
+
+# F4/F5 (dynamic, count guards on the DENOMINATOR, not the matches -- ADR-0085): read the
+# stderr summary from a run against the real corpus. An empty derivation must not silently
+# read as full coverage.
+f45_err="$(bash "$PRC" "$SKILL_MD" "$SKILL_DIR/scripts" 2>&1 >/dev/null)"
+f_helpers="$(printf '%s\n' "$f45_err" | grep -o 'helpers=[0-9]*' | head -1 | cut -d= -f2)"
+f_occurrences="$(printf '%s\n' "$f45_err" | grep -o 'occurrences=[0-9]*' | head -1 | cut -d= -f2)"
+
+if [ -n "$f_helpers" ] && [ "$f_helpers" -ge 7 ]; then
+  ok "F4: helper derivation is >= 7 (got $f_helpers)"
+else
+  bad "F4: helper derivation is '$f_helpers', expected >= 7"
+fi
+# plant: F4 | plugin/scripts/tests/path-rule-check.sh | for f in "$HELPER_DIR"/manifest-*.sh; do | for f in "$HELPER_DIR"/manifest-ZZZ-*.sh; do
+
+if [ -n "$f_occurrences" ] && [ "$f_occurrences" -ge 50 ]; then
+  ok "F5: occurrence count is >= 50 (got $f_occurrences)"
+else
+  bad "F5: occurrence count is '$f_occurrences', expected >= 50"
+fi
+# plant: F5 | plugin/scripts/tests/path-rule-check.sh | p = index(search, bn) | p = 0
+
+# Shared minimal helper dir for the fixture-based assertions below (F3, F6-F9, F12). Only one
+# derived helper basename is needed to exercise the predicate in isolation from the real corpus.
+PRC_HELPERS="$TMP/prc-helpers"
+mkdir -p "$PRC_HELPERS"
+: > "$PRC_HELPERS/manifest-foo.sh"
+
+# F3 (dynamic): a fixture with one planted bare mention (an invocation verb, no marker) must
+# exit 1 and the finding line must name the planted line specifically.
+F3_FIX="$TMP/f3-fixture.md"
+cat > "$F3_FIX" <<'EOF'
+# F3 fixture -- one planted bare call site, no marker
+5. Invoke `manifest-foo.sh <manifest-path>` directly here. F3_PLANT_TOKEN_UNIQUE
+EOF
+f3_out="$(bash "$PRC" "$F3_FIX" "$PRC_HELPERS" 2>/dev/null)"
+f3_rc=$?
+if [ "$f3_rc" -eq 1 ] && printf '%s\n' "$f3_out" | grep -qF 'F3_PLANT_TOKEN_UNIQUE'; then
+  ok "F3: fixture with one planted bare mention exits 1 and names the planted line"
+else
+  bad "F3: fixture with one planted bare mention did not exit 1 naming the planted line (rc=$f3_rc)"
+fi
+# plant: F3 | plugin/scripts/tests/path-rule-check.sh | is_finding = 0 if (ends_with(pre, "scripts/")) is_finding = 1 if (before_char != "`") is_finding = 1 if (after_char != "`") is_finding = 1 if (before_char == "`") { word_text = substr(pre, 1, length(pre) - 1) sub(/[ \t]+$/, "", word_text) w = normalise_word(last_field(word_text)) if (w in verbset) is_finding = 1 } | is_finding = 0
+
+# F6 (dynamic, count guard on the waiver population -- ADR-0084 §S2): a fixture with one
+# legitimate waiver must report waived >= 1, or F7/F8/F9 below would be vacuous.
+F6_FIX="$TMP/f6-fixture.md"
+cat > "$F6_FIX" <<'EOF'
+# F6 fixture -- a legitimate waiver
+Call it via `manifest-foo.sh <manifest-path>` when needed. <!-- path-rule-exempt: prose demonstrating what a real call would look like, not an instruction -->
+EOF
+f6_err="$(bash "$PRC" "$F6_FIX" "$PRC_HELPERS" 2>&1 >/dev/null)"
+f6_waived="$(printf '%s\n' "$f6_err" | grep -o 'waived=[0-9]*' | head -1 | cut -d= -f2)"
+if [ -n "$f6_waived" ] && [ "$f6_waived" -ge 1 ]; then
+  ok "F6: count guard waived >= 1 on a fixture with a legitimate waiver (got $f6_waived)"
+else
+  bad "F6: waived count is '$f6_waived', expected >= 1"
+fi
+# plant: F6 | plugin/scripts/tests/path-rule-check.sh | marker_pos = index(line, "<!-- path-rule-exempt:") | marker_pos = index(line, "<!-- path-rule-exemptXXX:")
+
+# F7 (reverse direction -- ADR-0081 §ZA4: a stale waiver reads exactly like clean coverage): a
+# marked line whose only occurrence is compliant/prose (nothing invocation-shaped to waive) must
+# report STALE-WAIVER and exit 1.
+F7_FIX="$TMP/f7-fixture.md"
+cat > "$F7_FIX" <<'EOF'
+# F7 fixture -- marker with no invocation-shaped occurrence to waive
+Documentation references `manifest-foo.sh` without any verb nearby. <!-- path-rule-exempt: kept only to test that a marker with an existing but non-invocation occurrence still stale-waivers -->
+EOF
+f7_out="$(bash "$PRC" "$F7_FIX" "$PRC_HELPERS" 2>/dev/null)"
+f7_rc=$?
+if [ "$f7_rc" -eq 1 ] && printf '%s\n' "$f7_out" | grep -q 'STALE-WAIVER'; then
+  ok "F7: a marked line with no invocation-shaped occurrence reports STALE-WAIVER and exits 1"
+else
+  bad "F7: marked line with no invocation-shaped occurrence did not report STALE-WAIVER (rc=$f7_rc)"
+fi
+# plant: F7 | plugin/scripts/tests/path-rule-check.sh | if (line_waived_count == 0) { | if (line_waived_count == 999) {
+
+# F8 (rule 12): a reason that names a helper, on a line with no real occurrence before the
+# marker, must not self-waive -- the truncation at the marker (ADR-0082) means the reason's own
+# mention of the helper contributes ZERO to the occurrence count.
+F8_FIX="$TMP/f8-fixture.md"
+cat > "$F8_FIX" <<'EOF'
+# F8 fixture -- reason names a helper, no real occurrence before the marker
+This sentence names no helper at all before the marker. <!-- path-rule-exempt: the word manifest-foo.sh only appears in this explanatory reason text, never as a real occurrence -->
+EOF
+f8_err="$(bash "$PRC" "$F8_FIX" "$PRC_HELPERS" 2>&1 >/dev/null)"
+f8_occ="$(printf '%s\n' "$f8_err" | grep -o 'occurrences=[0-9]*' | head -1 | cut -d= -f2)"
+if [ -n "$f8_occ" ] && [ "$f8_occ" -eq 0 ]; then
+  ok "F8: a reason naming a helper does not self-waive -- the marker's own text contributes zero occurrences"
+else
+  bad "F8: occurrences='$f8_occ', expected 0 -- the reason's mention of the helper leaked into the scan"
+fi
+# plant: F8 | plugin/scripts/tests/path-rule-check.sh | scan_text = substr(line, 1, marker_pos - 1) | scan_text = line
+
+# F9 (dynamic): a genuine waived occurrence with a reason under 40 characters must report
+# SHORT-REASON and exit 1.
+F9_FIX="$TMP/f9-fixture.md"
+cat > "$F9_FIX" <<'EOF'
+# F9 fixture -- a genuine waived occurrence with a too-short reason
+Please run `manifest-foo.sh <manifest-path>` today. <!-- path-rule-exempt: too short -->
+EOF
+f9_out="$(bash "$PRC" "$F9_FIX" "$PRC_HELPERS" 2>/dev/null)"
+f9_rc=$?
+if [ "$f9_rc" -eq 1 ] && printf '%s\n' "$f9_out" | grep -q 'SHORT-REASON'; then
+  ok "F9: a reason under 40 characters reports SHORT-REASON and exits 1"
+else
+  bad "F9: reason under 40 characters did not report SHORT-REASON (rc=$f9_rc)"
+fi
+# plant: F9 | plugin/scripts/tests/path-rule-check.sh | if (length(rl) < 40) { | if (length(rl) < 0) {
+
+# F10 (dynamic): an empty helper directory (zero derived basenames) must exit 3 and the message
+# must state that the check did not run -- distinct from exit 0, which would read as a clean
+# file (ADR-0085).
+F10_EMPTY="$TMP/f10-empty-helpers"
+mkdir -p "$F10_EMPTY"
+f10_all="$(bash "$PRC" "$SKILL_MD" "$F10_EMPTY" 2>&1)"
+f10_rc=$?
+if [ "$f10_rc" -eq 3 ] && printf '%s\n' "$f10_all" | grep -qi 'did not run'; then
+  ok "F10: an empty helper directory exits 3 and states the check did not run"
+else
+  bad "F10: empty helper directory did not exit 3 with a DID NOT RUN message (rc=$f10_rc)"
+fi
+# plant: F10 | plugin/scripts/tests/path-rule-check.sh | if [ "$HCOUNT" -eq 0 ]; then | if [ "$HCOUNT" -eq 999 ]; then
+
+# F11 (dynamic): bad invocation (no arguments) must exit 2.
+bash "$PRC" >/dev/null 2>&1
+f11_rc=$?
+if [ "$f11_rc" -eq 2 ]; then
+  ok "F11: invoking path-rule-check.sh with no arguments exits 2"
+else
+  bad "F11: invoking path-rule-check.sh with no arguments exited $f11_rc, expected 2"
+fi
+# plant: F11 | plugin/scripts/tests/path-rule-check.sh | echo "path-rule-check: usage: path-rule-check.sh <skill-md> <helper-scripts-dir>" >&2 echo "path-rule-check: helpers=0 occurrences=0 compliant=0 waived=0 findings=0" >&2 exit 2 | echo "path-rule-check: usage: path-rule-check.sh <skill-md> <helper-scripts-dir>" >&2; echo "path-rule-check: helpers=0 occurrences=0 compliant=0 waived=0 findings=0" >&2; exit 55
+
+# F12 (static + dynamic): path-rule-check.sh is a CHECKER, not a REPORTER -- its source must
+# contain no `CLEAN` sentinel EMISSION (weakening-scan.sh's idiom is `echo "CLEAN"`, a
+# double-quoted literal; ADR-0048's "two adjacent gates, two opposite caller idioms" already
+# confused once). The needle targets the emission shape, not the word: the header prose above
+# legitimately explains "prints no `CLEAN` sentinel" with backticks, and a bare substring match
+# on CLEAN would count that explanation as a violation (rule 12). A fully compliant fixture must
+# exit 0 with EMPTY stdout, never a printed sentinel.
+F12_CLEAN="$TMP/f12-clean.md"
+cat > "$F12_CLEAN" <<'EOF'
+# F12 fixture -- fully compliant, no findings
+See `manifest-foo.sh` for background. Absolute call:
+~/.claude/skills/concept-to-code/scripts/manifest-foo.sh <manifest-path>
+EOF
+f12_out="$(bash "$PRC" "$F12_CLEAN" "$PRC_HELPERS" 2>/dev/null)"
+f12_rc=$?
+if ! grep -qF '"CLEAN"' "$PRC" && [ "$f12_rc" -eq 0 ] && [ -z "$f12_out" ]; then
+  ok "F12: path-rule-check.sh is a checker (no CLEAN sentinel emission) and exits 0 with empty stdout on a clean fixture"
+else
+  bad "F12: checker-vs-reporter property violated (CLEAN sentinel emission present, or non-empty/non-zero on a clean fixture)"
+fi
+# plant: F12 | plugin/scripts/tests/path-rule-check.sh | exit 0 | echo "CLEAN"; exit 0
+
+
+# F13 (static): the PATH RULE blockquote's new paragraph (Task 5) is present in the real
+# SKILL.md. Matched against a FLATTENED, UNDECORATED, case-insensitive copy of the file --
+# leading `>` blockquote markers stripped per line, line breaks collapsed to single spaces,
+# backticks and asterisks stripped -- so this assertion does not depend on where the prose
+# wraps, how a word is decorated, or whether the paragraph sits inside a blockquote (ADR-0073
+# line wrap, ADR-0076 comment marker, ADR-0080 backticks, ADR-0082 one-line marker,
+# ADR-0098 sentence-opening capitalisation, ADR-0101, and the blockquote-marker case found
+# while this section was written: without stripping `>`, a needle phrase wrapped across two
+# `> ` lines read as "...prefix > and no path prefix..." and the assertion depended on the
+# paragraph staying on one physical line -- eight instances and counting). The needle is a
+# phrase distinctive to the paragraph's own content (a bare-code-span helper mention carries
+# neither arguments nor a path prefix) rather than to prose describing the rule in general --
+# "path prefix" alone already occurs elsewhere in SKILL.md (Gate 0's unrelated
+# `express|hybrid|standard` title prefix), so the needle requires both halves together
+# (rule 12).
+f13_flat="$(sed -E 's/^>[[:space:]]*//' "$SKILL_MD" | tr '\n' ' ' | tr -d '`*' | tr -s ' ' | tr '[:upper:]' '[:lower:]')"
+if printf '%s' "$f13_flat" | grep -qF 'no arguments and no path prefix'; then
+  ok "F13: SKILL.md's PATH RULE block carries the new paragraph (flattened, undecorated match)"
+else
+  bad "F13: PATH RULE block does not yet carry the new paragraph -- EXPECTED RED until Task 5's SKILL.md half lands"
+fi
+# plant: F13 | plugin/skills/concept-to-code/SKILL.md | no arguments and no path prefix | no arguments and no path suffix
+
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

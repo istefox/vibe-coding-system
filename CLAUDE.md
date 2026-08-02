@@ -3184,3 +3184,50 @@ surface**; building that means enumerating a surface that is prose across severa
 named, not half-built. The RUNBOOK now names a mode this repository has not yet run a full night in.
 
 Detail: `docs/architecture/ADR-0116-339-permission-posture-overpromise.md`.
+
+## Decisions from the PATH-RULE bare-mention chain (ADR-0117)
+
+Closes issue #286. ADR-0028 fixed five bare `manifest-set-flag.sh` mentions in
+`concept-to-code/SKILL.md` and deferred a sixth. **Re-deriving the population rather than trusting
+that count found 16 findings across 10 call sites** — and five of the ten were written by ADR-0099
+(issue #238) *three weeks after* ADR-0028 counted, by an author with no reason to know the rule
+existed. **That, not the deferred sixth, is how this class grows.** A count in a prior ADR is a
+snapshot of its moment, not a fact.
+
+- **Form cannot separate an instruction from prose, and the first design proved it.** ``via
+  `<helper>` `` (the issue's own subject) and ``do not call `<helper>` `` are byte-identical in
+  shape, so a "prose is a bare code span" rule classifies the defect as compliant — a guard going
+  green against the thing it was commissioned for. The working discriminator was **measured**: the
+  word immediately preceding each bare occurrence separates cleanly where the shape does not
+  (prose is preceded by `—`, `(`, `in`, `the`, `to`, or start-of-line; the real call sites by
+  `via`/`call`). Widening the verb set beyond the two observed adds **zero** false positives on the
+  real corpus, so the extra entries are free coverage rather than a guess.
+- **The checker sits outside every deployment path, deliberately.**
+  `staging/plugin/scripts/tests/path-rule-check.sh` is outside `pairs-completeness.test.sh`'s
+  non-recursive `plugin/scripts/*.sh` population and does not end in `.test.sh` — no `PAIRS` entry,
+  no `docs-ci.yml` append, no `.claude/test-cmd` change, and therefore **no "inert until sync"
+  dependency**, the class that has bitten six recent ADRs. Its assertions extend ADR-0028's own
+  harness, already in CI's named list, so ADR-0113's CI-dark gap cannot reopen here.
+- **Rule 12 bites at two levels once a guard has a declared waiver.** The documentation of the rule
+  must not spell a real subject in a violating shape (it becomes a finding), and must not spell the
+  waiver marker's literal opening (it becomes a malformed waiver). Placeholders for the first,
+  naming-without-delimiters for the second.
+- **Instance 11 of the derived-guard pattern, not extracted** (ADR-0086's criterion: its own
+  population, its own question). The numbering had **already collided** — instance 10 is claimed
+  twice and instance 7 carries no marker at all — so derive the next free number from the files,
+  never from a brief.
+
+Known consequences, recorded rather than fixed:
+- The verb set is a judgement encoded as data. A call site using an invocation verb outside it is
+  invisible; the honest reading of a green run is *"no recognised invocation shape is bare"*.
+- The comment-line exemption skips any line whose first non-blank character is `#`, markdown
+  headings included. Harmless today, a hole if a heading ever names a helper.
+- The guard reads `concept-to-code/SKILL.md` only. `autopilot-build`, `project-conductor`,
+  `nightly-autopilot`, `commit` and `deep-refactor` carry **24** bare occurrences between them and
+  are out of scope by design — a decision, not a cleanup. The checker takes the file as an argument
+  so a later issue can point it there without editing it.
+- The checker verifies a **shape**, never that an instruction is correct: an absolute path naming a
+  helper that does not exist passes.
+- ADR-0028's body is not edited (ADR-0034 precedent); its §2.4 deferral was accurate for its moment.
+
+Detail: `docs/architecture/ADR-0117-286-path-rule-bare-mentions.md`.
