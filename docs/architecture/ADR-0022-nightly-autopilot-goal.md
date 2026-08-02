@@ -693,3 +693,18 @@ it should not start. See ADR-0016's probe section for the full data.
 - ADR-0014 `docs/architecture/ADR-0014-architect-proposes-test-cmd.md` — TOFU trust model
 - `~/.claude/skills/project-conductor/SKILL.md` — roadmap engine, Step 3 gate (amended by D5)
 - `~/.claude/skills/autopilot-build/SKILL.md` — unattended implement-review-commit, morning report v1.0
+
+## Correction (2026-08-02, issue #339 / ADR-0116)
+
+The launch-recipe paragraph in this document says a non-blocking permission mode is set *"so no
+per-tool prompt fires"*, treating `acceptEdits` and bypass as interchangeable. **They are not.**
+`acceptEdits` auto-accepts *edits*; a Bash command outside `permissions.allow` still prompts, and
+the chain's own Bash surface is not in a default allowlist — measured on this machine, where the
+allowlist holds 16 Bash entries and none of them is a `manifest-*.sh` call, `git push`, or the
+project's `test-cmd`. **`bypassPermissions` is the mode for an unattended run.**
+
+The body above is left byte-unchanged (ADR-0034 precedent). The living instructions —
+`nightly-autopilot/SKILL.md`, `autopilot-build/SKILL.md`, `docs/RUNBOOK-nightly-autopilot.md` — now
+distinguish the two, and `permission-mode-state.test.sh` section `PMQ` derives the rule over them so
+a seventh site cannot reintroduce the claim. This ADR is deliberately outside that population: it is
+a record of its moment, not an instruction anyone follows at launch.

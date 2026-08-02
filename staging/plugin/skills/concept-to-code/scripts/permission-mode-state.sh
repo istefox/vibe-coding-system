@@ -54,6 +54,20 @@
 #
 #     NONBLOCKING|<mode>    `acceptEdits` or `bypassPermissions` — the two `nightly-autopilot`
 #                           declares as non-blocking. An unattended run may proceed.
+#
+#                           THE TWO ARE NOT EQUIVALENT, AND A CALLER MUST NOT SAY THEY ARE
+#                           (issue #339). `acceptEdits` auto-accepts EDITS; a Bash command outside
+#                           `permissions.allow` still prompts. Measured on this machine: the
+#                           allowlist holds 16 Bash entries (git status/diff/log/add/commit,
+#                           pytest, ruff, black, mypy, npm run/test, rg, fd, gh issue, pip
+#                           install) and the chain's own surface — `bash ~/.claude/skills/*/
+#                           scripts/manifest-*.sh`, sed, awk, mkdir, `git push`, `gh pr create`,
+#                           the project's test-cmd — is not among them. Only `bypassPermissions`
+#                           delivers "no prompt can fire". Both tokens stay NONBLOCKING because a
+#                           repo whose allowlist DOES cover its Bash surface makes `acceptEdits`
+#                           sufficient, and deciding that is the caller's job, not this reporter's
+#                           (ADR-0076 §D2). What the caller owes the operator is a message that
+#                           distinguishes them.
 #     BLOCKING|<mode>       `auto`, `plan`, `default`, `manual` — a prompt or a classifier denial
 #                           can fire, and there is nobody to answer it.
 #     UNCLASSIFIED|<mode>   a mode this enumeration does not know. `dontAsk` is the one that exists

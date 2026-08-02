@@ -108,13 +108,24 @@ if [ "$_pmrc" -ne 0 ]; then
 fi
 case "${_pm%%|*}" in
   NONBLOCKING)
-    echo "✓ permission posture: ${_pm#*|} — no per-tool prompt will fire." ;;
+    # Two NONBLOCKING modes, two different guarantees, two different sentences (issue #339).
+    # acceptEdits auto-accepts EDITS only; Bash outside permissions.allow still prompts.
+    if [ "${_pm#*|}" = "bypassPermissions" ]; then
+      echo "✓ permission posture: bypassPermissions — no per-tool prompt can fire."
+    else
+      echo "✓ permission posture: ${_pm#*|} — edits are auto-accepted, but a Bash command outside"
+      echo "  permissions.allow STILL PROMPTS and nobody is here to answer it. Proceeding on the"
+      echo "  assumption your allowlist covers this build's Bash surface; relaunch with"
+      echo "  bypassPermissions if you have not checked."
+    fi ;;
   BLOCKING)
     echo "✗ permission posture: this session is in '${_pm#*|}', which can prompt or deny, and"
     echo "  autopilot-build runs with nobody to answer. Set a non-blocking mode and relaunch."
     echo "  /permissions does NOT set the mode (it manages allow/ask/deny rules); hooks are a"
-    echo "  separate axis and stay enabled. Shift+Tab cycles the modes (from 'auto', two"
-    echo "  presses to acceptEdits), or launch with: claude --permission-mode acceptEdits."
+    echo "  separate axis and stay enabled. Launch with:"
+    echo "    claude --permission-mode bypassPermissions   (the mode to use unattended)"
+    echo "  or Shift+Tab to it, reading the mode off the status line. acceptEdits is accepted"
+    echo "  too but only auto-accepts EDITS — Bash outside permissions.allow still prompts."
     exit 1 ;;
   UNCLASSIFIED)
     echo "✗ permission posture: mode '${_pm#*|}' is UNCLASSIFIED — not known-bad, just unmeasured."

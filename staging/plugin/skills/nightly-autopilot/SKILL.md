@@ -34,13 +34,25 @@ Project root = `$PWD`. Run this only after the evening design gate is done: SPEC
 each roadmap feature, or a roadmap of features whose chains will run in autopilot.
 
 **Launch order (see `docs/RUNBOOK-nightly-autopilot.md`):**
-1. Set a non-blocking permission mode (`acceptEdits` or bypass) so no per-tool prompt fires.
-   **Three ways, and `/permissions` is not one of them** — that command manages allow/ask/deny
-   rules, and hooks are a third axis it does not touch either:
+1. Set **`bypassPermissions`**. It is the only mode under which no per-tool prompt can fire, and
+   an overnight run is exactly the case that needs that.
+   **`acceptEdits` is NOT equivalent and the difference is not cosmetic** (issue #339): it
+   auto-accepts *edits*, while a Bash command outside `permissions.allow` still prompts — and the
+   chain's Bash surface (`bash ~/.claude/skills/*/scripts/manifest-*.sh`, `sed`, `awk`, `mkdir`,
+   `git push`, `gh pr create`, the project's own test-cmd) is not in a default allowlist. Choose
+   `acceptEdits` only if you have checked that yours covers all of it.
+   **Three ways to set it, and `/permissions` is not one of them** — that command manages
+   allow/ask/deny rules, and hooks are a third axis it does not touch either:
    - **Shift+Tab** cycles `default → acceptEdits → plan → bypassPermissions → auto → default`.
-     From `auto`, which is Claude Code's own shipping default, that is two presses.
-   - `claude --permission-mode acceptEdits` at launch.
+     Read the mode off the status line rather than counting presses.
+   - `claude --permission-mode bypassPermissions` at launch.
    - `permissions.defaultMode` in `~/.claude/settings.json` for the durable default.
+
+   The safety layer does not go away with the prompts: `stop-gate`, `pre-flight-pattern-enforce`,
+   `protect-files`, `db-backup-guardrail`, `write-scope-enforce`, `agent-write-scope`,
+   `agent-command-scope` and `nightly-guard` all still fire, and a hook deny overrides any
+   permission mode. That is the design ADR-0022 states: autopilot bypasses the human-decision
+   layer, never the safety layer.
 2. Set the outer loop: paste the `/goal` template this skill prints (Phase 1).
 3. Invoke this skill.
 
@@ -83,21 +95,37 @@ fi
 _pmtok="${_pm%%|*}"; _pmval="${_pm#*|}"
 case "$_pmtok" in
   NONBLOCKING)
-    echo "✓ permission posture: $_pmval — no per-tool prompt will fire." ;;
+    # The two NONBLOCKING modes get DIFFERENT sentences, because they are not the same guarantee
+    # (issue #339). Promising acceptEdits that nothing can interrupt it is false whenever a Bash
+    # command falls outside permissions.allow, and this is the operator-facing line that decides
+    # whether someone walks away from the machine. This comment deliberately does not quote the
+    # old wording: a guard bans that phrase where it is unqualified, and a scan whose needle is a
+    # literal counts its own explanation (rule 12).
+    if [ "$_pmval" = "bypassPermissions" ]; then
+      echo "✓ permission posture: bypassPermissions — no per-tool prompt can fire."
+    else
+      echo "✓ permission posture: $_pmval — edits are auto-accepted, but a Bash command outside"
+      echo "  permissions.allow STILL PROMPTS, and there is nobody to answer it. Proceeding"
+      echo "  because you may have an allowlist that covers this chain's Bash surface; if you"
+      echo "  have not checked, stop and relaunch with bypassPermissions."
+    fi ;;
   BLOCKING)
     echo "✗ permission posture: this session is in '$_pmval', which can prompt or deny."
     echo "  Nobody is here to answer it, so the run would stall with state half-written."
     echo "  Set a non-blocking mode and relaunch. /permissions does NOT do this — it manages"
     echo "  allow/ask/deny rules. Hooks are a separate axis and stay enabled either way:"
-    echo "    Shift+Tab cycles default → acceptEdits → plan → bypassPermissions → auto → default"
-    echo "    (from 'auto', two presses), or launch with: claude --permission-mode acceptEdits,"
+    echo "    launch with: claude --permission-mode bypassPermissions   (the mode to use)"
+    echo "    or Shift+Tab through default → acceptEdits → plan → bypassPermissions → auto,"
+    echo "    reading the mode off the status line rather than counting presses,"
     echo "    or set permissions.defaultMode in ~/.claude/settings.json."
+    echo "  acceptEdits is accepted too, but it only auto-accepts EDITS — Bash outside"
+    echo "  permissions.allow still prompts. Use it only with an allowlist you have checked."
     exit 1 ;;
   UNCLASSIFIED)
     echo "✗ permission posture: mode '$_pmval' is UNCLASSIFIED — not known-bad, just unmeasured."
     echo "  Nobody has established whether it prompts, so a pre-flight refuses it rather than"
-    echo "  gamble a night on it. Use acceptEdits or bypassPermissions, or measure '$_pmval'"
-    echo "  and add it to permission-mode-state.sh's enumeration."
+    echo "  gamble a night on it. Use bypassPermissions, or measure '$_pmval' and add it to"
+    echo "  permission-mode-state.sh's enumeration."
     exit 1 ;;
   UNOBSERVABLE)
     echo "✗ permission posture: the effective mode could not be observed — $_pmval"
