@@ -28,6 +28,12 @@
 #
 #   # plant: <assertion-id> | <path-relative-to-staging> | <needle> | <replacement>
 #
+# The path is staging-relative, with one exception: a literal `../docs/` prefix reaches the docs
+# copy the sandbox already makes. Any other `..` is refused. See PATH RESOLUTION below for why that
+# exception exists — a claim living in a RUNBOOK was unplantable by construction (issue #339).
+# Declarations sit at COLUMN 1: the collector below anchors on `^# plant:`, so an indented one is
+# silently skipped (`PC4`, issue #329).
+#
 # The needle is matched with its words joined on `\s+`, so a clause that WRAPS is still found. That
 # is today's lesson put into the mechanism rather than left to the author's memory (ADR-0099).
 # A ` | ` sequence cannot appear inside a field; that is the one syntax limit and it is deliberate.
@@ -95,10 +101,28 @@ while IFS="$(printf '\t')" read -r tfile payload; do
   cp -R "$STAGING" "$SBX/staging" 2>/dev/null
   cp -R "$REPO/docs" "$SBX/docs" 2>/dev/null
 
-  TARGET="$SBX/staging/$tgt"
+  # PATH RESOLUTION. Staging-relative by default. `../docs/...` reaches the docs copy the sandbox
+  # already makes two lines above — which existed only so tests could READ it, while no plant could
+  # ever TARGET it, so a claim written in a RUNBOOK was unplantable by construction (issue #339,
+  # found the same day as PC4 and the same shape: a boundary of this registry that looks like full
+  # coverage from outside). The prefix is matched literally and any OTHER `..` is refused, so the
+  # widening cannot walk out of the sandbox.
+  case "$tgt" in
+    ../docs/*)
+      case "${tgt#../docs/}" in
+        *..*) BADPLANT="$BADPLANT
+    $tfile [$aid]: refused — '..' inside a ../docs/ target: $tgt"; continue ;;
+      esac
+      TARGET="$SBX/docs/${tgt#../docs/}" ;;
+    *..*)
+      BADPLANT="$BADPLANT
+    $tfile [$aid]: refused — '..' is allowed only as the literal ../docs/ prefix: $tgt"
+      continue ;;
+    *) TARGET="$SBX/staging/$tgt" ;;
+  esac
   if [ ! -f "$TARGET" ]; then
     BADPLANT="$BADPLANT
-    $tfile [$aid]: target not found under staging/ — $tgt"
+    $tfile [$aid]: target not found under staging/ (or ../docs/) — $tgt"
     continue
   fi
 

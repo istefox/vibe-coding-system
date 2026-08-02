@@ -309,6 +309,78 @@ printf '%s' "$ABFLAT" | grep -qi 'Placed here and not first because Check 1 genu
   || bad "PMP4 check 1b's placement rationale is missing — the next reader will move it"
 
 # ===========================================================================
+# Section PMQ — issue #339 / ADR-0116: the posture message must not overpromise
+# ===========================================================================
+#
+# The pre-flight told the operator "no per-tool prompt will fire" for BOTH non-blocking modes.
+# That is true of `bypassPermissions` and false of `acceptEdits`, which auto-accepts EDITS while a
+# Bash command outside `permissions.allow` still prompts — observed live on 2026-08-02, and this
+# machine's allowlist holds 16 Bash entries, none of which is the chain's own surface. The
+# operator-facing line is what decides whether someone walks away from the machine.
+#
+# DERIVED, not a list of the six known sites: a seventh site added later must fail. The rule is
+# one line — a claim that nothing can prompt has to name the mode that actually delivers it.
+#
+# `docs/architecture/` is OUT of the population on purpose. ADR-0022 line 179 still carries the old
+# wording and stays byte-unchanged (ADR-0034 precedent: a historical ADR records its moment; the
+# correction is written forward as a dated `## Correction`). This guard is about LIVING
+# instructions — what an operator reads at launch time.
+PMQ_REPO=$(cd "$STAGING/.." && pwd)
+PMQ_POP=""
+for _f in "$STAGING"/plugin/skills/*/SKILL.md "$STAGING"/plugin/skills/*/scripts/*.sh \
+          "$PMQ_REPO"/docs/RUNBOOK-*.md; do
+  [ -f "$_f" ] && PMQ_POP="$PMQ_POP $_f"
+done
+PMQ_N=$(printf '%s\n' $PMQ_POP | sed '/^$/d' | wc -l | tr -d ' ')
+
+# PMQ0 (denominator guard): a glob that stops resolving empties the population, and an empty
+# population makes PMQ1 pass vacuously — which reads exactly like full coverage.
+if [ "$PMQ_N" -ge 25 ]; then
+  ok "PMQ0 living-instruction population resolved ($PMQ_N files, >= 25 expected)"
+else
+  bad "PMQ0 population is only $PMQ_N file(s) — a glob stopped resolving, PMQ1 would be vacuous"
+fi
+
+# PMQ1: every line claiming no per-tool prompt must name bypassPermissions on that same line.
+# plant: PMQ1 | plugin/skills/nightly-autopilot/SKILL.md | echo "✓ permission posture: bypassPermissions — no per-tool prompt can fire." | echo "✓ permission posture: $_pmval — no per-tool prompt can fire."
+PMQ_BAD=$(grep -n 'no per-tool prompt' $PMQ_POP 2>/dev/null | grep -v 'bypassPermissions' || true)
+if [ -z "$PMQ_BAD" ]; then
+  ok "PMQ1 every 'no per-tool prompt' claim names bypassPermissions"
+else
+  bad "PMQ1 unqualified claim(s) — true only of bypassPermissions:"
+  printf '%s\n' "$PMQ_BAD" | sed 's/^/      /'
+fi
+
+# PMQ2: both unattended entry points must brand acceptEdits with what it does NOT cover. A message
+# that merely stops overpromising still leaves an operator with no way to know the difference.
+# plant: PMQ2 | plugin/skills/autopilot-build/SKILL.md | permissions.allow STILL PROMPTS and nobody is here to answer it | permissions.allow is fine and nobody is here to answer it
+PMQ2_MISS=""
+for _f in "$STAGING/plugin/skills/nightly-autopilot/SKILL.md" \
+          "$STAGING/plugin/skills/autopilot-build/SKILL.md"; do
+  grep -qF 'STILL PROMPTS' "$_f" || PMQ2_MISS="$PMQ2_MISS $(basename "$(dirname "$_f")")"
+done
+if [ -z "$PMQ2_MISS" ]; then
+  ok "PMQ2 both unattended pre-flights say acceptEdits still prompts on Bash"
+else
+  bad "PMQ2 pre-flight(s) not naming the acceptEdits limitation:$PMQ2_MISS"
+fi
+
+# PMQ3 (R-03): the RUNBOOK must stop presenting /permissions as the way to set the mode. ADR-0110
+# established against the CC 2.1.220 binary that it does not, and nightly-autopilot/SKILL.md has
+# said so in terms since — the RUNBOOK is the one an operator actually reads at launch.
+# The `../docs/` prefix is the one non-staging target plant-check accepts, added with this issue:
+# the sandbox already copied docs/ so tests could read it, and no plant could reach it, so a claim
+# living in a RUNBOOK was unplantable by construction.
+# plant: PMQ3 | ../docs/RUNBOOK-nightly-autopilot.md | claude --permission-mode bypassPermissions | /permissions is the way
+PMQ3_RB="$PMQ_REPO/docs/RUNBOOK-nightly-autopilot.md"
+if grep -qE '^[[:space:]]*/permissions' "$PMQ3_RB"; then
+  bad "PMQ3 the RUNBOOK still offers /permissions as a way to set the permission mode"
+elif grep -qF 'claude --permission-mode bypassPermissions' "$PMQ3_RB"; then
+  ok "PMQ3 the RUNBOOK names --permission-mode bypassPermissions and not /permissions"
+else
+  bad "PMQ3 the RUNBOOK names no working way to set the mode"
+fi
+
 TOTAL=$((PASS+FAIL))
 [ "$TOTAL" -ge 26 ] && ok "Z1 assertion floor met ($TOTAL)" \
   || bad "Z1 only $TOTAL assertions ran (floor 26) — assertions vanished rather than failed"

@@ -3135,3 +3135,52 @@ Phase 10.0** — the exit criterion is a launch reaching a `NIGHTLY-PUBLISH` lin
 `permissions.defaultMode` off `auto`.
 
 Detail: `docs/architecture/ADR-0115-329-gate0-autopilot-default.md`.
+
+## Decisions from the permission-posture overpromise (ADR-0116)
+
+Closes issue #339. The pre-flight accepts two modes as `NONBLOCKING` and printed **one** message for
+both — `"✓ permission posture: acceptEdits — no per-tool prompt will fire."` True of
+`bypassPermissions`, **false of `acceptEdits`**, which auto-accepts *edits* while a Bash command
+outside `permissions.allow` still prompts. **Found by the operator running the chain, not by the
+harness.**
+
+- **ADR-0110 had named this and then contradicted it.** Its "known consequences" said *"whether
+  `acceptEdits` is sufficient is unmeasured"* while the operator-facing text asserted the opposite.
+  Now measured: this machine's allowlist holds **16** Bash entries and the chain's own surface
+  (`bash ~/.claude/skills/*/scripts/manifest-*.sh`, `sed`, `awk`, `mkdir`, `git push`,
+  `gh pr create`, the project's `test-cmd`) is **not among them**. Insufficient in concrete, not in
+  principle.
+- **Six sites, and the ORDERING was as much the defect as the wording:** both launch instructions,
+  both success messages, both `BLOCKING` remedies named `acceptEdits` and never
+  `bypassPermissions`. An operator following the instruction landed on the mode that does not work.
+  **The "from `auto`, two presses" recipe is deleted** — it lands on `acceptEdits`, and it is a
+  claim about a cycle order nobody here has verified. Read the mode off the status line.
+- **`acceptEdits` stays `NONBLOCKING`; only the message changes.** A repo whose allowlist genuinely
+  covers its Bash surface makes it sufficient, and deciding that is the caller's job — the reporter
+  reports, the caller decides (ADR-0076 §D2). Demoting it would move policy into a script designed
+  to hold none.
+- **`docs/RUNBOOK-nightly-autopilot.md:74` still said `/permissions   # choose acceptEdits`** —
+  wrong on both counts, and ADR-0110 had already established that `/permissions` does not set the
+  mode. The correction had reached the SKILL and never the RUNBOOK, which is the document a human
+  opens at launch.
+- **The guard is derived over LIVING instructions** (`staging/plugin/skills/*/SKILL.md`, their
+  `scripts/*.sh`, `docs/RUNBOOK-*.md` — 73 files, count-guarded): every line claiming no per-tool
+  prompt must name `bypassPermissions` on that same line. `ADR-0022:179` keeps the old phrasing
+  byte-unchanged and gains a dated `## Correction` (ADR-0034 precedent) — a historical ADR records
+  its moment; the guard is about what someone reads at launch time.
+
+**Second boundary of the plant registry, closed the same day as the first.** `PMQ3` asserts the
+RUNBOOK, and its plant **could not be declared**: `plant-check.sh` resolved every target under
+`staging/`, so a claim living in `docs/` was unplantable by construction — even though the sandbox
+had been copying `docs/` all along so tests could read it. A literal `../docs/` prefix is now
+accepted, with any other `..` refused so the widening cannot leave the sandbox. With `PC4`
+(ADR-0115, hours earlier) that is two boundaries in one day, both the same shape: **a plant that
+cannot exist looks exactly like a file that needs none.**
+
+Known consequences: no run is newly blocked — an operator in `acceptEdits` is newly told what they
+are actually getting, and the branch proceeds rather than refusing (refusing would demote the mode
+by the back door). **Nothing verifies that a given repo's allowlist covers its chain's Bash
+surface**; building that means enumerating a surface that is prose across several SKILL.md files —
+named, not half-built. The RUNBOOK now names a mode this repository has not yet run a full night in.
+
+Detail: `docs/architecture/ADR-0116-339-permission-posture-overpromise.md`.

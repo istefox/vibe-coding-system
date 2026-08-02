@@ -69,10 +69,26 @@ committed inside the feature PR for you to review at merge.
 From inside the target repo. In pre-designed mode `PROJECT.md` already holds the roadmap; in
 auto-design mode you only need the labeled issues and the `prep:` marker (Phase P builds the rest):
 
-1. **Set a non-blocking permission mode** so no per-tool prompt fires overnight:
+1. **Set `bypassPermissions`** — the only mode under which no per-tool prompt can fire:
    ```
-   /permissions        # choose acceptEdits (or bypass for a fully hands-off run)
+   claude --permission-mode bypassPermissions
    ```
+   Or Shift+Tab to it and read the mode off the status line, or set `permissions.defaultMode` in
+   `~/.claude/settings.json` for the durable default.
+
+   **`/permissions` does NOT set the mode.** It manages allow/ask/deny rules; hooks are a third
+   axis it does not touch. This step said otherwise until issue #339.
+
+   **`acceptEdits` is accepted by the pre-flight but is not the same guarantee.** It auto-accepts
+   *edits*; a Bash command outside `permissions.allow` still prompts, and the chain's Bash surface
+   (`bash ~/.claude/skills/*/scripts/manifest-*.sh`, `sed`, `awk`, `mkdir`, `git push`,
+   `gh pr create`, the project's test-cmd) is not in a default allowlist. Use it only if you have
+   checked that yours covers all of it.
+
+   The prompts go, the guardrails stay: `stop-gate`, `pre-flight-pattern-enforce`,
+   `protect-files`, `db-backup-guardrail`, `write-scope-enforce`, `agent-write-scope`,
+   `agent-command-scope` and `nightly-guard` all still fire, and a hook deny overrides any
+   permission mode (ADR-0022).
 
 2. **Set the outer loop.** Paste the `/goal` template (the skill also prints it). Fill in the turn
    budget:
