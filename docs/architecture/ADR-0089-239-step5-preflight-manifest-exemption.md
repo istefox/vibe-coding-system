@@ -185,3 +185,40 @@ plant that does not fire is evidence about the assertion, not a formality to get
 
 Full harness 53/53. `fence-contract-coverage.test.sh` F3/F4/F6/F7 confirm the new contract is
 declared, unique, parseable and executed.
+
+## Correction 2026-08-02 (issue #344) — `pwd -P` closed the symlink half only
+
+The body above is left unedited (ADR-0034 precedent). This records what was wrong with the fix it
+describes, and what replaced it.
+
+§D's `rel()` normalised both sides with `cd … && pwd -P` and compared string prefixes. **`pwd -P`
+resolves symlinks; it does not normalise case.** On a case-insensitive, case-preserving filesystem
+— APFS, which is where this chain runs — `cd /Users/x/developer/…` succeeds and reports the casing
+the caller traversed, while `git rev-parse --show-toplevel` reports the casing git recorded. The
+prefix match failed, `rel()` fell through to its absolute-path branch, and the manifest exemption
+was **inert on every run from a differently-cased CWD**.
+
+The failure shape is this ADR's own defect one level down. The fence did not crash and did not
+report a check that had not run: it returned a confident, well-formed
+`PREFLIGHT_OTHER docs/manifests/<manifest>` — **naming the one file it exists to exempt** — with the
+`PREFLIGHT_OTHER` remediation attached, which advises `git stash push -u`. Following that advice
+would stash the chain's own manifest. Found by running the 2026-08-02 nightly on feature #287, not
+by reading the fence.
+
+The comment this ADR shipped names the hazard by name (*"a checkout is reachable through
+differently-cased paths on APFS"*) and `RJ9` pins only the symlink case. **A hazard named in a
+comment and covered by no assertion is a hazard nobody is checking** — the same gap, in the same
+paragraph, as the claim it makes.
+
+`rel()` now takes the repo-relative path from `git -C "$_d" rev-parse --show-prefix`, so the
+comparison is removed rather than corrected and there is no third normalisation left to miss. A
+`-ef` device+inode guard keeps an artifact living in a different checkout from being handed that
+checkout's prefix — identity, deliberately not a string compare, since a string compare here is how
+this would return through the side door. `RJ13` (behavioural, case-insensitive filesystems only),
+`RJ13b` (source-level, always runnable — ADR-0026's precedent for a platform-specific precondition)
+and `RJ14` (foreign repo) pin the three properties; `RJ9` still pins the symlink half and still
+passes, which is what shows the new mechanism did not trade one half for the other.
+
+**`ROOT` is gone from the fence.** The body above describes it as belt-and-braces defence with no
+constructible failing case; it is now unused, so it is removed rather than left as a variable a
+reader would assume is load-bearing.
