@@ -233,16 +233,26 @@ reads. Features run sequentially, so there is no collision, and this feature's S
 its PR.
 
 **A missing spec is a KNOWN, CONTAINED, per-feature problem and is settled HERE (ADR-0111, issue
-#324) — not passed downstream.** Before this feature existed, this block printed a log line and
+#324) — not passed downstream.** Before that feature existed, this block printed a log line and
 invoked the chain anyway, on the stated belief that *"the c2c autopilot pre-flight hard-aborts at
-Gate 0 for a missing SPEC.md"*. Measured: it does not. With no SPEC, `gate0-detect.sh` reports
-`spec_adr_exist=false`, the chain routes greenfield, and Step 1 dispatches `interview-driver`, which
-is interactive — on a path with nobody to answer it (the gate's own missing autopilot default is
-issue #329). The chain then failed to complete, Step 5 branch C called that an unknown state, and one
-feature with a thin issue halted every feature behind it. **The evidence lives here and only here**:
-by the time branch C runs, the manifest reads `step_0_init`/`in_progress`, indistinguishable from any
-other mid-flight state. This is the issue's own instruction — move the classification to where the
-evidence is — applied.
+Gate 0 for a missing SPEC.md"*. At the time that was false: with no SPEC, `gate0-detect.sh` reports
+`spec_adr_exist=false`, the chain routed greenfield, and Step 1 dispatched `interview-driver`, which
+is interactive — on a path with nobody to answer it. The chain then failed to complete, Step 5 branch
+C called that an unknown state, and one feature with a thin issue halted every feature behind it.
+**The evidence lives here and only here**: by the time branch C runs, the manifest reads
+`step_0_init`/`in_progress`, indistinguishable from any other mid-flight state. This is the issue's
+own instruction — move the classification to where the evidence is — applied.
+
+**As of issue #329 / ADR-0115 the chain does abort, and this block still runs first and stays
+primary.** `concept-to-code` §2 Form A step 7b is an unattended routing pre-flight: with
+`autopilot = true` and no `SPEC.md` it transitions the manifest to `aborted` and exits 1. That
+closes the same hole from the other end, for every route to `autopilot = true` — including the
+attended *"Start in autopilot mode"* branch of Step 3, which never reaches the copy below because
+the copy is `_nightly=true` only. **It does not make this block redundant, and the difference is
+which artifacts exist afterwards:** this guard settles the feature before any manifest is created,
+where the c2c pre-flight has to create one and then abort it. Both outcomes are contained
+per-feature skips; this one is cheaper and leaves no record to explain. Do not remove it on the
+grounds that the chain now checks too.
 
 This is a **CHECKER**: branch on its exit code. (`weakening-scan.sh`, invoked from `commit` Step 1,
 is a REPORTER — it always exits 0 and signals `CLEAN` on stdout. Do not copy one block's branching

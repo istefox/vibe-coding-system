@@ -184,6 +184,84 @@ Behavior:
    - `[a]` → abort chain.
 
    Write `gate0.chain_path` and `gate0.auto_detect_reason` in the manifest via inline sed (no helper script for nested YAML yet — see §3 helper scripts note).
+7b. **Unattended routing pre-flight (issue #329, ADR-0115).** Runs for **every** route out of
+   step 7 — the Gate 0 click, the Gate 0 autopilot default, and the `express|hybrid|standard`
+   prefix fast path that skips Gate 0 altogether. That coverage is the reason it lives at the
+   step and not inside the gate: the check it replaces sat inside Gate 0's `[auto]` branch, where
+   the fast path bypassed it and the one caller that needs it — an unattended run whose
+   `autopilot` was already set by `project-conductor` — never clicked it, so it never ran once.
+
+   This is a **CHECKER**: branch on the exit code. (`weakening-scan.sh`, invoked from `commit`
+   Step 1, is a REPORTER — it always exits 0 and signals `CLEAN` on stdout. Do not copy one
+   block's branching into the other.) Exit **3** is separate from exit **1** on purpose: a check
+   that could not look must not read as a check that found nothing.
+
+   <!-- fence-contract: c2c-autopilot-routing-preflight -->
+   ```bash
+   # Free variables, bound by the orchestrator: _root (project root), _man (manifest path).
+   _c2c="$HOME/.claude/skills/concept-to-code/scripts"
+   _mfs="$_c2c/manifest-field-state.sh"
+   if [ ! -f "$_mfs" ]; then
+     echo "AUTOPILOT-PREFLIGHT: DID-NOT-RUN — field reader missing: $_mfs"
+     echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+     exit 3
+   fi
+   # ADR-0076 §THE RULE: read a manifest field through the helper, never with a bare m.get().
+   # ABSENT, INVALID and UNREADABLE are three states and this gate must not collapse them.
+   # No new dependency class — step 4b of this same form already hard-depends on this script.
+   _ap=$(bash "$_mfs" "$_man" autopilot 2>&1) || {
+     echo "AUTOPILOT-PREFLIGHT: DID-NOT-RUN — $_ap"; exit 3; }
+   case "$_ap" in
+     UNREADABLE*)
+       echo "AUTOPILOT-PREFLIGHT: DID-NOT-RUN — the manifest does not parse: $_man"; exit 3 ;;
+     "PRESENT|True") : ;;
+     *)
+       # ABSENT or false: an attended run. Byte-for-byte today's behaviour.
+       echo "AUTOPILOT-PREFLIGHT: NOT-AUTOPILOT — attended run, nothing to check."; exit 0 ;;
+   esac
+   _cp=$(bash "$_mfs" "$_man" chain_path 2>&1) || {
+     echo "AUTOPILOT-PREFLIGHT: DID-NOT-RUN — $_cp"; exit 3; }
+   _cpv="${_cp#PRESENT|}"
+   # Every abort transitions the manifest FIRST. Left in flight it reads ADOPTABLE at
+   # project-conductor Step 5 branch C and halts the whole roadmap; aborted reads TERMINAL and
+   # is a contained per-feature skip — the blast radius ADR-0111 (issue #324) removed.
+   case "$_cpv" in
+     express|hybrid)
+       bash "$_c2c/manifest-transition.sh" "$_man" aborted aborted >/dev/null 2>&1
+       echo "AUTOPILOT-PREFLIGHT: ABORT — chain_path is '$_cpv' and autopilot is true."
+       echo "  Express step E1 runs plan mode; hybrid step H1 invokes interview-driver"
+       echo "  unconditionally. Neither can complete with nobody present. Only standard is"
+       echo "  unattended-safe, which is what the [auto] option's own label says."
+       exit 1 ;;
+   esac
+   # A null or absent chain_path PROCEEDS, and the reason is measured rather than assumed: 18 of
+   # 41 corpus manifests carry autopilot:true with chain_path:null, all brownfield, all
+   # completed. Refusing it would fail the dominant historical shape over a bookkeeping gap in
+   # the manifest write, not a routing decision that went wrong.
+   if [ ! -f "$_root/SPEC.md" ]; then
+     bash "$_c2c/manifest-transition.sh" "$_man" aborted aborted >/dev/null 2>&1
+     echo "AUTOPILOT-PREFLIGHT: ABORT — autopilot is true and $_root/SPEC.md does not exist."
+     echo "  With no SPEC, gate0-detect.sh reports spec_adr_exist=false, the chain routes"
+     echo "  greenfield, and Step 1 dispatches interview-driver — interactive, on a path with"
+     echo "  nobody to answer it. Generate the SPEC first (run the chain without autopilot), or"
+     echo "  place one at docs/specs/<issue>-*.spec.md for project-conductor to copy in."
+     exit 1
+   fi
+   echo "AUTOPILOT-PREFLIGHT: OK — autopilot, chain_path '$_cpv', SPEC.md present."
+   exit 0
+   ```
+
+   Branch on the exit code:
+   - **`0`** → proceed to step 8. Both the attended no-op and the verified-unattended case.
+   - **`1`** → the chain is already transitioned to `aborted`. Stop. An unattended caller reads
+     that as a contained per-feature end (`TERMINAL`) and continues its roadmap.
+   - **`3`** → the check did not run. Stop **without** transitioning: an unread gate is not a
+     clean gate, and guessing here is what issue #329 cost a whole night.
+
+   **`project-conductor`'s just-in-time SPEC copy stays the primary defence for the nightly
+   path** — it settles a missing SPEC before any manifest exists at all, where this fence has to
+   create one and then abort it. This is a backstop for every other route to `autopilot = true`,
+   including the attended conductor's "Start in autopilot mode", which does not run the SPEC copy.
 8. **Gate 0b (anonymize — conditional):** run `~/.claude/skills/clean-public-repo/scripts/detect-public-remote.sh <project-root>` (the script lives in the `clean-public-repo` skill, NOT in `concept-to-code/scripts/`).
    - output `silent` → Gate 0b **silent no-op**: UX unchanged, `anonymize` stays `false`. Proceed to step 8c.
    - output `public` → show Gate 0b box and wait for input:
@@ -2733,7 +2811,14 @@ Recommended format: `"Gate N approved ✓ — <what happens next>..."`.
 This prevents the prolonged silence that makes the user think the chain is blocked.
 
 **Autopilot mode (`manifest.autopilot = true`):**
-When `autopilot = true`, every gate listed below skips its `AskUserQuestion` and auto-selects the safe default. Emit one line before proceeding: `"Gate N: autopilot — <choice> ✓"`. The per-gate default is listed inline as **[Autopilot default: ...]** after each gate definition. Gates that are already conditional silent no-ops (e.g. Gate 0b/0c when remote is private) remain unchanged. The stop-gate hook, TOFU guard, and circuit breaker (deep-refactor) still apply — autopilot only bypasses the human-decision layer, not the safety layer.
+When `autopilot = true`, every gate listed below skips its `AskUserQuestion` and auto-selects the safe default. Emit one line before proceeding: `"Gate N: autopilot — <choice> ✓"`. The per-gate default is listed inline after each gate definition, in one of **two** marker forms — both colon-terminated so they can be checked mechanically:
+
+- **[Autopilot default: ...]** — the gate still runs and one of its options is auto-selected. This is the form thirteen of the gates use.
+- **[Autopilot bypass: ...]** — the gate is skipped outright rather than answered. **Gate 4 only.** Do not normalise it to `default:`: the semantics differ, and `recovery-preflight.test.sh` (`RH4`, `RI1`) uses `**[Autopilot bypass` as an awk extraction boundary, so changing the spelling breaks two assertions in another file.
+
+A gate that legitimately needs neither — a container heading whose sub-gates carry their own, or a step that raises no `AskUserQuestion` at all — declares that in one line: `<!-- autopilot-gate-exempt: <reason> -->`, reason ≥ 40 characters, on the marker line itself. **The stop-gate hook, TOFU guard, and circuit breaker (deep-refactor) still apply — autopilot only bypasses the human-decision layer, not the safety layer.**
+
+**This paragraph was a promise nothing kept until issue #329 (ADR-0115).** Gate 0 — the chain's *first* gate, which fires on every feature — carried no marker at all, so an unattended run raised a question `/goal` cannot answer (ADR-0022) and stalled before doing any work. Nothing in the harness asserted the contract; section G of `concept-to-code-bsd-autopilot-gates.test.sh` now derives every gate in this section at run time and requires a marker or a declared exemption. The old sentence exempting "conditional silent no-ops (e.g. Gate 0b/0c when remote is private)" is gone: it was true only in the *private* case, and Gate 0b prompts when the remote is public.
 
 ---
 
@@ -2784,8 +2869,10 @@ options:
   - label: "[s] Standard — full chain: interview → ADR → plan → fresh session → agents"
     description: "Best for: complex features, multi-layer, ADR required, or spec_adr_exist=true (brownfield)."
   - label: "[auto] Autopilot — Standard unattended (brownfield only)"
-    description: "Standard path + all HITL gates auto-approved. REQUIRES SPEC.md to already exist — if absent the chain errors at Gate 1. Use for overnight runs on already-specced features."
+    description: "Standard path + all HITL gates auto-approved. REQUIRES SPEC.md to already exist — if absent the routing pre-flight at §2 step 7b aborts the chain. Use for overnight runs on already-specced features."
 ```
+
+**[Autopilot default: `[s]` standard. Set `chain_path: standard`, emit `"Gate 0: autopilot — standard ✓"`, and proceed. This is `[auto]` minus the one thing `[auto]` adds, because by the time this gate is reached unattended `autopilot` is already `true` — `project-conductor` sets it before invoking the chain. **It is NOT the auto-detect vote**, and that is the load-bearing part: `hybrid` reaches Step H1, which invokes `interview-driver` *unconditionally* (unlike standard Step 1, it has no brownfield skip), and `express` reaches plan mode. Only `standard` can complete with nobody present. The SPEC.md pre-flight that used to sit inside the `[auto]` branch now runs at **§2 Form A step 7b** for every route, including the `express|hybrid|standard` prefix fast path that skips this gate entirely — do not reinstate a copy here.]**
 
 After click:
 - Write `chain_path` (top-level) in the manifest:
@@ -2807,7 +2894,7 @@ After click:
 - `[e]` → set `chain_path: express`. Proceed to step 8 (Gate 0b) in §2 Form A — the path begins after Gate 0d routes to `step_e1_plan` (§4 Express).
 - `[h]` → set `chain_path: hybrid`. Proceed to step 8 (Gate 0b) in §2 Form A — the path begins after Gate 0d routes to `step_h1_interview` (§4 Hybrid).
 - `[s]` → proceed to step 8 (Gate 0b) in §2 Form A. Standard path continues unchanged.
-- `[auto]` → set `chain_path: standard` and `manifest.autopilot: true` via bash sed. **Pre-flight check:** verify `<project-root>/SPEC.md` exists. If absent: emit error `"Autopilot requires an existing SPEC.md (brownfield). Run /skill concept-to-code without autopilot to generate the SPEC first."` and abort chain. If present: emit `"Autopilot mode ON — all HITL gates will be auto-approved."` then proceed to step 8 (Gate 0b) in §2 Form A. Standard path continues with autopilot=true active.
+- `[auto]` → set `chain_path: standard` and `manifest.autopilot: true` via bash sed, emit `"Autopilot mode ON — all HITL gates will be auto-approved."`, then proceed to step 8 (Gate 0b) in §2 Form A. Standard path continues with autopilot=true active. **The SPEC.md pre-flight is not here.** It used to be, and inside this branch it was unreachable by the only caller that needs it: on the nightly path `autopilot` is already `true` before Gate 0 renders, so nobody ever clicks `[auto]` and the check never ran (issue #329). It now runs at **§2 Form A step 7b**, once, for every route. Two copies of one safety question is the worst available shape — they can disagree about whether the gate fires.
 
 ---
 
@@ -2836,6 +2923,8 @@ HITL Gate 0b: anonymize_decision
 `[y]` → set `manifest.anonymize = true` (via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed.
 `[n]` → `manifest.anonymize = false` (default); proceed.
 `[a]` → abort chain.
+
+**[Autopilot default: `[n]` — `anonymize` stays `false`, the same value the `silent` branch leaves, and the same value a private remote produces. Emit `"Gate 0b: autopilot — anonymize off ✓"` and proceed. Never `[y]`: enabling anonymisation is the user's decision and is never auto-applied, which the line below states unconditionally. This marker exists because the old contract exempted Gate 0b as a "conditional silent no-op" — true only when the remote is **private**. On a public remote this gate prompts, and unattended it would stall exactly as Gate 0 did (issue #329).]**
 
 When `anonymize=false` (default), all dispatch templates remain **identical to today** → zero regressions.
 
@@ -3105,6 +3194,8 @@ do NOT produce any text response and do NOT wait for user input. Proceed IMMEDIA
 ---
 
 **Gate 2 — Architecture review (blocking)**
+
+<!-- autopilot-gate-exempt: a container heading only — sub-gates 2a, 2b and 2c are what actually prompt, and each carries its own autopilot default -->
 
 Trigger: architect agent returns, `current_step = gate_2_architecture_review`.
 
@@ -3569,10 +3660,16 @@ else the coder's own report summarized in one line. Transition to `aborted` (3-a
 `bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest> aborted aborted`).
 Emit "Gate 4.5: hand-code — chain aborted, reason recorded ✓". **STOP — no further tool calls.**
 
-**[Autopilot default is deliberately NOT "Continue anyway" — autopilot must never silently override
-a red probe.** Default is **"Hand-code (abort)"**, with
+**[Autopilot default: "Hand-code (abort)" — and deliberately NOT "Continue anyway", because
+autopilot must never silently override a red probe. Set
 `tracer_bullet_abort_reason: "autopilot: red tracer-bullet probe, no human present to decide — halting rather than guessing"`.
 Emit: "Gate 4.5: autopilot — red probe, no unattended override, chain aborted ✓".]**
+
+> The marker above was `**[Autopilot default is deliberately NOT …` until issue #329 — a third
+> spelling that the §5 contract does not describe and no mechanical check could recognise. The
+> argument is unchanged word for word; only the form is now the colon-terminated one, so section G
+> of `concept-to-code-bsd-autopilot-gates.test.sh` can see it. Nothing extracted on the old
+> spelling (verified by search before changing it), unlike Gate 4's `bypass:` form.
 
 ---
 
@@ -3802,6 +3899,8 @@ options:
 ---
 
 **Gate 5.6 — Transition to commit (unconditional, no user prompt)**
+
+<!-- autopilot-gate-exempt: raises no AskUserQuestion at all — it is a bare state transition, so there is no human decision for autopilot to default -->
 
 Trigger: post Gate 5.1, pre Step 7.
 
