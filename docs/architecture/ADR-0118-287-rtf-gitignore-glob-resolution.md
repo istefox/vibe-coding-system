@@ -21,14 +21,16 @@ $ grep -n 'triage-fix-last' .gitignore
 ```
 
 The repository carries **two** entries, not one — the SPEC's own correction to the issue's premise,
-confirmed live. `git check-ignore -v` against concrete candidate paths:
+confirmed live. `git check-ignore -v` against concrete candidate paths: (the tool's TAB
+separator is rendered as two spaces below — MD010 is enabled repo-wide, including in code
+blocks, so the block is not byte-verbatim)
 
 ```
 $ git check-ignore -v -- ".claude/.triage-fix-last-feat_222-vendor-deployed-only-skills.json"
-.gitignore:36:.claude/.triage-fix-last-*.json	.claude/.triage-fix-last-feat_222-vendor-deployed-only-skills.json
+.gitignore:36:.claude/.triage-fix-last-*.json  .claude/.triage-fix-last-feat_222-vendor-deployed-only-skills.json
 
 $ git check-ignore -v -- ".claude/.triage-fix-lastFOO.json"
-.gitignore:7:.claude/.triage-fix-last*.json	.claude/.triage-fix-lastFOO.json
+.gitignore:7:.claude/.triage-fix-last*.json  .claude/.triage-fix-lastFOO.json
 ```
 
 `git check-ignore -v` reports the **last** matching line by number when several rules match a
