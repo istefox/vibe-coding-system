@@ -1134,7 +1134,7 @@ Generated from the `prep`-labelled issues by `roadmap-from-issues.sh`. One issue
 wave order.
 ##### Wave 1 — LOW: single file, mechanical, no live-guardrail behaviour change
 
-- [ ] the sixth bare manifest-set-flag.sh mention was left when the other five were fixed  (issue #286)
+- [x] the sixth bare manifest-set-flag.sh mention was left when the other five were fixed  (issue #286)  (completed: 2026-08-02)
 - [ ] RTF's gitignore glob and this repo's own entry differ by a dash  (issue #287)
 - [ ] the Express path says No worktree isolation and the Italian guide says the opposite  (issue #288)
 - [ ] the transition-pair count is stated in three files and derived in one  (issue #289)
