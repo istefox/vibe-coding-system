@@ -20,6 +20,15 @@
 # THE FIXTURES HERE CONTAIN NO KEY-SHAPED LITERAL and NO PATH CONTAINING secret / credential /
 # .env / .pem / .key — protect-files.sh denies such paths and secret-dep-gate.test.sh section D
 # scans this repository's tracked files (via git ls-files) as its false-positive corpus.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# RJ13 and RJ13b share a mutation SITE but not a mutation: RJ13's reintroduces the string-prefix
+# strip (#344's actual defect), RJ13b's merely stops asking git, which exercises its third branch.
+# plant: RJ13 | plugin/skills/concept-to-code/SKILL.md | printf '%s%s' "$(git -C "$_d" rev-parse --show-prefix 2>/dev/null)" "$(basename "$1")" | _p=$(cd "$_d" && pwd -P)/$(basename "$1"); case "$_p" in "$_top"/*) printf '%s' "${_p#$_top/}" ;; *) printf '%s' "$1" ;; esac
+# plant: RJ13b | plugin/skills/concept-to-code/SKILL.md | rev-parse --show-prefix | rev-parse --show-cdup
+# plant: RJ14 | plugin/skills/concept-to-code/SKILL.md | { [ -n "$_t2" ] && [ "$_t2" -ef "$_top" ]; } || { printf '%s' "$1"; return 0; } | :
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -629,8 +638,69 @@ ln -sf "$RJ_REPO" "$RJ9_LINK" 2>/dev/null
 printf 'current_step: "z"\n' >>"$RJ_REPO/docs/manifests/m.yml"
 RJ9_OUT=$(rj_run "$RJ_FENCE" "$RJ9_LINK")
 case "$RJ9_OUT" in
-  "0 PREFLIGHT_CLEAN"*) ok "RJ9: the exemption survives a symlinked project path — both sides are pwd -P resolved" ;;
+  "0 PREFLIGHT_CLEAN"*) ok "RJ9: the exemption survives a symlinked project path — rel() resolves rather than string-matches" ;;
   *) bad "RJ9: symlinked path broke the exemption (got: $RJ9_OUT) — rel() is comparing an unresolved path again"
+esac
+( cd "$RJ_REPO" && git checkout -q -- . )
+
+# RJ13/RJ13b — THE CASE HALF (issue #344). RJ9's own comment above claims this machine "reaches its
+# own checkout through two differently-cased paths", and until #344 no assertion exercised that:
+# the symlink case was covered, the case case was asserted in prose only. `pwd -P` resolves
+# symlinks and does NOT normalise case, so #239's fix left the exemption inert on every run whose
+# CWD casing differed from git's recorded casing — the exact state the 2026-08-02 nightly hit.
+#
+# RJ13 is BEHAVIOURAL and can only run on a case-insensitive filesystem (APFS, and this bug's whole
+# habitat). RJ13b is the always-runnable half, per ADR-0026's precedent for a platform-specific
+# precondition: it pins the MECHANISM out of the source, so a CI run on ext4 still fails if the
+# string-prefix form comes back. Neither alone is enough — read them as a pair.
+RJ13_PROBE="$TMP/CaseProbe"; mkdir -p "$RJ13_PROBE"
+if [ -d "$TMP/caseprobe" ]; then
+  RJ13_CI=yes
+else
+  RJ13_CI=no
+fi
+if [ "$RJ13_CI" = yes ]; then
+  RJ13_REPO="$TMP/RjCase"; rj_repo "$RJ13_REPO"
+  printf 'current_step: "z"\n' >>"$RJ13_REPO/docs/manifests/m.yml"
+  # Reached through a differently-cased spelling of the same directory — not a copy, not a symlink.
+  RJ13_OUT=$(rj_run "$RJ_FENCE" "$TMP/rjcase")
+  case "$RJ13_OUT" in
+    "0 PREFLIGHT_CLEAN"*) ok "RJ13: the exemption survives a differently-cased CWD — rel() takes its prefix from git, not from a string compare (#344)" ;;
+    *) bad "RJ13: a differently-cased CWD broke the manifest exemption (got: $RJ13_OUT) — #344 is back, and it reports PREFLIGHT_OTHER naming the file it is meant to exempt" ;;
+  esac
+else
+  ok "RJ13: NOT EXERCISED — this filesystem is case-sensitive, so the #344 precondition cannot be built here. RJ13b carries the check on this platform."
+fi
+
+# RJ13b — the mechanism, asserted out of the fence source so the check survives a case-sensitive
+# filesystem. The banned construct is the string-prefix strip, whichever variable it strips against.
+if grep -qE '[$][{]_p#[$](ROOT|_top)/[}]' "$RJ_FENCE"; then
+  bad "RJ13b: the fence strips a string prefix to derive the repo-relative path again — that form cannot normalise case, which is #344 (and #239 before it, for symlinks)"
+elif grep -q 'rev-parse --show-prefix' "$RJ_FENCE"; then
+  ok "RJ13b: rel() derives the repo-relative path from git, so there is no normalisation left for it to miss"
+else
+  bad "RJ13b: rel() no longer asks git for the prefix and does not use the banned string strip either — the mechanism changed to something unreviewed; re-read #344 before accepting it"
+fi
+
+# RJ14 — the -ef guard, which is what stops a foreign repository's prefix being applied to a path
+# that merely LOOKS like it belongs. Without it, an artifact inside another checkout gets that
+# checkout's prefix and can be silently exempted. Device+inode identity, not a string compare —
+# reintroducing a string compare here is how #344 would come back through the side door.
+# The fixture has to make the guard MATTER: the local repo is dirty at docs/manifests/m.yml, and
+# MANIFEST points at the foreign repo's file of the SAME repo-relative shape. Drop the -ef guard
+# and rel() hands back `docs/manifests/m.yml` from the foreign checkout's prefix, which then
+# filters the LOCAL dirty entry and reports CLEAN. A clean local tree would report CLEAN either
+# way — the first draft of this assertion did exactly that and pinned nothing.
+RJ14_FOREIGN="$TMP/foreign"; rj_repo "$RJ14_FOREIGN"
+printf 'current_step: "q"\n' >>"$RJ_REPO/docs/manifests/m.yml"
+RJ14_OUT=$( cd "$RJ_REPO" && MANIFEST="$RJ14_FOREIGN/docs/manifests/m.yml" SPEC="$RJ_REPO/SPEC.md" \
+            ADR="$RJ_REPO/docs/architecture/A.md" PLAN="$RJ_REPO/docs/superpowers/plans/p.md" \
+            bash "$RJ_FENCE" 2>&1; printf ' rc=%s' "$?" )
+case "$RJ14_OUT" in
+  "PREFLIGHT_CLEAN"*)
+    bad "RJ14: a manifest in a DIFFERENT repository exempted this repo's dirty file of the same relative path — the -ef identity guard is gone (got: $RJ14_OUT)" ;;
+  *)
+    ok "RJ14: a manifest path in a foreign repository does not exempt anything here — the -ef guard answers 'same directory' by identity, not by string" ;;
 esac
 ( cd "$RJ_REPO" && git checkout -q -- . )
 
