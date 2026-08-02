@@ -1017,6 +1017,61 @@ before any run starts. #319 is about the mechanism; this one file predates it an
 line. Phase 10 wave 1 does not start before that, because a wave that halts on feature 1 costs a
 night and teaches nothing.
 
+#### 10.0 — Outcome (2026-08-02), and the fix roadmap that is left
+
+**All six table rows shipped.** Each as its own PR, CI green, squash merge, and a verified `--apply`
+sync reporting zero drift. Harness 67 → 72 files, plant registry 32 → 78 plants.
+
+| # | issue | PR | ADR |
+|---|---|---|---|
+| 1 | #319 | #326 | ADR-0109 |
+| 2 | #320 | #327 | ADR-0110 |
+| 3 | #324 | #330 | ADR-0111 |
+| 4, 5 | #321 and #323, shipped in one PR — neither explains the incident alone | #332 | ADR-0112 |
+| 6 | #322 | #334 | ADR-0114 |
+
+Two more landed that the table never named. **#331** — invariant 4 reads terminality from one field
+where the state lives in two (PR #333, ADR-0113); found because the manual act above, committed
+as #328, made a manifest that validates locally and fails on CI. **#329** — Gate 0 has no
+`[Autopilot default: …]`; found while tracing #324's second cause, filed rather than bundled because
+what the safe default *is* needs its own decision. The orphan manifest is a committed record now, so
+the corpus is 42.
+
+##### What the table got wrong about itself
+
+Three of six, the same rate §8.8 measured:
+
+- **#322** said check 8 verifies one of three required contexts. It verified **nothing**: check 8 was
+  prose with no mechanism, and grepping `staging/` for a protection API call returns one hit, inside
+  `set-branch-protection.sh`.
+- **#321** proposes recording a pid so a stale marker can be told from a live one. The marker is
+  written from a Bash tool call whose subprocess exits in milliseconds, so a recorded `$$` is
+  **always dead** — the one signal that cannot work. Session id and timestamp are the two real ones.
+- **#324** carried a premise from `project-conductor`'s own comment: the c2c autopilot pre-flight
+  "hard-aborts at Gate 0 for a missing SPEC.md". It does not. That measurement is what produced #329.
+
+##### The path to the launch, in order
+
+Not a checklist. `project-conductor` takes the first `- [ ]` line in this file and none of the four
+rows below are its work — the same device the table above uses.
+
+| # | what | why it is here | done means |
+|---|---|---|---|
+| 1 | **#329** — Gate 0's autopilot default | The only `chain-blocker` left, and it sits on the unattended path at the **first gate of every feature**. A stall there costs the whole night and produces nothing to read in the morning. | The unattended path reaches a deterministic routing decision with no `AskUserQuestion`, pinned by a test; and `project-conductor`'s "hard-aborts at Gate 0" comment and the code agree, whichever way the decision goes. |
+| 2 | **Set the permission mode** | Measured live 2026-08-02: `permission-mode-state.sh` returns `BLOCKING\|auto`. #320's Phase M fence aborts the run before Phase P writes anything. Human keystroke, not a code change — `/permissions` does **not** set it. | Two Shift+Tab to `acceptEdits`, or launch with `--permission-mode acceptEdits`. Phase M returns non-blocking. |
+| 3 | **File the two disclosed follow-ups** — done 2026-08-02, **#335** and **#336** | Both were recorded in an ADR's own "recorded, not fixed" section and neither had an issue, which is precisely the shape §10 exists to close — a backlog at the end of a document is an invisible backlog. | #335: `manifest-transition.sh` does not refuse a manifest terminal by `status` (ADR-0113). #336: `set-branch-protection.sh` still unions exactly one context, so the audit derives what it cannot enforce (ADR-0114). Both `prep`, appended to wave 2. |
+| 4 | **The launch** | The exit criterion is a run, not a PR. Everything above is a precondition for it and none of it is evidence about it. | At least one `NIGHTLY-PUBLISH` line. Phase 10 wave 1 does not start before that. |
+
+**One repo-admin action is not on the path, and is worth doing anyway.** `shell-tests` — the job that
+runs the whole harness and the plant registry — is **not a required check on `main`**. The new audit
+reports it as `not-required:` on every run, and `main` requires `markdownlint`, `links` and `ci`
+without it. Making it required is a click in branch protection, not a code change, and until it
+happens the merge gate this repository's whole discipline rests on does not include the harness.
+
+**What is deliberately not on this path.** The second shakedown (§9.4) stays a separate run:
+`hook_verified` is still `false`, so nothing has ever taken the Workflow dispatch path, and a green
+Phase 10 exercises the Agent-batch path only. Do not read the launch above as covering it.
+
 ### Phase 10 — total review closure, executed unattended
 
 Phase 9 left one open GitHub issue. The repository's actual backlog was somewhere else: a sweep of
@@ -1107,6 +1162,8 @@ wave order.
 - [ ] thirteen skill-private test runners exercise the deployed copy and are dark to CI  (issue #308)
 - [ ] settings.json is never synced and five guardrail hooks are wired by hand  (issue #309)
 - [ ] an undefined assertion helper is indistinguishable from a passing assertion  (issue #310)
+- [ ] a manifest terminal by status is exempt from invariant 4 and the state machine still lets it transition  (issue #335)
+- [ ] set-branch-protection.sh unions one context while the audit derives three  (issue #336)
 
 ##### Wave 3 — HIGH: detector precision, and the decisions
 
