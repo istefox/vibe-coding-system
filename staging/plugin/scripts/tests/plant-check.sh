@@ -169,6 +169,24 @@ else
   bad "PC3 plants span only $FILES_N test file(s) — expected >= 4"
 fi
 
+# PC4 — no declaration may be INDENTED. The collector above anchors on `^# plant:`, so a
+# declaration written inside an `if`/`for` block, beside the assertion it proves, is silently
+# skipped: it does not run, it does not fail, and the only symptom is a file appearing to carry
+# fewer plants than its author wrote. That is this registry's own failure mode — a plant nobody
+# validated — reproduced one level up, and it cost eight plants on the day it was found (issue
+# #329). Declarations sit at column 1; the assertion id is what ties them to their assertion,
+# not their position.
+INDENTED=""
+for t in "$TESTS"/*.test.sh; do
+  [ -f "$t" ] || continue
+  grep -qE '^[[:space:]]+# plant:' "$t" 2>/dev/null && INDENTED="$INDENTED $(basename "$t")"
+done
+if [ -z "$INDENTED" ]; then
+  ok "PC4 no plant declaration is indented (all collectable at column 1)"
+else
+  bad "PC4 indented plant declaration(s) — silently skipped by the collector:$INDENTED"
+fi
+
 _total=$((PASS + FAIL))
 if [ "$_total" -ge 14 ]; then ok "Z1 assertion-count floor ($_total >= 14)"
 else bad "Z1 assertion count fell to $_total (floor 14) — plants or assertions vanished"; fi

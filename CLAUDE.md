@@ -3079,3 +3079,59 @@ on a deployed script and is **worse than inert** until sync; `PASS` means every 
 a PRODUCER and never that it will be green; the `Workflow / job` context form is not decomposed.
 
 Detail: `docs/architecture/ADR-0114-322-required-checks-audit.md`.
+
+## Decisions from the Gate 0 autopilot default (ADR-0115)
+
+Closes issue #329, the last Phase 10.0 chain blocker. §5 promises that under `autopilot = true`
+every gate skips its `AskUserQuestion` and auto-selects a default listed inline as
+`[Autopilot default: …]`. **Gate 0 — the chain's FIRST gate, which fires on every feature — had
+none**, so an unattended run raised a question `/goal` cannot answer before doing any work. That is
+the 2026-07-31 launch, in one sentence.
+
+- **Nothing in the harness asserted the contract.** Grepping all 72 test files for `Autopilot
+  default` returned **zero** hits, which is how one missing block survived thirteen present ones.
+  Section G derives all 18 §5 gates at run time and requires a marker or a declared
+  `<!-- autopilot-gate-exempt: … -->`. It found a **third marker spelling** on Gate 4.5
+  (`[Autopilot default is deliberately NOT …`) on its first run — recognised by nothing, described
+  by nothing. Normalised; Gate 4's `bypass:` is NOT, because `recovery-preflight.test.sh` `RH4`/`RI1`
+  use it as an awk **extraction boundary**.
+- **The default is `standard`, and the marker says why it is not the auto-detect vote.** Step H1
+  invokes `interview-driver` **unconditionally** — unlike standard Step 1 it has no brownfield skip
+  — and Express E1 runs plan mode. Only `standard` completes with nobody present. The vote is the
+  obvious-looking choice and it is the wrong one.
+- **The SPEC pre-flight moved from the `[auto]` option to §2 step 7b, and the old copy is deleted.**
+  Inside the option it was unreachable by the only caller that needs it (nightly sets `autopilot`
+  *before* Gate 0 renders, so nobody clicks `[auto]`); inside the gate the `express|hybrid|standard`
+  prefix fast path would skip it. Two copies of one safety question can disagree about whether the
+  gate fires — ADR-0086's criterion, applied.
+- **Every abort transitions the manifest to `aborted` FIRST.** Left in flight it reads `ADOPTABLE`
+  at conductor branch C → run-level halt, reintroducing the blast radius ADR-0111 had just removed.
+  Exit 3 deliberately does not transition: an unread gate is not a decided end.
+- **The conductor's SPEC-COPY guard stays primary and its text says `do not remove it`** — both are
+  contained skips now, but that one settles the feature before any manifest exists, and it is the
+  only cover for the attended *"Start in autopilot mode"* branch, which never runs the copy.
+- **`chain_path: null` is tolerated, measured:** 18 of 41 corpus manifests carry `autopilot:true`
+  with `chain_path:null`, all brownfield, all completed. `express`/`hybrid` with autopilot: **0**.
+
+**Five assertion defects, all caught by planting, four of them shapes already in this file.** The
+`^_c2c=` redirect anchor missed the fence's three-space list indentation, so `G5`–`G8` went green
+**against the deployed copy**; `[^]]*standard` stopped at the `` `[s]` `` three characters in; the
+`G1` plant did not fire because "standard" appears five times in one marker line; the `G4` plant did
+not fire because the extractor matched `fence-contract: <id>` as a **substring** and the mutation
+renamed by appending; the `G9` plant collapsed `echo` + `exit 0` onto one line (ADR-0112) and `G9`
+was covered by two guards so it isolated neither (ADR-0104).
+
+**The registry's own boundary, found the hard way.** `plant-check.sh` collects with
+`grep '^# plant:'` — **column-anchored**. Eight declarations written beside their assertions inside
+an `if` block were **silently skipped**: they did not run, did not fail, and the only symptom was a
+file appearing to carry fewer plants than its author wrote. That is the registry's own failure mode
+one level up. **`PC4`** now fails on any indented declaration.
+
+Known consequences: this ships an instruction, not an enforcement (only the fence executes); the
+fence is a hard dependency on a deployed script and **worse than inert until sync**; a tolerated
+`null` chain_path makes a genuinely-unrouted run indistinguishable from 18 historical ones; Gate 0's
+`⚠ topic could not be verified` warning still renders where nobody reads it. **This does not close
+Phase 10.0** — the exit criterion is a launch reaching a `NIGHTLY-PUBLISH` line, which still needs
+`permissions.defaultMode` off `auto`.
+
+Detail: `docs/architecture/ADR-0115-329-gate0-autopilot-default.md`.
