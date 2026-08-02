@@ -912,21 +912,31 @@ Four assertions, run once, at the very top of Step 5 — before dispatch-mode se
 # that could not run must not be readable as a checker that found nothing.
 _top=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "PREFLIGHT_NOREPO"; exit 3; }
 [ -n "${MANIFEST:-}" ] || { echo "PREFLIGHT_NOMANIFEST"; exit 3; }
-# rel() RESOLVES ITS ARGUMENT before comparing. `git rev-parse --show-toplevel` returns a physical
-# path while the manifest path the chain carries is whatever `$PWD` was at Gate 0, so a raw prefix
-# match shortens nothing and EVERY artifact then classifies as OTHER — including the manifest,
-# which makes the exemption below silently inert. That was this fence's first draft, found by
-# running it. Not hypothetical on macOS: `/tmp` is a symlink to `/private/tmp`, and a checkout is
-# reachable through differently-cased paths on APFS. Pinned by `recovery-preflight.test.sh` RJ9.
-# The `cd … && pwd -P` on ROOT is belt-and-braces for a git that returns a logical path; no failing
-# case could be constructed for it, so it is defence, not a tested property — do not read the two
-# as equally evidenced.
-ROOT=$(cd "$_top" && pwd -P)
+# rel() ASKS GIT for the repo-relative path. It does not compare strings, and that is the whole
+# point: every string form of this comparison has a normalisation it does not perform.
+#
+# The first draft compared `git rev-parse --show-toplevel` (resolved) against the caller's path
+# (not), so `rel()` shortened nothing and EVERY artifact classified as OTHER — including the
+# manifest, which made the exemption silently inert. #239 fixed that by resolving both sides with
+# `cd … && pwd -P`. That closed the symlink half only: **`pwd -P` resolves symlinks, it does not
+# normalise case.** APFS is case-insensitive and case-preserving, so `cd /Users/x/developer/…`
+# succeeds and reports the casing you traversed, while git reports the casing it recorded — the
+# prefix match failed again, on the same file, for a different reason, and the exemption was inert
+# on every run from a differently-cased CWD (issue #344, found by running the chain, twice over).
+#
+# Deriving the prefix from git removes the comparison rather than correcting it, so there is no
+# third normalisation left to miss. The `-ef` guard is device+inode identity — "is this the same
+# directory" answered without going back through a string compare, which is the trap being removed.
+# It is what keeps an artifact living in a DIFFERENT repository from being handed that repository's
+# prefix and silently exempted. Pinned by `recovery-preflight.test.sh` RJ9 (symlink), RJ13/RJ13b
+# (case) and RJ14 (foreign repo).
 rel() {
   [ -n "${1:-}" ] || return 0
-  _d=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) || { printf '%s' "$1"; return 0; }
-  _p="$_d/$(basename "$1")"
-  case "$_p" in "$ROOT"/*) printf '%s' "${_p#$ROOT/}" ;; *) printf '%s' "$_p" ;; esac
+  _d=$(dirname "$1")
+  [ -d "$_d" ] || { printf '%s' "$1"; return 0; }
+  _t2=$(git -C "$_d" rev-parse --show-toplevel 2>/dev/null) || { printf '%s' "$1"; return 0; }
+  { [ -n "$_t2" ] && [ "$_t2" -ef "$_top" ]; } || { printf '%s' "$1"; return 0; }
+  printf '%s%s' "$(git -C "$_d" rev-parse --show-prefix 2>/dev/null)" "$(basename "$1")"
 }
 
 # The manifest leaves the dirty set BEFORE anything is classified. Do not put it back — see the
