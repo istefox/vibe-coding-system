@@ -84,3 +84,29 @@ deleted the actual invocation walked straight through. It now requires the invoc
 - The repoint happens after everything that reads `artifacts.spec` during the chain, so nothing
   in-flight sees the change. That ordering is load-bearing and unasserted.
 - Inert until sync.
+
+## Correction 2026-08-02 (issue #342) — SP5 is a floor, not an equality
+
+The body above is left unedited (ADR-0034 precedent). This records what changed and why.
+
+`SP5` was written as `SLOT -eq TOT`: every manifest with a non-null `artifacts.spec` names the root
+slot. **That forbids exactly what Step 7.0b above performs.** The two shipped together and did not
+contradict each other in practice for as long as no chain completed afterwards — the corpus had one
+legitimate shape, so the equality and the floor were the same assertion. Feature #286, the first
+chain to complete under this ADR, produced the second shape and left the harness red for a defect
+that did not exist.
+
+The proxy is the cause, not the arithmetic: *"`artifacts.spec` is not null"* stood in for *"this
+manifest is historical"*. `SP5` now asserts `SLOT >= HIST_FLOOR` (41, measured on `origin/main`
+2026-08-02), which is the invariant the third consequence bullet above actually states — the 41
+historical records keep their slot pointers. A completing chain never raises that set, so the floor
+does not drift; a chain between Step 1 and Step 7 sits at the slot and only ever raises `SLOT`.
+
+`SP5c`/`SP5d` were added because a floor counts what stayed and says nothing about where a departed
+pointer went. They resolve a non-slot pointer **by basename** against `docs/specs/`, never by
+resolving the recorded absolute path — a manifest records a machine-specific `project_root`
+(ADR-0078), so a filesystem check on the stored string fails on CI for a correct manifest.
+
+**Disclosed:** a floor is masked by concurrency. A historical manifest rewritten while another chain
+sits at the slot leaves `SLOT` unchanged. Telling "a chain repointed its own record" from "a chain
+repointed someone else's" needs history, not a snapshot of the corpus, and is not attempted.
