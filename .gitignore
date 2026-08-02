@@ -4,6 +4,8 @@
 
 # Claude Code local session state
 .claude/settings.local.json
+# Covers RTF's per-branch state files too (triage-state.sh's own glob is a strict subset of
+# this pattern) — do not add a second, narrower entry for it (ADR-0118).
 .claude/.triage-fix-last*.json
 .claude/test-cmd
 .claude/context.md
@@ -33,4 +35,3 @@ docs/books/*
 .remember/recent.md
 .remember/archive.md
 .remember/remember.md
-.claude/.triage-fix-last-*.json
