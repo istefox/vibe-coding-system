@@ -35,7 +35,7 @@ above the helper inventory:
 ADR-0028 (issue #32) enforced it at five named `manifest-set-flag.sh` call sites, found a sixth
 during its own research, and deferred it with reasons (§3.6): both the SPEC and the orchestrator
 brief presented the count as a closed, counted list, and the sixth was grammatically distinct — a
-`via `X`` clause inside a longer conditional sentence, not a standalone bullet. The deferral was
+``via `X` `` clause inside a longer conditional sentence, not a standalone bullet. The deferral was
 correct discipline for its moment. Issue #286 is the follow-up it explicitly left open.
 
 ### 1.1 The re-derivation, because the number was never the point
@@ -77,9 +77,9 @@ every other, which is precisely why it has survived two ADRs.
 
 The SPEC's own edge case names it. Two lines in the same file:
 
-- `- **exit 3 (INCONCLUSIVE)** → record NOTHING, do not call `manifest-set-flag.sh`.` — prose.
-- `… otherwise record `hook_verified = false` via `manifest-set-flag.sh` and take the Agent-tool
-  fallback.` — a call site. **ADR-0028's deferred sixth.**
+- ``- **exit 3 (INCONCLUSIVE)** → record NOTHING, do not call `manifest-set-flag.sh`.`` — prose.
+- ``… otherwise record `hook_verified = false` via `manifest-set-flag.sh` and take the Agent-tool
+  fallback.`` — a call site. **ADR-0028's deferred sixth.**
 
 They are the same shape: a bare code span with no arguments. No formal rule over the text separates
 them, and this is the reason a guard for this class had never been written. It is also the reason a
@@ -92,7 +92,7 @@ preceding every bare occurrence over the real corpus gives a clean distribution:
 canonical-prose occurrences are preceded by `—`, `(`, `in`, `the`, `to`, `it.**`, or nothing
 (start of line). The three that need catching are preceded by `via`, `call`, `via`. **An invocation
 verb immediately before the name is the signal**, and on this corpus it produces exactly three false
-positives — `NOT via `X``, `do not call `X``, `NOT via X which is boolean-only` — which are the
+positives — ``NOT via `X` ``, ``do not call `X` ``, `NOT via X which is boolean-only` — which are the
 negated-prose class the SPEC's edge case names by name.
 
 ### 1.4 The instance number is already colliding
@@ -228,9 +228,9 @@ checker exit 1, 2 and 3 for the right stated reason. Count guards ride on the st
 `helpers >= 7`, `occurrences >= 50`, `waived >= 1` — the DENOMINATOR, per ADR-0085. A waiver
 population of zero would make every waiver assertion vacuous (ADR-0084 §S2).
 
-The header note is `# DERIVED-GUARD PATTERN — instance 11 (ADR-0086). Derives: helper basenames from
+The header note is ``# DERIVED-GUARD PATTERN — instance 11 (ADR-0086). Derives: helper basenames from
 a scripts directory, occurrences inside one file. Waiver: `<!-- path-rule-exempt: <reason> -->`,
-same-line, which the scanner must TRUNCATE at.` Not extracted into a shared helper, per §3.4.
+same-line, which the scanner must TRUNCATE at.`` Not extracted into a shared helper, per §3.4.
 
 ## 3. Alternatives considered
 
