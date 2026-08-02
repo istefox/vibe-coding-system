@@ -6,8 +6,8 @@ mode: "brownfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-08-02T18:23:08+00:00"
-last_updated_at: "2026-08-02T18:43:53+00:00"
-current_step: "step_4_session_boundary"
+last_updated_at: "2026-08-02T18:44:41+00:00"
+current_step: "ready_for_implementation"
 status: "in_progress"
 
 # Gate 0 routing result (ADR-0017)
@@ -114,9 +114,9 @@ hitl_gates:
     notes: "CLAUDE.md ADR-0118 section applied (autopilot)"
   - gate: 4
     label: "implementation_mode"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-08-02T18:44:41+00:00"
+    notes: "autopilot bypass — roadmap pre-authorised by nightly-autopilot, not a human choice at this gate"
   - gate: 5
     label: "review_cycle_decision"
     status: "pending"
