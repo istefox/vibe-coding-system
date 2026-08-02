@@ -6,8 +6,8 @@ mode: "brownfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-08-02T12:47:22+00:00"
-last_updated_at: "2026-08-02T13:07:22+00:00"
-current_step: "step_4_session_boundary"
+last_updated_at: "2026-08-02T14:07:08+00:00"
+current_step: "step_7_commit"
 status: "in_progress"
 
 # Gate 0 routing result (ADR-0017)
@@ -29,10 +29,10 @@ autopilot: true
 
 # Dynamic Workflows Step 5 tracking (ADR-0016) — default false; smoke test flips it true per environment
 hook_verified: false
-step5_mode: null
+step5_mode: "agent_batch"
 
 # Recovery-readiness pre-flight (ADR-0050) — HEAD sha recorded once at Step 5 entry
-recovery_baseline_sha: null
+recovery_baseline_sha: "ee968ba67a8b4ed56f1a10fc0332b2f5e6fcb065"
 
 # Worktree isolation contract (ADR-0068 §D1, §D11). worktree_baseref_verified is boolean,
 # set true by Step 5.0.4 via manifest-set-flag.sh once worktree.baseRef == "head" is
@@ -42,7 +42,7 @@ recovery_baseline_sha: null
 # it goes via bash sed on the additive field, the step5_review_mode precedent above. Flip
 # with, per merged stage ({stage, agent_type, branch, base_sha, merge_result}):
 # sed -i '' 's/^worktree_merges: \[\]$/worktree_merges: [{stage: ..., agent_type: ..., branch: ..., base_sha: ..., merge_result: ...}]/' <manifest>
-worktree_baseref_verified: false
+worktree_baseref_verified: true
 worktree_merges: []
 
 # Proportional audit depth (ADR-0055) — risk and task_type axes. Absent/null means STRICT
@@ -83,11 +83,11 @@ license: "None"
 xcode_project: false
 initial_commit_push: "commit"
 git_remote_url: "https://github.com/istefox/vibe-coding-system.git"
-step6_mode: null
+step6_mode: "skill_fallback"
 
 # Artifacts (absolute paths, populated as steps complete)
 artifacts:
-  spec: "/Users/stefer/Developer/vibe-coding-system/SPEC.md"
+  spec: "/Users/stefer/Developer/vibe-coding-system/docs/specs/286-the-sixth-bare-manifest-set-flag-sh-ment.spec.md"
   brainstorm: null
   ux_blueprint: null
   adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0117-286-path-rule-bare-mentions.md"
@@ -114,14 +114,14 @@ hitl_gates:
     notes: "autopilot: CLAUDE.md section for ADR-0117 auto-applied"
   - gate: 4
     label: "implementation_mode"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-08-02T13:08:52+00:00"
+    notes: "autopilot bypass: nightly roadmap pre-authorised (project-conductor nightly), implementation in this session"
   - gate: 5
     label: "review_cycle_decision"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-08-02T14:06:46+00:00"
+    notes: "autopilot: skip review"
 
 # Session boundary tracking
 session_boundary:
