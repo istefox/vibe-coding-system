@@ -3231,3 +3231,54 @@ Known consequences, recorded rather than fixed:
 - ADR-0028's body is not edited (ADR-0034 precedent); its §2.4 deferral was accurate for its moment.
 
 Detail: `docs/architecture/ADR-0117-286-path-rule-bare-mentions.md`.
+
+## Decisions from the RTF gitignore glob chain (ADR-0118)
+
+Closes issue #287. `triage-state.sh commit` appends `${pref}.triage-fix-last-*.json` only when
+`git check-ignore` says the state file is not already covered (ADR-0094). The issue asked whether
+that glob and this repository's own `.gitignore` entry, differing "by a dash", cover the same set.
+
+- **The premise was wrong in the direction that matters: there are TWO entries, not one.** Line 7
+  (`.claude/.triage-fix-last*.json`) has been present since the initial commit `ac207d5`; line 36
+  (`.claude/.triage-fix-last-*.json`) was added by `a482dbb` (PR #251) when the #222 chain
+  dogfooded RTF on its own branch and a human swapped a dead per-branch line for the script's
+  canonical glob **without checking that line 7 already covered it**. The mechanism was never at
+  fault; a human reintroduced the exact redundant form `triage-state.sh`'s own comment warns about.
+- **`git check-ignore -v` reports the LAST matching line, not every match**, so the obvious probe
+  proves less than it appears to. What proves the coverage relation is the second probe: line 7's
+  bare `*` matches a `triage-fix-last`-prefixed name with **no dash**, which line 36 structurally
+  cannot — line 7 is a strict **superset**, not merely a similar rule. Corroborated by an assertion
+  that already passes: `T5` seeds line 7's literal form alone in a fresh fixture repo, runs a real
+  `triage-state.sh commit`, and the append is suppressed.
+- **Line 7 survives, line 36 is deleted — chosen for coverage, not for symmetry with the script.**
+  Removing line 7 instead would read textually identical to the glob the script writes and would
+  silently drop protection for the vestigial flat name `.triage-fix-last.json`, which
+  `vibe-status/scripts/aggregate.sh` and the legacy `review-triage-fix/tests/run-tests.sh` still
+  reference. Symmetry is cosmetic; superset coverage with no collateral narrowing is not. A comment
+  above the survivor exists so the next "chore" commit does not reintroduce the narrower form.
+- **`triage-state.sh` is byte-untouched.** ADR-0094's per-branch design is out of scope and was
+  never the defect, and `T2`/`T3`/`T8` pin the dash-glob as the script's output on a *fresh* repo —
+  a property line 7's presence or absence does not affect.
+- **The new fixture's seed is chosen against the failure mode, and the naive choice reproduces
+  ADR-0094's own dead draft one level up.** Replaying this repository's exact historical two-line
+  pair would pass under a `check-ignore`-disabled implementation too, because the literal-grep
+  fallback recognises the glob string verbatim regardless of whether `check-ignore` ran. Found by
+  tracing control flow, not by a live run: the architect's command scope (ADR-0042/ADR-0045)
+  forbids creating a scratch git repository, so **running the plant and observing both directions
+  is an explicit coder task**, not an architect claim.
+
+Known consequences, recorded rather than fixed:
+- The `.gitignore` entry still does not read textually identical to the script's glob. The
+  difference is resolved in **coverage**, not in **text**, and the comment at the survivor is the
+  only thing stopping a future reader from "fixing" that mismatch back into a duplicate.
+- The two live-content assertions against the real committed `.gitignore` carry **no declared
+  plant**. `plant-check.sh`'s sandbox copies only `staging/` and `docs/` (plus ADR-0116's
+  `../docs/` hatch), so a repo-root file is unreachable; widening that registry for one feature's
+  two byte-content checks was judged disproportionate. Follows `T12`'s existing precedent in the
+  same file — disclosed, not silently skipped.
+- **The architect's command scope blocks `git init` inside heredoc CONTENT**, because
+  `agent-command-scope.sh` matches the full command string including text being written to a file.
+  Inert data for a later script reads as a command. Recorded because it bounds what an architect
+  can verify empirically, and hands live differential verification to the coder by construction.
+
+Detail: `docs/architecture/ADR-0118-287-rtf-gitignore-glob-resolution.md`.
