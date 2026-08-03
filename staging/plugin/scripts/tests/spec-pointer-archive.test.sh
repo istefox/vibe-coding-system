@@ -64,7 +64,16 @@ VA="$STAGING/plugin/skills/concept-to-code/scripts/manifest-validate.sh"
 # 2026-07-31 orphan carrying `spec: null`, so 41 carried a slot pointer before any chain completed
 # under ADR-0106. This number is a floor, not a count of the corpus: it may only be RAISED, and only
 # by a deliberate decision recorded beside it.
-HIST_FLOOR=41
+#
+# RAISED 41 -> 42 on 2026-08-03, and this is that decision. Issue #288's chain was interrupted and
+# recorded `aborted`, so ADR-0106's Step 7.0b archive-on-completion never runs for it and its
+# `artifacts.spec` keeps a slot pointer permanently — a 42nd member of the set that can never
+# shrink. Left at 41 the corpus carried one unit of slack, the SP5 plant's -1 landed exactly ON the
+# floor, and `plant-check.sh` reported SP5 as pinning nothing. That is issue #346's subject observed
+# live rather than argued: **raising the floor restores the plant's bite on today's corpus and fixes
+# nothing general** — the next chain that leaves a permanent slot pointer makes it inert again, and
+# a floor that has to be bumped by hand after every such chain is the design #346 has to replace.
+HIST_FLOOR=42
 
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }

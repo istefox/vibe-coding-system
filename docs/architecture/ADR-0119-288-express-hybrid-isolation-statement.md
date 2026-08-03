@@ -2,10 +2,11 @@
 
 **Issue:** #288
 **Date:** 2026-08-02
-**Status:** Accepted (§D1/§D2/§D7 shipped by hand 2026-08-03 — the guide's three lines; §D3–§D5
-cross-file assertion and §D6/§D8 NOT implemented, the chain was interrupted at Step 2. Do not read
-§D3 as existing: no assertion reads the guide's diagram parentheticals as claims about behaviour,
-which is why the defect survived in the first place.)
+**Status:** Accepted and fully implemented (2026-08-03, by hand — the chain was interrupted at
+Step 2 and did not deliver it). §D1/§D2/§D7 are the guide's three corrected lines; §D6 is the
+Express note; §D3–§D5 and §D8 are section L of
+`staging/plugin/scripts/tests/worktree-isolation-contract.test.sh`. **Read the Correction below
+before building on §D3 or §D8** — three of their measured claims did not reproduce.
 **Supersedes:** nothing. **Amends:** nothing. Closes a disclosure ADR-0068 recorded and deliberately
 did not act on.
 **Related:** ADR-0017 (the three-path routing that created Express and Hybrid), ADR-0068 §D7 (both
@@ -335,5 +336,50 @@ moment to reconsider — not before.
 - `staging/plugin/scripts/tests/worktree-isolation-contract.test.sh` — J1/J2's
   forbid-the-phrase-outright predicate idiom, and the Task-8 EXPECTED header that inspected the
   false lines and recorded them as fine.
-- Implementation plan:
-  `docs/superpowers/plans/2026-08-02-the-express-path-says-no-worktree-isolat.md`.
+- Implementation plan: **none was ever written** — see the Correction below, finding 4.
+
+---
+
+## Correction (2026-08-03) — four claims of this ADR that did not reproduce
+
+The body above is left byte-unchanged (ADR-0034's precedent: an ADR records its moment). This
+section records what re-measuring found when §D3–§D6 and §D8 were finally built, three days later
+and by a different route. Every one of the four was found by *running* something rather than by
+reading, which is the only reason they were found at all.
+
+**1. §D8 prescribes "a new section K". Section K already exists in this file.** The letters in use
+are A B C D G H I J K W; the first free one is **L**, and that is where the assertions live. A
+section-K assertion would have been interleaved with an unrelated section's, which is not a
+cosmetic problem: the EXPECTED headers in this file are per-section and a reader would have been
+sent to the wrong one.
+
+**2. §D8 computes the floor as 96 (87 + eight assertions + Z1). Ten assertions were needed, so the
+floor is 98.** Two more than planned, and both additions are load-bearing rather than padding —
+see finding 3 and `L9`. ADR-0083's rule applied to this ADR's own arithmetic: recount before
+building on a count.
+
+**3. §D3's classification is right only on a population §D3 never defines, and the four states are
+not enough.** Classifying every block the boundary set produces gives `DIRECT` = 4 and 24 blocks
+total, not `DIRECT` = {E2, H3} with eleven others: the two section-opener blocks (`Express path —
+Steps E1–E4`, `Hybrid path — Steps H1–H5`) also carry `no sub-agents`. §D3's numbers hold on the
+**mappable** population — the blocks a guide step token can actually reach — which is 16 tokens,
+14 mapped, 2 not (`step_0_init` and `step_4_session_boundary` have no `Step 0`/`Step 4` heading).
+
+The consequence is the fifth state. A first draft let an unmapped token fall through to `NEITHER`,
+because an awk that never enters a block reaches `END` with an empty buffer and an empty buffer
+contains no mechanism. `UNMAPPED` and `NEITHER` were then indistinguishable, so renaming
+`#### Step E2 — Execute` would have removed E2 from the population **silently** — the check stays
+green while it stops looking. `L5` pins the distinction, `L0` guards the denominator.
+
+**4. §D6's prescribed note quotes the mechanism string that classifies it** — ``pin `isolation:
+"worktree"` explicitly`` is the `DISPATCH` predicate verbatim. It is harmless only while the note
+sits in the unmappable section-opener block; moved a few lines down into `Step E2` it would
+classify that block `AMBIGUOUS`, and the guard would fire on the text written to satisfy it. Rule
+12, inside the wording an ADR prescribed to close a rule-12-adjacent defect. The shipped note says
+*"to pin that value explicitly"* instead, and `L9` makes the constraint structural rather than a
+sentence someone has to remember.
+
+**Also corrected:** the References entry above pointed at an implementation plan under
+`docs/superpowers/plans/`. No such file exists and none was ever written — the chain was
+interrupted at Step 2, before the architect produced one, which is precisely why §D3's numbers
+were never checked against a second reader.

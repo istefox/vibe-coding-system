@@ -2634,7 +2634,7 @@ Transition to `completed`. Write final report.
 
 No sub-agents. No fresh session. No SPEC, ARCH, or ADR. The orchestrator executes everything directly.
 
-**No worktree isolation** — failures during E2 leave partial edits in the working tree. The user must `git status` and reset manually if needed. Known limitation (ADR-0017).
+**No worktree isolation, by design** — Step E2 dispatches no sub-agent: the orchestrator executes the approved plan directly in this session, so there is no worktree to isolate. ADR-0068 §D7 requires every *dispatch* to pin that value explicitly; a path with no dispatch is outside it. The consequence is real and is the price of the single-session design (ADR-0017): a failure during E2 leaves partial edits in the working tree, so recovery is `git status` and a manual reset, not discarding a worktree.
 
 #### Step E1 — Plan (EnterPlanMode + superpowers allowed)
 
