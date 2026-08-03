@@ -329,3 +329,46 @@ its likely outcome is a second, unrelated red population inside a plan-predicate
 - The SPEC states the corpus is 58 plans. It is 61.
 - The SPEC's "The unrecognised shapes are `### Step N —`, `### Step 0 —`, and `### T1 —`" describes
   three shapes across two files, and the first two are the same file's heading run.
+
+## Correction 2026-08-03 (Task 6 re-measurement) — the corpus grew from 61 to 62 while this feature was being implemented
+
+Re-deriving the numbers for Task 6 found the corpus is **62** plans, not the 61 this ADR's Measured
+section recorded: this feature's own plan,
+`docs/superpowers/plans/2026-08-03-one-real-plan-shape-is-recognised-by-no.md`, is itself now a
+tracked file under `docs/superpowers/plans/` and diverges (`--count` 14, `--count-openers` 8), so
+every corpus-wide count downstream moves by one plan. Re-measured with the same commands this ADR
+cites:
+
+- `is_task_line` matches **61 of 62** (was 60 of 61) — `claude-md-slim` is still the sole exception.
+- `is_task_opener` matches **60 of 62** (was 59 of 61) — `claude-md-slim` and `deep-refactor-skill`
+  are still the sole two.
+- `--count` vs `--count-openers` diverge on **53 of 62** (was 52 of 61); every one is still `>= 6`
+  and over-counted, 0 under-counts — the property this ADR's §D1 measurements rest on is unaffected
+  by the shift, since the new 62nd plan is a fresh `## Task N`-heading plan (this feature's own
+  architect dispatch) that changes no exemption.
+- A checkbox-only count (the figure at `SKILL.md:1160`) rejects **9 of 62** plans, not the 7 of 57
+  ADR-0069 originally measured and this ADR had never reconciled to its own 61-plan corpus.
+
+`plan-shape-baseline.tsv` was never stale: Task 2 generated it after this feature's own plan file
+already existed in the corpus, so it holds 62 rows and `PTH0`/`PTH1`/`PTH2` pass unchanged. Only the
+prose around it — in `plan-task-predicate.awk`, `plan-tasks.sh` and `SKILL.md` — carried the 61/57/58
+figures corrected above.
+
+**A scope boundary Task 6 did not anticipate: two of its five files are `*.test.sh`.**
+`batch-dispatch-openers.test.sh`'s stale header count (Task 6 item 3) and
+`plan-task-count.test.sh`'s stale `PTG` corpus comment (Task 6 item 4) both live inside test-shaped
+paths. `test-write-scope.sh` (ADR-0049, generator/verifier separation) denies a coder dispatch any
+write to a test-shaped path regardless of whether the edit is prose or assertion logic, so neither
+correction — nor Task 7's two `Z1` floor raises (43→48, 13→16) — could be applied by this dispatch.
+Left uncorrected, for a tester or orchestrator pass: `batch-dispatch-openers.test.sh`'s header
+("58 plans … diverge on **51**" → 62, 53) and `plan-task-count.test.sh`'s `PTG` corpus comment
+("same two named exemptions plus one more" above a two-entry list).
+
+**Found on the way, out of scope for this ADR.** A full run of all 73
+`staging/plugin/scripts/tests/*.test.sh` files surfaced one unrelated pre-existing failure:
+`diff-budget-scope.test.sh`
+`BB2b` ("7 plan(s) excluded from BB2 — re-derive the exclusion, it no longer bounds anything") — the
+same 61→62 corpus growth, but against `diff-budget-check.sh`'s own hardcoded exclusion bound
+(ADR-0070/ADR-0091's subject, not this ADR's). Present before any of this feature's edits — none of
+them touch `diff-budget-check.sh` or `diff-budget-scope.test.sh` — and disclosed rather than fixed,
+since it belongs to a different feature and is itself a `*.test.sh` file.

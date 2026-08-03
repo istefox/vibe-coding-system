@@ -12,7 +12,9 @@
 #   ### Task 3 — … (R-02, R-05)      a heading, H2 through H4, containing the word "Task"
 #   - [ ] **Task 3** — … (R-02)      a checklist item, checked or not
 #
-# Measured 2026-07-29 over the 57 plans in docs/superpowers/plans/: this predicate matches all 57.
+# Measured 2026-08-03 over the 62 plans in docs/superpowers/plans/ (ADR-0121): this predicate
+# matches 61 of 62 — `claude-md-slim` yields 0, the same fact the `is_task_opener` header below
+# and ADR-0069 §PTE2's exemption already record; this header used to contradict both.
 # `any - [ ]` matches 50 (seven plans carry no checkbox at all); `- [ ] **Task N` matches 18.
 #
 # DELIBERATELY LOOSE, and the callers depend on the direction. `## Tasks` as a section heading
@@ -57,10 +59,11 @@ function is_task_line(l) {
 #
 # and rejects a sub-step that merely mentions a task, which is the whole point.
 #
-# Measured 2026-07-29 over the 57 plans in docs/superpowers/plans/: 55 match. The two that do not
-# use a different word for a task entirely — `### Step 0 —` and `### T1 —` — and both predate the
-# `architect.md` contract that names the `Task N` form. See ADR-0070 §D3: exempted by name, not
-# absorbed, because widening to `Step|T[0-9]` would make `## The T1 approach` a task boundary.
+# Measured 2026-08-03 over the 62 plans in docs/superpowers/plans/ (ADR-0121): 60 match. The two
+# that do not use a different word for a task entirely — `### Step 0 —` and `### T1 —` — and both
+# predate the `architect.md` contract that names the `Task N` form. See ADR-0070 §D3: exempted by
+# name, not absorbed, because widening to `Step|T[0-9]` would make `## The T1 approach` a task
+# boundary.
 function is_task_opener(l,   lvl, rest) {
   rest = l
   lvl = heading_level(l)

@@ -1157,8 +1157,9 @@ If either path is missing on disk: do NOT dispatch coder. Present to user:
 ```bash
 # plan-tasks.sh owns the definition of a plan task (ADR-0069 §D1/§D3, issue #172). Do NOT inline a
 # grep here: the architect is allowed BOTH `### Task 3 — …` headings and `- [ ]` checkbox items
-# (architect.md Output Format), a checkbox-only count rejects 7 of the 57 plans in the corpus, and
-# three files each holding their own answer is the defect #172 was filed about.
+# (architect.md Output Format); a checkbox-only count rejects 9 of the 62 plans in the corpus
+# (re-measured 2026-08-03, ADR-0121), and three files each holding their own answer is the defect
+# #172 was filed about.
 # This is a CHECKER — branch on its exit code. The anti-test-weakening scan four blocks below and
 # the diff-budget reporter are the opposite contract (always exit 0, signal on stdout, print
 # CLEAN). Do not copy one block's branching into the other.
@@ -2098,9 +2099,11 @@ the closing gates. Split the dispatch into **batches of 2-3 task blocks**, numbe
 > "Batch dispatch: the plan's tasks are not in the `Task N` form (`plan-tasks.sh --count-openers`
 > returned 0), so batch ranges cannot be numbered. Dispatching as one block."
 
-Two corpus plans are in exactly that state — they write `### T1 —` and `### Step 0 —`, the forms
-ADR-0070 §PTG9 and ADR-0069 §PTE2 exempt by name. Consuming `$openers` without this branch would
-turn an over-batching bug into a batch-nothing one, which is #242 committed in the other direction.
+Two corpus plans, not three shapes, are in exactly that state — `deep-refactor-skill.md` (which
+writes `### T1 —`) and `claude-md-slim.md` (which writes `### Step N —`, whose first heading is
+`### Step 0 —`), the forms ADR-0070 §PTG9 and ADR-0069 §PTE2 exempt by name. Consuming `$openers`
+without this branch would turn an over-batching bug into a batch-nothing one, which is #242
+committed in the other direction.
 If `$orc` is 2 or 3 the count did not run: treat it as this same case, single block, and report the
 stderr.
 
