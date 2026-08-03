@@ -1139,7 +1139,7 @@ wave order.
 - [x] the Express path says No worktree isolation and the Italian guide says the opposite  (issue #288)  (completed: 2026-08-03)
 - [x] the transition-pair count is stated in three files and derived in one  (issue #289)  (completed: 2026-08-03)
 - [x] one real plan shape is recognised by no task predicate  (issue #290)  (completed: 2026-08-03)
-- [ ] a bold-wrapped requirement id is invisible to both the checker and the repairer  (issue #291)
+- [x] a bold-wrapped requirement id is invisible to both the checker and the repairer  (issue #291)  (completed: 2026-08-03)
 - [ ] the value-domain guard covers step5_mode only  (issue #292)
 - [ ] task_num extracts digits only so a lettered task collides with its sibling  (issue #293)
 - [ ] plan-tasks.sh has two modes with opposite failure directions and nothing stops a caller picking the wrong one  (issue #294)

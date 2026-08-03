@@ -139,22 +139,33 @@ BEGIN { collecting = 0 }
   # Before ADR-0072 this line was examined by nothing — the parser only ever looked at checklist
   # items — so its token reached neither IDS nor MALFORMED nor OUTSIDE, DECL_N stayed 0, and the
   # whole SPEC took the silent no-IDs path. A SPEC declaring 17 requirements passed the gate.
+  #
+  # Site 2 of 3 (ADR-0122 §D4). A first prototype patched sites 1 and 3 only and produced the
+  # worst reachable state: the repairer rewrote a bold plain bullet while the checker stayed
+  # silent about it — repair without detection, the mirror image of the invariant this near-miss
+  # branch exists to protect. strip_emphasis() here is what lets a bold plain bullet
+  # (`- **R-01** — …`) be recognised as a near-miss at all. The match() is GUARDED: on no match it
+  # must not write an empty line — an unguarded match() writes substr(nmt, 0, -1), an empty line,
+  # which makes [ -s "$NEARMISS" ] true with no content and sets NEARMISS_FIRED=1 against an empty
+  # STRUCT (the file is non-empty but every line is skipped by `[ -n "$id" ] || continue`).
   if (collecting && is_near_miss_bullet(line)) {
     nmt = line
     sub(/^[ \t]*[-*][ \t]+/, "", nmt)
-    match(nmt, /^R-[0-9][0-9]/)
-    printf "%s\n", substr(nmt, RSTART, RLENGTH) >> NEARMISS_FILE
+    nmt = strip_emphasis(nmt)
+    if (match(nmt, /^R-[0-9][0-9]/))
+      printf "%s\n", substr(nmt, RSTART, RLENGTH) >> NEARMISS_FILE
     next
   }
 
   if (is_checklist_item(line)) {
-    txt = item_text(line)
+    txt = strip_emphasis(item_text(line))
     if (match(txt, /^[Rr]-[0-9][0-9A-Za-z]*/)) {
       tok = substr(txt, RSTART, RLENGTH)
       strict_ok = (tok ~ /^R-[0-9][0-9]$/)
       if (collecting) {
         if (strict_ok) {
           rest = substr(txt, RLENGTH + 1)
+          rest = strip_emphasis(rest)
           rest = strip_sep(rest)
           printf "%s\t%s\n", tok, rest >> IDS_FILE
         } else {

@@ -1886,9 +1886,11 @@ under the heading `"Requirement ids: repaired plain-bullet declaration(s) — di
 visible after the fact rather than invisible.
 
 If the re-run still returns 3, stop as before: the cause was something else, or something the repair
-does not cover. **A bold-wrapped id (`- **R-01** — …`) is one of those** — the checker cannot read it
-in either form, so it is not detected as a near-miss and not repaired (ADR-0072 §D4). Never loop:
-the repair runs at most once per gate invocation.
+does not cover. **A bold-wrapped id (`- **R-01** — …`) is no longer one of those (ADR-0122, issue
+#291).** In a checklist item it reads as declared directly, no repair needed. As a plain bullet it
+is a near-miss like any other and is repaired by this same automatic path, with the emphasis
+preserved — `- **R-01** — …` becomes `- [ ] **R-01** — …`, never stripped. Never loop: the repair
+runs at most once per gate invocation.
 
 **This gate branches on the exit code. The anti-test-weakening gate immediately above must
 never do that — `weakening-scan.sh` always exits 0 and signals through stdout. Two adjacent
