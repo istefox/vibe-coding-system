@@ -6,8 +6,8 @@ mode: "brownfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-08-03T13:17:01+00:00"
-last_updated_at: "2026-08-03T13:32:54+00:00"
-current_step: "step_4_session_boundary"
+last_updated_at: "2026-08-03T13:34:03+00:00"
+current_step: "step_5_implementation"
 status: "in_progress"
 
 # Gate 0 routing result (ADR-0017)
@@ -29,10 +29,10 @@ autopilot: true
 
 # Dynamic Workflows Step 5 tracking (ADR-0016) — default false; smoke test flips it true per environment
 hook_verified: false
-step5_mode: null
+step5_mode: "agent_batch"
 
 # Recovery-readiness pre-flight (ADR-0050) — HEAD sha recorded once at Step 5 entry
-recovery_baseline_sha: null
+recovery_baseline_sha: "7ae11b45f6d374dcb6558e5d4b5d383ea5033620"
 
 # Worktree isolation contract (ADR-0068 §D1, §D11). worktree_baseref_verified is boolean,
 # set true by Step 5.0.4 via manifest-set-flag.sh once worktree.baseRef == "head" is
@@ -42,7 +42,7 @@ recovery_baseline_sha: null
 # it goes via bash sed on the additive field, the step5_review_mode precedent above. Flip
 # with, per merged stage ({stage, agent_type, branch, base_sha, merge_result}):
 # sed -i '' 's/^worktree_merges: \[\]$/worktree_merges: [{stage: ..., agent_type: ..., branch: ..., base_sha: ..., merge_result: ...}]/' <manifest>
-worktree_baseref_verified: false
+worktree_baseref_verified: true
 worktree_merges: []
 
 # Proportional audit depth (ADR-0055) — risk and task_type axes. Absent/null means STRICT
@@ -114,9 +114,9 @@ hitl_gates:
     notes: "autopilot: ADR-0120 section appended to CLAUDE.md (3284 -> 3333 lines)"
   - gate: 4
     label: "implementation_mode"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-08-03T13:33:40+00:00"
+    notes: "autopilot bypass: session boundary skipped, Steps 5-7 continue in this session (project-conductor nightly pre-authorised the roadmap; no human at this gate)"
   - gate: 5
     label: "review_cycle_decision"
     status: "pending"
