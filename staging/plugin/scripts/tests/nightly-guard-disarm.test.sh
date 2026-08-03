@@ -47,7 +47,7 @@
 # went on passing. It read as "O5 pins nothing". Reproduced by hand with a real newline, the
 # assertion failed correctly. **Inspect what a plant produced before believing what it reports**
 # (ADR-0090), and note that PC2's exactly-one-match check cannot see this class at all.
-# plant: O5 | plugin/scripts/nightly-disarm.sh | echo "nightly-disarm: usage: nightly-disarm.sh <project-root>" >&2 exit 2 | echo "usage" >&2; exit 0
+# plant: O5 | plugin/scripts/nightly-disarm.sh | echo "nightly-disarm: no project root given" >&2 | echo "usage" >&2; exit 0
 # plant: O6 | plugin/scripts/nightly-disarm.sh | echo "nightly-disarm: not a directory: $ROOT" >&2 exit 2 | echo "not a directory" >&2; exit 0
 # plant: D1 | plugin/scripts/nightly-disarm.sh | "$SDIR/started-at" "$ROOT/.claude/needs-human"; do | ; do
 # plant: D4 | plugin/scripts/nightly-disarm.sh | echo "DISARM: NOTHING-ARMED — no $STATE_SUBDIR and no needs-human under $ROOT" | echo "DISARM: CLEARED"
@@ -56,8 +56,27 @@
 # plant: G5 | plugin/scripts/nightly-guard.sh | [ -f "$CWD/$STATE_SUBDIR/active" ] || exit 0 | true
 # plant: S1 | plugin/skills/nightly-autopilot/SKILL.md | printf 'session_id=%s\nstarted_at=%s\n' | printf 'nothing=%s\n'
 # plant: S2 | plugin/skills/nightly-autopilot/SKILL.md | "${CLAUDE_CODE_SESSION_ID:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \ > "$PWD/.claude/nightly-state/active" | touch "$PWD/.claude/nightly-state/active"
-# plant: S4 | plugin/skills/nightly-autopilot/SKILL.md | bash ~/.claude/hooks/nightly-disarm.sh "$PWD" | rm -f "$PWD/.claude/nightly-state/active"
+# plant: S4 | plugin/skills/nightly-autopilot/SKILL.md | bash ~/.claude/hooks/nightly-disarm.sh --completing "$PWD" | rm -f "$PWD/.claude/nightly-state/active"
 # plant: P1 | sync-to-claude.sh | plugin/scripts/nightly-disarm.sh|hooks/nightly-disarm.sh | plugin/scripts/nightly-guard.sh|hooks/nightly-guard.sh
+#
+# CP1 AND CP2 SHARE A NEEDLE AND MUST NOT SHARE A REPLACEMENT. They pin the two halves of ONE
+# condition, so each mutation has to isolate its own half: inverting the comparison refuses the
+# owner (CP1's case) while `if false` deletes the mirror and lets a foreign session through
+# (CP2's case). One replacement cannot demonstrate both — the F3/F6 situation, avoided here
+# because the two halves are separable rather than merely correlated.
+#
+# CP5's mutation keeps the exit code and removes the WORDING, deliberately. Exit 2 was already
+# reachable before the flag existed (an unknown flag was read as the project root and failed as a
+# missing directory), so a plant that broke the exit code would prove nothing about the assertion.
+#
+# `CP8` is not named `CP7b`, and that is not style. `plant-check.sh` decides a plant fired with
+# `grep -q "^FAIL: <id>"`, a PREFIX match, so a plant declared for `CP7` would be satisfied by
+# `CP7b` failing instead. 26 of the registry's declared plants currently sit on that collision;
+# this file adds none.
+# plant: CP1 | plugin/scripts/nightly-disarm.sh | if [ -n "$OWNER" ] && [ -n "$CUR" ] && [ "$OWNER" != "$CUR" ]; then | if [ -n "$OWNER" ] && [ -n "$CUR" ] && [ "$OWNER" = "$CUR" ]; then
+# plant: CP2 | plugin/scripts/nightly-disarm.sh | if [ -n "$OWNER" ] && [ -n "$CUR" ] && [ "$OWNER" != "$CUR" ]; then | if false; then
+# plant: CP5 | plugin/scripts/nightly-disarm.sh | echo "nightly-disarm: unknown option: $1" >&2 | echo "nightly-disarm: bad argument" >&2
+# plant: CP7 | plugin/skills/nightly-autopilot/SKILL.md | bash ~/.claude/hooks/nightly-disarm.sh --completing "$PWD" | bash ~/.claude/hooks/nightly-disarm.sh "$PWD"
 
 set -u
 
@@ -212,6 +231,107 @@ if [ "$RC" = "3" ] && printf '%s' "$OUT" | grep -q 'DID-NOT-RUN'; then
   ok "O7: an unreadable state path is exit 3, never a clean 0"
 else
   bad "O7: rc=$RC — $(printf '%s' "$OUT" | head -1)"
+fi
+
+# =====================================================================================
+# CP. The completing path — `--completing`, the flag Phase 2 passes.
+#
+# WHY IT EXISTS. Before this section, `nightly-autopilot` Phase 2 called this script from the
+# session that armed the marker, and section O above is exactly the refusal it hit. The two files
+# pointed at each other: the script's refusal said "finish the run, Phase 2 clears the marker", and
+# Phase 2 cleared the marker BY CALLING THIS SCRIPT. Every completed run therefore left the marker
+# behind — the stale marker this whole file exists to eliminate, reintroduced through the primary
+# path rather than through a crash.
+#
+# THE TWO MODES ARE EXACT MIRRORS, AND THAT IS THE DESIGN. Bare = recovery, by a DIFFERENT session,
+# owner refused (section O, unchanged). `--completing` = Phase 2, by the OWNING session, foreign
+# refused. R-04's content survives intact: no session disarms on a claim it cannot back. A foreign
+# session cannot prove the owner is dead — hence the bare form's refusal and the deliberate absence
+# of a liveness oracle. The owning session at Phase 2 backs its claim with identity: it IS the run,
+# and it is ending. That was always the one caller with certainty, and it was the one being refused.
+#
+# CP6 IS A FORWARD GUARD, NOT FIX EVIDENCE. It passes before and after. It is here because the
+# failure mode of this change is the flag becoming a general permission rather than a mirror.
+
+# CP1: the owning session, completing. THE assertion that was RED before the flag existed.
+R=$(mk_root cp1); arm "$R" "session-AAA"
+OUT=$(CLAUDE_CODE_SESSION_ID=session-AAA bash "$DISARM" --completing "$R" 2>&1); RC=$?
+if [ "$RC" = "0" ] && [ ! -f "$R/.claude/nightly-state/active" ] \
+   && printf '%s' "$OUT" | grep -q 'DISARM: CLEARED'; then
+  ok "CP1: the owning session clears its own marker when completing"
+else
+  bad "CP1: rc=$RC marker=$( [ -f "$R/.claude/nightly-state/active" ] && echo kept || echo removed ) — $(printf '%s' "$OUT" | head -1)"
+fi
+
+# CP2: the mirror. A session that did NOT arm the marker has no standing to claim it is completing
+# the run, so `--completing` refuses it — the opposite of the bare form, on the same evidence.
+R=$(mk_root cp2); arm "$R" "session-AAA"
+OUT=$(CLAUDE_CODE_SESSION_ID=session-BBB bash "$DISARM" --completing "$R" 2>&1); RC=$?
+if [ "$RC" = "1" ] && [ -f "$R/.claude/nightly-state/active" ] \
+   && printf '%s' "$OUT" | grep -q 'REFUSED'; then
+  ok "CP2: --completing from a foreign session is refused and the marker survives"
+else
+  bad "CP2: rc=$RC marker=$( [ -f "$R/.claude/nightly-state/active" ] && echo kept || echo REMOVED )"
+fi
+
+# CP3: a legacy ownerless marker completes, with the note. Same leniency the recovery path already
+# applies (O3): ABSENT is not FOREIGN and not CORRUPT. Refusing here would strand a run whose
+# marker predates issue #321 — the population the flag exists to serve.
+R=$(mk_root cp3); : > "$R/.claude/nightly-state/active"
+OUT=$(CLAUDE_CODE_SESSION_ID=session-AAA bash "$DISARM" --completing "$R" 2>&1); RC=$?
+if [ "$RC" = "0" ] && [ ! -f "$R/.claude/nightly-state/active" ] \
+   && printf '%s' "$OUT" | grep -q 'no session_id'; then
+  ok "CP3: a legacy ownerless marker completes and says why it could not name an owner"
+else
+  bad "CP3: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# CP4: the marker names an owner but the environment carries no session id, so ownership cannot be
+# established either way. Proceed with a note. Failing closed here would recreate the very bug this
+# flag fixes, in a narrower case — a run that cannot finish clearing up after itself.
+R=$(mk_root cp4); arm "$R" "session-AAA"
+OUT=$(env -u CLAUDE_CODE_SESSION_ID bash "$DISARM" --completing "$R" 2>&1); RC=$?
+if [ "$RC" = "0" ] && [ ! -f "$R/.claude/nightly-state/active" ] \
+   && printf '%s' "$OUT" | grep -q 'could not be established'; then
+  ok "CP4: an unprovable ownership completes with a note rather than stranding the run"
+else
+  bad "CP4: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# CP5: an unknown flag is a bad invocation NAMED AS SUCH. Exit 2 alone is not evidence here: before
+# the flag existed, `--bogus` was read as the project root and exited 2 for the unrelated reason
+# that no such directory exists. The message has to distinguish the two.
+OUT=$(bash "$DISARM" --bogus "$TMPROOT" 2>&1); RC=$?
+if [ "$RC" = "2" ] && printf '%s' "$OUT" | grep -q 'unknown option'; then
+  ok "CP5: an unknown flag is exit 2 and says it is an unknown option"
+else
+  bad "CP5: rc=$RC — $(printf '%s' "$OUT" | head -1)"
+fi
+
+# CP6: forward guard — the BARE form must still refuse the owner. If this ever goes green through
+# the completing branch, the flag has stopped being a mirror and become a general permission.
+R=$(mk_root cp6); arm "$R" "session-AAA"
+OUT=$(CLAUDE_CODE_SESSION_ID=session-AAA bash "$DISARM" "$R" 2>&1); RC=$?
+if [ "$RC" = "1" ] && [ -f "$R/.claude/nightly-state/active" ]; then
+  ok "CP6: the bare recovery form still refuses the owner (forward guard, passes before and after)"
+else
+  bad "CP6: the bare form no longer refuses the owning session — R-04 has been widened"
+fi
+
+# CP7: the SKILL passes the flag, and the inverted sentence is gone. §4 used to claim a refusal
+# "cannot happen — this is the session that armed it", which names the refusal CONDITION as its
+# exclusion. Matched against a flattened, undecorated copy: a clause is the same clause whether it
+# wraps or carries backticks (ADR-0073/0076/0080/0098 family).
+NA_FLAT=$(tr '\n' ' ' < "$NA" | tr -s ' ' | tr -d '`*')
+if printf '%s' "$NA_FLAT" | grep -q 'nightly-disarm.sh --completing "\$PWD"'; then
+  ok "CP7: §4 disarms through the completing form"
+else
+  bad "CP7: §4 still calls the recovery form, which refuses the session it is called from"
+fi
+if printf '%s' "$NA_FLAT" | grep -qi 'on this path that cannot happen'; then
+  bad "CP8: §4 still states the ownership guarantee inverted"
+else
+  ok "CP8: the inverted guarantee is gone from §4"
 fi
 
 # =====================================================================================
@@ -381,10 +501,10 @@ bash -n "$DISARM" 2>/dev/null && ok "P3b: nightly-disarm.sh parses" || bad "P3b:
 # needing a bump on every addition (ADR-0083 §D3 — a suite reporting fewer assertions does not read
 # as broken, and nobody watches the number).
 TOTAL=$((PASS + FAIL))
-if [ "$TOTAL" -ge 33 ]; then
+if [ "$TOTAL" -ge 41 ]; then
   ok "Z1: assertion floor met ($TOTAL)"
 else
-  bad "Z1: only $TOTAL assertions executed, expected >= 33 — did an extraction return empty?"
+  bad "Z1: only $TOTAL assertions executed, expected >= 41 — did an extraction return empty?"
 fi
 
 echo "----"

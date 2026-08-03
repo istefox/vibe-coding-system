@@ -462,12 +462,21 @@ and a `needs-human` left behind halts every publish — so removing only `active
 session blocked by a file the disarm appeared to have handled.
 
 ```bash
-bash ~/.claude/hooks/nightly-disarm.sh "$PWD"
+bash ~/.claude/hooks/nightly-disarm.sh --completing "$PWD"
 ```
 
-It refuses (exit 1) if the marker was armed by a *different* session than the one running it. On this
-path that cannot happen — this is the session that armed it — so a refusal here means the marker was
-rewritten mid-run and is worth reporting rather than working around. Exit 3 means the disarm did not
+**`--completing` is not decoration, and this step used to be impossible without it.** The bare form
+is the RECOVERY path: it refuses the session that armed the marker, because a session cannot prove
+a run it does not own is over. This is that session. So Phase 2 was refused on every completed run,
+and the refusal it got said *"finish the run, Phase 2 clears the marker"* while Phase 2 cleared the
+marker by calling this very script. The marker outlived every run through the primary path rather
+than through a crash — the failure `nightly-disarm.sh` exists to remove, reintroduced at the one
+place that was assumed to be safe.
+
+`--completing` is the exact mirror: the owner is the permitted caller and a *foreign* session is
+the one refused, because a session that did not arm the marker has no standing to declare the run
+finished. So a refusal (exit 1) on this path means the marker was rewritten mid-run **by a
+different session** — worth reporting rather than working around. Exit 3 means the disarm did not
 run: report it, and do not treat the guard as cleared.
 
 **Do not replace this with `rm -f`.** The plain remove is what this step used to be, and it is how a
