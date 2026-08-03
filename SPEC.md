@@ -1,25 +1,25 @@
-# SPEC — one real plan shape is recognised by no task predicate
+# SPEC — a bold-wrapped requirement id is invisible to both the checker and the repairer
 
-Source: GitHub issue #290
+Source: GitHub issue #291
 
 ## Objectives
 
-1. Re-derive the corpus: run both predicates (`is_task_line`, `is_task_opener`) over every plan in
-   `docs/superpowers/plans/` and report which plans match neither, confirming today's number rather
-   than trusting ADR-0069's "one" or ADR-0100 §PTG9's "two further".
-2. Ensure each unrecognised plan is either recognised or exempted **by name**, with a companion
-   assertion that the exempted file still exists.
-3. Prove that widening a predicate does not change token extraction for the plans that already
-   match, by comparing both predicates over the whole corpus before and after.
+1. Run `spec-coverage.sh` over a SPEC declaring `- [ ] **R-01** — …` and confirm the id reaches
+   neither the declared set nor the malformed set — the silence ADR-0072 §D4 named and left unfixed.
+2. Decide whether a bold-wrapped id reads as **declared** or is reported **`MALFORMED`**; silence is
+   the one outcome that must not remain.
+3. If it is made readable, extend `spec-normalize-ids.sh` so the repairer can normalise it, per
+   ADR-0072 §D4's invariant that a flagged line must become readable once repaired.
 
 ## Scope
 
-In: `plan-task-predicate.awk`'s two predicates and any widening of them; the exemption list and its
-companion existence assertions; the before/after corpus comparison.
+In: `spec-id-predicate.awk`'s recognition of a requirement id; `spec-coverage.sh`'s declared,
+malformed and near-miss sets; `spec-normalize-ids.sh`'s repair reach; the corpus regression check
+over `docs/specs/`.
 
-Out: the `--tasks` expansion and the `BUDGET_FILE` key, and the identifier model generally —
-ADR-0070 records that `task_num()` extracts digits only and that changing it is out of scope. Out:
-rewriting any plan in `docs/superpowers/plans/`, which are historical records.
+Out: rewriting any existing SPEC in `docs/specs/`. Out: the plain-bullet near-miss repair ADR-0072
+already shipped. Out: the boundary-anchoring rule that keeps `R-NN` from colliding with `ADR-NNNN`
+(ADR-0048), which is not what this issue touches.
 
 ## Stack
 
@@ -30,66 +30,69 @@ CI (`ci`, `markdownlint`, `links`). No application runtime.
 
 ## Architecture
 
-- `staging/plugin/skills/concept-to-code/scripts/plan-task-predicate.awk` — the one place that
-  decides, holding both `is_task_line()` (the `>= 1` guard predicate, over-counting is safe) and
-  `is_task_opener()` (the block-boundary predicate, over-matching corrupts attribution).
-- `staging/plugin/skills/concept-to-code/scripts/plan-tasks.sh` — the single entry point, with its
-  `--count` and `--count-openers` modes and their **opposite failure directions**.
-- `docs/superpowers/plans/` — the corpus, 58 plans measured at spec time.
-  `2026-06-06-claude-md-slim.md` writes `### Step N — …`; ADR-0100 §PTG9 names two further plans
-  using `### T1 —` and `### Step 0 —`.
-- Consumers: `staging/plugin/skills/concept-to-code/SKILL.md` Step 5 pre-dispatch (plan-structure
-  validation and batch arithmetic), `staging/plugin/skills/autopilot-build/SKILL.md` check 5,
-  `staging/plugin/skills/concept-to-code/scripts/spec-coverage.sh`,
-  `staging/plugin/skills/concept-to-code/scripts/diff-budget-check.sh`.
-- Tests: `staging/plugin/scripts/tests/plan-task-count.test.sh` (`PTE1` count guard, `PTE2` the
-  named exemption, `PTE3` the exemption's live subject);
-  `staging/plugin/scripts/tests/diff-budget-scope.test.sh` (`PTG9`/`PTG10`);
-  `staging/plugin/scripts/tests/batch-dispatch-openers.test.sh`.
+- `staging/plugin/skills/concept-to-code/scripts/spec-id-predicate.awk` — the one place that decides
+  what counts as a requirement id, loaded by both the checker and the repairer (it loads
+  `plan-task-predicate.awk` first).
+- `staging/plugin/skills/concept-to-code/scripts/spec-coverage.sh` — the checker; emits `MALFORMED`,
+  distinguishes near-miss causes on stderr, and takes the documented silent no-IDs path when
+  `DECL_N` is 0.
+- `staging/plugin/skills/concept-to-code/scripts/spec-normalize-ids.sh` — the repairer; adds a
+  missing checklist marker to a plain-bullet declaration and prints the diff.
+- `staging/plugin/skills/concept-to-code/SKILL.md` — Step 5's gate block, which runs the repairer
+  automatically on the one diagnosable cause and then re-runs the checker.
+- `staging/plugin/scripts/tests/spec-coverage.test.sh` — the harness, including **`RN12`**, which
+  currently pins the bold-wrapped case as a *disclosed limit* ("a bold-wrapped id is not detected —
+  the checker cannot read it in either form"). `RN12` is the assertion this issue inverts, and it
+  must be changed in kind rather than deleted.
+- `docs/specs/` — the regression corpus, 36 SPECs measured at spec time.
 - `staging/plugin/scripts/tests/plant-check.sh` — the plant registry runner (ADR-0108).
-- Sources: `docs/architecture/ADR-0069-172-plan-task-form.md`,
-  `docs/architecture/ADR-0070-184-diff-budget-task-predicate.md`,
-  `docs/architecture/ADR-0100-242-batch-dispatch-openers.md`.
+- `docs/architecture/ADR-0072-171-spec-id-near-miss-self-repair.md` — the source; anchor on the
+  "Bold-wrapped ids stay invisible to the checker in both forms" sentence, not on `:147`.
 
 ## Data model
 
-A plan task, as recognised by the two predicates: a checklist item (`- [ ] **Task N …`), or an
-H2–H4 heading containing "Task". The unrecognised shapes are `### Step N —`, `### Step 0 —`, and
-`### T1 —`.
+A requirement declaration in a SPEC's Success criteria: `- [ ] R-01 — <text>`. The forms at issue
+are `- [ ] **R-01** — <text>` and, following ADR-0072's "in both forms", the plain-bullet bold
+variant `- **R-01** — <text>`.
 
 ## API / Interfaces
 
-`plan-tasks.sh --count` (guard, `>= 1`, over-counts by design) and `plan-tasks.sh --count-openers`
-(arithmetic, returns 0 on plans using a different word for a task). Both are checkers: exit 3 for
-"did not run" is distinct from a zero result. Neither is a safe substitute for the other, and both
-call sites say so.
+`spec-coverage.sh` is a **checker**: it branches on an exit code and must distinguish "did not run"
+(exit 3) from "found nothing". `spec-normalize-ids.sh` is the repairer and prints `CLEAN` when there
+is nothing to repair. No new stdout token should be introduced unless the exit-code contract
+demands it — ADR-0072 deliberately reported the near-miss as `MALFORMED` and separated the causes on
+stderr.
 
 ## UI flows
 
-None.
+The Step 5 gate output: the checker's verdict, the repairer's diff when it acts, and the re-run
+verdict.
 
 ## Edge cases
 
-- **A plan matching no predicate makes `--count` return 0**, and both Step 5 consumers abort blaming
-  a malformed plan — issue #172 reproduced.
-- **The batch arithmetic falls back to a single block, which is safe but silent** (ADR-0100). Safe
-  and silent is the harder failure to notice.
-- **Widening to `Task|Step` was already rejected once** by ADR-0069 §D6, on the ground that it
-  changes token extraction for every plan to accommodate one completed plan. R-02 is the check that
-  makes any widening prove otherwise.
-- **An exemption must not outlive its subject.** `PTE3` is the existing pattern: assert the exempted
-  file still exists, so the exemption cannot become a waiver covering nothing (the stale-waiver
-  direction, ADR-0081 `ZA4`).
-- **An identity waiver does not travel on rename** — ADR-0069 §PTD's objection to filename-keyed
-  lists; naming a file by name is accepted here only because R-01 pairs it with the existence
-  assertion.
-- **The two predicates answer different questions**, and a widening that satisfies one may corrupt
-  the other: a checkbox sub-step reading `- [ ] Re-run Task 2.` must satisfy `is_task_line` and must
-  not satisfy `is_task_opener`.
+- **The silent path is the failure.** A SPEC whose ids are all bold-wrapped keeps `DECL_N` at 0, the
+  gate passes, and the requirement-coverage gate is inert for that whole feature. This is #171 with
+  a different decoration.
+- **Detection is bounded by the repair's reach** (ADR-0072 §D4): every flagged line must become
+  readable once repaired, or the gate reports a problem, rewrites the file and still fails. That
+  invariant is precisely why the bold case was excluded, and R-02 is the condition for lifting the
+  exclusion.
+- **A mixed SPEC is the worse case** — only *partially* silent. ADR-0072 records that the near-miss
+  guard is deliberately **not** conditioned on `DECL_N`, and a bold-id guard needs the same
+  reasoning applied to it explicitly rather than inherited.
+- **The corpus must produce the same verdicts as before** (R-03), with a count guard against a
+  vacuous loop — a sweep over zero SPECs reports no regressions and looks identical to a clean run.
+- **The repairer edits a human-reviewed artifact without asking**, which is safe only because Gate
+  4.0 has already committed the planning artifacts (ADR-0071); any widening of the repair inherits
+  that dependency.
+- **`RN12` is a needle for the old behaviour.** Inverting the behaviour without changing the
+  assertion in kind leaves a green test asserting the opposite of the new contract.
 
 ## Success criteria
 
-- [ ] R-01 — each unrecognised plan is either recognised or exempted **by name**, with a companion
-      assertion that the exempted file still exists so the exemption cannot outlive its subject.
-- [ ] R-02 — widening a predicate must not change token extraction for the plans that already match;
-      prove it by comparing both predicates over the whole corpus before and after.
+- [ ] R-01 — a bold-wrapped id either reads as declared or is reported `MALFORMED`; silence is the
+      one outcome that must not remain.
+- [ ] R-02 — if it is made readable, the repairer must be able to normalise it, per ADR-0072 §D4's
+      invariant that a flagged line must become readable once repaired.
+- [ ] R-03 — every existing SPEC in `docs/specs/` still produces the same verdict as before, proven
+      by running the checker over the whole corpus with a count guard against a vacuous loop.

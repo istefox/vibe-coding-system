@@ -3376,3 +3376,52 @@ Known consequences, recorded rather than fixed:
   plant. Same boundary ADR-0118 recorded.
 
 Detail: `docs/architecture/ADR-0121-290-plan-shape-predicate.md`.
+
+## Decisions from the bold-wrapped requirement id chain (ADR-0122)
+
+Closes issue #291, the unclosed half of ADR-0072 §D4. **Four of the SPEC's premises did not
+reproduce**, and one of them changes what the feature is for.
+
+- **The corpus is 68 SPECs, not 36, and the harness is 73 files, not 68.** PR #317 (`4cacc76`) took
+  `docs/specs/` from 36 to 67 in a single commit. Counts in a SPEC rot fast here — re-derive both
+  before citing either.
+- **Zero of the 68 SPECs carry a bold id in declaration position.** The three `**R-01**` occurrences
+  are all inside backticks in prose. **The defect is hypothetical on today's corpus, not live** —
+  which also means a green corpus sweep proves the change is a no-op and never that it works. Every
+  bold assertion rests on fixtures; ADR-0092's derive-from-the-corpus technique does not apply.
+- **The issue's "silence" claim is conditional.** Silent only when the plan cites nothing; with a
+  citing plan the checker returns `rc=3 ORPHAN R-01` — noisy and misleading rather than quiet. The
+  genuinely damaging shape is the **mixed** SPEC, which the issue's own edge-case section predicted:
+  one plain id and one bold, plan citing the plain one, and the bold id vanishes with `rc=0` and a
+  passing gate.
+- **Bold reads as DECLARED, not `MALFORMED`.** The id *is* declared; the decoration is cosmetic. The
+  supporting argument is this repository's own history: *a clause is the same clause whether it
+  wraps, is backticked, is bolded, or is capitalised* — learned seven times about its own assertions
+  (ADR-0073, ADR-0076, ADR-0080, ADR-0082, ADR-0098, ADR-0101) and never once applied to the parser
+  it ships.
+- **One shared `strip_emphasis()` in `spec-id-predicate.awk`, called by reader and writer**, which
+  preserves ADR-0072 §D4's invariant *by construction*. **The exclusion was never about bold being
+  unrepairable — it was about the checker being unable to read the repaired line.** Fix the reader
+  and the exclusion's own reason evaporates. §D4's invariant is bidirectional and had been read as
+  one-way.
+- **`spec-coverage.sh` has THREE token-extraction sites, not one**, found by prototyping rather than
+  reading. Patching two produced the worst reachable state: the repairer rewrites a bold plain
+  bullet while the checker stays silent about it. Site 2 also carries an unguarded `match()` that
+  writes an empty token on failure.
+- **`RN12` inverts and is changed in kind** on the same fixture: from *"the disclosed limit is
+  pinned"* to *"the round trip holds for the bold plain-bullet form"*.
+
+Known consequences, recorded rather than fixed:
+- **Task order is load-bearing.** Widening the near-miss predicate before the checker leaves a
+  window that is ADR-0072 §D4's failure exactly. Do not commit between those two tasks.
+- **`declared as plain bullets` is a three-way cross-file contract** — produced by
+  `spec-coverage.sh`, consumed by `concept-to-code/SKILL.md`'s Step 5 auto-repair trigger, asserted
+  by `RN3`. Rewording it disables the repair silently.
+- **`plant-check.sh` copies only `staging/` and `docs/`**, so any assertion reading
+  `.github/workflows/` fails in every plant sandbox and passes on the real tree. `RG1` is the known
+  instance; do not chase it.
+- **`BB2b`'s absolute ceiling fired for the THIRD time in one session**, on the third consecutive
+  healthy feature (5→6→7→8). Its own comment already records the previous two as evidence against
+  the absolute bound. A proportional bound needs its own issue rather than a fourth hand-edit.
+
+Detail: `docs/architecture/ADR-0122-291-bold-wrapped-requirement-id.md`.
