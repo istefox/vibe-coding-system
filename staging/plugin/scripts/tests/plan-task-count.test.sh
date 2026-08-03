@@ -561,7 +561,7 @@ echo
 # are skipped, and a run reporting fewer assertions than before does not look like a defect. The
 # floor is what makes a vanished assertion visible; lowering it needs a deliberate edit.
 _TOTAL=$((PASS + FAIL))
-[ "$_TOTAL" -ge 43 ] \
+[ "$_TOTAL" -ge 48 ] \
   && ok "Z1: $_TOTAL assertions ran (floor 43) — none silently vanished" \
   || bad "Z1: only $_TOTAL assertions ran, floor 43 — assertions disappeared, they did not fail"
 

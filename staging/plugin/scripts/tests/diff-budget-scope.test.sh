@@ -187,12 +187,17 @@ fi
 # code block, not a declaration). 6 of 61 plans is still ~10% — the exclusion is small and BB2
 # still measures what it claims.
 #
-# The ceiling is absolute and therefore needs a human edit every time a plan declares a budget.
-# That is the assertion working, not a defect: it forces a re-derivation of the population rather
-# than letting it drift. A proportional bound (say, under a fifth of the corpus) would remove the
-# friction and also remove the prompt to look — disclosed here as the alternative, deliberately
-# not taken.
-if [ "$bb2_skipped" -ge 1 ] && [ "$bb2_skipped" -le 6 ]; then
+# RAISED 6 -> 7 the same day, and the repetition is the finding. Issue #290's plan declared budgets
+# too, so this ceiling fired TWICE in one session, on two consecutive healthy features. An absolute
+# ceiling makes every plan that declares a budget — the behaviour the budget feature exists to
+# encourage — a red test that a human must hand-edit. The comment below called a proportional bound
+# "the alternative, deliberately not taken"; two firings in a day is evidence against that choice,
+# recorded here so the next reader has the data rather than the reasoning alone.
+#
+# Still absolute, because changing the mechanism is a design decision and not something to slip into
+# a red-fixing edit. What the bound is FOR is unchanged: catching an exclusion that has grown to
+# cover most of the corpus, or shrunk to cover none. 7 of 62 is ~11%.
+if [ "$bb2_skipped" -ge 1 ] && [ "$bb2_skipped" -le 7 ]; then
   ok "BB2b: the budget-declaring exclusion covers $bb2_skipped plan(s) — small and live"
 else
   bad "BB2b: $bb2_skipped plan(s) excluded from BB2 — re-derive the exclusion, it no longer bounds anything"

@@ -187,7 +187,7 @@ fi
 # Z1 — assertion-count floor (ADR-0083 §D3).
 # ===========================================================================
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 13 ]; then ok "Z1 assertion-count floor ($_total >= 13)"
+if [ "$_total" -ge 16 ]; then ok "Z1 assertion-count floor ($_total >= 13)"
 else bad "Z1 assertion count fell to $_total (floor 13) — assertions vanished from this file"; fi
 
 echo
