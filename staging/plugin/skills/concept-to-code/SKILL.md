@@ -402,7 +402,7 @@ Terminal states: `completed`, `failed`, `aborted`. Any state can transition to `
 Gates 0, 0b–0d are NOT states: they are checks run inside `step_0_init` before the first transition.
 
 Legal transition pairs (45 total — 25 standard + 6 express + 14 hybrid, including Gate 0d routing, Step 4.5 tracer-bullet routing, and direct-close shortcuts). Four standard pairs through `gate_5_review_decision` were removed by issue #265 (ADR-0105): nothing ever entered that state, because Gate 5 is an inline sub-gate:
-- Standard (preserved): all 28 pre-existing pairs unchanged, plus 1 new pair for Step 4.5's
+- Standard (preserved): 25 pairs total — the 28 pre-existing pairs, minus the four `gate_5_review_decision` pairs removed by ADR-0105, plus 1 new pair for Step 4.5's
   amber / "red → reduce scope" route (ADR-0057): `ready_for_implementation→gate_2_architecture_review`.
   Green and "red → continue anyway" reuse the existing `ready_for_implementation→step_5_implementation`
   pair; hand-code reuses the existing unconditional any-state-to-`aborted` wildcard. Checked against
