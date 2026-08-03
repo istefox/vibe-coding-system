@@ -22,6 +22,38 @@
 #
 # `grep -c … || echo 0` yields the two-line string `0\n0` on no match — `|| true` is used throughout.
 # Bash 3.2 / BSD-tools clean. Run: bash transition-pair-count.test.sh
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# TC2's plant is the closest expressible form of the SPEC's literal R-03 wording ("insert one
+# additional pair"): the derivation is a strict one-echo-per-PHYSICAL-line static scanner (no
+# `getline`, `next` fires once per record), and a plant replacement cannot carry a literal
+# newline (ADR-0112) -- so a genuinely NEW distinct line cannot be expressed as a `# plant:`
+# mutation. A first draft tried inserting the new pair on the same line as the block-open marker
+# (`PAIRS="$(mktemp)"; echo ... >> "$PAIRS"`) and it did NOT fire: the marker match calls `next`
+# immediately, discarding the rest of that physical line before the appended echo is ever seen --
+# inspected per ADR-0090, not just re-run. The workable substitute collides an existing pair with
+# another existing one on ONE line (single-line, no newline, exactly one match), which drops the
+# derived total 45 -> 44 and trips the identical TC2 mechanism (real-tree derivation vs. the
+# literal counts). The literal insertion scenario IS exercised elsewhere, unplanted: TC6's own
+# FX_NEWPAIR fixture inserts a genuinely new physical line via the test file's own multi-line
+# `insert_before` primitive (outside plant-check.sh's single-line constraint) and is a real
+# RED-catching assertion, not a plant.
+# plant: TC1 | plugin/scripts/tests/transition-pair-count.sh | exit 0 | exit 42
+# plant: TC2 | plugin/skills/concept-to-code/scripts/manifest-transition.sh | echo "step_h5_commit,completed" >> "$PAIRS" | echo "step_e4_commit,completed" >> "$PAIRS"
+# plant: TC3 | plugin/scripts/tests/transition-pair-count.sh | hybrid=$STATS_HYB | unused=$STATS_HYB
+# plant: TC4 | plugin/scripts/tests/transition-pair-count.sh | if (!(pair in seen)) | if (1)
+# plant: TC5 | plugin/scripts/tests/transition-pair-count.sh | if (!in_block) next | if (0) next
+# plant: TC6 | plugin/scripts/tests/transition-pair-count.sh | if [ -s "$FIND_FILE" ]; then | if [ -s "$FIND_FILE" ] && [ 1 -eq 0 ]; then
+# plant: TC7 | plugin/scripts/tests/transition-pair-count.sh | if [ "$TOTAL_D" -eq 0 ]; then | if [ "$TOTAL_D" -eq 999 ]; then
+# plant: TC8 | plugin/scripts/tests/transition-pair-count.sh | if [ "$#" -ne 2 ]; then | if false; then
+# plant: TC8b | plugin/scripts/tests/transition-pair-count.sh | if [ ! -f "$SKILL" ] || [ ! -r "$SKILL" ]; then | if false; then
+# plant: TC9 | plugin/scripts/tests/transition-pair-count.sh | [ "$HDR_TOTAL" != "x" ] && [ "$HDR_TOTAL" -ne "$TOTAL_D" ] | [ "$HDR_TOTAL" != "x" ] && [ 1 -eq 0 ]
+# plant: TC10 | plugin/scripts/tests/transition-pair-count.sh | [ "$HELPER_TOTAL" != "x" ] && [ "$HELPER_TOTAL" -ne "$TOTAL_D" ] | [ "$HELPER_TOTAL" != "x" ] && [ 1 -eq 0 ]
+# plant: TC11 | plugin/scripts/tests/transition-pair-count.sh | [ "$COMMENT_TOTAL" != "x" ] && [ "$COMMENT_TOTAL" -ne "$TOTAL_D" ] | [ "$COMMENT_TOTAL" != "x" ] && [ 1 -eq 0 ]
+# plant: TC12 | plugin/scripts/tests/transition-pair-count.sh | if [ -s "$FIND_FILE" ]; then | if [ -s "$FIND_FILE" ] && [ 2 -eq 3 ]; then
+# plant: TC13 | plugin/scripts/tests/transition-pair-count.sh | [ "$HDR_STD" != "x" ] && [ "$HDR_STD" -ne "$STD_D" ] | [ "$HDR_STD" != "x" ] && [ 1 -eq 0 ]
 set -u
 
 TESTS=$(cd "$(dirname "$0")" && pwd)

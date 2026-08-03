@@ -243,6 +243,7 @@ fi
 # E2 (static, updated by issue #111 / ADR-0057, same reconciliation as E1. Message corrected by
 # issue #289 / ADR-0120 D-B: the needle already looked for 45 while the failure message still
 # named 49 -- the needle was never wrong, only what it told a reader on failure).
+# plant: E2 | plugin/skills/concept-to-code/SKILL.md | performs legal state transitions atomically (45 pairs). | performs legal state transitions atomically (46 pairs).
 if grep -qF 'performs legal state transitions atomically (45 pairs).' "$SKILL_MD"; then
   ok "E2: SKILL.md helper description states (45 pairs)"
 else
@@ -252,6 +253,7 @@ fi
 # E3 (static, updated by issue #111 / ADR-0057, same reconciliation as E1. Message corrected by
 # issue #289 / ADR-0120 D-B: the SUCCESS message named 49 while the grep looked for 45, so a green
 # run printed the wrong number).
+# plant: E3 | plugin/skills/concept-to-code/scripts/manifest-transition.sh | # Build legal transition pairs into temp file (spec §3.3, 45 transitions) | # Build legal transition pairs into temp file (spec §3.3, 46 transitions)
 if grep -qF '# Build legal transition pairs into temp file (spec §3.3, 45 transitions)' "$TRN"; then
   ok "E3: manifest-transition.sh comment states 45 transitions"
 else
@@ -275,6 +277,7 @@ fi
 # Step 4.5 pair was needed (the ADR-0027 Gates-0c/0d lesson) sits unedited on the following lines
 # and is not this needle's concern. EXPECTED RED until the coder's SKILL.md fix lands in this same
 # batch -- that is the intended TDD sequence, not a defect in this assertion.)
+# plant: E5 | plugin/skills/concept-to-code/SKILL.md | Standard (preserved): 25 pairs total | Standard (preserved): 29 pairs total
 if grep -qF 'Standard (preserved): 25 pairs total — the 28 pre-existing pairs, minus the four `gate_5_review_decision` pairs removed by ADR-0105, plus 1 new pair for Step 4.5' "$SKILL_MD"; then
   ok "E5: SKILL.md Standard bullet states 25 pairs total, reconciled with the header and the script"
 else
@@ -297,6 +300,7 @@ fi
 # manifest-transition.sh's own `grep -Fxq` runtime semantics. 48 -> 49 by issue #111 / ADR-0057
 # (Step 4.5's amber route), 49 -> 45 by issue #265 / ADR-0105 (four unreachable
 # gate_5_review_decision pairs deleted).
+# plant: E7 | plugin/scripts/tests/transition-pair-count.sh | STATS_TOTAL="$TOTAL_D" | STATS_TOTAL="999"
 PTC="$(dirname "$0")/transition-pair-count.sh"
 e7_stats="$(bash "$PTC" "$TRN" "$SKILL_MD" 2>&1 >/dev/null)"
 e7_rc=$?

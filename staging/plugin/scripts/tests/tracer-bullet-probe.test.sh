@@ -420,6 +420,13 @@ fi
 # measured three ad-hoc derivations disagreeing on three of five mutation fixtures; this file's own
 # local grep was one of them (neither block-bounded nor deduplicated). TBP2/TBP3 keep their own
 # comparisons unchanged -- only the derivation input moves.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: TBP1 | plugin/scripts/tests/transition-pair-count.sh | STATS_TOTAL="$TOTAL_D" | STATS_TOTAL="1"
+# plant: TBP2 | plugin/scripts/tests/transition-pair-count.sh | STATS_TOTAL="$TOTAL_D" | STATS_TOTAL="41"
+# plant: TBP3 | plugin/scripts/tests/transition-pair-count.sh | STATS_TOTAL="$TOTAL_D" | STATS_TOTAL="41"
 # ==================================================================================================
 PTC="$SCRIPTS/tests/transition-pair-count.sh"
 _tbp_stats="$(bash "$PTC" "$TRN" "$SKILL_MD" 2>&1 >/dev/null)"

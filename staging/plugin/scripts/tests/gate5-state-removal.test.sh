@@ -25,6 +25,8 @@
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
 # plant: GR4 | plugin/skills/concept-to-code/SKILL.md | Trigger: post Step 5 (coder complete), `current_step = step_6_review` | Trigger: post Step 5 (coder complete), `current_step = gate_5_review_decision`
+# plant: GR3 | plugin/scripts/tests/transition-pair-count.sh | STATS_TOTAL="$TOTAL_D" | STATS_TOTAL="999"
+# plant: GR3b | plugin/skills/concept-to-code/SKILL.md | Legal transition pairs (45 total — 25 standard + 6 express + 14 hybrid | Legal transition pairs (46 total — 25 standard + 6 express + 14 hybrid
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
