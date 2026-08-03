@@ -12,6 +12,15 @@ on:
   push:
     branches: [main]
 
+# Cancel a run only when a later push to the SAME pull request has superseded it. A run on `main`
+# is never cancelled: two merges landing close together would otherwise leave the earlier one
+# unvalidated, and "a check that did not run looks exactly like a check that found nothing" is the
+# failure this repository keeps recording. Measured 2026-08-03: 21 pull_request events over 17
+# branches, so 4 superseded runs in three days.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
