@@ -1409,6 +1409,231 @@ else
   bad "W6: the untracked predicate does not discriminate as designed (modified-only='$_only_modified' with-stray='$_with_stray')"
 fi
 
+# ==============================================================================================
+# Section L (issue #288, ADR-0119 §D3-§D6) — the cross-file isolation-claim assertion.
+#
+# ADR-0119 §D8 says "a new section K". Section K already exists in this file; L is the first free
+# letter (A B C D G H I J K W are taken). §D8 also computes a floor of 96 from eight assertions;
+# ten were needed, so Z1 sits at 98. Both recounted here rather than inherited — ADR-0083's rule.
+#
+# WHAT IS COMPARED. The guide's diagram parenthetical is a CLAIM about behaviour. What decides
+# that behaviour is whether the step's SKILL.md block dispatches an agent with an isolation value
+# pinned on it — a MECHANISM. Prose-to-prose was rejected (§D3): comparing the guide against
+# SKILL.md's own "No worktree isolation" note would verify that two sentences agree, not that
+# either is true, and it would go green the moment either side is reworded.
+#
+# FIVE states, not the four §D3 lists. UNMAPPED is the fifth and it is load-bearing: a first draft
+# let a token with no matching block fall through to NEITHER, because an awk that never entered a
+# block reaches END with an empty buffer and an empty buffer contains no mechanism. The two are
+# then indistinguishable, and renaming `#### Step E2 — Execute` would silently remove E2 from the
+# population — the check stays green while it stops looking. L5 pins the distinction.
+#
+# The claim predicate runs over the GUIDE ONLY. It does not distinguish an assertion from a denial
+# (§D5, and ADR-0093 measured negation-in-prose and rejected it), so `nessuna worktree isolation`
+# would fire it. The editing constraint that follows is stated at the guide's three corrected
+# sites: state the absence positively, never by negating the claim phrase.
+# ==============================================================================================
+
+L_GUIDA="$REPO/docs/GUIDA-USO-IT.md"
+
+# l_classify <skill.md> <step-id> -> DISPATCH|DIRECT|AMBIGUOUS|NEITHER|UNMAPPED
+# Block boundary set is `^### ` or `^(##|###|####) (Step|Gate) `, both with the trailing space —
+# measured fence-safe on this file (9 and 22 matches, 24 distinct lines, none inside a fence).
+# Written as an explicit alternation rather than `#{2,4}`: interval expressions are the awk
+# feature secret-scan.sh already has to exit 3 over, and nothing here needs them.
+l_classify() {
+  awk -v want="$2" '
+    function isb(l) { return (l ~ /^### / || l ~ /^(##|###|####) (Step|Gate) /) }
+    BEGIN { found=0; inb=0; buf="" }
+    {
+      if (isb($0)) {
+        inb=0
+        h=tolower($0); sub(/^#+ +/,"",h)
+        if (h ~ ("^step " want " ")) { found=1; inb=1; buf="" }
+        next
+      }
+      if (inb) buf = buf tolower($0) "\n"
+    }
+    END {
+      if (!found) { print "UNMAPPED"; exit }
+      d = (buf ~ /isolation:[^\n]*worktree/); r = (buf ~ /no sub-agents/)
+      print (d && r) ? "AMBIGUOUS" : (d ? "DISPATCH" : (r ? "DIRECT" : "NEITHER"))
+    }' "$1"
+}
+
+# l_claims <guide> <step-id> -> the guide lines that make a claim ABOUT that step, or nothing.
+# A line references the step by its `step_<id>_…` state name, or — for the Express/Hybrid ids
+# only — by the bare `[EH][0-9]+` token. The bare form is load-bearing rather than belt-and-
+# braces: the third false site this issue fixed was `# E2: dispatch coder` in the usage example,
+# which carries no state name at all and would sit outside the population without it.
+l_claims() {
+  awk -v want="$2" '
+    BEGIN { bare = (want ~ /^[eh][0-9]+$/) }
+    {
+      l = tolower($0)
+      if (l !~ /dispatch coder/ && l !~ /worktree isolation/) next
+      if (l ~ ("step_" want "_")) { print NR ": " $0; next }
+      if (bare && l ~ ("(^|[^a-z0-9_])" want "([^a-z0-9_]|$)")) { print NR ": " $0 }
+    }' "$1"
+}
+
+# The population is every step token the guide actually names — derived, never listed here.
+L_TOKENS=$(grep -oE 'step_[a-z0-9]+[a-z0-9_]*' "$L_GUIDA" 2>/dev/null \
+  | sed -E 's/^step_([a-z0-9]+)_.*/\1/' | sort -u)
+L_MAPPED=0; L_DIRECT_HIT=""; L_NEITHER_HIT=""; L_DISPATCH_CLAIMED=0; L_AMBIG=""
+for _id in $L_TOKENS; do
+  _cls=$(l_classify "$CC" "$_id")
+  [ "$_cls" = "UNMAPPED" ] || L_MAPPED=$((L_MAPPED+1))
+  _cl=$(l_claims "$L_GUIDA" "$_id")
+  case "$_cls" in
+    AMBIGUOUS) L_AMBIG="$L_AMBIG $_id" ;;
+    DIRECT)    [ -n "$_cl" ] && L_DIRECT_HIT="$L_DIRECT_HIT
+  step_$_id -> $_cl" ;;
+    DISPATCH)  [ -n "$_cl" ] && L_DISPATCH_CLAIMED=$((L_DISPATCH_CLAIMED+1)) ;;
+    NEITHER)   printf '%s\n' "$_cl" | grep -qi 'worktree isolation' \
+                 && L_NEITHER_HIT="$L_NEITHER_HIT
+  step_$_id -> $_cl" ;;
+  esac
+done
+
+# L0 — the DENOMINATOR, not the matches. Zero violations is the correct and common result, and it
+# is exactly what a derivation that stopped resolving also produces. Guard the population, or
+# every assertion below is vacuously true and reads as coverage (ADR-0085's rule).
+# plant: L0 | plugin/scripts/tests/worktree-isolation-contract.test.sh | sed -E 's/^step_([a-z0-9]+)_.*/\1/' | sed -E 's/^NOPE_([a-z0-9]+)_.*/\1/'
+if [ "$L_MAPPED" -ge 12 ]; then
+  ok "L0 (denominator guard): $L_MAPPED of the guide's step tokens resolve to a SKILL.md block (floor: 12)"
+else
+  bad "L0: only $L_MAPPED token(s) resolved to a block — the extractor stopped matching, so L1-L4 are vacuous, not clean"
+fi
+
+# L1 — §D4 condition 1. Names THE GUIDE: the block pins no isolation value and says "No
+# sub-agents", so the claim contradicts the mechanism, and SKILL.md is authoritative because it is
+# what the orchestrator executes. If the step genuinely gained a dispatch, ADR-0119's premise has
+# changed and the ADR is what must move, not this assertion.
+# plant: L1 | ../docs/GUIDA-USO-IT.md | -> step_e2_execute   (esecuzione diretta, nessun sub-agent: edit nel working tree) | -> step_e2_execute   (dispatch coder, worktree isolation)
+if [ -z "$L_DIRECT_HIT" ]; then
+  ok "L1 (forward guard): no direct-execution step is claimed by the guide to dispatch or to isolate"
+else
+  bad "L1: THE GUIDE is wrong — it claims a dispatch or worktree isolation for a step whose SKILL.md block pins no isolation value and says 'No sub-agents':$L_DIRECT_HIT"
+fi
+
+# L2 — §D4 condition 2. Names SKILL.md: the guide may be describing yesterday's behaviour
+# correctly and the block lost its pin, or a heading rewrite moved its boundary.
+# plant: L2 | ../docs/GUIDA-USO-IT.md | -> step_7_commit           (skill commit) | -> step_7_commit           (worktree isolation)
+if [ -z "$L_NEITHER_HIT" ]; then
+  ok "L2 (forward guard): no step the guide credits with worktree isolation has a block that pins none"
+else
+  bad "L2: SKILL.md is wrong — its block pins no isolation value for a step the guide credits with worktree isolation (lost pin, or a heading rewrite moved the block boundary):$L_NEITHER_HIT"
+fi
+
+# L3 — §D4 condition 3, the POSITIVE TWIN. Without it L1 and L2 pass trivially on a guide with no
+# parentheticals at all. "At least one", never "every": Step 6 is also DISPATCH and the guide's
+# line for it carries no claim, which is correct and must not fail.
+# plant: L3 | ../docs/GUIDA-USO-IT.md | (dispatch coder, worktree isolation, ultracode se hook_verified=true) | (esecuzione diretta)
+if [ "$L_DISPATCH_CLAIMED" -ge 1 ]; then
+  ok "L3 (positive twin): $L_DISPATCH_CLAIMED dispatching step(s) are claimed as such by the guide — L1/L2 are not passing on an empty guide"
+else
+  bad "L3: no guide line claims a dispatch or worktree isolation for any DISPATCH step — either the Standard diagram line lost its claim or Step 5 lost its pin"
+fi
+
+# L4 — AMBIGUOUS has never occurred. A block that both pins an isolation value and says "No
+# sub-agents" describes two incompatible mechanisms and no verdict about it can be trusted.
+# The plant targets a line INSIDE the E2 block, and both halves of that are earned. A replacement
+# cannot contain a newline (ADR-0112), so a plant aimed at the `#### Step E2 — Execute` heading
+# lands ON the heading, which the classifier skips via `next` — it does not fire, and the first
+# draft of this plant did exactly that. E2 and H3 are near-identical prose, so almost every line
+# in the block matches twice and is rejected by PC2; the transition call is the one line unique
+# to E2.
+# plant: L4 | plugin/skills/concept-to-code/SKILL.md | bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest-path> gate_e3_verify | bash x.sh <manifest-path> gate_e3_verify   # isolation: "worktree"
+if [ -z "$L_AMBIG" ]; then
+  ok "L4 (forward guard): no step block is AMBIGUOUS (pinning an isolation value AND declaring no sub-agents)"
+else
+  bad "L4: block(s) both pin an isolation value and declare no sub-agents, so neither reading is trustworthy:$L_AMBIG"
+fi
+
+# L5 — the UNMAPPED/NEITHER distinction, executed rather than asserted in prose. `step_0_init` and
+# `step_4_session_boundary` are real manifest states with no `Step 0`/`Step 4` heading in
+# SKILL.md; they must report UNMAPPED. If they read NEITHER, the classifier has collapsed "no
+# block found" into "block with no mechanism" and a renamed heading silently leaves the
+# population. Note `Step 4.5` exists and must NOT satisfy id `4` — the trailing space in the
+# heading match is what stops it.
+# plant: L5 | plugin/scripts/tests/worktree-isolation-contract.test.sh | if (!found) { print "UNMAPPED"; exit } | if (!found) { print "NEITHER"; exit }
+_l5_0=$(l_classify "$CC" 0); _l5_4=$(l_classify "$CC" 4)
+if [ "$_l5_0" = "UNMAPPED" ] && [ "$_l5_4" = "UNMAPPED" ]; then
+  ok "L5: a token with no matching block reports UNMAPPED, distinct from NEITHER (step_0_init, step_4_session_boundary)"
+else
+  bad "L5: an unmapped token does not report UNMAPPED (step_0='$_l5_0' step_4='$_l5_4') — 'no block found' is collapsing into 'block with no mechanism'"
+fi
+
+# L6 — the negative twin of L1, on a FIXTURE rather than on the live tree, so the detector is
+# proven to fire without anyone having to break the repository to see it. This is the exact line
+# this issue removed.
+# plant: L6 | plugin/scripts/tests/worktree-isolation-contract.test.sh | if (l !~ /dispatch coder/ && l !~ /worktree isolation/) next | if (1) next
+_l6_g="$TMP/l6-guida.md"
+sed 's#-> step_e2_execute   (esecuzione diretta.*#-> step_e2_execute   (dispatch coder, worktree isolation)#' \
+  "$L_GUIDA" > "$_l6_g" 2>/dev/null
+_l6_hit=$(l_claims "$_l6_g" e2)
+if [ -n "$_l6_hit" ] && [ "$(l_classify "$CC" e2)" = "DIRECT" ]; then
+  ok "L6 (negative twin): the pre-#288 guide line is detected as a claim about a DIRECT step"
+else
+  bad "L6: the detector does not catch the very line #288 removed (hit='$_l6_hit' class='$(l_classify "$CC" e2)') — L1 is pinning nothing"
+fi
+
+# L7 — the negative twin of L4. A DIRECT block that acquires a pin must read AMBIGUOUS, not
+# DISPATCH: silently promoting it would hide the contradiction rather than report it.
+# The plant collapses AMBIGUOUS into DISPATCH — the silent-promotion failure L7 exists to catch,
+# and the one that leaves L4 green while the contradiction goes unreported.
+# plant: L7 | plugin/scripts/tests/worktree-isolation-contract.test.sh | print (d && r) ? "AMBIGUOUS" : (d ? "DISPATCH" : (r ? "DIRECT" : "NEITHER")) | print (d) ? "DISPATCH" : (r ? "DIRECT" : "NEITHER")
+_l7_s="$TMP/l7-skill.md"
+awk '{ print } /^#### Step E2 — Execute$/ { print ""; print "isolation: \"worktree\"" }' \
+  "$CC" > "$_l7_s" 2>/dev/null
+_l7_cls=$(l_classify "$_l7_s" e2)
+if [ "$_l7_cls" = "AMBIGUOUS" ]; then
+  ok "L7 (negative twin): a direct-execution block that acquires an isolation pin reads AMBIGUOUS"
+else
+  bad "L7: a block with both mechanisms reads '$_l7_cls', not AMBIGUOUS — the contradiction would be resolved silently instead of reported"
+fi
+
+# L8 — R-03. The Express note must state the absence as a DELIBERATE decision WITH its reason, not
+# as a bare fact ("Known limitation" was the bare fact). Matched against a flattened, undecorated,
+# lowercased copy: a clause is the same clause whether it wraps, whether a word in it is
+# backticked, and whether it opens a sentence.
+# plant: L8 | plugin/skills/concept-to-code/SKILL.md | **No worktree isolation, by design** — Step E2 dispatches no sub-agent | **No worktree isolation** — known limitation
+_l8_flat=$(tr '\n' ' ' < "$CC" | tr -d '`*_' | tr '[:upper:]' '[:lower:]' | tr -s ' ')
+_l8_missing=""
+for _n in "no worktree isolation, by design" "dispatches no sub-agent" "no worktree to isolate" "the price of the single-session design"; do
+  printf '%s' "$_l8_flat" | grep -qF "$_n" || _l8_missing="$_l8_missing [$_n]"
+done
+if [ -z "$_l8_missing" ]; then
+  ok "L8 (R-03): the Express note states the absence of isolation as a deliberate decision and gives its reason"
+else
+  bad "L8 (R-03): the Express note no longer states the decision and its reason — missing:$_l8_missing"
+fi
+
+# L9 — rule 12, applied to the note this feature writes. §D6's prescribed wording quoted the
+# DISPATCH mechanism string verbatim. It is harmless only while the note lives in the unmappable
+# section-opener block; moved a few lines down into Step E2 it would classify that block
+# AMBIGUOUS, and the guard would fire on the text written to satisfy it. The note must describe
+# the pin, never spell it.
+# plant: L9 | plugin/skills/concept-to-code/SKILL.md | requires every *dispatch* to pin that value explicitly | requires every *dispatch* to pin isolation: "worktree" explicitly
+_l9_note=$(grep -F 'No worktree isolation, by design' "$CC" | head -1)
+if [ -n "$_l9_note" ] && ! printf '%s' "$_l9_note" | grep -qiE 'isolation:[^ ]* *"?worktree'; then
+  ok "L9: the Express note describes the isolation pin without spelling the literal that classifies a block as DISPATCH"
+else
+  bad "L9: the Express note spells the DISPATCH mechanism literal — moved into a mapped block it would classify that block AMBIGUOUS (rule 12)"
+fi
+
+# Z1 — assertion-count floor. §D8: this file had none, so the vanishing-assertion class ADR-0083
+# exists to catch was open here. A FLOOR, not an exact count, so adding an assertion does not
+# require bumping it — but a section that stops running does.
+# plant: Z1 | plugin/scripts/tests/worktree-isolation-contract.test.sh | _l5_0=$(l_classify "$CC" 0); _l5_4=$(l_classify "$CC" 4) | _l5_0=UNMAPPED; _l5_4=UNMAPPED; PASS=$((PASS-3))
+_z1_total=$((PASS + FAIL + 1))   # +1 counts Z1 itself, so the number matches the final PASS= line
+if [ "$_z1_total" -ge 98 ]; then
+  ok "Z1 (assertion floor): $_z1_total assertions ran (floor: 98)"
+else
+  bad "Z1: only $_z1_total assertions ran, floor is 98 — a section stopped running rather than failing"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

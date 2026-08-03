@@ -114,7 +114,7 @@ Stato, artefatti, gate:
 ```
 step_0_init
   -> step_e1_plan      (EnterPlanMode, opzionale superpowers)
-  -> step_e2_execute   (dispatch coder, worktree isolation)
+  -> step_e2_execute   (esecuzione diretta, nessun sub-agent: edit nel working tree)
   -> gate_e3_verify    (AskUserQuestion: Approve / Commit later / Abort)
   -> step_e4_commit    (invoca skill commit)
   -> completed
@@ -133,7 +133,7 @@ step_0_init
   -> gate_h1_spec_review     (review SPEC)
      -> [gate_h1b_brainstorm]  (opzionale: design-brainstorm)
   -> step_h2_plan            (EnterPlanMode, piano dettagliato)
-  -> step_h3_execute         (dispatch coder, worktree isolation, max 20 file)
+  -> step_h3_execute         (esecuzione diretta, nessun sub-agent: edit nel working tree, max 20 file)
   -> gate_h3_verify          (AskUserQuestion: Approve / Re-run / Abort)
      -> [step_h4_review]       (opzionale: review-triage-fix)
   -> step_h5_commit
@@ -704,7 +704,7 @@ Keyword-triggered ("is there a skill for...").
 
 # Sessione singola:
 # E1: EnterPlanMode, piano leggero
-# E2: dispatch coder
+# E2: esecuzione diretta del piano (nessun sub-agent)
 # Gate E3: verifica, approva
 # E4: commit
 ```
