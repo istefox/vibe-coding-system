@@ -11,6 +11,13 @@ on:
   push:
     branches: [main]
 
+# Same rule as docs-ci.yml, and it matters more here: `ci` is a REQUIRED status check on main
+# (with `markdownlint` and `links`), so a cancelled run on main would leave the branch protected by
+# a check that never reported. Superseded pull_request runs only.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
