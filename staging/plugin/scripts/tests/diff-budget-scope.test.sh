@@ -187,6 +187,12 @@ fi
 # code block, not a declaration). 6 of 61 plans is still ~10% — the exclusion is small and BB2
 # still measures what it claims.
 #
+# RAISED 7 -> 8, the THIRD firing in one session. Three consecutive healthy features have each
+# hand-raised this ceiling (5->6->7->8) purely for declaring budgets — the behaviour the budget
+# feature exists to encourage. Three data points is no longer 'evidence against the choice', it is
+# a mechanism that costs a red test per feature and prompts nobody to look at anything. A
+# proportional bound needs its own issue; a fourth hand-edit is not the answer.
+#
 # RAISED 6 -> 7 the same day, and the repetition is the finding. Issue #290's plan declared budgets
 # too, so this ceiling fired TWICE in one session, on two consecutive healthy features. An absolute
 # ceiling makes every plan that declares a budget — the behaviour the budget feature exists to
@@ -197,7 +203,7 @@ fi
 # Still absolute, because changing the mechanism is a design decision and not something to slip into
 # a red-fixing edit. What the bound is FOR is unchanged: catching an exclusion that has grown to
 # cover most of the corpus, or shrunk to cover none. 7 of 62 is ~11%.
-if [ "$bb2_skipped" -ge 1 ] && [ "$bb2_skipped" -le 7 ]; then
+if [ "$bb2_skipped" -ge 1 ] && [ "$bb2_skipped" -le 8 ]; then
   ok "BB2b: the budget-declaring exclusion covers $bb2_skipped plan(s) — small and live"
 else
   bad "BB2b: $bb2_skipped plan(s) excluded from BB2 — re-derive the exclusion, it no longer bounds anything"

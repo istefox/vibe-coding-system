@@ -948,15 +948,22 @@ RM03_ERR=$(cat "$TMP/rm-tests/rm03.err" 2>/dev/null)
 # --- RM05/RM06/RM07: the round trip. Mutates rm-bold-bullet.spec.md IN PLACE, after RM03/RM04 have
 # already read its pre-repair state — the same ordering RN's own round trip (RN1-RN4 then RN5) uses.
 # ---
-# plant: RM05 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | function strip_emphasis(s) { sub(/^[*_]+/, "", s); return s } | function strip_emphasis(s) { return s }
+# plant: RM05 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | function strip_emphasis(s) { sub(/^[*_]+/, "", s) return s } | function strip_emphasis(s) { return s }
 # plant: RM06 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | return indent "- [ ] " rest | sub(/^[*_]+/, "", rest); return indent "- [ ] " rest
-# plant: RM07 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | if (is_checklist_item(l)) return 0 | if (0) return 0
+# RM07 CARRIES NO PLANT, and that is the honest outcome rather than an oversight. It asserts a
+# second --apply run reports CLEAN, i.e. the repair is idempotent. Measured: no single-line
+# mutation of spec-id-predicate.awk breaks it. Neutering strip_emphasis() leaves the repaired
+# line a checklist item, so is_near_miss_bullet() returns 0 at its first test and CLEAN still
+# holds; disabling that first test lets the token fall through as `[`, which matches no id, so
+# CLEAN holds again. The property is true regardless of the mechanism under it, which means
+# RM07 pins nothing today. Recorded, not papered over with a plant that would fire for an
+# unrelated reason — a plant that fires for the wrong cause is worse than a declared gap.
 bash "$NORM" --spec "$TMP/rm-tests/rm-bold-bullet.spec.md" --apply >/dev/null 2>&1
 RM05_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-bold-bullet.spec.md" --plan "$RM_PLAN" --list 2>/dev/null); RM05_RC=$?
 [ "$RM05_RC" -eq 0 ] && printf '%s\n' "$RM05_OUT" | grep -qx "R-01${TAB}bold plain bullet" \
   && ok "RM05 (round trip): after --apply, rm-bold-bullet passes and R-01 is declared" \
   || bad "RM05: repair did not make rm-bold-bullet readable — rc=$RM05_RC out=[$RM05_OUT]"
-grep -qx -- '- [ ] **R-01** — bold plain bullet' "$TMP/rm-tests/rm-bold-bullet.spec.md" \
+grep -qxF -- '- [ ] **R-01** — bold plain bullet' "$TMP/rm-tests/rm-bold-bullet.spec.md" \
   && ok "RM06: the repaired line is exactly '- [ ] **R-01** — bold plain bullet' — the ** survives, only the marker is added" \
   || bad "RM06: the repaired line lost or altered the emphasis — got [$(cat "$TMP/rm-tests/rm-bold-bullet.spec.md" 2>/dev/null)]"
 RM07_OUT=$(bash "$NORM" --spec "$TMP/rm-tests/rm-bold-bullet.spec.md")
@@ -977,7 +984,7 @@ RM08_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-mixed.spec.md" --plan "$RM_PLAN
 # --- RM09: the negative twin. The widening changes decoration TOLERANCE, never the POSITION rule
 # (ADR-0122 D5) — a mid-sentence mention still declares nothing. Without it RM01 would also be
 # satisfied by a checker that declares everything. ---
-# plant: RM09 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | function strip_emphasis(s) { sub(/^[*_]+/, "", s); return s } | function strip_emphasis(s) { sub(/^[^R]+/, "", s); return s }
+# plant: RM09 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | function strip_emphasis(s) { sub(/^[*_]+/, "", s) return s } | function strip_emphasis(s) { sub(/^[^R]+/, "", s); return s }
 RM09_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-mention.spec.md" --plan "$RM_PLAN" --list 2>/dev/null); RM09_RC=$?
 [ "$RM09_RC" -eq 0 ] && [ -z "$RM09_OUT" ] \
   && ok "RM09 (negative twin): a mid-sentence mention still declares nothing after the widening" \
@@ -986,7 +993,7 @@ RM09_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-mention.spec.md" --plan "$RM_PL
 # --- RM10: __R-01__ and *R-01* both strip to R-01 — proven by the DUPLICATE detector firing, which
 # only happens if BOTH lines are independently recognised as declaring the same id (ADR-0122 D3: a
 # character-class RUN, never a **-then-* ladder, or **R-01** would lose one asterisk). ---
-# plant: RM10 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | function strip_emphasis(s) { sub(/^[*_]+/, "", s); return s } | function strip_emphasis(s) { sub(/^\*\*/, "", s); return s }
+# plant: RM10 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | function strip_emphasis(s) { sub(/^[*_]+/, "", s) return s } | function strip_emphasis(s) { sub(/^\*\*/, "", s); return s }
 RM10_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-underscore.spec.md" --plan "$RM_PLAN" 2>/dev/null); RM10_RC=$?
 [ "$RM10_RC" -eq 3 ] && printf '%s\n' "$RM10_OUT" | grep -q "^DUPLICATE${TAB}R-01" \
   && ok "RM10: __R-01__ and *R-01* both strip to R-01 — DUPLICATE R-01 confirms both decorations are recognised" \
