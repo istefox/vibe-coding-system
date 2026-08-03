@@ -33,6 +33,16 @@
 #   3. a line carrying the literal waiver `idiom-demo` is skipped as a declared demonstration.
 # Filter 3 is a DECLARED exemption, not an identity exemption: this file is scanned like any other
 # and its own PTA1 demonstration carries the marker. No file is trusted for being itself.
+#
+# --- plants (plant-check.sh, ADR-0121) ---------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# PTH0/PTH1/PTH2 back the R-02 corpus-baseline comparison (ADR-0121 §D3); PTE4/PTJ1 are the
+# vacuity assertions beside PTE3/PTG10 (ADR-0121 §D2, the ADR-0081 ZA4 stale-waiver direction).
+# plant: PTH0 | plugin/scripts/tests/plan-task-count.test.sh | BASELINE="$STAGING/plugin/scripts/tests/plan-shape-baseline.tsv" | BASELINE="$STAGING/plugin/scripts/tests/no-such-baseline.tsv"
+# plant: PTH1 | plugin/scripts/tests/plan-shape-baseline.tsv | 2026-05-30-deep-refactor-skill.md 36 0 | 2026-05-30-deleted-plan.md 36 0
+# plant: PTH2 | plugin/scripts/tests/plan-shape-baseline.tsv | 2026-07-30-222-vendor-deployed-only-skills.md 38 7 | 2026-07-30-222-vendor-deployed-only-skills.md 38 9
+# plant: PTE4 | plugin/skills/concept-to-code/scripts/plan-task-predicate.awk | return (lvl >= 2 && lvl <= 4) && (l ~ /Task/) | return (lvl >= 2 && lvl <= 4) && (l ~ /Task|Step/)
+# plant: PTJ1 | plugin/skills/concept-to-code/scripts/plan-task-predicate.awk | return rest ~ /^[Tt]ask[ \t]+[0-9]+/ | return rest ~ /^([Tt]ask|[Ss]tep)[ \t]+[0-9]+|^T[0-9]+[ \t]/
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -270,6 +280,19 @@ else
   [ -f "$PLANS_DIR/$PTE_KNOWN" ] \
     && ok "PTE3 (exemption is live): $PTE_KNOWN still exists — the PTE2 exemption still has a subject" \
     || bad "PTE3: $PTE_KNOWN is gone — delete the PTE2 exemption, it now protects nothing"
+
+  # PTE4 (vacuity assertion, ADR-0121 §D2): PTE3 asserts the exempted file still EXISTS. The
+  # exemption's actual subject is that it is still UNRECOGNISED by is_task_line(). Reword it to
+  # `### Task N`, or widen the predicate to absorb it, and PTE3 stays green while the exemption
+  # protects nothing — the ADR-0081 ZA4 stale-waiver direction, applied here rather than merely
+  # cited. Kept SEPARATE from PTE3 on purpose: "the file is gone" and "the file no longer needs
+  # exempting" are different failures with different remedies (do not merge them, ADR-0121 §D2).
+  # plan-tasks.sh is a CHECKER: branch on the exit code too — exit 3 means it did not run and must
+  # not be read as "returned 0".
+  pte4_n=$(bash "$PLAN_TASKS" --count "$PLANS_DIR/$PTE_KNOWN" 2>/dev/null); pte4_rc=$?
+  { [ "$pte4_rc" -eq 0 ] && [ "$pte4_n" = "0" ]; } \
+    && ok "PTE4 (exemption still needed): $PTE_KNOWN still returns 0 — the PTE2 exemption still has work to do" \
+    || bad "PTE4: $PTE_KNOWN now returns count=$pte4_n rc=$pte4_rc — the exemption is stale, delete PTE2, it now covers nothing"
 fi
 
 # ==================================================================================================
@@ -448,6 +471,89 @@ EOF
   [ "$ptg_live" = "2" ] \
     && ok "PTG10 (exemptions are live): both named plans still exist" \
     || bad "PTG10: only $ptg_live of 2 exempted plans exist — prune the list, it protects nothing"
+
+  # PTJ1 (vacuity assertion, ADR-0121 §D2): PTG10 asserts the two named plans still EXIST. The
+  # exemption's actual subject is that they are still UNRECOGNISED by is_task_opener() — reword
+  # either to `### Task N` and PTG10 stays green while the waiver protects nothing (the ADR-0081
+  # ZA4 stale-waiver direction). Kept as a SEPARATE assertion from PTG10 on purpose: "the file is
+  # gone" and "the file no longer needs exempting" are different failures with different remedies.
+  ptj1_bad=""
+  while IFS= read -r _k; do
+    [ -f "$PLANS_DIR/$_k" ] || continue
+    _kn=$(awk -f "$PRED" -f "$TMP/openct.awk" "$PLANS_DIR/$_k" 2>/dev/null); _kn_rc=$?
+    if [ "$_kn_rc" -ne 0 ] || [ "${_kn:-x}" != "0" ]; then
+      ptj1_bad="$ptj1_bad $_k(openers=${_kn:-err} rc=$_kn_rc)"
+    fi
+  done < "$TMP/ptg-known"
+  [ -z "$ptj1_bad" ] \
+    && ok "PTJ1 (exemption still needed): both PTG9-named plans still return 0 openers" \
+    || bad "PTJ1: an exemption no longer needed — this plan now has openers, delete it from ptg-known:$ptj1_bad"
+fi
+
+# ==================================================================================================
+# PTH. The R-02 instrument (ADR-0121 §D3): a committed corpus baseline. Any predicate edit is run
+#      against it and fails naming exactly which plans moved and by how much — the "before/after
+#      comparison over the whole corpus" R-02 asks for, executed rather than re-derived.
+#
+#      REGENERATE with (after a DELIBERATE predicate change — the resulting diff is the review
+#      evidence, ADR-0121 §D3). Write this awk program to a temp file (this file's own Bash 3.2
+#      convention — no process substitution), then:
+#        FNR==1 { if (NR>1) emit(); f=FILENAME; L=0; O=0 }
+#        { if (is_task_line($0)) L++; if (is_task_opener($0)) O++ }
+#        END { emit() }
+#        function emit(  n,p,b) { n=split(f,p,"/"); b=p[n]; printf "%s\t%d\t%d\n", b, L, O }
+#      and run:
+#        awk -f staging/plugin/skills/concept-to-code/scripts/plan-task-predicate.awk \
+#            -f <the-temp-file> docs/superpowers/plans/*.md | sort > \
+#            staging/plugin/scripts/tests/plan-shape-baseline.tsv
+# ==================================================================================================
+BASELINE="$STAGING/plugin/scripts/tests/plan-shape-baseline.tsv"
+pth_rows=0
+if [ -f "$BASELINE" ]; then
+  pth_rows=$(grep -c . "$BASELINE" 2>/dev/null || true); pth_rows=${pth_rows:-0}
+fi
+
+if [ -f "$BASELINE" ] && [ "$pth_rows" -ge 55 ]; then
+  ok "PTH0 (denominator guard): $BASELINE resolves and holds $pth_rows rows (>= 55) — a baseline that stopped resolving discovers nothing and reads exactly like full agreement"
+
+  # PTH1 — stale-entry guard: every baseline row's plan still exists under docs/superpowers/plans/.
+  : > "$TMP/pth-missing.txt"
+  while read -r _bn _bl _bo; do
+    [ -n "${_bn:-}" ] || continue
+    [ -f "$PLANS_DIR/$_bn" ] || printf '%s\n' "$_bn" >> "$TMP/pth-missing.txt"
+  done < "$BASELINE"
+  pth1_missing=$(grep -c . "$TMP/pth-missing.txt" 2>/dev/null || true); pth1_missing=${pth1_missing:-0}
+  [ "$pth1_missing" -eq 0 ] \
+    && ok "PTH1 (stale-entry guard): every baseline row's plan still exists under $PLANS_DIR" \
+    || bad "PTH1: $pth1_missing baseline row(s) name a plan that no longer exists: $(tr '\n' ' ' < "$TMP/pth-missing.txt")"
+
+  # PTH2 — the comparison itself, recomputed with a single awk pass loading the shared predicate,
+  # never a reimplementation (ADR-0069 §D2). Rows whose file is missing are PTH1's business, not
+  # this one's — keeping them out is what makes each Task-5 plant isolate to one assertion
+  # (ADR-0104: an assertion covered by two guards isolates neither).
+  cat > "$TMP/pth-both.awk" <<'AWKEOF'
+{ if (is_task_line($0)) L++; if (is_task_opener($0)) O++ }
+END { printf "%d\t%d\n", L+0, O+0 }
+AWKEOF
+  : > "$TMP/pth-diff.txt"
+  pth2_compared=0
+  while read -r _bn _bl _bo; do
+    [ -n "${_bn:-}" ] || continue
+    [ -f "$PLANS_DIR/$_bn" ] || continue
+    pth2_compared=$((pth2_compared+1))
+    _res=$(awk -f "$PRED" -f "$TMP/pth-both.awk" "$PLANS_DIR/$_bn" 2>/dev/null)
+    _cl=$(printf '%s' "$_res" | cut -f1)
+    _co=$(printf '%s' "$_res" | cut -f2)
+    if [ "${_cl:-x}" != "$_bl" ] || [ "${_co:-x}" != "$_bo" ]; then
+      printf '%s: lines %s->%s openers %s->%s\n' "$_bn" "$_bl" "${_cl:-?}" "$_bo" "${_co:-?}" >> "$TMP/pth-diff.txt"
+    fi
+  done < "$BASELINE"
+  pth2_diffs=$(grep -c . "$TMP/pth-diff.txt" 2>/dev/null || true); pth2_diffs=${pth2_diffs:-0}
+  { [ "$pth2_diffs" -eq 0 ] && [ "$pth2_compared" -ge 1 ]; } \
+    && ok "PTH2: both predicates agree with the baseline on all $pth2_compared plan(s) compared" \
+    || bad "PTH2: $pth2_diffs plan(s) diverge from the baseline: $(tr '\n' '; ' < "$TMP/pth-diff.txt")"
+else
+  bad "PTH0 (denominator guard): baseline missing or holds only $pth_rows row(s) (need >= 55) at $BASELINE — PTH1/PTH2 skipped"
 fi
 
 echo
