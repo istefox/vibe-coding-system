@@ -175,8 +175,14 @@ bash ~/.claude/hooks/nightly-disarm.sh "$PWD"
 ```
 
 It prints what it cleared. Exit codes: `0` cleared (or nothing was armed), `1` refused because the
-marker belongs to *this* session — a run does not disarm itself — `2` bad arguments, `3` it could not
-look, which is **not** the same as "nothing was armed" and means you are still blocked.
+marker belongs to *this* session — a run does not disarm itself through the recovery path — `2` bad
+arguments, `3` it could not look, which is **not** the same as "nothing was armed" and means you are
+still blocked.
+
+**The bare form above is your command. `--completing` is not.** That flag is the mirror of this one:
+it is how `nightly-autopilot` Phase 2 clears the state of the run it is itself ending, so it accepts
+the owning session and refuses everyone else. Passing it by hand to clear somebody else's stale
+marker will be refused, and correctly — you are not that run.
 
 It clears the whole transient set, because the marker is only one of five ways to be stuck:
 

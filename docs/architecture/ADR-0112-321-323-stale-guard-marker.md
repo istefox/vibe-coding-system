@@ -165,3 +165,23 @@ of one property, and the only mutation that breaks `F6` is the whole-command rev
 - This repository's own `.claude/nightly-state/` still holds `build-status` and `started-at` from the
   2026-07-31 run. Running the disarm here is the end-to-end check, and clearing that debris is a real
   outcome rather than a fixture.
+
+---
+
+## Correction (2026-08-03)
+
+**R-04, as shipped, made `nightly-autopilot` Phase 2 impossible.** This ADR's own §3.1/§4 wiring
+has Phase 2 clear the marker by calling `nightly-disarm.sh` from the session that armed it, which
+is exactly the refusal R-04 installs. So every *completed* run left the marker behind, through the
+primary path rather than through a crash — the failure this ADR exists to remove, reintroduced at
+the one place assumed safe. The refusal message compounded it by naming Phase 2 as the remedy
+while Phase 2's remedy was this script.
+
+Fixed by **ADR-0123**, which adds a `--completing` flag and makes the two modes exact mirrors: the
+bare form is recovery and refuses the owner (this ADR's rule, unchanged); `--completing` is
+completion and refuses a foreign session. R-04's content survives intact — no session disarms on
+a claim it cannot back — and the "no liveness oracle" paragraph above stands verbatim.
+
+The body is not edited (ADR-0034 precedent): it is an accurate record of what was decided and why.
+What is corrected is the scope of the refusal, and the sentence in `nightly-autopilot/SKILL.md` §4
+that stated the guarantee inverted.
