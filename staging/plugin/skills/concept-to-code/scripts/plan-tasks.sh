@@ -30,15 +30,17 @@
 #
 # --count-openers IS THAT SECOND ANSWER (issue #242, ADR-0100). It exposes is_task_opener(), which
 # ADR-0070 added to the shared predicate for exactly this distinction: "is there a task here"
-# versus "does a task BLOCK START here". Measured over the 58 plans in docs/superpowers/plans/, the
-# two answers differ on 51, and every one of those 51 is >= 6 and over-counted — so a caller that
-# batches by ranges gets ranges over tasks that do not exist. On #222's plan: 38 lines, 7 openers.
+# versus "does a task BLOCK START here". Measured over the 62 plans in docs/superpowers/plans/
+# (re-measured 2026-08-03, ADR-0121), the two answers differ on 53, and every one of those 53 is
+# >= 6 and over-counted — so a caller that batches by ranges gets ranges over tasks that do not
+# exist. On #222's plan: 38 lines, 7 openers.
 #
 # THE TWO MODES ARE NOT INTERCHANGEABLE IN EITHER DIRECTION. --count over-counts, which is safe for
-# a guard and wrong for arithmetic. --count-openers returns 0 on the two corpus plans that use a
-# different word for a task (`### T1 —`, `### Step 0 —`, exempted by name in ADR-0070 §PTG9 and
-# ADR-0069 §PTE2), which is safe for arithmetic that checks for zero and wrong for a guard. A
-# caller picks the one matching its question and says which, at the call site.
+# a guard and wrong for arithmetic. --count-openers returns 0 on two corpus plans, not three shapes
+# — `deep-refactor-skill.md` (`### T1 —`) and `claude-md-slim.md` (`### Step N —`, whose first
+# heading is `### Step 0 —`), exempted by name in ADR-0070 §PTG9 and ADR-0069 §PTE2 — which is safe
+# for arithmetic that checks for zero and wrong for a guard. A caller picks the one matching its
+# question and says which, at the call site.
 #
 # Bash 3.2 clean: no assoc arrays, no mapfile, no process substitution, no <<<.
 set -u

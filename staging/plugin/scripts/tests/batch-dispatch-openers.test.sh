@@ -35,6 +35,7 @@
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
 # plant: BO1 | plugin/skills/concept-to-code/scripts/plan-task-predicate.awk | return rest ~ /^[Tt]ask[ \t]+[0-9]+/ | return 1
+# plant: BOV1 | plugin/skills/concept-to-code/scripts/plan-task-predicate.awk | return rest ~ /^[Tt]ask[ \t]+[0-9]+/ | return rest ~ /^([Tt]ask|[Ss]tep)[ \t]+[0-9]+|^T[0-9]+[ \t]/
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -130,6 +131,15 @@ if [ -f "$PLANS/2026-05-30-deep-refactor-skill.md" ]; then
 else
   bad "BO5b the ### T1 — plan is gone; BO5's exemption outlived its subject"
 fi
+# BOV1 (vacuity assertion, ADR-0121 §D2): BO5b asserts the ### T1 plan still EXISTS. BO5 already
+# asserts the zero-opener POPULATION is non-empty; BOV1 is the per-name half, which is what goes
+# stale silently — reword this one plan to `### Task N` and BO5/BO5b both stay green while the
+# zero-opener branch (BO7) has lost its real subject. Kept SEPARATE from BO5b on purpose: "the
+# file is gone" and "the file no longer needs exempting" want different remedies.
+bov1_o=$(bash "$PT" --count-openers "$PLANS/2026-05-30-deep-refactor-skill.md" 2>/dev/null); bov1_rc=$?
+{ [ "$bov1_rc" -eq 0 ] && [ "$bov1_o" = "0" ]; } \
+  && ok "BOV1 (exemption still needed): the ### T1 plan still returns 0 openers" \
+  || bad "BOV1: the ### T1 plan now returns openers=$bov1_o rc=$bov1_rc — the zero-opener branch has lost its real subject"
 
 # ===========================================================================
 # BO6..BO8 — the call sites. Prose matched flat and undecorated (ADR-0098's rule).
@@ -177,7 +187,7 @@ fi
 # Z1 — assertion-count floor (ADR-0083 §D3).
 # ===========================================================================
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 13 ]; then ok "Z1 assertion-count floor ($_total >= 13)"
+if [ "$_total" -ge 16 ]; then ok "Z1 assertion-count floor ($_total >= 13)"
 else bad "Z1 assertion count fell to $_total (floor 13) — assertions vanished from this file"; fi
 
 echo

@@ -3331,3 +3331,48 @@ Known consequences, recorded rather than fixed:
   `TBP2`/`TBP3`.
 
 Detail: `docs/architecture/ADR-0120-289-transition-pair-count.md`.
+
+## Decisions from the plan-shape predicate chain (ADR-0121)
+
+Closes issue #290. Asks whether a real plan shape is recognised by no task predicate. **Measured on
+the 61-file corpus, and three of the issue's premises did not reproduce.**
+
+- **`### Step 0 —` is not a further plan.** It is the first heading *inside*
+  `2026-06-06-claude-md-slim.md`, the file `PTE2` already exempts — its headings run `### Step 0`
+  through `### Step 7`. The recurring "three shapes / two further plans" claim conflates one file's
+  heading run with a second file.
+- **Exactly ONE plan matches neither predicate**, and the second zero-opener plan
+  (`2026-05-30-deep-refactor-skill.md`) is matched 36 times by `is_task_line` — it is not
+  unrecognised, it simply has no `Task N` opener. The exemption list of two files is correct as it
+  stands; only the prose describing it was wrong.
+- **The real gap is a stale-waiver one, and R-01 was already satisfied literally.** `PTE3`, `PTG10`
+  and `BO5b` assert the exempted **file exists**. The exemption's subject is *the file being
+  unrecognised*. Reword that plan to `### Task N` and both assertions stay green while the waiver
+  covers nothing — the ADR-0081 `ZA4` direction, which the issue cites and does not itself apply.
+  Three vacuity assertions are added beside the existence checks, deliberately separate: "file
+  gone" and "exemption no longer needed" want different remedies.
+- **Widening is rejected on measured cost, not on inherited reasoning.** Making `is_task_opener`
+  accept `Step N` changes **22 of 61** plans and **20 of those are collateral**: they use
+  `- [ ] **Step N:` as sub-steps *inside* a task, so opener counts rise to equal the line counts
+  (26→87, 11→67) and the predicate's stated purpose inverts. Widening `is_task_line` is cheap on
+  the guard axis but feeds 15 new lines into `spec-coverage.sh`'s token extraction — none carrying
+  an `R-NN` today, so latent rather than zero, in a merge-blocking gate. ADR-0069 §D6's refusal
+  survives re-measurement and now carries the numbers it was originally asserted without.
+
+Known consequences, recorded rather than fixed:
+- **A registry-wide defect was found and is NOT fixed here: `plant-check.sh` decides a plant fired
+  with `grep -q "^FAIL: $aid"`, a PREFIX match.** So `SP5`'s plant is satisfied by `SP5b` failing,
+  `TC1`'s by `TC10`, `G1`'s by `G1b` — **41 of 148 declared plants sit on such a collision**. It is
+  the fourth boundary of that registry after `PC4` and the `../docs/` hatch. Fixing it means
+  re-verifying 148 plants and probably exposing a second red population, so it needs its own issue.
+  This feature adds none: its new ids were chosen to avoid prefix collisions and verified both ways.
+- The committed 61-row corpus baseline decays. A plan added after 2026-08-03 is outside it, and the
+  count guard catches a baseline that stopped *resolving*, not one that merely aged. The first
+  forgotten regeneration will read as a regression.
+- The three vacuity assertions pass on day one, so their only evidence is the declared plant.
+  Inspect what each plant actually produced (ADR-0090), never the word "fired".
+- **The architect's command scope blocks `sed -i` and `rm -rf`**, so a differential simulation over
+  a mutated corpus copy cannot be run at design time and must be handed to the coder as a declared
+  plant. Same boundary ADR-0118 recorded.
+
+Detail: `docs/architecture/ADR-0121-290-plan-shape-predicate.md`.
