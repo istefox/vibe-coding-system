@@ -840,12 +840,21 @@ RN11_OUT=$(bash "$NORM" --spec "$TMP/rn-ok.spec.md")
   && ok "RN11 (negative twin of RN1): a correctly-written SPEC needs no repair" \
   || bad "RN11: the repair wants to rewrite a correct SPEC: [$RN11_OUT]"
 
-# --- RN12: the disclosed limit, pinned so the exclusion is a decision on record. ---
+# --- RN12: INVERTED IN KIND (2026-08-03, ADR-0122 §D8, issue #291). Was "the disclosed limit,
+# pinned so the exclusion is a decision on record" — a bold-wrapped id was NOT detected, and the
+# repair left it unreadable. It now asserts the OPPOSITE, on the SAME fixture: the round trip
+# HOLDS for the bold plain-bullet form. This is not a relaxation of the check; it is the check for
+# the contract this repository ships now (ADR-0122 D1/D2). See section RM below for the rest of
+# the new-behaviour coverage.
+# plant: RN12 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | t = strip_emphasis(t) | t = t
 printf '# SPEC\n\n## Success criteria\n\n- **R-01** — bold id\n' >"$TMP/rn-bold.spec.md"
-RN12_OUT=$(bash "$NORM" --spec "$TMP/rn-bold.spec.md")
-[ "$RN12_OUT" = "CLEAN" ] \
-  && ok "RN12 (disclosed limit, ADR-0072 §D4): a bold-wrapped id is not detected — the checker cannot read it in either form" \
-  || bad "RN12: a bold id was rewritten into a form the checker still cannot read — a repair that does not repair"
+bash "$NORM" --spec "$TMP/rn-bold.spec.md" --apply >/dev/null 2>&1
+printf '# Plan\n\n## Task 1 — noop (R-01)\n' >"$TMP/rn12-plan.md"
+RN12_LIST=$(bash "$SCOV" --spec "$TMP/rn-bold.spec.md" --plan "$TMP/rn12-plan.md" --list 2>/dev/null)
+{ grep -q -- '^- \[ \] \*\*R-01\*\* — bold id$' "$TMP/rn-bold.spec.md" \
+    && printf '%s\n' "$RN12_LIST" | grep -q "^R-01${TAB}"; } \
+  && ok "RN12 (inverted, ADR-0122 §D8): the round trip holds for the bold plain-bullet form — repaired into \`- [ ] **R-01** — bold id\` and then read as declared" \
+  || bad "RN12: the round trip does not hold for a bold-wrapped id — repaired-file=[$(cat "$TMP/rn-bold.spec.md")] list=[$RN12_LIST]"
 
 # --- RN13: the whole corpus stays silent, count-guarded. Same hard gate as section RE, re-asserted
 # after adding a new way for the checker to fail. ---
@@ -883,6 +892,138 @@ done
 [ -z "$RN15_MISS" ] \
   && ok "RN15: both SPEC producers show the literal '- [ ] R-01' form in their template" \
   || bad "RN15: producer(s) without the literal marker:$RN15_MISS — the drift #171 was filed about"
+
+# ==================================================================================================
+# RM. Issue #291 / ADR-0122 — a bold-wrapped requirement id is invisible to both the checker and
+# the repairer. RN12 above is changed IN KIND to assert the new contract on ADR-0072's own fixture;
+# this section covers the rest: the closing-run trim, the round trip, the mixed-SPEC damaging case
+# (ADR-0122 M4), the position rule (unchanged, D5), decoration tolerance beyond bold (D3), and the
+# corpus differential (R-03, D9).
+#
+# EXPECTED RED, in whole or in part, until the coder lands Tasks 2-3 (spec-id-predicate.awk's
+# strip_emphasis() and spec-coverage.sh's three call sites). Before that, `strip_emphasis` is not
+# called anywhere and a bold-wrapped id at the START of an item's text never matches the checker's
+# `^R-` anchor in either the checklist-item or the near-miss branch, so every bold-carrying fixture
+# below is currently invisible (the DECL_N=0 silent path) rather than declared or MALFORMED.
+# RM11/RM12 are corpus facts independent of this fix (0 bold ids exist in the corpus today, ADR-0122
+# M3) and may already pass — that is expected, not a defect in the assertion.
+# ==================================================================================================
+mkdir -p "$TMP/rm-tests"
+RM_PLAN="$TMP/rm-tests/rm-plan.md"
+printf '# Plan\n\n## Task 1 — noop\n' >"$RM_PLAN"
+
+printf '# SPEC\n\n## Success criteria\n\n- [ ] **R-01** — bold checklist id\n' >"$TMP/rm-tests/rm-bold-item.spec.md"
+printf '# SPEC\n\n## Success criteria\n\n- **R-01** — bold plain bullet\n' >"$TMP/rm-tests/rm-bold-bullet.spec.md"
+printf '# SPEC\n\n## Success criteria\n\n- [ ] R-01 — plain\n- [ ] **R-02** — bold mixed\n' >"$TMP/rm-tests/rm-mixed.spec.md"
+printf '# SPEC\n\n## Success criteria\n\n- [ ] **Note** R-01 is mentioned mid-sentence\n' >"$TMP/rm-tests/rm-mention.spec.md"
+printf '# SPEC\n\n## Success criteria\n\n- [ ] __R-01__ — underscore\n- [ ] *R-01* — italic\n' >"$TMP/rm-tests/rm-underscore.spec.md"
+
+# --- RM01/RM02: a bold-wrapped id inside a checklist item declares, and the closing run is trimmed
+# from the --list text (not just the leading one — RM01 alone would not prove that, ADR-0122 D4.3). ---
+# plant: RM01 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | txt = strip_emphasis(item_text(line)) | txt = item_text(line)
+# plant: RM02 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | rest = strip_emphasis(rest) | rest = rest
+RM01_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-bold-item.spec.md" --plan "$RM_PLAN" --list 2>/dev/null); RM01_RC=$?
+[ "$RM01_RC" -eq 0 ] && [ -n "$RM01_OUT" ] \
+  && ok "RM01: a bold-wrapped id inside a checklist item declares (R-01)" \
+  || bad "RM01: rm-bold-item did not declare — rc=$RM01_RC out=[$RM01_OUT]"
+printf '%s\n' "$RM01_OUT" | grep -qx "R-01${TAB}bold checklist id" \
+  && ok "RM02: --list text is exactly 'bold checklist id' — no leading or trailing ** (the closing-run trim)" \
+  || bad "RM02: --list text carries leftover emphasis or is wrong — got [$RM01_OUT]"
+
+# --- RM03/RM04: a bold-wrapped id as a plain BULLET is a near-miss — MALFORMED, exit 3, and the
+# stderr sentence names the plain-bullet cause plus the repair command, never the word "bold"
+# (ADR-0122 D6). ---
+# plant: RM03 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | t = strip_emphasis(t) | t = t
+# plant: RM04 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | nmt = strip_emphasis(nmt) | nmt = nmt
+RM03_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-bold-bullet.spec.md" --plan "$RM_PLAN" 2>"$TMP/rm-tests/rm03.err"); RM03_RC=$?
+RM03_ERR=$(cat "$TMP/rm-tests/rm03.err" 2>/dev/null)
+[ "$RM03_RC" -eq 3 ] && printf '%s\n' "$RM03_OUT" | grep -q "^MALFORMED${TAB}R-01" \
+  && ok "RM03: a bold-wrapped id as a plain bullet is a near-miss (exit 3, MALFORMED R-01)" \
+  || bad "RM03: expected exit 3 / MALFORMED R-01, got rc=$RM03_RC out=[$RM03_OUT]"
+{ printf '%s\n' "$RM03_ERR" | grep -q 'declared as plain bullets'; } \
+  && { printf '%s\n' "$RM03_ERR" | grep -q 'spec-normalize-ids.sh'; } \
+  && ok "RM04: stderr names the plain-bullet cause and the repair command" \
+  || bad "RM04: stderr does not name both the cause and the repair command — got [$RM03_ERR]"
+
+# --- RM05/RM06/RM07: the round trip. Mutates rm-bold-bullet.spec.md IN PLACE, after RM03/RM04 have
+# already read its pre-repair state — the same ordering RN's own round trip (RN1-RN4 then RN5) uses.
+# ---
+# plant: RM05 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | function strip_emphasis(s) { sub(/^[*_]+/, "", s); return s } | function strip_emphasis(s) { return s }
+# plant: RM06 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | return indent "- [ ] " rest | sub(/^[*_]+/, "", rest); return indent "- [ ] " rest
+# plant: RM07 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | if (is_checklist_item(l)) return 0 | if (0) return 0
+bash "$NORM" --spec "$TMP/rm-tests/rm-bold-bullet.spec.md" --apply >/dev/null 2>&1
+RM05_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-bold-bullet.spec.md" --plan "$RM_PLAN" --list 2>/dev/null); RM05_RC=$?
+[ "$RM05_RC" -eq 0 ] && printf '%s\n' "$RM05_OUT" | grep -qx "R-01${TAB}bold plain bullet" \
+  && ok "RM05 (round trip): after --apply, rm-bold-bullet passes and R-01 is declared" \
+  || bad "RM05: repair did not make rm-bold-bullet readable — rc=$RM05_RC out=[$RM05_OUT]"
+grep -qx -- '- [ ] **R-01** — bold plain bullet' "$TMP/rm-tests/rm-bold-bullet.spec.md" \
+  && ok "RM06: the repaired line is exactly '- [ ] **R-01** — bold plain bullet' — the ** survives, only the marker is added" \
+  || bad "RM06: the repaired line lost or altered the emphasis — got [$(cat "$TMP/rm-tests/rm-bold-bullet.spec.md" 2>/dev/null)]"
+RM07_OUT=$(bash "$NORM" --spec "$TMP/rm-tests/rm-bold-bullet.spec.md")
+[ "$RM07_OUT" = "CLEAN" ] \
+  && ok "RM07: a second normalise run on the repaired file reports CLEAN" \
+  || bad "RM07: second run still proposes changes: [$RM07_OUT]"
+
+# --- RM08: the mixed SPEC — ADR-0122 M4, the shape that passed the gate while losing a requirement.
+# Both R-01 (plain) and R-02 (bold) must declare. ---
+# plant: RM08 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | txt = strip_emphasis(item_text(line)) | txt = item_text(line)
+RM08_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-mixed.spec.md" --plan "$RM_PLAN" --list 2>/dev/null); RM08_RC=$?
+{ [ "$RM08_RC" -eq 0 ] \
+  && printf '%s\n' "$RM08_OUT" | grep -q "^R-01${TAB}" \
+  && printf '%s\n' "$RM08_OUT" | grep -q "^R-02${TAB}"; } \
+  && ok "RM08: the mixed SPEC declares BOTH R-01 (plain) and R-02 (bold) — M4's vanishing requirement is closed" \
+  || bad "RM08: mixed SPEC does not declare both ids — rc=$RM08_RC out=[$RM08_OUT]"
+
+# --- RM09: the negative twin. The widening changes decoration TOLERANCE, never the POSITION rule
+# (ADR-0122 D5) — a mid-sentence mention still declares nothing. Without it RM01 would also be
+# satisfied by a checker that declares everything. ---
+# plant: RM09 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | function strip_emphasis(s) { sub(/^[*_]+/, "", s); return s } | function strip_emphasis(s) { sub(/^[^R]+/, "", s); return s }
+RM09_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-mention.spec.md" --plan "$RM_PLAN" --list 2>/dev/null); RM09_RC=$?
+[ "$RM09_RC" -eq 0 ] && [ -z "$RM09_OUT" ] \
+  && ok "RM09 (negative twin): a mid-sentence mention still declares nothing after the widening" \
+  || bad "RM09: rm-mention wrongly declared something — rc=$RM09_RC out=[$RM09_OUT]"
+
+# --- RM10: __R-01__ and *R-01* both strip to R-01 — proven by the DUPLICATE detector firing, which
+# only happens if BOTH lines are independently recognised as declaring the same id (ADR-0122 D3: a
+# character-class RUN, never a **-then-* ladder, or **R-01** would lose one asterisk). ---
+# plant: RM10 | plugin/skills/concept-to-code/scripts/spec-id-predicate.awk | function strip_emphasis(s) { sub(/^[*_]+/, "", s); return s } | function strip_emphasis(s) { sub(/^\*\*/, "", s); return s }
+RM10_OUT=$(bash "$SCOV" --spec "$TMP/rm-tests/rm-underscore.spec.md" --plan "$RM_PLAN" 2>/dev/null); RM10_RC=$?
+[ "$RM10_RC" -eq 3 ] && printf '%s\n' "$RM10_OUT" | grep -q "^DUPLICATE${TAB}R-01" \
+  && ok "RM10: __R-01__ and *R-01* both strip to R-01 — DUPLICATE R-01 confirms both decorations are recognised" \
+  || bad "RM10: expected DUPLICATE R-01 (both forms recognised), got rc=$RM10_RC out=[$RM10_OUT]"
+
+# --- RM11/RM12: R-03, proven at the mechanism level (ADR-0122 D9), never by a golden file. Both
+# count-guarded — a sweep over zero SPECs would report no regressions and look identical to a clean
+# run. Includes the root SPEC.md deliberately (it carries 3 backticked **R-01** occurrences in
+# prose, the adversarial file, unlike RE3's exclusion of it — RE3 needs the silent pass this file
+# legitimately fails on unrelated id-declaring grounds; neither RM11 nor RM12 does). ---
+# plant: RM11 | ../docs/specs/287-rtf-s-gitignore-glob-and-this-repo-s-own.spec.md | - [ ] R-01 — one rule, covering | - [ ] **R-01** — one rule, covering
+# plant: RM12 | ../docs/specs/287-rtf-s-gitignore-glob-and-this-repo-s-own.spec.md | - [ ] R-02 — an assertion that seeds | - **R-02** — an assertion that seeds
+RM11_TOTAL=0; RM11_HITS=0
+for _s in "$REPO"/docs/specs/*.spec.md "$REPO/SPEC.md"; do
+  [ -f "$_s" ] || continue
+  RM11_TOTAL=$((RM11_TOTAL + 1))
+  _n=$(grep -cE '^[ \t]*[-*][ \t]+(\[[ xX]\][ \t]*)?[*_]+R-[0-9][0-9]' "$_s" 2>/dev/null || true)
+  RM11_HITS=$((RM11_HITS + ${_n:-0}))
+done
+if [ "$RM11_TOTAL" -ge 50 ] && [ "$RM11_HITS" -eq 0 ]; then
+  ok "RM11 (R-03): corpus differential — $RM11_TOTAL SPECs swept, zero emphasis-sensitive declaration lines — the parse is byte-identical to the pre-change parse"
+else
+  bad "RM11: corpus differential failed — swept=$RM11_TOTAL (need >=50), emphasis-sensitive hits=$RM11_HITS (need 0)"
+fi
+
+RM12_TOTAL=0; RM12_MALFORMED=0
+for _s in "$REPO"/docs/specs/*.spec.md "$REPO/SPEC.md"; do
+  [ -f "$_s" ] || continue
+  RM12_TOTAL=$((RM12_TOTAL + 1))
+  _o=$(bash "$SCOV" --spec "$_s" --plan "$RM_PLAN" --list 2>/dev/null)
+  printf '%s\n' "$_o" | grep -q '^MALFORMED' && RM12_MALFORMED=$((RM12_MALFORMED + 1))
+done
+if [ "$RM12_TOTAL" -ge 50 ] && [ "$RM12_MALFORMED" -eq 0 ]; then
+  ok "RM12 (R-03): corpus outcome — $RM12_TOTAL SPECs swept, no SPEC reports MALFORMED under the widened checker"
+else
+  bad "RM12: corpus outcome failed — swept=$RM12_TOTAL (need >=50), MALFORMED-reporting SPEC(s)=$RM12_MALFORMED (need 0)"
+fi
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
