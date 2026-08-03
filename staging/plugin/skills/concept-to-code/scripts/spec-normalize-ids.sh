@@ -10,8 +10,12 @@
 #
 # WHAT IT WILL NOT DO. It rewrites a line only when ALL of these hold, per spec-id-predicate.awk:
 # the line is inside a recognised requirements section, is a plain bullet (not already a checklist
-# item), and its text begins with a well-formed R-NN token. Prose, nested notes, headings and
-# anything outside those sections are left byte-identical.
+# item), and its text begins with a well-formed R-NN token OR a well-formed R-NN token wrapped in a
+# leading run of `*`/`_` (ADR-0122, issue #291) — e.g. `- **R-01** — …`. The emphasis is PRESERVED
+# in the rewrite: only the checklist marker is added, so `- **R-01** — x` becomes
+# `- [ ] **R-01** — x`, never `- [ ] R-01 — x`. This required no code change here — the predicate
+# is shared with spec-coverage.sh, so the widened tolerance reaches this script for free. Prose,
+# nested notes, headings and anything outside those sections are left byte-identical.
 #
 # CONTRACT.
 #   dry run (default): prints a unified diff to stdout and writes nothing; prints the sentinel

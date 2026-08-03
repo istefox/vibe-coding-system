@@ -43,16 +43,23 @@ function is_spec_section_heading(l,   lvl, rest, ll) {
 # spec-coverage.sh READS once the marker is added. A detection the repair cannot make readable is
 # worse than no detection — it reports a problem, rewrites the file, and the gate still fails.
 #
-# That is why a bold-wrapped id (`- **R-01** — …`) is NOT matched here. The checker's item_text()
-# strips the checklist marker and then requires `R-` immediately, so `- [ ] **R-01**` is invisible
-# to it too and normalising the marker would not help. Bold ids are a PRE-EXISTING blind spot of
-# the checker in both forms, independent of #171, and deliberately out of scope — disclosed in
-# ADR-0072 rather than half-handled here.
+# A bold-wrapped id (`- **R-01** — …`) IS matched here (ADR-0122, issue #291). It used to be
+# excluded, and the exclusion was never about bold being unrepairable — it was about the checker
+# being unable to read the REPAIRED line: item_text() strips the checklist marker and then requires
+# `R-` immediately, so `- [ ] **R-01**` was invisible to it too. strip_emphasis() below is called by
+# BOTH is_near_miss_bullet() here and by spec-coverage.sh's own extraction sites, so the invariant
+# now holds by construction rather than by staying out of the way: the repaired line is readable
+# because both sides strip the same leading emphasis run before testing for `R-NN`.
+function strip_emphasis(s) {
+  sub(/^[*_]+/, "", s)
+  return s
+}
 function is_near_miss_bullet(l,   t) {
   if (is_checklist_item(l)) return 0
   if (l !~ /^[ \t]*[-*][ \t]/) return 0
   t = l
   sub(/^[ \t]*[-*][ \t]+/, "", t)
+  t = strip_emphasis(t)
   return t ~ /^R-[0-9][0-9]([^0-9]|$)/
 }
 
