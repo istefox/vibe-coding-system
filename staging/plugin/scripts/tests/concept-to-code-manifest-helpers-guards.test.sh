@@ -240,18 +240,22 @@ else
   bad "E1: SKILL.md pair-count header does not state 45 total (25+6+14)"
 fi
 
-# E2 (static, updated by issue #111 / ADR-0057, same reconciliation as E1).
+# E2 (static, updated by issue #111 / ADR-0057, same reconciliation as E1. Message corrected by
+# issue #289 / ADR-0120 D-B: the needle already looked for 45 while the failure message still
+# named 49 -- the needle was never wrong, only what it told a reader on failure).
 if grep -qF 'performs legal state transitions atomically (45 pairs).' "$SKILL_MD"; then
   ok "E2: SKILL.md helper description states (45 pairs)"
 else
-  bad "E2: SKILL.md helper description does not state (49 pairs)"
+  bad "E2: SKILL.md helper description does not state (45 pairs)"
 fi
 
-# E3 (static, updated by issue #111 / ADR-0057, same reconciliation as E1).
+# E3 (static, updated by issue #111 / ADR-0057, same reconciliation as E1. Message corrected by
+# issue #289 / ADR-0120 D-B: the SUCCESS message named 49 while the grep looked for 45, so a green
+# run printed the wrong number).
 if grep -qF '# Build legal transition pairs into temp file (spec §3.3, 45 transitions)' "$TRN"; then
-  ok "E3: manifest-transition.sh comment states 49 transitions"
+  ok "E3: manifest-transition.sh comment states 45 transitions"
 else
-  bad "E3: manifest-transition.sh comment does not state 49 transitions"
+  bad "E3: manifest-transition.sh comment does not state 45 transitions"
 fi
 
 # E4 (static, genuine RED now): both new Hybrid gate_h1c items present, no-space compact-list
@@ -263,12 +267,18 @@ else
   bad "E4: SKILL.md Hybrid enumeration is missing one or both new gate_h1c_macos_ux pairs"
 fi
 
-# E5 (static, updated by issue #111 / ADR-0057: the Standard bullet now also discloses the one
-# new Step 4.5 pair added on top of the 28 pre-existing ones — same reconciliation as E1).
-if grep -qF 'Standard (preserved): all 28 pre-existing pairs unchanged, plus 1 new pair for Step 4.5' "$SKILL_MD"; then
-  ok "E5: SKILL.md Standard bullet states 28 pre-existing pairs plus the one new Step 4.5 pair"
+# E5 (static, issue #289 / ADR-0120 D-A / D5: the Standard bullet said "all 28 pre-existing pairs
+# unchanged, plus 1 new pair for Step 4.5" = 29, while the header nine lines above and the script
+# both say 25 -- ADR-0105 moved the header from 29 to 25 and left the bullet, so E5's old needle
+# pinned the stale side of a self-contradiction as a frozen string (M7: "a passing test is holding
+# the contradiction in place"). Only the count is reworded; the reasoning about WHY only the one
+# Step 4.5 pair was needed (the ADR-0027 Gates-0c/0d lesson) sits unedited on the following lines
+# and is not this needle's concern. EXPECTED RED until the coder's SKILL.md fix lands in this same
+# batch -- that is the intended TDD sequence, not a defect in this assertion.)
+if grep -qF 'Standard (preserved): 25 pairs total — the 28 pre-existing pairs, minus the four `gate_5_review_decision` pairs removed by ADR-0105, plus 1 new pair for Step 4.5' "$SKILL_MD"; then
+  ok "E5: SKILL.md Standard bullet states 25 pairs total, reconciled with the header and the script"
 else
-  bad "E5: SKILL.md Standard bullet does not state 28 pre-existing pairs plus the one new Step 4.5 pair"
+  bad "E5: SKILL.md Standard bullet does not yet state 25 pairs total (still self-contradicts the header) -- EXPECTED RED until the coder's SKILL.md fix lands"
 fi
 
 # E6 (static, genuine RED now): Express bullet gains its missing gate_e3_verify→completed pair.
@@ -279,15 +289,23 @@ else
   bad "E6: SKILL.md Express bullet is missing the gate_e3_verify→completed pair"
 fi
 
-# E7 (dynamic, mechanical proof): live recount of manifest-transition.sh's actual PAIRS block --
-# a permanent drift-detector for the script itself. 48 -> 49 by issue #111 / ADR-0057 (Step 4.5's
-# amber route), 49 -> 45 by issue #265 / ADR-0105 (four unreachable gate_5_review_decision pairs
-# deleted). An exact count on purpose: this is the one assertion that recounts rather than reads.
-actual_pairs="$(awk '/PAIRS="\$\(mktemp\)"/,/if ! grep -Fxq/' "$TRN" | grep -Ec '^ *echo "[a-z_0-9]+,[a-z_0-9]+" >')"
-if [ "$actual_pairs" -eq 45 ]; then
-  ok "E7: manifest-transition.sh's actual PAIRS block has exactly 45 pairs (live recount)"
+# E7 (dynamic, mechanical proof): issue #289 / ADR-0120 D4 retires this assertion's own local
+# recount into a call on the single shared checker, transition-pair-count.sh -- the derivation is
+# NOT local to this file any more. ADR-0120 M3 measured three ad-hoc derivations (this was one:
+# bounded to the block, but NOT deduplicated) disagreeing with each other on three of five
+# mutation fixtures; the checker alone is block-bounded AND distinct, matching
+# manifest-transition.sh's own `grep -Fxq` runtime semantics. 48 -> 49 by issue #111 / ADR-0057
+# (Step 4.5's amber route), 49 -> 45 by issue #265 / ADR-0105 (four unreachable
+# gate_5_review_decision pairs deleted).
+PTC="$(dirname "$0")/transition-pair-count.sh"
+e7_stats="$(bash "$PTC" "$TRN" "$SKILL_MD" 2>&1 >/dev/null)"
+e7_rc=$?
+actual_pairs="$(printf '%s\n' "$e7_stats" | grep -o 'pairs=[0-9]*' | head -1 | cut -d= -f2)"
+actual_pairs="${actual_pairs:-0}"
+if [ "$e7_rc" -eq 0 ] && [ "$actual_pairs" -eq 45 ]; then
+  ok "E7: transition-pair-count.sh (the shared derivation, not a local recount) reports 45 distinct pairs and zero findings"
 else
-  bad "E7: manifest-transition.sh's actual PAIRS block has $actual_pairs pairs, expected 45"
+  bad "E7: transition-pair-count.sh reports rc=$e7_rc pairs=$actual_pairs, expected rc=0 pairs=45"
 fi
 
 # =====================================================================================

@@ -414,15 +414,28 @@ fi
 # TBP. Transition-pair reconciliation (the task's explicit "verify, don't assume" instruction,
 # ADR-0027 precedent). Proves the documented count in SKILL.md matches manifest-transition.sh's
 # comment AND the actual number of pairs the script builds.
+#
+# ISSUE #289 / ADR-0120: ACTUAL_PAIRS is NOT derived locally any more -- it consumes
+# transition-pair-count.sh (staging/plugin/scripts/tests/), the single shared checker. ADR-0120 M3
+# measured three ad-hoc derivations disagreeing on three of five mutation fixtures; this file's own
+# local grep was one of them (neither block-bounded nor deduplicated). TBP2/TBP3 keep their own
+# comparisons unchanged -- only the derivation input moves.
 # ==================================================================================================
-ACTUAL_PAIRS=$(grep -cE '^[[:space:]]*echo "[a-z_0-9]+,[a-z_0-9]+" >>?[[:space:]]*"\$PAIRS"' "$TRN")
+PTC="$SCRIPTS/tests/transition-pair-count.sh"
+_tbp_stats="$(bash "$PTC" "$TRN" "$SKILL_MD" 2>&1 >/dev/null)"
+ACTUAL_PAIRS="$(printf '%s\n' "$_tbp_stats" | grep -o 'pairs=[0-9]*' | head -1 | cut -d= -f2)"
+ACTUAL_PAIRS="${ACTUAL_PAIRS:-0}"
 TRN_COMMENT_N=$(grep -oE '[0-9]+ transitions\)' "$TRN" | grep -oE '[0-9]+' | head -1)
 SKILL_TOTAL_N=$(grep -oE 'Legal transition pairs \([0-9]+ total' "$SKILL_MD" | grep -oE '[0-9]+' | head -1)
 
-# Asserts the PAIR, not a count that stands in for it. The count was 49 and is now 45 (issue #265
-# removed four unreachable gate_5_review_decision pairs), and a threshold that moves whenever an
-# unrelated pair is added or removed was never evidence that THIS pair is present. The count guard
-# below keeps the derivation from going vacuous.
+# TBP1 asserts the PAIR, not a count that stands in for it, and this is UNCHANGED by issue #289 /
+# ADR-0120 D4 on purpose: ADR-0105 changed it in kind (a total is never evidence about a specific
+# pair) and this chain must not reverse an Accepted decision by "consolidating" it into an equality.
+# The count was 49 and is now 45 (issue #265 removed four unreachable gate_5_review_decision
+# pairs), and a threshold that moves whenever an unrelated pair is added or removed was never
+# evidence that THIS pair is present. The `>= 40` count guard (now sourced from the shared checker,
+# not derived locally) below keeps the derivation from going vacuous -- it does not replace the
+# pair-presence grep.
 if [ -n "$ACTUAL_PAIRS" ] && [ "$ACTUAL_PAIRS" -ge 40 ] \
    && grep -qF 'ready_for_implementation,gate_2_architecture_review' "$TRN"; then
   ok "TBP1: the amber/reduce-scope pair ready_for_implementation,gate_2_architecture_review is present ($ACTUAL_PAIRS pairs built)"
