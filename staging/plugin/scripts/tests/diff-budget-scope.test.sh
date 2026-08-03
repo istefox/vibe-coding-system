@@ -180,7 +180,19 @@ if [ "$bb2_bad" -eq 0 ]; then
 fi
 # The exclusion must stay small and must actually have a subject — if it ever covers most of the
 # corpus, or none of it, BB2 has stopped measuring what it claims.
-if [ "$bb2_skipped" -ge 1 ] && [ "$bb2_skipped" -le 5 ]; then
+# RAISED 5 -> 6 on 2026-08-03, and this is that decision. Issue #289's plan declares seven
+# per-task budgets, making it the fifth plan with a real declaration; the sixth match is
+# `2026-05-20-vibe-status-skill.md`, which ADR-0091 already records as a known false positive of
+# this loose substring predicate (`# Performance budget: <10s typical…`, a comment inside a fenced
+# code block, not a declaration). 6 of 61 plans is still ~10% — the exclusion is small and BB2
+# still measures what it claims.
+#
+# The ceiling is absolute and therefore needs a human edit every time a plan declares a budget.
+# That is the assertion working, not a defect: it forces a re-derivation of the population rather
+# than letting it drift. A proportional bound (say, under a fifth of the corpus) would remove the
+# friction and also remove the prompt to look — disclosed here as the alternative, deliberately
+# not taken.
+if [ "$bb2_skipped" -ge 1 ] && [ "$bb2_skipped" -le 6 ]; then
   ok "BB2b: the budget-declaring exclusion covers $bb2_skipped plan(s) — small and live"
 else
   bad "BB2b: $bb2_skipped plan(s) excluded from BB2 — re-derive the exclusion, it no longer bounds anything"

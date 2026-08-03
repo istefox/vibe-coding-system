@@ -25,6 +25,8 @@
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
 # plant: GR4 | plugin/skills/concept-to-code/SKILL.md | Trigger: post Step 5 (coder complete), `current_step = step_6_review` | Trigger: post Step 5 (coder complete), `current_step = gate_5_review_decision`
+# plant: GR3 | plugin/scripts/tests/transition-pair-count.sh | STATS_TOTAL="$TOTAL_D" | STATS_TOTAL="999"
+# plant: GR3b | plugin/skills/concept-to-code/SKILL.md | Legal transition pairs (45 total — 25 standard + 6 express + 14 hybrid | Legal transition pairs (46 total — 25 standard + 6 express + 14 hybrid
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -83,27 +85,45 @@ else
 fi
 
 # ===========================================================================
-# GR3 — the count, DERIVED from the script and compared against every place that states it.
-# A count asserted in four files and derived in none is four chances to drift.
+# GR3/GR3b — issue #289 / ADR-0120: the count is no longer derived locally in this file. It is
+# derived ONCE by transition-pair-count.sh (staging/plugin/scripts/tests/), the single place that
+# decides what a transition pair is (ADR-0120 D1), and both assertions below consume its output.
+# ADR-0120 M3 measured THREE ad-hoc derivations across three files disagreeing with each other on
+# three of five mutation fixtures -- this file's own GR3 was one of them (deduped, but NOT bounded
+# to the pair-building block). Do not re-derive the count here; call the checker.
 # ===========================================================================
-ACTUAL=$(awk -F'"' '/^[[:space:]]*echo "[a-z0-9_]+,[a-z0-9_]+"/{print $2}' "$TR" | sort -u | wc -l | tr -d ' ')
+PTC="$STAGING/plugin/scripts/tests/transition-pair-count.sh"
+gr3_stats="$(bash "$PTC" "$TR" "$CC" 2>&1 >/dev/null)"
+gr3_rc=$?
+ACTUAL="$(printf '%s\n' "$gr3_stats" | grep -o 'pairs=[0-9]*' | head -1 | cut -d= -f2)"
+ACTUAL="${ACTUAL:-0}"
 if [ "$ACTUAL" -eq 45 ]; then
-  ok "GR3 the script builds 45 distinct pairs (49 minus the four unreachable ones)"
+  ok "GR3 transition-pair-count.sh (the shared derivation, not a local recount) reports 45 distinct pairs (49 minus the four unreachable ones)"
 else
-  bad "GR3 the script builds $ACTUAL pairs, expected 45"
+  bad "GR3 transition-pair-count.sh reports $ACTUAL pairs, expected 45"
 fi
 
-STATED=$(grep -c '45 total\|(45 pairs)\|§3.3, 45 transitions' "$CC" "$TR" 2>/dev/null | awk -F: '{s+=$2} END{print s+0}')
-if [ "$STATED" -ge 3 ]; then
-  ok "GR3b the new count is stated in SKILL.md and the script ($STATED sites)"
+# GR3b REPLACES the old `>= 3` line-floor over an OR'd needle set (ADR-0120 D-C: a floor over
+# matching lines cannot say WHICH site moved, and passes if a fourth site appears while one of the
+# three vanishes). It now asserts the checker's own per-site comparison found nothing wrong: zero
+# findings means every one of the three shipping literals (SKILL.md header, SKILL.md "atomically
+# (<n> pairs)", and the script's own §3.3 comment) agrees with the derived total. A finding, were
+# there one, would print naming the specific stale site -- see transition-pair-count.sh's own
+# COMPARISONS section.
+if [ "$gr3_rc" -eq 0 ]; then
+  ok "GR3b transition-pair-count.sh reports zero findings across SKILL.md and manifest-transition.sh -- a finding would name the stale site"
 else
-  bad "GR3b only $STATED site(s) state 45; the count is written in three places and all must move together"
+  bad "GR3b transition-pair-count.sh reports findings (rc=$gr3_rc): $gr3_stats -- one or more of the three shipping literals disagrees with the derived count"
 fi
 
+# GR3c (forward guard, ADR-0120 D4: subsumed by GR3b's per-site mechanism -- a literal that
+# disagrees with the derivation is now a finding whatever its value, so a hardcoded ban on one
+# specific historical number is no longer the mechanism doing the work. Kept as a cheap check and
+# LABELLED here: it passes before AND after this chain and must never be read as fix evidence.)
 if grep -q '49 total\|49 transitions\|(49 pairs)' "$CC" "$TR" 2>/dev/null; then
   bad "GR3c a stale 49 survives in SKILL.md or the transition script"
 else
-  ok "GR3c no stale 49 remains"
+  ok "GR3c no stale 49 remains (forward guard only -- passes before and after this chain, not fix evidence; GR3b is the real mechanism now)"
 fi
 
 # ===========================================================================

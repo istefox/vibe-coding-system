@@ -3282,3 +3282,52 @@ Known consequences, recorded rather than fixed:
   can verify empirically, and hands live differential verification to the coder by construction.
 
 Detail: `docs/architecture/ADR-0118-287-rtf-gitignore-glob-resolution.md`.
+
+## Decisions from the transition-pair count chain (ADR-0120)
+
+Closes issue #289. The legal transition-pair total was stated as a literal in nine places and
+derived in three — and the issue's own title said "derived in one". Every number below was measured
+before anything was designed; **three of the SPEC's premises did not reproduce.**
+
+- **The count is 45**, confirmed five ways including **live execution of the pair block into a real
+  file** rather than by grep alone (standard 25 / express 6 / hybrid 14). It counts distinct pairs
+  emitted into `$PAIRS`; producer exemptions are outside it (they are comment declarations, and
+  there are currently zero) and so is the unconditional `any → failed|aborted` wildcard, which
+  short-circuits before `$PAIRS` is built.
+- **Three derivations existed and they disagree — in two opposite directions.** Measured by mutating
+  the source rather than by reading: `GR3` dedups but does not bound to the block, so a pair-shaped
+  `echo` elsewhere in the file inflates it; `E7` bounds but does not dedup, so a duplicated line
+  inflates it AND a renamed block marker silently returns **0**; `tracer-bullet-probe.test.sh`'s
+  `ACTUAL_PAIRS` is wrong on both counts. All three agree on the unmutated input, which is worth
+  nothing. **The operative semantics is `grep -Fxq`, so the correct rule is block-bounded AND
+  distinct — which is none of the three.**
+- **ADR-0086 and ADR-0069 are the same criterion read in two directions**, and this is the case that
+  makes it legible: extract when copies answer the SAME question (three answers to one question is a
+  defect), keep copies when they answer DIFFERENT questions. Decide by asking what each copy is a
+  predicate *of*, never by counting copies. `transition-pair-count.sh` is the shared checker.
+- **The checker sits outside every deployment path, deliberately.**
+  `staging/plugin/scripts/tests/<name>.sh` with no `.test.sh` suffix is outside
+  `pairs-completeness.test.sh`'s non-recursive `plugin/scripts/*.sh` population and outside
+  `.claude/test-cmd`'s glob — so no `PAIRS` entry and **no inert-until-sync failure mode**, the
+  class that has bitten six recent ADRs. Precedent: `path-rule-check.sh` (ADR-0117).
+- **`TBP1` must not be converted to an equality.** ADR-0105 changed it in kind on purpose: a total
+  is never evidence about a specific pair. Consolidating it back would reverse an Accepted decision.
+
+Known consequences, recorded rather than fixed:
+- The extractor couples to a shell idiom — rewriting the pair block as a heredoc or an array makes
+  the derivation exit 3. Loud, but the block boundary strings become anchors in a file nobody
+  previously treated as anchored.
+- A fourth derivation written tomorrow passes every assertion, because the harness structurally
+  cannot see one that is correct today. A grep checkpoint in the plan is the only guard.
+- **Two live defects were found that a test was holding in place**, and both are in scope for that
+  reason: `SKILL.md` contradicts itself nine lines apart (header `25 standard` against a bullet
+  reading `28 + 1 = 29`) with `E5` pinning the stale bullet, and `E2`/`E3` carry messages naming the
+  stale 49 while grepping 45 — so a **passing** `E3` prints the wrong number. **When you change a
+  literal in an assertion, grep the message strings in the same edit**: the message is not covered
+  by the assertion it belongs to.
+- **Re-derive an assertion ID list from the file, never from a brief.** The SPEC named `GR4`/`GR5`
+  as count assertions; they are `GR3b`/`GR3c`, and `GR4`/`GR5` are about entirely different
+  subjects. It also missed a whole file and did not know R-02 was already two-thirds satisfied by
+  `TBP2`/`TBP3`.
+
+Detail: `docs/architecture/ADR-0120-289-transition-pair-count.md`.
