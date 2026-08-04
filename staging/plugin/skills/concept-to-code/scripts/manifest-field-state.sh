@@ -26,8 +26,14 @@
 # A helper that returned a verdict would have to flatten that asymmetry or grow a policy argument
 # for it. It returns a FACT instead, and each caller keeps its own rule visible at its own site.
 #
-# The value domain is the caller's too, and it has to be: hook_verified is a boolean, step5_mode is
+# The value domain is the caller's too, and it has to be: hook_verified is true|false, step5_mode is
 # workflow|agent_batch|null, step5_review_mode is none|checkpoint. There is no general "valid".
+# hook_verified's true|false are the LITERALS A PRODUCER WRITES. The helper's own stdout above
+# renders a parsed YAML boolean as True/False (S1/S2) and a quoted "true" as true (S11) — a
+# DIFFERENT axis; do not "fix" this enumeration to True|False, the derivation's [a-z_|]+ class
+# cannot match a capital letter at all. manifest-set-flag.sh, the only writer, structurally
+# refuses any value but the two literals true and false. YAML 1.1's yes/no/on/off parse as
+# booleans too but are written by nothing here — measured, hook_verified: yes reads PRESENT|True.
 # (`agent_batch`, not `agent_fallback`: issue #240. The wrong name stood here from ADR-0076 until
 # 2026-07-31 while 18 manifests carried the real one, and this comment is the worked example the
 # next author of a step5_mode checker would have copied. ADR-0016 §Manifest fields had it right
