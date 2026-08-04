@@ -179,8 +179,9 @@ never an enumeration.
 
 `sed 's/[[:space:]]*|[[:space:]]*/|/g'` is added after the comment-marker strip. Verified against
 three wrap shapes — no wrap, wrap after `is`, wrap **inside** a value list — all three now yield the
-full correct set for all three fields. The regex stays anchored on `<field> is `, so collapsing
-pipes elsewhere in the header (`PRESENT|<value>`, `${st%%|*}`) cannot be picked up.
+full correct set for all three fields. The regex stays anchored on `<field> is` plus its trailing
+space, so collapsing pipes elsewhere in the header (`PRESENT|<value>`, `${st%%|*}`) cannot be
+picked up.
 
 This satisfies R-02 by **surviving** the wrap rather than by failing loudly on it. `WW1` runs the
 derivation over a fixture copy of the helper whose sentence is re-flowed mid-list and requires the
