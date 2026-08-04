@@ -50,6 +50,7 @@
 # plant: SP5b | plugin/scripts/tests/spec-pointer-archive.test.sh | INFLIGHT=$((INFLIGHT + 1)); continue | :
 # plant: SP5 | ../docs/manifests/2026-05-23-clean-public-repo-anonymize.manifest.yml | spec: "/Users/stefanoferri/Developer/vibe-coding-system/SPEC.md" | spec: "/x/docs/specs/100-secrets-and-dependency-gate-content-scan.spec.md"
 # plant: SP5c | plugin/scripts/tests/spec-pointer-archive.test.sh | printf '# archived spec\n' >"$SPX/286-demo.spec.md" | true
+# plant: SP8b | plugin/scripts/tests/spec-pointer-archive.test.sh | printf 'artifacts:\n  spec: "/x/docs/specs/9-b.spec.md"\n' >"$BLFX/bl-b.manifest.yml" | true
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -60,20 +61,94 @@ SA="$STAGING/plugin/skills/concept-to-code/scripts/spec-archive.sh"
 SETA="$STAGING/plugin/skills/concept-to-code/scripts/manifest-set-artifact.sh"
 VA="$STAGING/plugin/skills/concept-to-code/scripts/manifest-validate.sh"
 
-# The historical set, measured on origin/main 2026-08-02: 42 manifest files, one of them the
-# 2026-07-31 orphan carrying `spec: null`, so 41 carried a slot pointer before any chain completed
-# under ADR-0106. This number is a floor, not a count of the corpus: it may only be RAISED, and only
-# by a deliberate decision recorded beside it.
+# THE FLOOR IS RETIRED (issue #346, ADR-0124). It was `HIST_FLOOR`, a hand-maintained number
+# compared against a count of slot pointers, and the history is worth keeping because it is what
+# rules the design out rather than merely arguing against it.
 #
-# RAISED 41 -> 42 on 2026-08-03, and this is that decision. Issue #288's chain was interrupted and
-# recorded `aborted`, so ADR-0106's Step 7.0b archive-on-completion never runs for it and its
-# `artifacts.spec` keeps a slot pointer permanently — a 42nd member of the set that can never
-# shrink. Left at 41 the corpus carried one unit of slack, the SP5 plant's -1 landed exactly ON the
-# floor, and `plant-check.sh` reported SP5 as pinning nothing. That is issue #346's subject observed
-# live rather than argued: **raising the floor restores the plant's bite on today's corpus and fixes
-# nothing general** — the next chain that leaves a permanent slot pointer makes it inert again, and
-# a floor that has to be bumped by hand after every such chain is the design #346 has to replace.
-HIST_FLOOR=42
+# Measured on origin/main 2026-08-02 the set was 41. RAISED 41 -> 42 by hand on 2026-08-03: issue
+# #288's chain was interrupted and recorded `aborted`, so ADR-0106's Step 7.0b archive-on-completion
+# never runs for it and its `artifacts.spec` keeps a slot pointer permanently. Left at 41 the corpus
+# carried one unit of slack, the SP5 plant's -1 landed exactly ON the floor, and `plant-check.sh`
+# reported SP5 as pinning nothing.
+#
+# A FLOOR ABSORBS ITS OWN PLANT WHENEVER THE CORPUS CARRIES SLACK, and the corpus has two
+# independent ways to acquire it — measured on the 48-manifest corpus of 2026-08-04, not argued:
+#
+#   1. a chain in flight between Step 1 and Step 7.0b carries a filled slot pointer:  +1, transient
+#   2. a chain that ABORTS keeps its slot pointer for good (7.0b runs on completion): +1, permanent
+#
+# Issue #346 names source 1 and proposes widening the in-flight exclusion from `spec: null` to
+# "not terminal". That closes source 1 and leaves source 2 open — and **a nightly run that halts
+# mid-feature produces an aborted chain**, so the fix would be re-broken by the first interrupted
+# night, which is the scenario the guard exists to make readable. #288 is already one such instance
+# in 48 manifests.
+#
+# So the count goes, and with it the maintenance. SP5 now asserts a property no count can express —
+# *this specific manifest still points at the slot* — against the frozen baseline below. Corpus
+# growth, in-flight chains and aborted chains all leave the verdict untouched by construction, so
+# the plant fires deterministically and nothing has to be bumped by hand ever again.
+#
+# It also closes the weakness disclosed above at "THE WEAKNESS, DISCLOSED RATHER THAN HIDDEN": a
+# historical rewrite masked by another chain raising SLOT. A per-manifest check cannot be masked by
+# concurrency, because it never looks at a total.
+#
+# THE BASELINE IS FROZEN, and freezing is only sound while no chain is in flight with a filled slot
+# pointer — an in-flight manifest frozen in here would legitimately fail at its own Step 7.0b.
+# Verified zero in flight at generation time (2026-08-04). Re-derive and diff with:
+#
+#   for m in docs/manifests/*.manifest.yml; do \
+#     sp=$(grep -E '^[[:space:]]+spec:' "$m" | head -1 | sed 's/.*spec:[[:space:]]*//; s/"//g'); \
+#     case "$sp" in */SPEC.md) basename "$m";; esac; done | sort
+#
+# A NEW ENTRY IS NEVER REQUIRED. A chain completing under ADR-0106 repoints to its own archive and
+# so never joins this set; one that aborts keeps a slot pointer but is not a record this baseline
+# was frozen to protect. The list only ever needs editing if a manifest is legitimately deleted,
+# which ADR-0075 declines to do.
+BASELINE=$(cat <<'BASELINE_EOF'
+2026-05-23-clean-public-repo-anonymize.manifest.yml
+2026-05-29-dynamic-workflows-step5.manifest.yml
+2026-05-30-deep-refactor-skill.manifest.yml
+2026-06-04-chain-gate-smoke-test.manifest.yml
+2026-06-06-claude-md-slim.manifest.yml
+2026-07-11-28-vendor-deployed-only-skills-and-hooks.manifest.yml
+2026-07-11-29-refresh-stale-staging-copies-from-the.manifest.yml
+2026-07-11-30-clean-public-repo-private-history.manifest.yml
+2026-07-11-31-concept-to-code-bsd-safe-slug-stamp.manifest.yml
+2026-07-11-32-manifest-helpers-count-guards.manifest.yml
+2026-07-11-33-hook-verify-session-filter.manifest.yml
+2026-07-11-34-scope-guards-autopilot-conductor.manifest.yml
+2026-07-11-35-refactor-snapshot-deep-refactor.manifest.yml
+2026-07-11-36-claude-md-slim-union-check.manifest.yml
+2026-07-11-37-vibe-status-recursion-chains.manifest.yml
+2026-07-11-38-hook-hardening.manifest.yml
+2026-07-11-39-skill-text-corrections.manifest.yml
+2026-07-11-40-agent-tool-scoping.manifest.yml
+2026-07-26-100-secrets-and-dependency-gate-content.manifest.yml
+2026-07-26-101-wire-the-anti-test-weakening-detecto.manifest.yml
+2026-07-26-102-requirement-ids-in-spec-and-a-covera.manifest.yml
+2026-07-26-103-generator-verifier-separation-dispat.manifest.yml
+2026-07-26-104-recovery-readiness-preflight.manifest.yml
+2026-07-26-105-reward-hacking-detectors.manifest.yml
+2026-07-26-106-diff-budget-scope-check.manifest.yml
+2026-07-26-107-interface-immutability-gate.manifest.yml
+2026-07-26-108-project-ci-deterministic-checks.manifest.yml
+2026-07-26-109-proportional-audit-depth.manifest.yml
+2026-07-26-110-sast-security-audit.manifest.yml
+2026-07-26-111-tracer-bullet-probe.manifest.yml
+2026-07-26-112-context-occupancy-precompact.manifest.yml
+2026-07-26-113-untrusted-input-hardening.manifest.yml
+2026-07-26-114-external-dependency-gate.manifest.yml
+2026-07-26-115-human-gate-coverage.manifest.yml
+2026-07-26-116-litter-debris-discipline.manifest.yml
+2026-07-26-117-canonical-mechanism-conformance.manifest.yml
+2026-07-26-118-agent-instrumentation.manifest.yml
+2026-07-26-119-licence-provenance.manifest.yml
+2026-07-26-120-accessibility-i18n.manifest.yml
+2026-07-28-176-worktree-isolation-contract.manifest.yml
+2026-07-30-222-vendor-deployed-only-skills.manifest.yml
+2026-08-02-the-express-path-says-no-worktree-isolat.manifest.yml
+BASELINE_EOF
+)
 
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
@@ -127,6 +202,37 @@ archive_pointers_resolve() {   # $1 = manifests dir, $2 = specs dir. Sets ARCH_N
     [ -f "$2/$(basename "$_s")" ] || ARCH_BAD=$((ARCH_BAD + 1))
   done
 }
+# Per-manifest, never a total — that is the whole point of issue #346 and the reason the floor
+# above was retired. Takes the directory and the baseline so it can be exercised on FIXTURES, the
+# same shape as count_pointers() and archive_pointers_resolve() above; an assertion that can only
+# run against the live corpus cannot be shown both directions.
+#
+# A MISSING FILE AND A REPOINTED POINTER ARE DISTINCT REASONS. "The record was deleted" and "the
+# record was rewritten" want different remedies, and a bare count cannot say which happened — the
+# defect this whole file keeps re-learning one level down. The pointer is read with the SAME idiom
+# count_pointers() uses; a second reader here would be two answers to one question (ADR-0069's rule).
+baseline_check() {   # $1 = manifests dir, $2 = newline-separated basenames. Sets BL_N, BL_BAD, BL_WHY.
+  BL_N=0; BL_BAD=0; BL_WHY=""
+  while IFS= read -r _bn; do
+    [ -n "$_bn" ] || continue
+    BL_N=$((BL_N + 1))
+    _bm="$1/$_bn"
+    if [ ! -f "$_bm" ]; then
+      BL_BAD=$((BL_BAD + 1)); BL_WHY="$BL_WHY
+  $_bn — the file is gone (ADR-0075 declines deleting a record)"
+      continue
+    fi
+    _bs=$(grep -E '^[[:space:]]+spec:' "$_bm" | head -1 | sed 's/.*spec:[[:space:]]*//; s/"//g')
+    case "$_bs" in
+      */SPEC.md) ;;
+      *) BL_BAD=$((BL_BAD + 1)); BL_WHY="$BL_WHY
+  $_bn — repointed away from the slot, now: ${_bs:-<empty>}" ;;
+    esac
+  done <<BASELINE_CHECK_EOF
+$2
+BASELINE_CHECK_EOF
+}
+
 count_pointers "$REPO/docs/manifests"
 if [ "$TOT" -ge 30 ] && [ "$SLOT" -ge 30 ]; then
   ok "SP0 $SLOT of $TOT manifests point artifacts.spec at the root slot ($INFLIGHT in-flight, excluded)"
@@ -172,12 +278,20 @@ fi
 # ===========================================================================
 # SP5 — forward guard: no historical manifest is rewritten (ADR-0075's rule).
 # ===========================================================================
-if [ "$TOT" -lt 30 ]; then
-  bad "SP5 the population collapsed to $TOT manifest(s) — an empty or tiny corpus must not read as agreement"
-elif [ "$SLOT" -ge "$HIST_FLOOR" ]; then
-  ok "SP5 (forward guard) the historical set keeps its slot pointers — SLOT=$SLOT >= floor $HIST_FLOOR of $TOT ($INFLIGHT in-flight, excluded)"
+baseline_check "$REPO/docs/manifests" "$BASELINE"
+if [ "$BL_BAD" -eq 0 ]; then
+  ok "SP5 (forward guard) every one of the $BL_N frozen historical manifests still points at the slot"
 else
-  bad "SP5 SLOT fell to $SLOT, below the floor of $HIST_FLOOR — a historical manifest lost its slot pointer; ADR-0075 declined exactly that. A chain repointing its OWN record at Step 7.0b does not lower this number."
+  bad "SP5 $BL_BAD of $BL_N frozen historical manifest(s) no longer point at the slot; ADR-0075 declined exactly that. A chain repointing its OWN record at Step 7.0b never touches this set — it was frozen before that chain existed.$BL_WHY"
+fi
+
+# SP7 — the denominator. A heredoc that failed to load leaves BASELINE empty, BL_N=0 and BL_BAD=0,
+# and SP5 goes green having checked nothing: full coverage and no coverage are the same output.
+# FORWARD GUARD — it passes before and after this feature and is not evidence that #346 is fixed.
+if [ "$BL_N" -ge 40 ]; then
+  ok "SP7 (forward guard) the frozen baseline loaded $BL_N entries — SP5 is not passing vacuously"
+else
+  bad "SP7 the baseline loaded only $BL_N entries — SP5 cannot be trusted; the heredoc did not load"
 fi
 
 # SP5b — the exclusion itself, on a fixture, in both directions. SP5 above reads the LIVE corpus,
@@ -192,6 +306,46 @@ else
   bad "SP5b fixture returned TOT=$TOT SLOT=$SLOT INFLIGHT=$INFLIGHT — expected 1/1/1"
 fi
 count_pointers "$REPO/docs/manifests"   # restore the live counts for anything downstream
+
+# SP8/SP8b — issue #346's acceptance criterion, EXECUTED rather than argued. SP5 above reads the
+# live corpus, which today contains neither an in-flight chain nor a newly-aborted one, so it cannot
+# demonstrate that those two leave the verdict alone. This can, on every run.
+#
+# The fixture carries exactly the two things that used to add slack to the retired floor: a chain in
+# flight holding a FILLED slot pointer (source 1) and a manifest outside the baseline that has been
+# repointed (the shape an aborted or completed chain leaves behind, source 2). Under a floor both
+# moved the number. Under a per-manifest baseline neither is even looked at.
+BLFX="$TMP/bl"; mkdir -p "$BLFX"
+printf 'artifacts:\n  spec: "/x/SPEC.md"\n' >"$BLFX/bl-a.manifest.yml"
+printf 'artifacts:\n  spec: "/x/SPEC.md"\n' >"$BLFX/bl-b.manifest.yml"
+printf 'artifacts:\n  spec: "/x/SPEC.md"\n' >"$BLFX/inflight-not-in-baseline.manifest.yml"
+printf 'artifacts:\n  spec: "/x/docs/specs/9-a.spec.md"\n' >"$BLFX/repointed-not-in-baseline.manifest.yml"
+BLIST=$(printf '%s\n%s\n' "bl-a.manifest.yml" "bl-b.manifest.yml")
+
+# SP8 CARRIES NO PLANT, and the reason is the assertion's shape rather than an oversight. It is a
+# NEGATIVE assertion — "these two additions must NOT reach the verdict" — and deleting a mechanism
+# cannot break "X must not happen" (ADR-0112's lesson, where five of fifteen plants failed to fire
+# for exactly this). The mutation that would redden it is "make baseline_check iterate the
+# DIRECTORY instead of the baseline", which is a structural rewrite of the loop and not expressible
+# as the one-line replacement registry v1 accepts (issue #305). SP8b below plants the same function
+# in the positive direction, so baseline_check is pinned; what is unpinned is the claim that it
+# ignores everything else, which is structural — there is no branch in it where a non-baseline file
+# could enter. Disclosed rather than skipped in silence.
+baseline_check "$BLFX" "$BLIST"
+if [ "$BL_N" -eq 2 ] && [ "$BL_BAD" -eq 0 ]; then
+  ok "SP8 an in-flight chain at the slot and a repointed non-member leave the verdict untouched — the two sources of slack that absorbed the retired floor"
+else
+  bad "SP8 fixture returned BL_N=$BL_N BL_BAD=$BL_BAD — expected 2/0; corpus additions are reaching the verdict, which is the floor's defect reintroduced$BL_WHY"
+fi
+
+printf 'artifacts:\n  spec: "/x/docs/specs/9-b.spec.md"\n' >"$BLFX/bl-b.manifest.yml"
+baseline_check "$BLFX" "$BLIST"
+if [ "$BL_N" -eq 2 ] && [ "$BL_BAD" -eq 1 ] && printf '%s' "$BL_WHY" | grep -q 'bl-b.manifest.yml'; then
+  ok "SP8b a baseline member repointed away from the slot is caught and named"
+else
+  bad "SP8b fixture returned BL_N=$BL_N BL_BAD=$BL_BAD — expected 2/1 naming bl-b.manifest.yml$BL_WHY"
+fi
+baseline_check "$REPO/docs/manifests" "$BASELINE"   # restore the live verdict for anything downstream
 
 # ===========================================================================
 # SP5c/SP5d — the floor alone cannot see a repoint that goes somewhere wrong, so this does.
@@ -268,9 +422,14 @@ fi
 # ===========================================================================
 # Z1 — assertion-count floor (ADR-0083 §D3).
 # ===========================================================================
+# RAISED 13 -> 16 by issue #346, which added SP7, SP8 and SP8b. The bump is not bookkeeping: left
+# at 13 this floor would carry three units of slack and three assertions could vanish while it
+# stayed green — the exact shape of the defect #346 exists to remove from SP5, reintroduced in the
+# same file by the change that removes it. A floor that no longer tracks its population has stopped
+# measuring (ADR-0120's RH2 lesson). Raise it with every assertion added here.
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 13 ]; then ok "Z1 assertion-count floor ($_total >= 13)"
-else bad "Z1 assertion count fell to $_total (floor 13) — assertions vanished from this file"; fi
+if [ "$_total" -ge 16 ]; then ok "Z1 assertion-count floor ($_total >= 16)"
+else bad "Z1 assertion count fell to $_total (floor 16) — assertions vanished from this file"; fi
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"
