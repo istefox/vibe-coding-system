@@ -3425,3 +3425,46 @@ Known consequences, recorded rather than fixed:
   the absolute bound. A proportional bound needs its own issue rather than a fourth hand-edit.
 
 Detail: `docs/architecture/ADR-0122-291-bold-wrapped-requirement-id.md`.
+
+## Decisions from the SP5 frozen-baseline chain (ADR-0124)
+
+Closes issue #346. `SP5` guarded ADR-0075's rule with a **count** against a hand-maintained floor,
+and a floor absorbs its own plant whenever the corpus carries slack — `plant-check.sh` removes one
+slot pointer, and if the slack is ≥ 1 the assertion still passes and pins nothing.
+
+- **The issue names one source of slack; measuring found two, and the second is the one that
+  matters here.** Corpus of 48: 46 `completed` (41 at the slot, 5 repointed), 2 `aborted` (1 at the
+  slot). Source 1 is a chain in flight holding a filled pointer (`+1`, transient) — the issue's
+  subject, closed by its proposed remedy. Source 2 is a chain that **aborts**, which keeps its slot
+  pointer for good because Step 7.0b runs on completion only (`+1`, **permanent**). Not
+  hypothetical: #288 is already one instance, and it is exactly the `+1` that forced the hand bump
+  `HIST_FLOOR` 41 → 42 the day before. **A nightly run that halts mid-feature produces an aborted
+  chain**, so the issue's own remedy would be re-broken by the first interrupted night — the very
+  scenario the guard exists to make readable.
+- **So the count goes, not the floor's value.** `SP5` now checks a frozen baseline of 42 basenames:
+  each file must still exist and still point at the slot. A property no count can express, and one
+  that corpus growth, in-flight chains and aborted chains leave untouched **by construction**.
+  Nothing is bumped by hand again. **A new entry is never required** — a completing chain repoints
+  to its own archive and never joins the set; an aborting one is not a record the baseline was
+  frozen to protect.
+- **It retires a disclosure as well as a mechanism.** The file had already recorded that a floor
+  "is masked by concurrency: a historical manifest rewritten WHILE another chain sits at the slot
+  leaves `SLOT` unchanged". A per-manifest check cannot be masked, because it never looks at a
+  total.
+- **`Z1`'s floor raised 13 → 16 in the same edit**, and this is the part worth remembering: left at
+  13 it would have carried three units of slack and three assertions could have vanished while it
+  stayed green. **The exact defect being removed from `SP5`, reintroduced in the same file by the
+  change that removes it.** ADR-0120's RH2 lesson, met while fixing its sibling.
+- **The freeze precondition is verified, not assumed:** zero chains in flight at generation time,
+  reading both terminality axes (ADR-0113). An in-flight manifest frozen in would legitimately fail
+  at its own Step 7.0b. The re-derivation one-liner is in the file so a reader can diff, not trust.
+
+Known consequences: the baseline is a snapshot, so a legitimately deleted manifest reddens `SP5`
+(correct under ADR-0075, and it will read as a regression the first time); **`SP8` carries no
+plant** because it is a negative assertion and deleting a mechanism cannot break "X must not
+happen" (ADR-0112) — the mutation would be a structural loop rewrite, not registry v1's one-line
+replacement (#305), and `SP8b` plants the same function in the positive direction; `SP5`'s plant is
+still subject to #355's prefix match, verified to redden none of `SP5b`/`SP5c`/`SP5d` on this
+corpus, which is what makes attribution hold today rather than in general.
+
+Detail: `docs/architecture/ADR-0124-346-spec-pointer-baseline.md`.
