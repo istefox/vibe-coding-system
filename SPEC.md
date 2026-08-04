@@ -1,25 +1,26 @@
-# SPEC — a bold-wrapped requirement id is invisible to both the checker and the repairer
+# SPEC — the value-domain guard covers step5_mode only
 
-Source: GitHub issue #291
+Source: GitHub issue #292
 
 ## Objectives
 
-1. Run `spec-coverage.sh` over a SPEC declaring `- [ ] **R-01** — …` and confirm the id reaches
-   neither the declared set nor the malformed set — the silence ADR-0072 §D4 named and left unfixed.
-2. Decide whether a bold-wrapped id reads as **declared** or is reported **`MALFORMED`**; silence is
-   the one outcome that must not remain.
-3. If it is made readable, extend `spec-normalize-ids.sh` so the repairer can normalise it, per
-   ADR-0072 §D4's invariant that a flagged line must become readable once repaired.
+1. For each of the two uncovered fields, `hook_verified` and `step5_review_mode`, find every
+   producer (what writes it) and the documented domain (what `manifest-field-state.sh`'s header
+   claims).
+2. Compare the two sets in **both** directions over the 41 manifests in `docs/manifests/` — the
+   reverse direction, a documented value nothing writes, is what caught #240.
+3. Extend the value-domain guard to both fields with count guards on both derivations, and with no
+   waiver mechanism.
 
 ## Scope
 
-In: `spec-id-predicate.awk`'s recognition of a requirement id; `spec-coverage.sh`'s declared,
-malformed and near-miss sets; `spec-normalize-ids.sh`'s repair reach; the corpus regression check
-over `docs/specs/`.
+In: the written and documented value domains of `hook_verified` and `step5_review_mode`; the
+derivation extending `manifest-field-state.test.sh` section `V`; the count guards on both
+derivations; the wrap-tolerant reading of the helper's header.
 
-Out: rewriting any existing SPEC in `docs/specs/`. Out: the plain-bullet near-miss repair ADR-0072
-already shipped. Out: the boundary-anchoring rule that keeps `R-NN` from colliding with `ADR-NNNN`
-(ADR-0048), which is not what this issue touches.
+Out: `step5_mode`, already covered by ADR-0092's section `V`. Out: rewriting historical manifests —
+ADR-0092 left the 18 carrying `agent_batch` untouched because they are accurate. Out: converting
+`manifest-validate.sh`'s 28 invariants, which ADR-0076 explicitly declined.
 
 ## Stack
 
@@ -30,69 +31,74 @@ CI (`ci`, `markdownlint`, `links`). No application runtime.
 
 ## Architecture
 
-- `staging/plugin/skills/concept-to-code/scripts/spec-id-predicate.awk` — the one place that decides
-  what counts as a requirement id, loaded by both the checker and the repairer (it loads
-  `plan-task-predicate.awk` first).
-- `staging/plugin/skills/concept-to-code/scripts/spec-coverage.sh` — the checker; emits `MALFORMED`,
-  distinguishes near-miss causes on stderr, and takes the documented silent no-IDs path when
-  `DECL_N` is 0.
-- `staging/plugin/skills/concept-to-code/scripts/spec-normalize-ids.sh` — the repairer; adds a
-  missing checklist marker to a plain-bullet declaration and prints the diff.
-- `staging/plugin/skills/concept-to-code/SKILL.md` — Step 5's gate block, which runs the repairer
-  automatically on the one diagnosable cause and then re-runs the checker.
-- `staging/plugin/scripts/tests/spec-coverage.test.sh` — the harness, including **`RN12`**, which
-  currently pins the bold-wrapped case as a *disclosed limit* ("a bold-wrapped id is not detected —
-  the checker cannot read it in either form"). `RN12` is the assertion this issue inverts, and it
-  must be changed in kind rather than deleted.
-- `docs/specs/` — the regression corpus, 36 SPECs measured at spec time.
+- `staging/plugin/skills/concept-to-code/scripts/manifest-field-state.sh` — the helper whose header
+  documents the domains: "hook_verified is a boolean, step5_mode is workflow|agent_batch|null,
+  step5_review_mode is none|checkpoint". That sentence **wraps across comment lines**, which is what
+  R-02 is about.
+- Producers of `hook_verified`, measured at spec time:
+  `staging/plugin/skills/concept-to-code/scripts/manifest-init.sh` (the `false` default),
+  `staging/plugin/skills/concept-to-code/SKILL.md` (the `manifest-set-flag.sh … hook_verified
+  true|false` call sites keyed on the hook-verify exit code),
+  `staging/plugin/skills/autopilot-build/SKILL.md` and
+  `staging/plugin/skills/nightly-autopilot/SKILL.md` (readers, and pre-flight consumers),
+  `staging/plugin/skills/deep-refactor/SKILL.md`,
+  `staging/plugin/skills/concept-to-code/scripts/manifest-validate.sh`.
+- Producers of `step5_review_mode`: `manifest-init.sh` (the `none` default),
+  `staging/plugin/skills/concept-to-code/SKILL.md` (the `sed` flip on the additive field —
+  `manifest-set-flag.sh` cannot do it, being boolean-only), `manifest-validate.sh` invariant 14
+  (conditional, "if present").
+- `docs/manifests/` — the corpus, 41 manifests measured at spec time.
+- `staging/plugin/scripts/tests/manifest-field-state.test.sh` — section `V` (`V0b` written-set count
+  guard, `V1` forward, `V2` reverse, `V3` corpus, `V4` the source pin), the pattern to extend.
 - `staging/plugin/scripts/tests/plant-check.sh` — the plant registry runner (ADR-0108).
-- `docs/architecture/ADR-0072-171-spec-id-near-miss-self-repair.md` — the source; anchor on the
-  "Bold-wrapped ids stay invisible to the checker in both forms" sentence, not on `:147`.
+- `docs/architecture/ADR-0092-240-step5-mode-value-domain.md` (the source; anchor on its "covers
+  `step5_mode` only" sentence, not `:88`), `docs/architecture/ADR-0076-195-additive-field-state.md`,
+  `docs/architecture/ADR-0016-dynamic-workflows-step5.md`.
 
 ## Data model
 
-A requirement declaration in a SPEC's Success criteria: `- [ ] R-01 — <text>`. The forms at issue
-are `- [ ] **R-01** — <text>` and, following ADR-0072's "in both forms", the plain-bullet bold
-variant `- **R-01** — <text>`.
+- `hook_verified` — documented as a boolean; `manifest-init.sh` defaults it to `false`.
+- `step5_review_mode` — documented as `none|checkpoint`; `manifest-init.sh` defaults it to `none`.
+- Both are **additive** fields: a manifest written before the field simply does not carry it, which
+  is a distinct state from invalid and from unreadable (ADR-0076 §THE RULE).
 
 ## API / Interfaces
 
-`spec-coverage.sh` is a **checker**: it branches on an exit code and must distinguish "did not run"
-(exit 3) from "found nothing". `spec-normalize-ids.sh` is the repairer and prints `CLEAN` when there
-is nothing to repair. No new stdout token should be introduced unless the exit-code contract
-demands it — ADR-0072 deliberately reported the near-miss as `MALFORMED` and separated the causes on
-stderr.
+`manifest-field-state.sh <manifest> <field>` — reports `PRESENT|<value>`, `ABSENT|<current_step>`,
+or `UNREADABLE`, with exit 3 for "could not run". It reports; it never decides. The value domain
+stays the caller's, which is exactly why the documented domain in its header is the artefact that
+must be checked against the producers.
 
 ## UI flows
 
-The Step 5 gate output: the checker's verdict, the repairer's diff when it acts, and the re-run
-verdict.
+None.
 
 ## Edge cases
 
-- **The silent path is the failure.** A SPEC whose ids are all bold-wrapped keeps `DECL_N` at 0, the
-  gate passes, and the requirement-coverage gate is inert for that whole feature. This is #171 with
-  a different decoration.
-- **Detection is bounded by the repair's reach** (ADR-0072 §D4): every flagged line must become
-  readable once repaired, or the gate reports a problem, rewrites the file and still fails. That
-  invariant is precisely why the bold case was excluded, and R-02 is the condition for lifting the
-  exclusion.
-- **A mixed SPEC is the worse case** — only *partially* silent. ADR-0072 records that the near-miss
-  guard is deliberately **not** conditioned on `DECL_N`, and a bold-id guard needs the same
-  reasoning applied to it explicitly rather than inherited.
-- **The corpus must produce the same verdicts as before** (R-03), with a count guard against a
-  vacuous loop — a sweep over zero SPECs reports no regressions and looks identical to a clean run.
-- **The repairer edits a human-reviewed artifact without asking**, which is safe only because Gate
-  4.0 has already committed the planning artifacts (ADR-0071); any widening of the repair inherits
-  that dependency.
-- **`RN12` is a needle for the old behaviour.** Inverting the behaviour without changing the
-  assertion in kind leaves a green test asserting the opposite of the new contract.
+- **The reverse direction is the one that catches the defect.** A documented value nothing writes is
+  what #240 was; without `V2`'s shape the header could name anything and the forward check would
+  still pass.
+- **A wrapped sentence yields an empty documented set**, which makes the reverse assertion vacuously
+  true — ADR-0092 records that the first line-based derivation returned nothing. R-02 requires the
+  derivation to survive the wrap; the count guard is what makes a failed derivation loud.
+- **A boolean domain is not shaped like an enum domain.** `hook_verified`'s producers write YAML
+  booleans through `manifest-set-flag.sh`; ADR-0076 records that a **quoted** `"true"` reads `true`,
+  not `True`, and that this strictness is deliberate. The derivation must not "fix" that.
+- **`step5_review_mode` is written by `sed` on an additive field**, not by a helper, so its producer
+  is prose in a SKILL.md rather than a script — a differently shaped producer, which is the stated
+  reason ADR-0092 left both fields out.
+- **No waiver mechanism** (R-03): a value domain with an exemption is not a domain. This diverges
+  deliberately from the exemption-carrying derived guards elsewhere in the harness.
+- **A manifest predating a field is not a domain violation.** The `ABSENT` state must not be fed
+  into the written set, or every pre-field manifest reads as writing an undocumented value.
+- **The wrong string sat in the live worked example for months.** #240 was latent because nothing
+  checked, and the example is the one ADR-0076 tells the next author to follow.
 
 ## Success criteria
 
-- [ ] R-01 — a bold-wrapped id either reads as declared or is reported `MALFORMED`; silence is the
-      one outcome that must not remain.
-- [ ] R-02 — if it is made readable, the repairer must be able to normalise it, per ADR-0072 §D4's
-      invariant that a flagged line must become readable once repaired.
-- [ ] R-03 — every existing SPEC in `docs/specs/` still produces the same verdict as before, proven
-      by running the checker over the whole corpus with a count guard against a vacuous loop.
+- [ ] R-01 — written set and documented set derived at run time for both fields and compared in both
+      directions, with count guards on both derivations.
+- [ ] R-02 — the derivation must survive a sentence that wraps across comment lines; ADR-0092
+      records that the first line-based derivation returned nothing and would have been vacuously
+      true.
+- [ ] R-03 — no waiver mechanism: a value domain with an exemption is not a domain.

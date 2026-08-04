@@ -3468,3 +3468,68 @@ still subject to #355's prefix match, verified to redden none of `SP5b`/`SP5c`/`
 corpus, which is what makes attribution hold today rather than in general.
 
 Detail: `docs/architecture/ADR-0124-346-spec-pointer-baseline.md`.
+
+## Decisions from the value-domain guard chain (ADR-0125)
+
+Closes issue #292. ADR-0092 built a derived guard comparing the WRITTEN value set against the
+DOCUMENTED one, in both directions, and scoped it to `step5_mode` alone — leaving `hook_verified`
+and `step5_review_mode` named in the same helper sentence and checked by nothing. **Five of the
+SPEC's premises did not reproduce; two changed the design.**
+
+- **Neither field has a phantom today, and saying so is the point.** Measured: `hook_verified`
+  writes `true`/`false` (45 `false`, 4 `true`, 0 absent across 49 manifests); `step5_review_mode`
+  writes `none`/`checkpoint`. Both directions clean on both fields. **This is ADR-0107's shape, not
+  ADR-0092's** — the property holds and nothing checks it. A reader expecting a #240 repeat will
+  hunt for one and find nothing; the answer is that a correct property with no check is one edit
+  from an incorrect property with no check, and the last time that combination was left alone the
+  wrong string stood for months.
+- **`checkpoint` is written by no manifest in the corpus and that is NOT the #240 shape.** #240 was
+  a value no *producer* writes; `checkpoint` has a producer and has simply never been opted into.
+  The reverse check compares documented against **produced**, never against the corpus — that
+  distinction is what keeps an unexercised opt-in from reading as a phantom.
+- **Live defect 1: `hook_verified`'s documented domain is a TYPE, not a value set.** The header says
+  *"a boolean"*, and ADR-0092's own derivation run against it yields the single token `a` — R-01 is
+  unsatisfiable until the header enumerates. The ambiguity is reachable, not theoretical:
+  `yaml.safe_load` is YAML 1.1, so `hook_verified: yes` reads `PRESENT|True` and **both** call
+  sites accept it, while `manifest-set-flag.sh` — the only writer — structurally refuses anything
+  but the literals. "A boolean" names a set strictly wider than any producer can write, in the one
+  place ADR-0076 §D2 tells the next checker author to copy.
+- **Live defect 2: the existing flatten does not survive the wrap the SPEC assumes it does.** Re-flow
+  the sentence so a value list splits *inside* itself and the derivation returns `none|` — the set
+  `{none}`, `checkpoint` silently dropped. Today's header wraps *between* `is` and its list, which
+  the flatten does survive; the untested case is the one a routine re-flow produces. Fixed by a
+  pipe-collapse `sed` clause, verified on three wrap shapes; `step5_mode` inherits it.
+- **Per-field extractors, one shared derivation, one shared comparison — ADR-0086's criterion
+  applied in BOTH directions inside one file.** The shared idiom is not merely inelegant on
+  `hook_verified`: measured, it yields four English-word phantoms (`field`, `manifest`, `the`,
+  `value`) lifted out of operator-facing error messages that use a colon, so the guard would fail on
+  a correct tree on its first run. The obvious alternative `hook_verified=<word>` is worse — it adds
+  `unchanged`, `hook-verify-workflow.sh`'s token meaning *do not write this field at all*. **Rule 12
+  one level up:** not an assertion whose needle matches the prose explaining it, but a *derivation*
+  whose needle matches the prose explaining the field.
+- **Each field's enforcer is pinned, because that is what makes a narrow extractor trustworthy.**
+  `manifest-set-flag.sh` validates `true|false` and exits 1 otherwise — enforced by code, and
+  **asserted nowhere across all 73 harness files** until now. `manifest-validate.sh` invariant 14 is
+  the symmetric enforcer for `step5_review_mode`: its behaviour is covered, its *agreement with the
+  documented domain* was not, which is #240's shape with a different pair of files.
+- **The extractor stays permissive on purpose.** `checkpoint`'s only real producer is a `sed`
+  command inside a comment at `manifest-init.sh:134`, and `concept-to-code/SKILL.md` names the value
+  twice in prose — so a permissive extractor keeps reporting it even if the producer were deleted.
+  Narrowing to `scripts/*.sh` would fix that and go blind to a future genuine SKILL.md producer. The
+  real producer is pinned separately instead.
+- **No waiver mechanism, asserted behaviourally rather than stated.** A value domain with an
+  exemption is not a domain (ADR-0092's rule, carried forward).
+
+Known consequences, recorded rather than fixed:
+- `V0b`/`V1`/`V2` are re-implemented onto shared functions. Ids and `ok`-line text are preserved
+  byte-for-byte, but **ADR-0092's assertions stop being the code ADR-0092 describes**.
+- Three different extractor shapes now live in one file, held apart by comments and a comparison
+  that goes red when they are conflated. A tidying pass is the plausible failure mode.
+- **`CLAUDE.md`'s restatement of the domain is corrected by hand and checked by nothing** —
+  `plant-check.sh` copies only `staging/` and `docs/`, so a repo-root assertion is unplantable
+  (ADR-0122's class). That is #240's exact drift route, left open and recorded rather than
+  half-closed.
+- The corpus is 49 manifests and the harness 73 files, not the 41 and 68 the SPEC states. Re-derive
+  both before citing either.
+
+Detail: `docs/architecture/ADR-0125-292-value-domain-guard-two-fields.md`.
