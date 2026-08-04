@@ -63,3 +63,8 @@
 287-rtf-s-gitignore-glob-and-this-repo-s-own	287	RTF's gitignore glob and this repo's own entry differ by a dash
 286-the-sixth-bare-manifest-set-flag-sh-ment	286	the sixth bare manifest-set-flag.sh mention was left when the other five were fixed
 273-the-step-5-checkpoint-has-no-mechanism-t	273	The Step 5 checkpoint has no mechanism to tell an expected red from a real one
+358-bb2b-s-absolute-ceiling-was-hand-raised	358	BB2b's absolute ceiling was hand-raised three times in one session on three healthy features
+355-plant-check-sh-decides-a-plant-fired-wit	355	plant-check.sh decides a plant fired with a PREFIX match: 26 of 166 plants pin nothing
+350-plant-check-sh-cost-scales-as-plants-x-t	350	plant-check.sh cost scales as (plants x target-file runtime), not as their sum
+335-a-manifest-terminal-by-status-is-exempt	335	a manifest terminal by status is exempt from invariant 4 and the state machine still lets it transition
+336-set-branch-protection-sh-unions-one-cont	336	set-branch-protection.sh unions one context while the audit derives three
