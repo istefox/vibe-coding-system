@@ -1057,10 +1057,17 @@ rows below are its work — the same device the table above uses.
 
 | # | what | why it is here | done means |
 |---|---|---|---|
-| 1 | **#329** — Gate 0's autopilot default | The only `chain-blocker` left, and it sits on the unattended path at the **first gate of every feature**. A stall there costs the whole night and produces nothing to read in the morning. | The unattended path reaches a deterministic routing decision with no `AskUserQuestion`, pinned by a test; and `project-conductor`'s "hard-aborts at Gate 0" comment and the code agree, whichever way the decision goes. |
-| 2 | **Set the permission mode** | Measured live 2026-08-02: `permission-mode-state.sh` returns `BLOCKING\|auto`. #320's Phase M fence aborts the run before Phase P writes anything. Human keystroke, not a code change — `/permissions` does **not** set it. | Two Shift+Tab to `acceptEdits`, or launch with `--permission-mode acceptEdits`. Phase M returns non-blocking. |
+| 1 | **#329** — Gate 0's autopilot default — **done 2026-08-02**, PR #338, ADR-0115 | The only `chain-blocker` left, and it sits on the unattended path at the **first gate of every feature**. A stall there costs the whole night and produces nothing to read in the morning. | The unattended path reaches a deterministic routing decision with no `AskUserQuestion`, pinned by a test; and `project-conductor`'s "hard-aborts at Gate 0" comment and the code agree, whichever way the decision goes. |
+| 2 | **Set the permission mode** — still open, the one row left | Measured live 2026-08-02: `permission-mode-state.sh` returns `BLOCKING\|auto`. #320's Phase M fence aborts the run before Phase P writes anything. Human keystroke, not a code change — `/permissions` does **not** set it, and the mode cannot be changed from inside a session. | Launch with `claude --permission-mode bypassPermissions`. **Not `acceptEdits`** — ADR-0116 measured it: `acceptEdits` auto-accepts edits while a Bash command outside `permissions.allow` still prompts, and the chain's own Bash surface is not in this machine's 16-entry allowlist. The superseded "two Shift+Tab to `acceptEdits`" recipe this row used to carry is exactly what that ADR deleted from the skill. |
 | 3 | **File the two disclosed follow-ups** — done 2026-08-02, **#335** and **#336** | Both were recorded in an ADR's own "recorded, not fixed" section and neither had an issue, which is precisely the shape §10 exists to close — a backlog at the end of a document is an invisible backlog. | #335: `manifest-transition.sh` does not refuse a manifest terminal by `status` (ADR-0113). #336: `set-branch-protection.sh` still unions exactly one context, so the audit derives what it cannot enforce (ADR-0114). Both `prep`, appended to wave 2. |
 | 4 | **The launch** | The exit criterion is a run, not a PR. Everything above is a precondition for it and none of it is evidence about it. | At least one `NIGHTLY-PUBLISH` line. Phase 10 wave 1 does not start before that. |
+
+**Two more landed on 2026-08-02 that this table never named**, both found by running the chain
+rather than by reading it — the same origin as the six rows above. **#339** (PR #340, ADR-0116): the
+permission-posture check told the operator no prompt would fire while `acceptEdits` still prompts on
+Bash, which is why row 2 above now names `bypassPermissions`. **#344** (PR #345): Step 5.0.1's
+manifest exemption was inert whenever the session CWD case differed from git's recorded case — live
+here, since this checkout is reachable as both `/Users/stefer/Developer/…` and `/Users/stefer/developer/…`.
 
 **One repo-admin action is not on the path, and is worth doing anyway.** `shell-tests` — the job that
 runs the whole harness and the plant registry — is **not a required check on `main`**. The new audit
@@ -1071,6 +1078,25 @@ happens the merge gate this repository's whole discipline rests on does not incl
 **What is deliberately not on this path.** The second shakedown (§9.4) stays a separate run:
 `hook_verified` is still `false`, so nothing has ever taken the Workflow dispatch path, and a green
 Phase 10 exercises the Agent-batch path only. Do not read the launch above as covering it.
+
+##### Three attended items the waves cannot hold (2026-08-04)
+
+All three edit **what executes the roadmap**, which §10 excludes from it by name — a night that
+rewrites its own Step 7 while running on it is not a test of anything. They are a table for the
+same reason §10.0's own table is one: `project-conductor` takes the first `- [ ]` line in this
+file, and none of these are its work. All three were found by running the chain on the three
+features that shipped on 2026-08-03, not by reading it.
+
+| # | issue | the measurement | done means |
+|---|---|---|---|
+| 1 | **#346** — `chain-blocker` | `SP5`'s plant is inert while a chain sits between Step 1 and Step 7.0b, so the assertion pins nothing during exactly the window a nightly run spends inside. An open `chain-blocker` is a launch precondition by definition, not a nightly feature. | The plant fires in that window, or the window is stated and the assertion says what it does not cover. |
+| 2 | **#356** — Step 7.0 snapshot collapse has never been executed | 3 of 3 features on 2026-08-03 kept their `chore(step5): snapshot` commits. ADR-0104 built the collapse and no run has ever reached it — not a defeated guard, a fence that was not run. The same shape as ADR-0114's check 8, which turned out to verify nothing. | The fence executes on a real run, or the reason it cannot is measured. Do not read a green harness as evidence: nothing in it executes this prose. |
+| 3 | **#357** — the terminal transition is ordered after the commit | The manifest ships at `step_7_commit`, so it loses ADR-0078's invariant-4 exemption. Live risk, not theoretical: `project_root` here is `/Users/stefer/developer/…` with a lowercase `d`, a path that does not exist on the Linux CI runner. | The manifest reaches a terminal state before the commit that ships it, with the ordering asserted. |
+
+**#355 and #350 are deliberately NOT here.** Both are defects in the *evidence* — the plant
+registry — not in the chain, so they go through the waves as ordinary Wave 2 features. #355 is
+the heavier of the two by a distance: closing it means re-verifying all 166 plants, and 26 of them
+currently pin nothing.
 
 ### Phase 10 — total review closure, executed unattended
 
@@ -1146,6 +1172,7 @@ wave order.
 - [ ] MALFORMED is dropped silently by any caller filtering BUDGET or SCOPE  (issue #295)
 - [ ] a per-file budget ceiling is parsed and then summed so one file can exceed its own  (issue #296)
 - [ ] the dirty-classify fence reads porcelain v1 so a renamed artifact classifies as OTHER  (issue #297)
+- [ ] BB2b's absolute ceiling was hand-raised three times in one session on three healthy features  (issue #358)
 
 ##### Wave 2 — MED: shared scripts with multiple live callers, and the guard populations
 
@@ -1164,6 +1191,8 @@ wave order.
 - [ ] an undefined assertion helper is indistinguishable from a passing assertion  (issue #310)
 - [ ] a manifest terminal by status is exempt from invariant 4 and the state machine still lets it transition  (issue #335)
 - [ ] set-branch-protection.sh unions one context while the audit derives three  (issue #336)
+- [ ] plant-check.sh decides a plant fired with a PREFIX match: 26 of 166 plants pin nothing  (issue #355)
+- [ ] plant-check.sh cost scales as (plants x target-file runtime), not as their sum  (issue #350)
 
 ##### Wave 3 — HIGH: detector precision, and the decisions
 
