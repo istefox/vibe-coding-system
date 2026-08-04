@@ -1320,7 +1320,7 @@ with a bare `m.get()`.**
   with an era attached, not an error.
 - **The helper REPORTS, it never DECIDES** — `PRESENT|<value>` / `ABSENT|<current_step>` /
   `UNREADABLE`, exit 3 for "could not run" (environment) as distinct from `UNREADABLE` (input).
-  The value domain is the caller's and has to be: `hook_verified` is a boolean, `step5_mode` is
+  The value domain is the caller's and has to be: `hook_verified` is `true|false`, `step5_mode` is
   `workflow|agent_batch|null`, `step5_review_mode` is `none|checkpoint`. There is no general
   "valid".
 - **The two call sites apply OPPOSITE policies to the same ABSENT state and both are right.**
