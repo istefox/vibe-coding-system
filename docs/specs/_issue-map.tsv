@@ -68,3 +68,7 @@
 350-plant-check-sh-cost-scales-as-plants-x-t	350	plant-check.sh cost scales as (plants x target-file runtime), not as their sum
 335-a-manifest-terminal-by-status-is-exempt	335	a manifest terminal by status is exempt from invariant 4 and the state machine still lets it transition
 336-set-branch-protection-sh-unions-one-cont	336	set-branch-protection.sh unions one context while the audit derives three
+363-gate-4-0-s-branch-name-and-publish-f	363	Gate 4.0's branch name and publish-feature.sh's expected branch never coincide on the nightly path
+364-nothing-states-what-feature-n-1-s-br	364	Nothing states what feature N+1's branch forks from, and main's PROJECT.md makes the obvious answer wrong
+365-a-nightly-run-cannot-be-scoped-to-a	365	A nightly run cannot be scoped to a wave, and the turn budget is the only bound and is ~4x miscalibrated
+366-skill-md-bash-fences-assume-bash-wor	366	SKILL.md bash fences assume bash word-splitting and break silently under zsh

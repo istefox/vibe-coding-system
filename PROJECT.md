@@ -1202,3 +1202,24 @@ wave order.
 - [ ] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)
 - [ ] The Step 5 checkpoint has no mechanism to tell an expected red from a real one  (issue #273)
 - [ ] seventeen ADRs carry the same instruction-not-an-enforcement paragraph and the class is undecided  (issue #315)
+
+### Phase 10.1 — what the first nightly run found (attended, issues #363–#366)
+
+The 2026-08-04 run is the first that reached `NIGHTLY-PUBLISH` (feature #292, PR #362). It also
+measured four defects that no amount of reading had surfaced, because three of them only exist
+while a run is actually in flight.
+
+**These are attended, and the reason is the same one Phase 10.0 gives: you cannot fix the runner
+from inside the runner.** #363 and #364 in particular block a multi-feature night outright — a
+second feature cannot be published until both are resolved, so the waves below stay unreachable
+regardless of how the budget is set.
+
+- [ ] Gate 4.0's branch name and publish-feature.sh's expected branch never coincide  (issue #363)
+- [ ] nothing states what feature N+1's branch forks from  (issue #364)
+- [ ] a nightly run cannot be scoped to a wave and the turn budget is ~4x miscalibrated  (issue #365)
+- [ ] SKILL.md bash fences assume bash word-splitting and break under zsh  (issue #366)
+
+Measured, and worth carrying into whatever fixes #365: **a full standard chain costs roughly 50
+orchestrator turns**, not the ~15 the RUNBOOK's 200-for-13 example implies. A 110-turn budget
+delivered one feature. Re-derive the figure across more than one feature before trusting it —
+n=1, and a 4-task plan will not cost what a 9-task plan did.
