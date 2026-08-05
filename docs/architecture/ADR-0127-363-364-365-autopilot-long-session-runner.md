@@ -126,13 +126,27 @@ this system makes. Each is closed where it happens, not in prose:
 
 `commit` Step 3.6 derives a branch name from the commit **subject**. Gate 4.0's commit is a
 planning-artifacts commit, so its type is `docs`, so the name is `chore/<subject-slug>` — while
-`publish-feature.sh:35` pushes `feat/$SLUG` from the topic slug. They never coincide, and the one
+`publish-feature.sh`'s `BRANCH="feat/$SLUG"` line pushes a name from the topic slug. They never
+coincide, and the one
 successful run published only because a human created the branch first.
 
 `--branch <name>` is orthogonal to `--autopilot` and `--no-pr` exactly as those two are to each
-other. When given, Step 3.6 uses it instead of deriving; it still structurally refuses the default
-branch and still no-ops when a feature branch is already checked out. Absent, behaviour is
-byte-identical (#363 R-03).
+other. Absent, behaviour is byte-identical (#363 R-03).
+
+**It ENSURES the branch, it does not merely name it — and this decision's own first draft got that
+wrong.** The draft said Step 3.6 "uses it instead of deriving" and "still no-ops when a feature
+branch is already checked out". The second clause is false under §D4: each feature forks from
+`autopilot/prep-<date>`, which is feature-shaped and **not** the default branch, so a trigger
+conditioned on "am I on the default branch" would no-op and commit the feature onto the shared prep
+base. The trigger is therefore *not already on `<name>`*, with three outcomes — already there →
+no-op, exists → check out, absent → create from the current HEAD. Found by writing the fixture for
+the prep-branch case, not by re-reading the paragraph.
+
+**An existing `<name>` is reused, never suffixed.** The derived path appends `-2`, `-3` … on
+collision, which is right for an accidental slug clash and wrong here: `publish-feature.sh` expects
+exactly `feat/<slug>`, so a suffixed branch is one nothing will ever push. A pre-existing `<name>`
+is a resumed feature. `<name>` naming the default branch is refused outright — an argument must not
+be able to override the invariant Step 3.6 exists to enforce.
 
 **Chosen over "Gate 4.0 creates the branch itself" for a reason that is not style:**
 `recovery-preflight.test.sh` **RH4b** forbids raw `git checkout -b` / `commit` / `add` inside the
@@ -161,6 +175,19 @@ any slug listed there. So the conductor cannot re-pick a feature that published 
 
 `publish-feature.sh`'s `--base` is the **PR base**, not the fork point. The two were being
 conflated; both are now named at that site.
+
+**Who performs the fork had to be decided, and the first draft did not say.** Nothing downstream
+chooses a base: `commit --branch` (§D3) creates from whatever `HEAD` is when Gate 4.0 runs, so the
+fork point is decided in `project-conductor` Step 4 or it is decided by accident — and by accident
+it is the previous feature's tip, which is the stacking this section exists to remove. The
+mechanism is `project-conductor autopilot --fork-from <ref>`, checked out before the chain is
+invoked. Writing `--fork-from` into the caller without a consumer would have been the
+producer/consumer defect recorded six times in this repository, committed while fixing its cousin.
+
+Both new fences distinguish **did not run** from **found nothing**: an unresolvable fork ref is
+exit 3 rather than a silent fall back to `HEAD`, and an absent ledger (exit 0, nothing published
+yet — the common legitimate case) is distinct from an unreadable one (exit 3). A dirty tree refuses
+the base switch at exit 2 rather than dragging uncommitted work across branches.
 
 Cost, recorded rather than discovered later: one extra PR per run, and every feature PR carries the
 prep commit until prep is merged. The report records `base` per feature (#364 R-03).

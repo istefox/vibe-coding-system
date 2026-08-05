@@ -3533,11 +3533,26 @@ of this chain already uses it, so there is exactly one commit path in the system
 
 - **Attended** (`manifest.autopilot = false`): invoke `commit` with args
   `<topic-full-title> — planning artifacts (ADR: <manifest.artifacts.adr>) --no-pr
-  --include <spec>,<manifest.artifacts.adr>,<manifest.artifacts.plan>,<manifest-path>`.
+  --branch feat/<manifest.topic> --include
+  <spec>,<manifest.artifacts.adr>,<manifest.artifacts.plan>,<manifest-path>`.
   The Step 4 gate still asks; `--no-pr` suppresses only the PR question, which would otherwise fire
   on every chain run with nothing to publish.
 - **Unattended** (`manifest.autopilot = true`): the same, plus `--autopilot`. Local commit only —
   this changes no autonomy boundary, ADR-0020 already places a local commit inside it.
+
+**`--branch feat/<manifest.topic>` is what makes the branch name agree with the publish step
+(issue #363, ADR-0127 §D3), and the agreement is BY CONSTRUCTION rather than by an orchestrator
+remembering.** Without it, `commit` Step 3.6 derives the name from the commit *subject*: this is a
+planning-artifacts commit, so its type is `docs`, so the derived name is `chore/<subject-slug>` —
+while `publish-feature.sh`'s `BRANCH="feat/$SLUG"` line pushes a name built from the topic slug.
+**They never
+coincide.** The 2026-08-04 run reached `AUTOPILOT-PUBLISH` only because a human created
+`feat/<slug>` by hand beforehand, which is also what Step 5.0.2's own remediation message
+prescribes — a hint the contract was assumed and never written down.
+
+`<manifest.topic>` is the same field `publish-feature.sh` receives as `--slug`, so there is one
+source for the name rather than two that agree today. Do not substitute the subject slug here:
+that is the derivation this argument exists to bypass.
 
 **`--include` is what makes this step able to produce anything at all (issue #234).** On a
 greenfield chain those four artifacts are **untracked**, and `commit`'s default rule never stages

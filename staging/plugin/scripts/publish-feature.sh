@@ -32,6 +32,17 @@ fail() { printf 'publish-feature: %s\n' "$1" >&2; exit 2; }
 [ -n "$ROOT" ] || fail "missing --root"
 [ -d "$ROOT" ] || fail "root is not a directory: $ROOT"
 
+# BRANCH is not merely expected here — it is PRODUCED upstream under the same rule (issue #363,
+# ADR-0127 §D3). concept-to-code Gate 4.0 invokes the `commit` skill with
+# `--branch feat/<manifest.topic>`, and $SLUG below is that same manifest topic, so the branch this
+# script pushes and the branch the feature was committed on agree by construction.
+#
+# Before #363 they never agreed: Gate 4.0 let `commit` derive the name from the commit SUBJECT,
+# which for a planning-artifacts commit is type `docs` and therefore `chore/<subject-slug>`. The
+# 2026-08-04 run published only because a human created feat/<slug> by hand first.
+#
+# If you change this construction, change Gate 4.0's `--branch` argument in the same edit; a
+# mismatch here does not fail loudly, it pushes a branch nothing created.
 BRANCH="feat/$SLUG"
 
 # Hard safety: never operate on the base branch itself.

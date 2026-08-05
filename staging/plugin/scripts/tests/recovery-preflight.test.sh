@@ -731,13 +731,99 @@ else
   bad "RJ12: the *.bak fact is unrecorded — a change to .gitignore would break two checks with no warning"
 fi
 
+# ==================================================================================================
+# BR. Branch identity: the name a feature is committed on and the name publish-feature.sh pushes
+# (issue #363, ADR-0127 §D3).
+#
+# These never coincided on the unattended path. Gate 4.0 let `commit` Step 3.6 derive the branch
+# from the commit SUBJECT — a planning-artifacts commit is type `docs`, so `chore/<subject-slug>` —
+# while publish-feature.sh pushes `feat/$SLUG` from the topic slug. The 2026-08-04 run published
+# only because a human created the branch by hand first.
+#
+# BR2/BR6 are BEHAVIOURAL: they extract the Step 3.6 fence and execute it. A prose assertion here
+# would pass on a fence that documents the flag and ignores it, which is the defect one level up.
+# ==================================================================================================
+PUBSH="$SCRIPTS/publish-feature.sh"
+BR_FENCE=$(awk '/fence-contract: commit-ensure-feature-branch/{f=1;next} f&&/^```bash/{g=1;next} g&&/^```/{exit} g' "$COMMITMD")
+
+# BR1's needle is the CONTRACT CLAUSE, not the flag name. `--branch <name>` appears 4 times in
+# this file (usage line, section heading, prose), so a needle on the name survives the mechanism
+# being removed — the first draft of this assertion did exactly that and its plant did not fire.
+# rule 12: a needle must belong to the mechanism, not to the prose that names it.
+# plant: BR1 | plugin/skills/commit/SKILL.md | ensure the commit lands on | guarantee the commit lands on
+if [ "$(ri_flat '[--branch <name>]' "$COMMITMD")" -ge 1 ] \
+   && [ "$(ri_flat 'ensure the commit lands on' "$COMMITMD")" -ge 1 ]; then
+  ok "BR1: commit/SKILL.md carries --branch in the usage line AND states the ensure-not-name contract"
+else
+  bad "BR1: commit/SKILL.md is missing the --branch usage entry or the ensure-not-name contract — Gate 4.0 would pass a flag the skill does not define"
+fi
+
+if [ -z "$BR_FENCE" ]; then
+  bad "BR2: the Step 3.6 fence extracted nothing — an empty extraction is a FAILURE, never a skip"
+else
+  _brtmp=$(mktemp -d "${TMPDIR:-/tmp}/br.XXXXXX")
+  printf '%s\n' "$BR_FENCE" > "$_brtmp/fence.sh"
+  bash -n "$_brtmp/fence.sh" 2>/dev/null \
+    && ok "BR2: the Step 3.6 fence parses as bash (ADR-0083 F7)" \
+    || bad "BR2: the Step 3.6 fence does not parse"
+
+  _mkrepo() { d="$_brtmp/$1"; mkdir -p "$d"; git -C "$d" init -q -b main >/dev/null 2>&1
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init >/dev/null 2>&1; printf '%s' "$d"; }
+  # Variables must be EXPORTED: the fence runs in a fresh `bash`, which does not inherit plain
+  # shell variables. A first draft omitted this and all six cases silently took the no-op branch,
+  # reporting nothing while appearing to pass (the ADR-0090 / ADR-0102 fixture-bug class).
+  _runfence() { ( cd "$1"; export default_branch=main branch_flag="$2" type=docs subject="planning artifacts"
+      bash "$_brtmp/fence.sh" >/dev/null 2>&1; printf '%s|%s' "$?" "$(git branch --show-current)" ) ; }
+
+  _r=$(_mkrepo r1); _out=$(_runfence "$_r" feat/topic-slug)
+  [ "$_out" = "0|feat/topic-slug" ] \
+    && ok "BR3: --branch creates and switches to the named branch from the default branch" \
+    || bad "BR3: --branch from main gave '$_out', expected 0|feat/topic-slug"
+
+# plant: BR4 | plugin/skills/commit/SKILL.md | elif git show-ref --verify --quiet "refs/heads/$branch_flag"; then | elif false; then
+  _r=$(_mkrepo r3); git -C "$_r" branch feat/topic-slug >/dev/null 2>&1
+  git -C "$_r" checkout -q -b autopilot/prep-2026-08-05 >/dev/null 2>&1
+  _out=$(_runfence "$_r" feat/topic-slug)
+  [ "$_out" = "0|feat/topic-slug" ] \
+    && ok "BR4: an EXISTING --branch is reused from a non-default base, never suffixed (publish-feature.sh expects exactly this name; a -2 variant is a branch nothing pushes)" \
+    || bad "BR4: --branch with an existing branch from a prep base gave '$_out', expected 0|feat/topic-slug"
+
+# plant: BR5 | plugin/skills/commit/SKILL.md | if [ "$branch_flag" = "$default_branch" ]; then | if false; then
+  _r=$(_mkrepo r4); _out=$(_runfence "$_r" main)
+  [ "$_out" = "1|main" ] \
+    && ok "BR5: --branch naming the default branch is REFUSED (exit 1), branch unchanged" \
+    || bad "BR5: --branch main gave '$_out', expected 1|main — an argument must not be able to override the never-commit-to-default invariant"
+
+  _r=$(_mkrepo r6); _out=$(_runfence "$_r" "")
+  [ "$_out" = "0|chore/planning-artifacts" ] \
+    && ok "BR6 (unchanged-behaviour guard): with NO --branch the subject-derived path still runs, reproducing #363's own defect (docs -> chore/<subject-slug>) rather than silently changing the attended flow" \
+    || bad "BR6: without --branch the derived path gave '$_out', expected 0|chore/planning-artifacts — #363 R-03 requires the interactive behaviour to be unchanged"
+fi
+
+# The needle is the ARGUMENT SEQUENCE, not the flag: `--branch feat/<manifest.topic>` occurs twice
+# in this block (the invocation and the paragraph explaining it), so a bare needle survives its
+# removal from the invocation. Same defect as BR1, same run, caught by the same plant.
+# plant: BR7 | plugin/skills/concept-to-code/SKILL.md | --no-pr --branch feat/<manifest.topic> --include | --no-pr --include
+if printf '%s\n' "$RH4_BLOCK" | tr '\n' ' ' | tr -s ' ' | grep -qF -- '--no-pr --branch feat/<manifest.topic> --include'; then
+  ok "BR7: Gate 4.0 passes --branch feat/<manifest.topic> — the name agrees with publish-feature.sh by construction"
+else
+  bad "BR7: Gate 4.0 does not pass --branch — the branch name reverts to the subject derivation and never matches feat/<slug>"
+fi
+
+# plant: BR8 | plugin/scripts/publish-feature.sh | it is PRODUCED upstream under the same rule | it is expected here
+if [ -f "$PUBSH" ] && grep -qF 'PRODUCED upstream' "$PUBSH" && grep -qF 'Gate 4.0' "$PUBSH"; then
+  ok "BR8: publish-feature.sh states the contract from its own side and names Gate 4.0 as the producer (#363 R-02)"
+else
+  bad "BR8: publish-feature.sh does not state where feat/\$SLUG comes from — a reader at that site cannot see what the other end expects"
+fi
+
 # Z1 — assertion-count floor (ADR-0083 §D3: six assertions vanished from a suite once and the
 # suite still read as passing). A floor, not an exact count, so adding assertions needs no bump.
 Z1_TOTAL=$((PASS + FAIL))
-if [ "$Z1_TOTAL" -ge 60 ]; then
+if [ "$Z1_TOTAL" -ge 76 ]; then
   ok "Z1: assertion-count floor met ($Z1_TOTAL executed)"
 else
-  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 60; assertions have gone missing, not passed"
+  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 76; assertions have gone missing, not passed"
 fi
 
 echo "----"

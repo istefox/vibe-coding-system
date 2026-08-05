@@ -532,14 +532,139 @@ else
 fi
 
 # =====================================================================================
+# ==================================================================================================
+# FK. Fork point and the run ledger (issue #364, ADR-0127 §D4).
+#
+# PROJECT.md is marked [x] ON THE FEATURE BRANCH and never on the base the next feature forks from,
+# so the checkbox for a feature that just published still reads [ ] to the conductor. Forking from
+# main therefore re-picks it for ever; forking from the previous tip stacks every PR. The run's own
+# append-only ledger decides instead, and the fork point is the run-scoped prep branch.
+#
+# FK2-FK5 EXECUTE the fence. A prose assertion would pass on a fence that documents the ledger and
+# never reads it.
+# ==================================================================================================
+COND="$STAGING/plugin/skills/project-conductor/SKILL.md"
+AUTOSK="$STAGING/plugin/skills/autopilot/SKILL.md"
+DISARM="$SCRIPTS/autopilot-disarm.sh"
+FK_FENCE=$(awk '/fence-contract: conductor-published-skip -->/{f=1;next} f&&/^```bash/{g=1;next} g&&/^```/{exit} g' "$COND")
+
+if [ -z "$FK_FENCE" ]; then
+  bad "FK1: the conductor-published-skip fence extracted nothing — an empty extraction is a FAILURE, never a skip"
+else
+  _fkd=$(mktemp -d "${TMPDIR:-/tmp}/fk.XXXXXX")
+  printf '%s\n' "$FK_FENCE" > "$_fkd/f.sh"
+  bash -n "$_fkd/f.sh" 2>/dev/null && ok "FK1: the published-skip fence parses as bash (ADR-0083 F7)" \
+    || bad "FK1: the published-skip fence does not parse"
+  _fk() { ( export _root="$1" _slug="$2" _autopilot="$3"; bash "$_fkd/f.sh" >/dev/null 2>&1; printf '%s' "$?" ) ; }
+
+  mkdir -p "$_fkd/a/.claude/autopilot-state"; printf '102-req-ids\n' > "$_fkd/a/.claude/autopilot-state/published"
+  mkdir -p "$_fkd/b/.claude/autopilot-state"
+
+# plant: FK2 | plugin/skills/project-conductor/SKILL.md | elif grep -qxF "$_slug" "$_led" 2>/dev/null; then | elif false; then
+  [ "$(_fk "$_fkd/a" 102-req-ids true)" = "1" ] \
+    && ok "FK2: a slug already in the ledger returns ALREADY (exit 1) — the conductor cannot re-pick a feature that published in this run" \
+    || bad "FK2: an already-published slug did not return exit 1 — the roadmap would re-pick the feature that just finished, for ever"
+
+  [ "$(_fk "$_fkd/a" 103-other true)" = "0" ] \
+    && ok "FK3: a slug not in the ledger returns PENDING (exit 0)" \
+    || bad "FK3: an unpublished slug did not return exit 0"
+
+  [ "$(_fk "$_fkd/a" 102-req-ids-coverage true)" = "0" ] \
+    && ok "FK4: matching is whole-line — a slug that is a PREFIX of a published one does not collide" \
+    || bad "FK4: '102-req-ids-coverage' collided with published '102-req-ids' — the match is not whole-line"
+
+# plant: FK5 | plugin/skills/project-conductor/SKILL.md | elif [ ! -e "$_led" ]; then | elif false; then
+  [ "$(_fk "$_fkd/b" 102-req-ids true)" = "0" ] \
+    && ok "FK5: an ABSENT ledger returns 0 (nothing published yet) and is distinct from an unreadable one" \
+    || bad "FK5: an absent ledger did not return 0 — 'no feature has published yet' is the common legitimate case and must not read as an error"
+
+  # An unreadable ledger must be exit 3, never confused with an empty one. Skipped when the test
+  # user can read a chmod-000 file (CI often runs as root — ADR-0028's caveat), because there the
+  # fixture cannot express the state at all and a pass would be for the wrong reason.
+  mkdir -p "$_fkd/c/.claude/autopilot-state"; printf 'x\n' > "$_fkd/c/.claude/autopilot-state/published"
+  chmod 000 "$_fkd/c/.claude/autopilot-state/published" 2>/dev/null
+  if [ -r "$_fkd/c/.claude/autopilot-state/published" ]; then
+    ok "FK6 (skipped, not asserted): this user can read a chmod-000 file, so the unreadable-ledger state is not expressible here"
+  else
+    [ "$(_fk "$_fkd/c" 102-req-ids true)" = "3" ] \
+      && ok "FK6: an UNREADABLE ledger returns 3 (did not run), never 0 — a run that cannot tell what it published must stop rather than re-pick" \
+      || bad "FK6: an unreadable ledger did not return 3"
+  fi
+  chmod 644 "$_fkd/c/.claude/autopilot-state/published" 2>/dev/null
+fi
+
+FP_FENCE=$(awk '/fence-contract: conductor-fork-point -->/{f=1;next} f&&/^```bash/{g=1;next} g&&/^```/{exit} g' "$COND")
+if [ -z "$FP_FENCE" ]; then
+  bad "FK11: the conductor-fork-point fence extracted nothing — an empty extraction is a FAILURE, never a skip"
+else
+  _fpd=$(mktemp -d "${TMPDIR:-/tmp}/fp.XXXXXX")
+  printf '%s\n' "$FP_FENCE" > "$_fpd/f.sh"
+  bash -n "$_fpd/f.sh" 2>/dev/null && ok "FK11: the fork-point fence parses as bash" \
+    || bad "FK11: the fork-point fence does not parse"
+  _mkr() { d="$_fpd/$1"; mkdir -p "$d"; git -C "$d" init -q -b main >/dev/null 2>&1
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m i >/dev/null 2>&1; printf '%s' "$d"; }
+  _fp() { ( export _root="$1" _fork_from="$2"; bash "$_fpd/f.sh" >/dev/null 2>&1
+      printf '%s|%s' "$?" "$(git -C "$1" branch --show-current)" ) ; }
+
+# plant: FK12 | plugin/skills/project-conductor/SKILL.md | git -C "$_root" checkout -q "$_fork_from" 2>/dev/null | true
+  _r=$(_mkr a); git -C "$_r" branch autopilot/prep-x >/dev/null 2>&1; git -C "$_r" checkout -q -b feat/first >/dev/null 2>&1
+  [ "$(_fp "$_r" autopilot/prep-x)" = "0|autopilot/prep-x" ] \
+    && ok "FK12: from the PREVIOUS feature's tip the fence moves onto the prep ref — this is what stops PR N containing features 1..N" \
+    || bad "FK12: the fence did not move off the previous feature's tip; every feature branch would stack on the last one"
+
+  _r=$(_mkr b)
+  [ "$(_fp "$_r" autopilot/prep-missing)" = "3|main" ] \
+    && ok "FK13: a fork ref that does not resolve is DID-NOT-RUN (exit 3), never a silent fall back to HEAD" \
+    || bad "FK13: an unresolvable fork ref did not return 3 — the run would fork from wherever HEAD happened to be and look correct"
+
+# plant: FK14 | plugin/skills/project-conductor/SKILL.md | elif [ -n "$(git -C "$_root" status --porcelain 2>/dev/null)" ]; then | elif false; then
+  _r=$(_mkr c); git -C "$_r" branch autopilot/prep-x >/dev/null 2>&1; printf 'x' > "$_r/dirty.txt"
+  [ "$(_fp "$_r" autopilot/prep-x)" = "2|main" ] \
+    && ok "FK14: a dirty tree refuses the base switch (exit 2) rather than carrying uncommitted work across branches" \
+    || bad "FK14: a dirty tree did not refuse the base switch"
+
+  _r=$(_mkr d)
+  [ "$(_fp "$_r" "")" = "0|main" ] \
+    && ok "FK15 (unchanged-behaviour guard): with no --fork-from the fence is INACTIVE and HEAD is used as-is" \
+    || bad "FK15: the fence acted without --fork-from — the attended flow must be byte-identical"
+fi
+
+# plant: FK7 | plugin/skills/project-conductor/SKILL.md | printf '%s\n' "<topic-slug>" >> "$_root/.claude/autopilot-state/published" | true
+if grep -qF 'autopilot-state/published' "$COND" && grep -qF '>> "$_root/.claude/autopilot-state/published"' "$COND"; then
+  ok "FK7: the publish block APPENDS to the ledger — the producer the FK2 check consumes"
+else
+  bad "FK7: nothing writes .claude/autopilot-state/published — the skip check would read an empty ledger for ever (the producer/consumer defect this repo has recorded six times)"
+fi
+
+# plant: FK8 | plugin/skills/autopilot/SKILL.md | Prep branch — commit Phase P's outputs | Prep branch — assorted notes
+if grep -qF "Prep branch — commit Phase P's outputs" "$AUTOSK"; then
+  ok "FK8: Phase P has a step that commits its outputs onto the run-scoped prep branch"
+else
+  bad "FK8: Phase P does not commit its outputs — every SPEC it writes would live only on whichever feature branch commits first (VCS-003, observed 2026-08-04)"
+fi
+
+# plant: FK9 | plugin/skills/autopilot/SKILL.md | args="autopilot --fork-from | args="autopilot
+if grep -qF 'args="autopilot --fork-from' "$AUTOSK"; then
+  ok "FK9: the conductor is handed the prep ref to fork from"
+else
+  bad "FK9: no fork point is passed to the conductor — feature N+1 forks from wherever HEAD happens to be"
+fi
+
+# plant: FK10 | plugin/scripts/autopilot-disarm.sh | "$SDIR/published" | "$SDIR/unused-published"
+if grep -qF '"$SDIR/published"' "$DISARM"; then
+  ok "FK10: the disarm clears the run ledger — carried into the next run it would skip features that never ran"
+else
+  bad "FK10: autopilot-disarm.sh does not clear published — the next run would skip every feature this one shipped"
+fi
+
 # Z1: assertion-count floor. A floor, not an exact count: it catches an assertion that VANISHES
 # (ADR-0083 §D3 — a suite reporting fewer assertions does not read as broken, and nobody watches
 # the number) without needing a bump on every addition.
 TOTAL=$((PASS + FAIL))
-if [ "$TOTAL" -ge 26 ]; then
+if [ "$TOTAL" -ge 41 ]; then
   ok "Z1: assertion floor met ($TOTAL)"
 else
-  bad "Z1: only $TOTAL assertions executed, expected >= 26 — did an extraction return empty?"
+  bad "Z1: only $TOTAL assertions executed, expected >= 41 — did an extraction return empty?"
 fi
 
 echo "----"

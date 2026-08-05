@@ -161,8 +161,12 @@ fi
 # path (it appears in no script and no SKILL.md; §3.1 said "record started_at" without saying where)
 # and it is debris either way; the canonical timestamp now lives inside the marker.
 CLEARED=""
+# `published` is the run-scoped ledger of what shipped (issue #364, ADR-0127 §D4). It is cleared
+# here with the rest of the transient set: it answers "what has THIS run published", so carrying it
+# into the next run would make the conductor skip features that never ran, which is the opposite of
+# the defect it exists to fix. The durable record of what is done stays PROJECT.md's checkboxes.
 for f in "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/token-budget" \
-         "$SDIR/started-at" "$ROOT/.claude/needs-human"; do
+         "$SDIR/published" "$SDIR/started-at" "$ROOT/.claude/needs-human"; do
   [ -e "$f" ] || continue
   if rm -f "$f" 2>/dev/null; then
     CLEARED="$CLEARED

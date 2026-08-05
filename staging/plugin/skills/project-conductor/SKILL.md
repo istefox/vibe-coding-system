@@ -41,6 +41,13 @@ _root="$PWD"
 _pmd="$_root/PROJECT.md"
 # Roadmap-autopilot mode (ADR-0022): set by the `autopilot` argument.
 _autopilot=false; [ "$1" = "autopilot" ] && _autopilot=true
+# --fork-from <ref> (issue #364, ADR-0127 §D4): the base every feature branch is created from.
+# Empty in attended mode and on any run that does not pass it, which is exactly today's behaviour.
+_fork_from=""
+_i=1; for _a in "$@"; do
+  [ "$_a" = "--fork-from" ] && { _i=$((_i+1)); eval "_fork_from=\${$_i}"; break; }
+  _i=$((_i+1))
+done
 # Scripts dir: plugin install uses $CLAUDE_PLUGIN_ROOT/scripts; the ~/.claude deployment
 # keeps all shell helpers in ~/.claude/hooks. Prefer the plugin path, fall back to hooks.
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/publish-feature.sh" ]; then
@@ -156,6 +163,40 @@ If ALL features are `[x]` or `[~]`: go to Step 7 (project complete).
 
 Otherwise: find the first `- [ ]` line. Extract `<next-feature>` and `<next-phase>`. Go to Step 3.
 
+**In `autopilot` mode the run's OWN ledger overrides the checkbox (issue #364, ADR-0127 §D4).**
+`PROJECT.md` is marked `[x]` on the feature branch and never on the base the next feature forks
+from, so the checkbox for a feature that just published still reads `[ ]` here and the loop would
+re-pick it forever. The ledger is the run-scoped record of what this run has already published.
+
+This is a **CHECKER**: branch on its exit code. Exit 3 means the ledger could not be read, which is
+not the same as an empty ledger — a run that cannot tell what it has published must stop rather
+than re-pick.
+
+<!-- fence-contract: conductor-published-skip -->
+```bash
+# Free variables, bound by the orchestrator: _root, _slug (the candidate feature's topic slug),
+# _autopilot. Inert unless _autopilot=true.
+_led="$_root/.claude/autopilot-state/published"
+if [ "${_autopilot:-false}" != "true" ]; then
+  echo "PUBLISHED-SKIP: INACTIVE — attended mode, the checkbox is authoritative."
+elif [ ! -e "$_led" ]; then
+  # No ledger yet = nothing published in this run. Distinct from unreadable, below.
+  echo "PUBLISHED-SKIP: NONE — no feature has published in this run yet."
+elif [ ! -r "$_led" ]; then
+  echo "PUBLISHED-SKIP: DID-NOT-RUN — $_led exists but cannot be read."
+  exit 3
+elif grep -qxF "$_slug" "$_led" 2>/dev/null; then
+  echo "PUBLISHED-SKIP: ALREADY — '$_slug' published earlier in this run; advancing past it."
+  exit 1
+else
+  echo "PUBLISHED-SKIP: PENDING — '$_slug' has not published in this run."
+fi
+```
+
+On `ALREADY` (exit 1), skip this line and take the next `- [ ]`; on `DID-NOT-RUN` (exit 3), write
+`needs-human` and halt the run. Matching is `grep -qxF` — whole-line and literal, so a slug that is
+a prefix of another (`102-requirement-ids` against `102-requirement-ids-coverage`) does not collide.
+
 ---
 
 ### Step 3 — HITL gate: confirm next feature
@@ -225,6 +266,37 @@ options:
 ### Step 4 — Invoke concept-to-code
 
 Emit: `"── Starting chain for: <next-feature> (autopilot: <on|off>) ──"`
+
+**Fork point — check out `$_fork_from` BEFORE invoking the chain (issue #364, ADR-0127 §D4).**
+Nothing downstream chooses a base: `commit --branch` in Gate 4.0 creates the feature branch from
+whatever `HEAD` is when it runs, so the fork point is decided *here* or it is decided by accident.
+Left to accident it is the previous feature's tip, which stacks PR *N* on features 1..*N*.
+
+This is a **CHECKER**: branch on its exit code. Inert when `--fork-from` was not passed, so the
+attended flow is byte-identical.
+
+<!-- fence-contract: conductor-fork-point -->
+```bash
+# Free variables: _root, _fork_from (empty unless --fork-from was passed).
+if [ -z "${_fork_from:-}" ]; then
+  echo "FORK-POINT: INACTIVE — no --fork-from; HEAD is used as-is (attended behaviour)."
+elif ! git -C "$_root" rev-parse --verify --quiet "$_fork_from" >/dev/null 2>&1; then
+  echo "FORK-POINT: DID-NOT-RUN — '$_fork_from' does not resolve in $_root."
+  echo "  Phase P records this ref; a run whose base has vanished must stop, not fork from HEAD."
+  exit 3
+elif [ -n "$(git -C "$_root" status --porcelain 2>/dev/null)" ]; then
+  echo "FORK-POINT: DIRTY — refusing to switch base with uncommitted changes present."
+  exit 2
+else
+  git -C "$_root" checkout -q "$_fork_from" 2>/dev/null || {
+    echo "FORK-POINT: DID-NOT-RUN — checkout of '$_fork_from' failed."; exit 3; }
+  echo "FORK-POINT: ON — '$_fork_from'; this feature's branch forks from here."
+fi
+```
+
+`DID-NOT-RUN` (exit 3) and `DIRTY` (exit 2) are both run-level: write `needs-human` and halt. A run
+that cannot place itself on the agreed base would silently produce a stacked branch, which is the
+defect this fence exists to remove.
 
 **Just-in-time SPEC copy (ADR-0023, autopilot only).** If `_autopilot=true`, resolve the feature's
 generated spec **by its issue number** (never by re-deriving the slug from the feature text, which
@@ -382,6 +454,20 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
   printf 'GREEN' > "$_root/.claude/autopilot-state/build-status"
   bash "$_scripts/publish-feature.sh" --slug "<topic-slug>" --base main --root "$_root"
   ```
+  **`--base main` is the PR BASE, not the fork point, and the two were being conflated (issue #364,
+  ADR-0127 §D4).** Every feature PR targets `main`; every feature BRANCH forks from the run-scoped
+  `autopilot/prep-<date>` created in `autopilot` Phase P. Keeping the PR base at `main` is what makes
+  the PRs independently reviewable and mergeable in any order.
+
+  **On success, append the slug to the run ledger — this is the producer Step 2's
+  `conductor-published-skip` check consumes.** Without it that check reads an empty ledger for ever
+  and the loop re-picks the feature that just published, because `PROJECT.md`'s `[x]` was written on
+  the feature branch and is not visible from the base:
+  ```bash
+  mkdir -p "$_root/.claude/autopilot-state"
+  printf '%s\n' "<topic-slug>" >> "$_root/.claude/autopilot-state/published"
+  ```
+  Append-only and never rewritten, so a re-run that crashes mid-roadmap still knows what shipped.
   The helper prints a `AUTOPILOT-PUBLISH <slug> PR=<url>` line for the `/goal` evaluator and the
   morning report. If the helper exits non-zero (guard HALT or push/PR failure), the guard's halt
   conditions (`needs-human`, `rtf-blocker`, budget) are run-level, so STOP the roadmap: record the

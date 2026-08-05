@@ -176,9 +176,31 @@ Steps (each is skip-if-present):
    A thin or vague issue is SKIPPED (marked `[~]` in PROJECT.md with a `needs-human` note), never
    fabricated.
 
+4. **Prep branch — commit Phase P's outputs and make them the fork point (issue #364, ADR-0127
+   §D4).** Everything above is written into the WORKING TREE, so without this step those files exist
+   only wherever the first feature happens to commit them, and every later feature forked from a
+   clean base finds no SPEC of its own. That is not hypothetical: it is `VCS-003` in this
+   repository's own ledger, observed on 2026-08-04 with five SPECs stranded on one feature branch.
+
+   Create `autopilot/prep-<YYYY-MM-DD>` from the default branch, commit `PROJECT.md`,
+   `docs/specs/*.spec.md`, `docs/specs/_issue-map.tsv` and `.claude/test-cmd` onto it, and push it.
+   Use the `commit` skill with `--branch` and `--include` — never hand-rolled git, for the reason
+   Gate 4.0 gives: one commit path in the system.
+
+   **Record the ref as `$_prep_ref`.** §3.3 hands it to `project-conductor`, which forks every
+   feature branch from it. The feature PRs still target `main`.
+
+   Opening a PR for the prep branch itself is OPTIONAL and belongs to the human's morning: it is
+   documentation only, and merging it first is what stops each feature PR from carrying the prep
+   commit. The run does not depend on it being merged.
+
+   **Skip-if-present, like every step above:** if `autopilot/prep-<today>` already exists, reuse it
+   rather than creating a second one. A resumed run must fork from the same base as the run it
+   resumes, or half the features sit on a base the other half cannot see.
+
 Record for the report (schema v2.1 `prep` block): `features_generated`, `features_skipped_thin`,
-`test_cmd_created`. Then fall into Phase 0. Phase 0 still enforces the TOFU-trust and gh-auth wall;
-Phase P grants neither.
+`test_cmd_created`, and `prep_ref`. Then fall into Phase 0. Phase 0 still enforces the TOFU-trust
+and gh-auth wall; Phase P grants neither.
 
 **External-dependency check (G13, ADR-0060) is NOT a Phase P step.** It runs later, per feature,
 at that feature's own Gate 2c inside the per-feature chain §3.3 drives — a plan's declared
@@ -404,7 +426,13 @@ Or stop after <N> turns."
 
 ### 3.3 Drive project-conductor in roadmap-autopilot
 
-Invoke `Skill(skill="project-conductor", args="autopilot")`. The conductor (roadmap-autopilot mode) pre-authorizes
+Invoke `Skill(skill="project-conductor", args="autopilot --fork-from <$_prep_ref>")`, passing the
+prep ref Phase P step 4 recorded. **Every feature branch forks from that ref, and every feature PR
+still targets `main` (issue #364, ADR-0127 §D4).** The two are different questions and were being
+answered by one value: forking from `main` leaves each feature without the SPECs Phase P wrote, and
+forking from the previous feature's tip stacks PR *N* on features 1..*N*.
+
+The conductor (roadmap-autopilot mode) pre-authorizes
 every pending feature, skips the per-feature Step 3 gate, and for each feature:
 architecture (Gate 2, including Gate 2c's G13 external-dependency check — ADR-0060, resolved via
 `~/.claude/hooks/external-dependency-check.sh`, the same script `concept-to-code/SKILL.md` Gate 2c

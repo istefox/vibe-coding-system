@@ -179,5 +179,5 @@ the definition of done; the run takes care of itself.
 ## References
 
 - `code.claude.com/docs/en/goal` — the only authoritative source for `/goal` behavior
-- `docs/architecture/ADR-0022-autopilot-goal.md` — `/goal` as the outer loop for the
+- `docs/architecture/ADR-0022-nightly-autopilot-goal.md` — `/goal` as the outer loop for the
   overnight runner, D4 condition template, and the resume-reset risk
