@@ -12,13 +12,13 @@
 #
 # `m.get()` returns None for a field that is absent AND for one explicitly set to null, and the
 # shell one-liner returns an empty string when the file could not be PARSED at all, because the
-# traceback went to /dev/null. Issue #123 is what that costs: nightly-autopilot aborted a whole
+# traceback went to /dev/null. Issue #123 is what that costs: autopilot aborted a whole
 # roadmap on two long-completed chains that merely predate the field, and told the operator they
 # were "corrupted or hand-edited".
 #
 # IT REPORTS. IT DOES NOT DECIDE — and that separation is the whole design.
 # The two call sites #123 fixed apply OPPOSITE defaults to the same absence, and both are right:
-#   nightly-autopilot check 6   sweeps every manifest in the repo, most of them long completed.
+#   autopilot check 6   sweeps every manifest in the repo, most of them long completed.
 #                               Absence on a completed chain is expected; that chain's dispatch
 #                               mode cannot affect a future run. -> tolerate
 #   autopilot-build   check 7   reads the ONE manifest about to be built, in flight by definition.

@@ -22,7 +22,7 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 HELPER="$STAGING/plugin/skills/concept-to-code/scripts/manifest-field-state.sh"
-NA_SKILL="$STAGING/plugin/skills/nightly-autopilot/SKILL.md"
+NA_SKILL="$STAGING/plugin/skills/autopilot/SKILL.md"
 AB_SKILL="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 SYNC="$STAGING/sync-to-claude.sh"
 TMP=$(mktemp -d)
@@ -123,9 +123,9 @@ OUT=$(PATH="$TMP/emptybin" /bin/bash "$HELPER" "$TMP/valid.yml" hook_verified 2>
 # P. The policy asymmetry. This is the design, and it is the thing most at risk from a later
 # reader who notices two call sites treating one state differently and "fixes" it.
 if grep -q 'ABSENT|completed' "$NA_SKILL"; then
-  ok "P1: nightly check 6 still has an explicit ABSENT|completed tolerance branch"
+  ok "P1: autopilot check 6 still has an explicit ABSENT|completed tolerance branch"
 else
-  bad "P1: nightly check 6 lost its ABSENT|completed branch — #123 reintroduced"
+  bad "P1: autopilot check 6 lost its ABSENT|completed branch — #123 reintroduced"
 fi
 
 if grep -qE 'ABSENT\\\|\*\)' "$AB_SKILL"; then
@@ -194,7 +194,7 @@ if [ "$_n" -ge 30 ]; then
     esac
   done
   [ "$_bad" -eq 0 ] && ok "R1: all $_n manifests in this repository resolve to an accepted state" \
-                    || bad "R1: $_bad of $_n manifests resolve to a state nightly check 6 rejects"
+                    || bad "R1: $_bad of $_n manifests resolve to a state autopilot check 6 rejects"
 else
   bad "R1: expected >= 30 manifests, found $_n — R1 would pass vacuously"
 fi
@@ -351,7 +351,7 @@ fi
 # English words lifted out of operator-facing error messages that happen to use a colon —
 # "hook_verified: field absent", "hook_verified: value is …", "hook_verified:
 # manifest-field-state.sh not found …", "hook_verified: the manifest could not be read …" in
-# autopilot-build/SKILL.md and nightly-autopilot/SKILL.md. The `hook_verified=<word>` variant is
+# autopilot-build/SKILL.md and autopilot/SKILL.md. The `hook_verified=<word>` variant is
 # worse: it adds `unchanged`, hook-verify-workflow.sh's RECOMMEND token meaning DO NOT WRITE THIS
 # FIELD — a recommendation not to write would enter the written set. step5_review_mode's colon idiom
 # stays clean (7 matches, {none, checkpoint}) and needs none of this per-field care.
@@ -421,7 +421,7 @@ fi
 # {false, true, field, manifest, the, value} — four ENGLISH WORDS lifted out of operator-facing
 # error messages that happen to use a colon: "hook_verified: field absent …", "hook_verified: value
 # is …", "hook_verified: manifest-field-state.sh not found …", "hook_verified: the manifest could
-# not be read …" in autopilot-build/SKILL.md and nightly-autopilot/SKILL.md. A guard built on that
+# not be read …" in autopilot-build/SKILL.md and autopilot/SKILL.md. A guard built on that
 # idiom would fail on a correct tree on its first run. Instead this reads the actual write shapes:
 # manifest-set-flag.sh's two call-site literals, plus manifest-init.sh's bare-literal default.
 #

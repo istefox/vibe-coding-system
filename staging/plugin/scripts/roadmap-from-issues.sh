@@ -11,10 +11,10 @@
 # other entry point that reads the same untrusted source. This is a mitigation, not a boundary
 # (§D1) and runs unconditionally regardless of repo visibility (§D5).
 #
-# The skip note target is `.claude/nightly-state/skipped-features`, a per-feature note distinct
-# from the run-level halt marker nightly-guard.sh reads (ADR-0060 §D3, issue #114): before that
+# The skip note target is `.claude/autopilot-state/skipped-features`, a per-feature note distinct
+# from the run-level halt marker autopilot-guard.sh reads (ADR-0060 §D3, issue #114): before that
 # fix this script wrote to the run-level marker directly, so one injection-suspect issue title
-# silently halted every other feature in the roadmap. See nightly-guard.sh's own header comment
+# silently halted every other feature in the roadmap. See autopilot-guard.sh's own header comment
 # for the full split.
 #
 # Usage: roadmap-from-issues.sh --root <dir> --label <label> [--dry-run]
@@ -93,9 +93,9 @@ while IFS=$(printf '\t') read -r num title; do
   fi
   if printf '%s\n' "$_scan_out" | grep -q '^INJECTION'; then
     _rule=$(printf '%s\n' "$_scan_out" | head -1 | cut -f2)
-    mkdir -p .claude/nightly-state
+    mkdir -p .claude/autopilot-state
     printf 'issue #%s "%s" skipped: injection-shaped content detected in title (%s)\n' \
-      "$num" "$title" "$_rule" >> .claude/nightly-state/skipped-features
+      "$num" "$title" "$_rule" >> .claude/autopilot-state/skipped-features
     skipped=$((skipped+1))
     continue
   fi

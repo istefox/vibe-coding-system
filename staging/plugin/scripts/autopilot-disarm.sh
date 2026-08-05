@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# nightly-disarm.sh v1.0 — clear a nightly run's transient state after the run is over.
+# autopilot-disarm.sh v1.0 — clear an autopilot run's transient state after the run is over.
 # Issue #321 (with #323), ADR-0112. Bash 3.2 clean: no assoc array, no mapfile, no ${v^^}.
 #
-# WHY THIS EXISTS. `nightly-autopilot` creates `.claude/nightly-state/active` in Phase 1 and removes
+# WHY THIS EXISTS. `autopilot` creates `.claude/autopilot-state/active` in Phase 1 and removes
 # it ONLY in Phase 2. A session that dies — context exhaustion, a crash, the human pressing stop —
-# never reaches Phase 2, so the marker outlives the run and `nightly-guard` stays live in the
+# never reaches Phase 2, so the marker outlives the run and `autopilot-guard` stays live in the
 # human's own working sessions. The guard is RIGHT to fail closed; what was missing is an exit.
 # Grepping the RUNBOOK for disarm/stale/interrupt/crash/recover/stuck returned exactly one hit, and
 # it was about interrupting a turn, not recovering afterwards.
@@ -22,9 +22,9 @@
 #
 # TWO MODES, EXACT MIRRORS. Each has exactly one legitimate caller, and each refuses the other's.
 #
-#   nightly-disarm.sh <root>                 RECOVERY. A human clearing a stale marker, from a
+#   autopilot-disarm.sh <root>                 RECOVERY. A human clearing a stale marker, from a
 #                                            session that is not the run. The OWNER is refused.
-#   nightly-disarm.sh --completing <root>    COMPLETION. `nightly-autopilot` Phase 2, in the
+#   autopilot-disarm.sh --completing <root>    COMPLETION. `autopilot` Phase 2, in the
 #                                            session that armed it. A FOREIGN session is refused.
 #
 # R-04 HOLDS BY CONSTRUCTION, NOT BY PROMISE, and its content is: no session disarms on the
@@ -32,7 +32,7 @@
 # cannot prove the owner is dead — that is the paragraph below, unchanged.
 #
 # A RUN DOES DISARM ITSELF, AT PHASE 2, AND THAT IS NOT A HOLE (issue #321 follow-up). The bare
-# form used to be the only form, and `nightly-autopilot` Phase 2 called it from the owning session,
+# form used to be the only form, and `autopilot` Phase 2 called it from the owning session,
 # so it was refused on every completed run — the marker outlived the run through the PRIMARY path,
 # not through a crash, which is the failure this script exists to remove. Worse, the refusal below
 # told the caller to "finish the run, Phase 2 clears the marker" while Phase 2 cleared it BY
@@ -59,7 +59,7 @@
 
 set -u
 
-STATE_SUBDIR=".claude/nightly-state"
+STATE_SUBDIR=".claude/autopilot-state"
 
 COMPLETING=0
 ROOT=""
@@ -72,8 +72,8 @@ while [ "$#" -gt 0 ]; do
       # `--bogus` was taken as the project root and exited 2 for the unrelated reason that no such
       # directory exists — the right code for the wrong cause, which is the thing this file spends
       # three paragraphs refusing to do elsewhere.
-      echo "nightly-disarm: unknown option: $1" >&2
-      echo "nightly-disarm: usage: nightly-disarm.sh [--completing] <project-root>" >&2
+      echo "autopilot-disarm: unknown option: $1" >&2
+      echo "autopilot-disarm: usage: autopilot-disarm.sh [--completing] <project-root>" >&2
       exit 2 ;;
     *) ROOT="$1" ;;
   esac
@@ -81,30 +81,30 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$ROOT" ]; then
-  echo "nightly-disarm: no project root given" >&2
-  echo "nightly-disarm: usage: nightly-disarm.sh [--completing] <project-root>" >&2
+  echo "autopilot-disarm: no project root given" >&2
+  echo "autopilot-disarm: usage: autopilot-disarm.sh [--completing] <project-root>" >&2
   exit 2
 fi
 if [ ! -d "$ROOT" ]; then
-  echo "nightly-disarm: not a directory: $ROOT" >&2
+  echo "autopilot-disarm: not a directory: $ROOT" >&2
   exit 2
 fi
 
 SDIR="$ROOT/$STATE_SUBDIR"
 MARKER="$SDIR/active"
 
-# The state directory may legitimately not exist (this repo has never run nightly). That is
+# The state directory may legitimately not exist (this repo has never run autopilot). That is
 # "nothing armed", not "did not run".
 if [ ! -e "$SDIR" ] && [ ! -e "$ROOT/.claude/needs-human" ]; then
   echo "DISARM: NOTHING-ARMED — no $STATE_SUBDIR and no needs-human under $ROOT"
   exit 0
 fi
 if [ -e "$SDIR" ] && [ ! -d "$SDIR" ]; then
-  echo "nightly-disarm: DID-NOT-RUN — $SDIR exists and is not a directory" >&2
+  echo "autopilot-disarm: DID-NOT-RUN — $SDIR exists and is not a directory" >&2
   exit 3
 fi
 if [ -d "$SDIR" ] && [ ! -r "$SDIR" ]; then
-  echo "nightly-disarm: DID-NOT-RUN — cannot read $SDIR" >&2
+  echo "autopilot-disarm: DID-NOT-RUN — cannot read $SDIR" >&2
   exit 3
 fi
 
@@ -130,7 +130,7 @@ if [ "$COMPLETING" -eq 1 ]; then
     echo "DISARM: REFUSED — this session ($CUR) did not arm the marker (owner: $OWNER${ARMED_AT:+, at $ARMED_AT})." >&2
     echo "  --completing declares 'I am the run and I am finishing'. A session that did not arm the" >&2
     echo "  marker cannot declare that. To clear a marker left by someone else, drop the flag:" >&2
-    echo "    bash nightly-disarm.sh \"$ROOT\"" >&2
+    echo "    bash autopilot-disarm.sh \"$ROOT\"" >&2
     exit 1
   fi
   if [ -n "$OWNER" ] && [ -z "$CUR" ]; then
@@ -147,7 +147,7 @@ else
   if [ -n "$OWNER" ] && [ -n "$CUR" ] && [ "$OWNER" = "$CUR" ]; then
     echo "DISARM: REFUSED — this session ($CUR) is the one that armed the marker${ARMED_AT:+ at $ARMED_AT}." >&2
     echo "  A run does not disarm itself through the recovery path. If this IS the run ending, that" >&2
-    echo "  is what nightly-autopilot Phase 2 passes --completing for; otherwise run this from a" >&2
+    echo "  is what autopilot Phase 2 passes --completing for; otherwise run this from a" >&2
     echo "  different session." >&2
     exit 1
   fi
@@ -168,7 +168,7 @@ for f in "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/token-budget"
     CLEARED="$CLEARED
   removed: ${f#$ROOT/}"
   else
-    echo "nightly-disarm: DID-NOT-RUN — could not remove ${f#$ROOT/}" >&2
+    echo "autopilot-disarm: DID-NOT-RUN — could not remove ${f#$ROOT/}" >&2
     exit 3
   fi
 done
@@ -182,5 +182,5 @@ fi
 echo "DISARM: CLEARED${OWNER:+ (was armed by session $OWNER${ARMED_AT:+ at $ARMED_AT})}"
 printf '%s\n' "$CLEARED" | sed '/^$/d'
 [ -n "$NOTE" ] && echo "  $NOTE"
-echo "  nightly-guard is now inert for this repo. Your own pushes are unaffected by it."
+echo "  autopilot-guard is now inert for this repo. Your own pushes are unaffected by it."
 exit 0

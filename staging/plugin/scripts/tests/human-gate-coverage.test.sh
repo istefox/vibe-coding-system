@@ -293,12 +293,12 @@ else
   bad "HIC1b: h16-direction-check.sh is not referenced from project-conductor/SKILL.md"
 fi
 
-# HIC2: attended-mode-only gating — nightly has no human to ask (ADR-0022), so H16 must be
-# explicitly skipped when _nightly=true.
-if grep -qF '_nightly=false' "$CONDUCTOR_SKILL" | head -1; then :; fi
+# HIC2: attended-mode-only gating — autopilot has no human to ask (ADR-0022), so H16 must be
+# explicitly skipped when _autopilot=true.
+if grep -qF '_autopilot=false' "$CONDUCTOR_SKILL" | head -1; then :; fi
 H16_BLOCK=$(awk '/H16 — direction check/{f=1} f{print} f && /^- On success, return to Step 2\./{exit}' "$CONDUCTOR_SKILL")
-if printf '%s' "$H16_BLOCK" | grep -qF '_nightly=false' && printf '%s' "$H16_BLOCK" | grep -qi 'skipped when'; then
-  ok "HIC2: H16 is explicitly gated to attended mode only (_nightly=false)"
+if printf '%s' "$H16_BLOCK" | grep -qF '_autopilot=false' && printf '%s' "$H16_BLOCK" | grep -qi 'skipped when'; then
+  ok "HIC2: H16 is explicitly gated to attended mode only (_autopilot=false)"
 else
   bad "HIC2: H16 does not explicitly condition itself on attended mode"
 fi

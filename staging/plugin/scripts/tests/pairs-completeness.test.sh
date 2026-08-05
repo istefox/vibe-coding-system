@@ -350,7 +350,7 @@ done < "$tmp/deployed-only-fixture"
 # isolated copy of `staging/` and `docs/`; `.github/workflows/docs-ci.yml` is in neither, so CI1's
 # mechanism cannot be reached by a plant and a sandbox run reads the real workflow file. What CI1
 # has instead is LIVE red evidence: on its first run it failed naming conductor-entry-failure-split,
-# manifest-entry-state, nightly-guard-disarm and permission-mode-state — four real harnesses that
+# manifest-entry-state, autopilot-guard-disarm and permission-mode-state — four real harnesses that
 # had never run in CI. Live evidence beats a synthetic case built to pass (ADR-0108 §PC1).
 CIWF="$STAGING/../.github/workflows/docs-ci.yml"
 CI_LIST="$tmp/ci-list"; : >"$CI_LIST"

@@ -674,7 +674,7 @@ else
 fi
 
 # C1b (forward guard, named-regression anchor): the 3 sites this feature originally fixed
-# (nightly-autopilot/SKILL.md:69, :178, project-conductor/SKILL.md:167) must not have regressed
+# (autopilot/SKILL.md:69, :178, project-conductor/SKILL.md:167) must not have regressed
 # back to positional form. This is deliberately NOT a re-run of the old pre-fix snapshot — that
 # expected-list-equals-actual-list form can only ever be green before the fix it exists to drive,
 # and dies permanently the day the fix lands (this is the third assertion in this codebase to die
@@ -687,8 +687,8 @@ fi
 # count. A change to this set (one of the three reappearing as positional) must be visible here.
 KNOWN_FIXED_SITES="$TMP/known-fixed-sites.txt"
 cat > "$KNOWN_FIXED_SITES" <<EOF
-$STAGING/plugin/skills/nightly-autopilot/SKILL.md:69
-$STAGING/plugin/skills/nightly-autopilot/SKILL.md:178
+$STAGING/plugin/skills/autopilot/SKILL.md:69
+$STAGING/plugin/skills/autopilot/SKILL.md:178
 $STAGING/plugin/skills/project-conductor/SKILL.md:167
 EOF
 sort -u "$KNOWN_FIXED_SITES" -o "$KNOWN_FIXED_SITES"
@@ -699,7 +699,7 @@ comm -12 "$KNOWN_FIXED_SITES" "$ACTUAL_POSITIONAL" > "$REGRESSED"
 if [ -s "$REGRESSED" ]; then
   bad "C1b: a site this feature already fixed has regressed back to positional form: $(printf '%s ' $(cat "$REGRESSED"))"
 else
-  ok "C1b: none of the 3 historically-fixed positional sites (nightly-autopilot/SKILL.md:69, :178, project-conductor/SKILL.md:167) have regressed back to positional form"
+  ok "C1b: none of the 3 historically-fixed positional sites (autopilot/SKILL.md:69, :178, project-conductor/SKILL.md:167) have regressed back to positional form"
 fi
 
 # C1c (forward guard, mandatory positive twin for C1b's OWN logic — reintroduction proof): C2
@@ -707,14 +707,14 @@ fi
 # but C1b adds new logic beyond that detector — the KNOWN_FIXED_SITES-vs-ACTUAL_POSITIONAL
 # intersection. That logic needs its own proof, on a SCRATCH COPY of the real corpus file (never
 # the tracked file itself, and never written back into staging/), with the exact historical named
-# form at nightly-autopilot/SKILL.md:69 reintroduced as positional at the same line number. The
+# form at autopilot/SKILL.md:69 reintroduced as positional at the same line number. The
 # known-sites list below is scoped to the scratch path on purpose — C1b's real list names the
 # tracked path, which the scratch copy does not share, so reusing it here would compare two lists
 # that can never intersect regardless of content and prove nothing. If C1b's comm-based
 # intersection were broken (e.g. wrong field, unsorted input, wrong site string), this is what
 # would catch it.
-SCRATCH_C1C="$TMP/scratch-nightly-autopilot-SKILL.md"
-cp "$STAGING/plugin/skills/nightly-autopilot/SKILL.md" "$SCRATCH_C1C"
+SCRATCH_C1C="$TMP/scratch-autopilot-SKILL.md"
+cp "$STAGING/plugin/skills/autopilot/SKILL.md" "$SCRATCH_C1C"
 python3 - "$SCRATCH_C1C" <<'PYEOF'
 import sys
 path = sys.argv[1]
@@ -743,7 +743,7 @@ printf '%s\n' "$C1C_OUT" | awk -F'\t' '$4=="positional" {print $2":"$3}' | sort 
 C1C_REGRESSED="$TMP/c1c-regressed.txt"
 comm -12 "$KNOWN_FIXED_SITES_SCRATCH" "$C1C_ACTUAL" > "$C1C_REGRESSED"
 if [ -s "$C1C_REGRESSED" ]; then
-  ok "C1c (forward guard, reintroduction proof): reintroducing the historical positional form at nightly-autopilot/SKILL.md:69's equivalent line on a SCRATCH COPY is caught by C1b's own regression-intersection logic (not just the generic C2 detector)"
+  ok "C1c (forward guard, reintroduction proof): reintroducing the historical positional form at autopilot/SKILL.md:69's equivalent line on a SCRATCH COPY is caught by C1b's own regression-intersection logic (not just the generic C2 detector)"
 else
   bad "C1c (forward guard, reintroduction proof): reintroducing the historical positional form on a scratch copy was NOT caught — C1b's intersection logic cannot be trusted even though the underlying detector (C2) works"
 fi

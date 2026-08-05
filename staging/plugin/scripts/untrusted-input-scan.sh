@@ -7,7 +7,7 @@
 # same mechanism an attacker is trying to redirect, so nothing here "prevents" or "blocks"
 # injection. It raises the cost of the naive attacks and routes anything shape-matched to the
 # existing needs-human SKIP path (ADR-0059 §D3); it never invents a second enforcement mechanism.
-# The real boundary is capability (ADR-0059 §D2: nightly-autopilot never merges, force-pushes, or
+# The real boundary is capability (ADR-0059 §D2: autopilot never merges, force-pushes, or
 # writes main), not this script.
 #
 # Input: issue title+body text on stdin, in whatever order the caller concatenates them. This

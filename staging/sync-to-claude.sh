@@ -1,5 +1,5 @@
 #!/bin/bash
-# sync-to-claude v1.0 (ADR-0022 Phase 5) — copy the nightly-autopilot blueprint into ~/.claude.
+# sync-to-claude v1.0 (ADR-0022 Phase 5) — copy the autopilot blueprint into ~/.claude.
 #
 # Dry-run by default: prints a diff for every target and changes nothing. Pass --apply to write.
 # For an existing target, the diff is shown before it is overwritten (global safety rule). The live
@@ -14,6 +14,62 @@ STAGING="$REPO/staging"
 DEST="$HOME/.claude"
 APPLY=0
 [ "${1:-}" = "--apply" ] && APPLY=1
+
+# ---------------------------------------------------------------------------------------------
+# ADR-0127 §D2.1 — legacy autopilot wiring gate. REFUSES --apply, it does not merely warn.
+#
+# The rename nightly-* -> autopilot-* moves two hooks that settings.json wires BY ABSOLUTE PATH,
+# and settings.json is deliberately outside PAIRS (ADR-0025). The obvious reading of that risk is
+# wrong in the direction that matters: this script NEVER DELETES. It copies PAIRS entries, so
+# after --apply the deployed tree holds BOTH the stale nightly-guard.sh and the new
+# autopilot-guard.sh, with settings.json still naming the stale one. That hook keys off
+# .claude/nightly-state/active, which nothing writes any more — so it fires on every git push,
+# finds no marker, and exits 0 INERT. A missing file would error; this produces no signal at all.
+#
+# So the remediation has two halves and both are printed: edit settings.json, and delete the stale
+# deployed hooks by hand. The deletion cannot be automated here without giving this script a
+# delete path it has never had, which is a larger decision than this ADR should take (the same
+# by-hand precedent the file already sets for the dated settings.json backup below).
+#
+# Absent settings.json is NOT a refusal: that is a fresh install, and the wiring block near the
+# end of this script already prints the MANUAL step for it. Unreadable is distinguished from
+# clean — an unread file is not a clean file.
+_legacy_wiring() {
+  _s="$DEST/settings.json"
+  [ -e "$_s" ] || { printf 'absent'; return; }
+  [ -r "$_s" ] || { printf 'unreadable'; return; }
+  if grep -q 'nightly-guard\|nightly-disarm' "$_s" 2>/dev/null; then printf 'legacy'; else printf 'clean'; fi
+}
+_LW=$(_legacy_wiring)
+_STALE=""
+[ -f "$DEST/hooks/nightly-guard.sh" ]  && _STALE="$_STALE $DEST/hooks/nightly-guard.sh"
+[ -f "$DEST/hooks/nightly-disarm.sh" ] && _STALE="$_STALE $DEST/hooks/nightly-disarm.sh"
+
+if [ "$_LW" = "legacy" ] || [ -n "$_STALE" ]; then
+  printf '\n=== LEGACY AUTOPILOT WIRING DETECTED (ADR-0127) ===\n'
+  [ "$_LW" = "legacy" ] && {
+    printf '\n1. %s still wires a renamed hook. Replace the nightly-guard.sh command with:\n' "$DEST/settings.json"
+    printf '     "command": "bash ~/.claude/hooks/autopilot-guard.sh"\n'
+  }
+  [ -n "$_STALE" ] && {
+    printf '\n2. Stale deployed hooks remain. This script cannot delete them — remove by hand:\n'
+    for _f in $_STALE; do printf '     rm %s\n' "$_f"; done
+    printf '   Left in place AND still wired, the old guard runs, finds no nightly-state/active,\n'
+    printf '   and exits 0 inert: a PreToolUse guardrail that stops guarding with no error.\n'
+  }
+  if [ "$APPLY" -eq 1 ]; then
+    printf '\nREFUSING --apply. Deploying the rename while the old wiring stands would silently\n'
+    printf 'disarm the push guard. Do the steps above, then re-run.\n'
+    exit 1
+  fi
+  printf '\n(dry-run: the above must be resolved before --apply will proceed.)\n'
+fi
+
+if [ "$_LW" = "unreadable" ]; then
+  printf '\n!! %s exists but could not be read — the legacy-wiring check DID NOT RUN.\n' "$DEST/settings.json"
+  printf '   That is not the same as finding it clean.\n'
+  [ "$APPLY" -eq 1 ] && { printf '   REFUSING --apply.\n'; exit 1; }
+fi
 
 # src|dst pairs (dst relative to ~/.claude). Scripts land in hooks/ (this deployment's convention).
 # Exception: user/CLAUDE.md is the only non-plugin/ entry. user/settings.json stays out on
@@ -79,14 +135,15 @@ plugin/skills/interview-driver/SKILL.md|skills/interview-driver/SKILL.md
 plugin/skills/swift-vibe/SKILL.md|skills/swift-vibe/SKILL.md
 plugin/scripts/auto-format.sh|hooks/auto-format.sh
 plugin/scripts/chain-memory-capture.sh|hooks/chain-memory-capture.sh
-plugin/scripts/nightly-guard.sh|hooks/nightly-guard.sh
-plugin/scripts/nightly-disarm.sh|hooks/nightly-disarm.sh
+plugin/scripts/autopilot-guard.sh|hooks/autopilot-guard.sh
+plugin/scripts/autopilot-disarm.sh|hooks/autopilot-disarm.sh
+plugin/scripts/autopilot-migrate.sh|hooks/autopilot-migrate.sh
 plugin/scripts/protect-files.sh|hooks/protect-files.sh
 plugin/scripts/publish-feature.sh|hooks/publish-feature.sh
 plugin/scripts/required-checks-audit.sh|hooks/required-checks-audit.sh
 plugin/scripts/set-branch-protection.sh|hooks/set-branch-protection.sh
-plugin/skills/nightly-autopilot/SKILL.md|skills/nightly-autopilot/SKILL.md
-plugin/skills/nightly-autopilot/tests/run-tests.sh|skills/nightly-autopilot/tests/run-tests.sh
+plugin/skills/autopilot/SKILL.md|skills/autopilot/SKILL.md
+plugin/skills/autopilot/tests/run-tests.sh|skills/autopilot/tests/run-tests.sh
 plugin/scripts/tests/phase1.test.sh|hooks/tests/phase1.test.sh
 plugin/skills/project-conductor/SKILL.md|skills/project-conductor/SKILL.md
 plugin/skills/project-conductor/scripts/h16-direction-check.sh|skills/project-conductor/scripts/h16-direction-check.sh
@@ -238,12 +295,13 @@ done
 
 # Preserve executable bit on the shell helpers.
 if [ "$APPLY" -eq 1 ]; then
-  chmod +x "$DEST/hooks/precompact-guard.sh" "$DEST/hooks/nightly-guard.sh" "$DEST/hooks/publish-feature.sh" "$DEST/hooks/test-write-scope.sh" \
+  chmod +x "$DEST/hooks/precompact-guard.sh" "$DEST/hooks/autopilot-guard.sh" "$DEST/hooks/publish-feature.sh" "$DEST/hooks/test-write-scope.sh" \
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
     "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
     "$DEST/hooks/agent-command-scope.sh" "$DEST/hooks/vendor-checks.sh" \
-    "$DEST/hooks/nightly-disarm.sh" "$DEST/hooks/required-checks-audit.sh" 2>/dev/null || true
+    "$DEST/hooks/autopilot-disarm.sh" "$DEST/hooks/autopilot-migrate.sh" \
+    "$DEST/hooks/required-checks-audit.sh" 2>/dev/null || true
 fi
 
 # DEPLOYED SKILL REPORT (issue #222, ADR-0087, R-06). Every directory (or symlink resolving to a
@@ -279,7 +337,7 @@ MANUAL=0
 # Wiring: absent grep hit OR no settings.json at all. Fail-safe direction is to print — a state
 # that cannot be confirmed must not read as "already wired". grep, not jq: the script has no jq
 # dependency today and this check does not justify adding one.
-if ! grep -q 'nightly-guard' "$DEST/settings.json" 2>/dev/null; then
+if ! grep -q 'autopilot-guard' "$DEST/settings.json" 2>/dev/null; then
   MANUAL=1
   cat <<'NOTE'
 
@@ -287,10 +345,10 @@ if ! grep -q 'nightly-guard' "$DEST/settings.json" 2>/dev/null; then
 Add this PreToolUse entry to ~/.claude/settings.json (alongside the Edit|Write protect-files entry):
 
   { "matcher": "Bash",
-    "hooks": [ { "type": "command", "command": "\"$HOME\"/.claude/hooks/nightly-guard.sh" } ] }
+    "hooks": [ { "type": "command", "command": "\"$HOME\"/.claude/hooks/autopilot-guard.sh" } ] }
 
 The staged reference version is staging/user/settings.json. Review the live file first — it may have
-diverged. nightly-guard is inert outside a nightly run, so wiring it globally is safe.
+diverged. autopilot-guard is inert outside an autopilot run, so wiring it globally is safe.
 NOTE
 fi
 

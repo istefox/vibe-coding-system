@@ -1,6 +1,6 @@
 # CI template (ADR-0022 D8) — dropped into a target repo as .github/workflows/ci.yml.
 #
-# The __TEST_CMD__ token is substituted by nightly-autopilot at drop time with the target
+# The __TEST_CMD__ token is substituted by autopilot at drop time with the target
 # repo's TOFU-trusted command from .claude/test-cmd (fallback documented if absent).
 # The job name `ci` is the required status check that set-branch-protection.sh enforces on
 # main — keep the two in sync. No secrets are needed for a static build.

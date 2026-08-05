@@ -654,7 +654,7 @@ commit/push/PR already happened and are reversible; merge must never be proposed
 ### Step 7 — Merge gate (only reached after Step 6b reports fully green)
 
 **Never automatic — propose only.** A pushed branch and an open PR are reversible; a merge is
-not (see `ADR-0022`, `nightly-autopilot`'s "merge stays human" invariant — this step doesn't
+not (see `ADR-0022`, `autopilot`'s "merge stays human" invariant — this step doesn't
 relitigate that decision, it applies the same principle here).
 
 ```bash

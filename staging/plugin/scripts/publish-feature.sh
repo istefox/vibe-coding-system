@@ -1,8 +1,8 @@
 #!/bin/bash
-# publish-feature v1.0 (ADR-0022 D6) — idempotent branch/push/PR for overnight runs.
+# publish-feature v1.0 (ADR-0022 D6) — idempotent branch/push/PR for unattended runs.
 #
 # Pushes a feature branch and opens a PR to the base branch. Never force-pushes, never
-# merges, never enables auto-merge, never touches the base branch. Calls nightly-guard
+# merges, never enables auto-merge, never touches the base branch. Calls autopilot-guard
 # first and aborts on HALT. Re-runs must not duplicate a branch or a PR.
 #
 # Usage:
@@ -13,7 +13,7 @@
 set -u
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-GUARD="$SCRIPT_DIR/nightly-guard.sh"
+GUARD="$SCRIPT_DIR/autopilot-guard.sh"
 
 SLUG=""; BASE="main"; ROOT=""; DRY=0
 while [ $# -gt 0 ]; do
@@ -45,7 +45,7 @@ git rev-parse --git-dir >/dev/null 2>&1 || fail "root is not a git repository: $
 git remote get-url origin >/dev/null 2>&1 || fail "no 'origin' remote configured"
 
 # Per-repo opt-in marker (ADR-0022 D3).
-MARKER="$ROOT/.claude/nightly-autopilot.yml"
+MARKER="$ROOT/.claude/autopilot.yml"
 [ -f "$MARKER" ] || fail "opt-in marker missing: $MARKER (publish disabled)"
 grep -qE '^[[:space:]]*publish:[[:space:]]*true[[:space:]]*$' "$MARKER" \
   || fail "opt-in marker does not set publish: true — publish disabled"
@@ -54,10 +54,10 @@ grep -qE '^[[:space:]]*publish:[[:space:]]*true[[:space:]]*$' "$MARKER" \
 if [ -x "$GUARD" ]; then
   guard_out=$("$GUARD" --check "$ROOT" 2>&1) || {
     printf '%s\n' "$guard_out"
-    fail "nightly-guard HALT — not publishing"
+    fail "autopilot-guard HALT — not publishing"
   }
 else
-  fail "nightly-guard not found or not executable: $GUARD"
+  fail "autopilot-guard not found or not executable: $GUARD"
 fi
 
 run() {
@@ -97,7 +97,7 @@ if command -v gh >/dev/null 2>&1; then
     if [ -z "$PR_URL" ]; then
       gh pr create --base "$BASE" --head "$BRANCH" \
         --title "$SLUG" \
-        --body "Automated overnight run (ADR-0022 nightly-autopilot). Review and merge manually." \
+        --body "Automated overnight run (ADR-0022 autopilot). Review and merge manually." \
         >/dev/null 2>&1 || fail "gh pr create failed for $BRANCH"
       PR_URL=$(gh pr list --head "$BRANCH" --state open --json url --jq '.[0].url // empty' 2>/dev/null)
     fi
@@ -107,5 +107,5 @@ else
 fi
 
 # Status line for the /goal evaluator and the morning report.
-printf 'NIGHTLY-PUBLISH %s PR=%s CI=pending\n' "$SLUG" "${PR_URL:-none}"
+printf 'AUTOPILOT-PUBLISH %s PR=%s CI=pending\n' "$SLUG" "${PR_URL:-none}"
 exit 0

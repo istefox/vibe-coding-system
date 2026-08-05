@@ -574,8 +574,8 @@ if [ "$F5OK" -eq 1 ]; then
 else bad "F5: a step name or its [ -x .claude/scripts/… ] guard is missing from $CITPL"; fi
 
 # F6 — ALWAYS-PASS FORWARD GUARD (plan A4). Never fix evidence: it is green before and after the
-# Task 7 edit. `__TEST_CMD__` is substituted by nightly-autopilot at drop time and asserted on by
-# nightly-autopilot/tests/run-tests.sh; the job name `ci` is the required status check that
+# Task 7 edit. `__TEST_CMD__` is substituted by autopilot at drop time and asserted on by
+# autopilot/tests/run-tests.sh; the job name `ci` is the required status check that
 # set-branch-protection.sh enforces on main. Adding steps must not disturb either.
 F6OK=1
 grep -qF '__TEST_CMD__' "$CITPL" || F6OK=0

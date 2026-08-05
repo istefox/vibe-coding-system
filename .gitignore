@@ -12,11 +12,11 @@
 
 # Chain runtime artifacts (machine-local, never commit)
 .claude/step5-report.json
-.claude/nightly-report.json
+.claude/autopilot-report.json
 .claude/scheduled_tasks.lock
 .claude/agent-memory-local/
 .claude/worktrees/
-.claude/nightly-state/
+.claude/autopilot-state/
 *.bak
 *.bak-*
 

@@ -647,7 +647,7 @@ esac
 # own checkout through two differently-cased paths", and until #344 no assertion exercised that:
 # the symlink case was covered, the case case was asserted in prose only. `pwd -P` resolves
 # symlinks and does NOT normalise case, so #239's fix left the exemption inert on every run whose
-# CWD casing differed from git's recorded casing — the exact state the 2026-08-02 nightly hit.
+# CWD casing differed from git's recorded casing — the exact state the 2026-08-02 autopilot hit.
 #
 # RJ13 is BEHAVIOURAL and can only run on a case-insensitive filesystem (APFS, and this bug's whole
 # habitat). RJ13b is the always-runnable half, per ADR-0026's precedent for a platform-specific

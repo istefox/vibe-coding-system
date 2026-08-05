@@ -99,20 +99,20 @@ gap. Backfilled on user request alongside the 2.1.150–169 gap and the 2.1.212�
   is a second, independent layer on top of `stop-gate.sh`'s own anti-loop guardrail (a per-session
   counter that self-unblocks after N entries, see sec. 7.5) — belt and suspenders, no code change
   needed. The same release fixed `/goal` firing its completion evaluator while background shells or
-  delegated subagents were still running, a direct false-positive risk for `nightly-autopilot`'s outer
+  delegated subagents were still running, a direct false-positive risk for `autopilot`'s outer
   loop (ADR-0022). Also in 2.1.143: worktree cleanup no longer falls back to `rm -rf` when
   `git worktree remove` fails, preventing loss of gitignored or in-progress files — relevant to
   `coder`'s `isolation: worktree` (sec. 3.2) and `refactor-snapshot`'s worktree use (ADR-0031).
 - **Fixed `/goal` hanging under `disableAllHooks`, and `/loop` scheduling redundant polling wakeups**
   (ADR-0022): CC 2.1.140 fixed `/goal` silently hanging with no resolution indicator when
   `disableAllHooks` or `allowManagedHooksOnly` is set. This system keeps safety hooks (`stop-gate.sh`,
-  `nightly-guard.sh`, etc.) always active per ADR-0022's design, so the precondition never triggers
+  `autopilot-guard.sh`, etc.) always active per ADR-0022's design, so the precondition never triggers
   here, but it is the exact failure class ADR-0022's hang-detection thread exists to catch. The same
   release fixed `/loop` scheduling redundant wakeups to poll for background tasks that already notify
   on completion — this is the platform-side origin of the "don't poll, you'll be notified" guidance
   this session's own `ScheduleWakeup` tool description now carries.
 - **`/goal` and `claude agents` (agent view) introduced** (ADR-0022, sec. 3.10): CC 2.1.139 shipped
-  the `/goal` command and the agent view — the two platform primitives ADR-0022's nightly-autopilot
+  the `/goal` command and the agent view — the two platform primitives ADR-0022's autopilot
   outer loop is built on. Noted here for the record since the existing ADR-0022 addenda start at
   2.1.198. Same release: hooks now run without terminal access (fixed a hook-writing-to-terminal bug
   that could corrupt an on-screen interactive prompt) and `Skill(name *)` wildcard permission rules
@@ -122,7 +122,7 @@ gap. Backfilled on user request alongside the 2.1.150–169 gap and the 2.1.212�
   the mode's read-only contract. Direct precursor to the 2.1.212 fix (see the 2.1.212–215 audit below)
   for plan mode auto-running file-modifying Bash; both erode the same invariant this system's CLAUDE.md
   states unconditionally ("Plan mode required for any task modifying >1 file"). Same release fixed
-  `CronList` output missing qualifiers and the scheduled prompt — relevant to `nightly-autopilot`'s
+  `CronList` output missing qualifiers and the scheduled prompt — relevant to `autopilot`'s
   deferred `CronCreate` wrap-up (sec. "Cron scheduling... wrap once the Phase 4 smoke test passes").
 - **Fixed subagents unable to discover skills via the Skill tool** (sec. 3): CC 2.1.133 fixed
   project/user/plugin skills not being discoverable by subagents through the Skill tool at all. Same
@@ -138,7 +138,7 @@ gap. Backfilled on user request alongside the 2.1.150–169 gap and the 2.1.212�
 - **Sub-agent progress summaries: prompt-cache fix and idle-cost cap** (sec. 3.10): CC 2.1.128 fixed
   sub-agent progress summaries missing the prompt cache (~3× reduction in `cache_creation` cost) and
   capped summaries re-firing repeatedly while a sub-agent's transcript is static. Pure cost benefit for
-  any heavy subagent fan-out (Dynamic Workflows, `nightly-autopilot` roadmap runs).
+  any heavy subagent fan-out (Dynamic Workflows, `autopilot` roadmap runs).
 - **`--dangerously-skip-permissions` widened to bypass `.claude/`/`.git/` writes** (sec. 10): CC 2.1.126
   changed `--dangerously-skip-permissions` to also bypass prompts for writes to `.claude/`, `.git/`,
   `.vscode/`, and shell config files (catastrophic removal commands still prompt). This system's
@@ -196,7 +196,7 @@ the GitHub API, same method as the 2.1.125–146 audit above. This range sits be
   `staging/plugin/scripts/stop-gate.sh`) — this is a genuine, currently-unused enhancement opportunity,
   not a bug fix that changes existing behavior. Same release fixed `claude -p` hanging forever after
   its final result when a backgrounded command never exits, relevant to `autopilot-build` and
-  `nightly-autopilot`'s headless/print-mode runs.
+  `autopilot`'s headless/print-mode runs.
 - **Fixed subagent frontmatter MCP servers ignoring `--strict-mcp-config` and managed-MCP policy; fixed
   `subagent_type: 'claude'` silently discarding gitignored outputs** (sec. 3.8, ADR-0036): CC 2.1.153
   fixed inline `mcpServers` in agent frontmatter ignoring `--strict-mcp-config`, `--bare`, and
@@ -442,9 +442,9 @@ current online pages, which have not caught up; the bundled changelog confirms b
 - **`claude agents` launcher now auto-commits, pushes, and opens a draft PR on worktree finish**
   (ADR-0022 addendum): a background agent launched from `claude agents` commits, pushes, and opens a
   draft PR when it finishes code work in a worktree, rather than stopping to ask. This is the
-  standalone launcher, a separate path from nightly-autopilot (skill + `/goal` + Agent/Workflow
+  standalone launcher, a separate path from autopilot (skill + `/goal` + Agent/Workflow
   dispatch) and from the `coder` sub-agent (Agent-tool, `isolation: worktree`); neither of those
-  auto-pushes. The ADR-0022 boundary holds. The guardrail (never drive nightly or autopilot through
+  auto-pushes. The ADR-0022 boundary holds. The guardrail (never drive `autopilot` or `autopilot-build` through
   `claude agents`) is recorded in the ADR-0022 addendum.
 - **Explore now inherits the session model, capped at opus** (sec. 3.10; was Haiku): the built-in
   Explore agent no longer runs on Haiku by default. Broad Explore fan-out is no longer
@@ -462,9 +462,9 @@ current online pages, which have not caught up; the bundled changelog confirms b
   message from the launching agent is normal task direction and never counts as the user's approval.
   This is external confirmation of the HITL invariant the system already enforces.
 - **New Notification events `agent_needs_input` and `agent_completed`** (sec. 7): they fire for
-  `claude agents` sessions that need input or finish. Our nightly path is skill + `/goal`, not a
+  `claude agents` sessions that need input or finish. Our autopilot path is skill + `/goal`, not a
   `claude agents` background session, so the events are available but not wired; recorded for a
-  revisit if nightly ever runs under `claude agents`.
+  revisit if autopilot ever runs under `claude agents`.
 - **Agent-teams resilience and plan-mode read-only auto-allow** (sec. 2, sec. 11): a teammate that
   dies on an API error now reports "failed" to the lead, and messaging a stuck teammate wakes it to
   retry; plan mode now auto-allows read-only tool calls when a session starts in plan mode, matching
@@ -493,12 +493,12 @@ Changelog range 2.1.199–2.1.200 reconciled with the blueprint. Source: the cha
 - **Subagents now propagate API errors instead of reporting false success** (sec. 3.10, ADR-0016/0020/0022): CC 2.1.199 fixes two failure modes at once. A subagent that hit an API error such as "usage limit reached" used to return a successful-looking result; it now reports the error to the parent. A subagent cut off by a rate limit or server error used to fail silently; it now returns its partial work. This directly hardens the Step-5 Workflow and Agent dispatch and the unattended autopilot: an orchestrator can no longer proceed on a subagent's false "done" after a quota or capacity failure. It also bears on model-quota exhaustion, for example an agent pinned to a promo model that runs dry mid-chain. Promotes the earlier assumed subagent-error behavior toward verified. Source: v2.1.199.
 - **Project-scoped plugins and skills now load in git worktrees** (ADR-0016): CC 2.1.200 fixes project-scoped plugins not loading from a git worktree of the same repository. The `coder` sub-agent runs with `isolation: worktree`, and the Step-5 Workflow coder path uses worktrees; skills and plugins now resolve there as in the main tree. Removes a latent gap on the worktree coder path, alongside the 2.1.198 worktree edit-block fix. Source: v2.1.200.
 - **Hook stderr on exit code 2 is now shown** (sec. 7): CC 2.1.199 fixes `SessionStart`, `Setup`, and `SubagentStart` hooks silently hiding stderr when they exit 2. The system's hook stack (pattern-enforce ADR-0001, stop-gate, session-context-inject, chain-memory ADR-0021) becomes easier to debug: a blocking hook's own diagnostics now reach the transcript. Source: v2.1.199.
-- **`claude stop` is honored over a concurrent respawn; retry watchdog widened** (ADR-0022, sec. 10): CC 2.1.199 stops a background agent from being silently respawned after `claude stop`, which tightens the nightly-guard stop path. The same release raises `CLAUDE_CODE_RETRY_WATCHDOG`'s default retry count to 300 and lifts the 15-cap on `CLAUDE_CODE_MAX_RETRIES` for non-capacity transient errors, and retries unrelated 429s with backoff for subscribers. This continues the 2.1.198 transient-retry note toward verified. Source: v2.1.199.
+- **`claude stop` is honored over a concurrent respawn; retry watchdog widened** (ADR-0022, sec. 10): CC 2.1.199 stops a background agent from being silently respawned after `claude stop`, which tightens the autopilot-guard stop path. The same release raises `CLAUDE_CODE_RETRY_WATCHDOG`'s default retry count to 300 and lifts the 15-cap on `CLAUDE_CODE_MAX_RETRIES` for non-capacity transient errors, and retries unrelated 429s with backoff for subscribers. This continues the 2.1.198 transient-retry note toward verified. Source: v2.1.199.
 - **`SendMessage` detects a reused agent name** (sec. 2, agent-teams): CC 2.1.199 fixes SendMessage misrouting when a respawned agent reuses a previous agent's name; it now flags the mismatch and asks the caller to retarget. Relevant only to the agent-team topology, not the flat sub-agent path. Source: v2.1.199.
 - **Stacked slash-skill invocations load up to 5 leading skills** (sec. 8): CC 2.1.199 makes `/skill-a /skill-b do XYZ` load all leading skills, not just the first. Available for composing skill chains; no change required. Source: v2.1.199.
 - **Plan mode now prompts for state-changing browser calls** (sec. 10, sec. 11): CC 2.1.199 fixes plan mode not gating state-changing browser tool calls while auto-allowing read-only `browser_batch`. Complements the 2.1.198 plan-mode read-only auto-allow. Source: v2.1.199.
 
-Background-session reliability (sec. 7, ADR-0022): CC 2.1.200 fixes a cluster of background and daemon failures relevant to the overnight path: sessions stopping after sleep/wake, an Esc-cancelled turn re-running after a stall respawn, a stale `daemon.lock` with an OS-reused PID blocking restart, daemon handover now judged by build timestamp, and roster corruption. No config change; the nightly-autopilot runtime holds up better unattended.
+Background-session reliability (sec. 7, ADR-0022): CC 2.1.200 fixes a cluster of background and daemon failures relevant to the overnight path: sessions stopping after sleep/wake, an Esc-cancelled turn re-running after a stall respawn, a stale `daemon.lock` with an OS-reused PID blocking restart, daemon handover now judged by build timestamp, and roster corruption. No config change; the autopilot runtime holds up better unattended.
 
 Out of scope (no blueprint impact): startup crash on a non-array `disabledMcpServers`/`enabledMcpServers`, tmux 3.4+ flicker, screen-reader and decorative-glyph improvements, voice-dictation no-audio message, control bytes in the agent view, `claude agents --plugin-dir` flag ordering, `/mcp` list focus for assistive tech, the install-script OOM message, config-recovery backup-before-reset, the Chrome reconnect-page loop, `claude --dangerously-skip-permissions daemon <subcommand>` parsing, `claude agents` PR-link label, transcript growth on a no-new-message resume, background job progress stalls, memory-starved session messages, the Linux daemon ~50s self-kill (macOS host here), and the SSH cold-start audit-session regression (no SSH launch here). Source: `~/.claude/cache/changelog.md` (bundled CC 2.1.199–2.1.200); online `code.claude.com/docs` still behind.
 
@@ -509,11 +509,11 @@ Changelog range 2.1.201–2.1.202 reconciled with the blueprint. Source: the cha
 - **`/review <pr>` reverted to a single-pass review** (sec. 16, this section supersedes the 2.1.186 audit note): CC 2.1.202 changes `/review <pr>` back to a fast single-pass review and reserves the multi-agent path for `/code-review <level> <pr#>`. This reverses the earlier "`/review <pr>` now matches `/code-review medium`" note in the Audit 2026-06-23 (CC 2.1.186) block. No system impact: the fix/review skills (`review-triage-fix`, `code-review-checklist`) drive the `reviewer` agent and the `code-review` skill explicitly, never the bare `/review <pr>` alias, and the `/code-review ultra <PR#>` multi-agent cloud path is unaffected. Source: `~/.claude/cache/changelog.md` v2.1.202.
 - **"Dynamic workflow size" `/config` setting** (sec. 10, ADR-0016): CC 2.1.202 adds a `/config` control for how large Claude generally makes dynamic workflows (small/medium/large agent counts). It is explicitly an advisory guideline, not an enforced cap, so it co-exists with ADR-0016's hard limits (16 concurrent, 1000 total per run) and does not relax them. Useful to bound Step-5 fan-out cost by default; the ADR-0016 caps and the Agent-tool fallback are unchanged. Source: v2.1.202.
 - **Workflow script parse reliability** (ADR-0016): CC 2.1.202 fixes workflow scripts with unicode quote escapes being corrupted before parsing, and makes parse errors show the offending line instead of always blaming TypeScript. The Step-5 workflow script is generated by Claude, so this narrows a latent script-corruption failure mode on the dispatch path; the existing parse-failure fallback (Agent-tool batch dispatch when `step5-report.json` is absent) still covers any residual parse failure. Source: v2.1.202.
-- **Re-invoking a loaded skill no longer duplicates its instructions** (sec. 8): CC 2.1.202 stops a re-invoked skill from appending a second copy of its instructions to context. Pure benefit to any chain that re-enters a skill in one session (`project-conductor` resuming, `nightly-autopilot`, a second `humanize-en` or `commit` pass): it removes a hidden per-re-invocation token cost. No change required. Source: v2.1.202.
+- **Re-invoking a loaded skill no longer duplicates its instructions** (sec. 8): CC 2.1.202 stops a re-invoked skill from appending a second copy of its instructions to context. Pure benefit to any chain that re-enters a skill in one session (`project-conductor` resuming, `autopilot`, a second `humanize-en` or `commit` pass): it removes a hidden per-re-invocation token cost. No change required. Source: v2.1.202.
 - **Workflow OpenTelemetry attributes** (sec. 10, OTEL security note): CC 2.1.202 adds `workflow.run_id` and `workflow.name` attributes to telemetry from workflow-spawned agents, so a Step-5 workflow run can be reconstructed from OTel data. Observability-only; same handling as the 2.1.193 `assistant_response` log-event note (telemetry is opt-in and stays off unless explicitly enabled). Source: v2.1.202.
 - **CC 2.1.201 — Sonnet 5 harness-reminder delivery** (no blueprint impact): CC 2.1.201 stops Sonnet 5 sessions using the mid-conversation system role for harness reminders. This is an internal reminder-delivery change; it does not alter hook propagation, the pattern-enforce contract, or agent behavior. The system's Sonnet-tier agents (coder, reviewer, tester, debugger, refactorer) are unaffected. Source: v2.1.201.
 
-Background and worktree reliability (sec. 7, ADR-0016, ADR-0022): CC 2.1.202 fixes several items on the background and worktree paths the overnight and worktree-coder flows rely on: opening a chat from `claude agents` failing with "currently running as a background agent" followed by a worker crash/respawn loop, resuming a session by name (or the resume picker) taking minutes and large memory in repositories with many git worktrees, and `/rename` on a background session being reverted on job restart. No config change; the nightly-autopilot runtime and the `isolation: worktree` coder path hold up better unattended.
+Background and worktree reliability (sec. 7, ADR-0016, ADR-0022): CC 2.1.202 fixes several items on the background and worktree paths the overnight and worktree-coder flows rely on: opening a chat from `claude agents` failing with "currently running as a background agent" followed by a worker crash/respawn loop, resuming a session by name (or the resume picker) taking minutes and large memory in repositories with many git worktrees, and `/rename` on a background session being reverted on job restart. No config change; the autopilot runtime and the `isolation: worktree` coder path hold up better unattended.
 
 Out of scope (no blueprint impact): the inline Ctrl+R history-search crash, transient mTLS handshake failures during client-cert rotation, Remote Control "Unknown command" and dropped uncaptioned images/files, the wrong permission mode shown in `/remote-control` mobile/web, the SSH-wrapped sign-in URL not being clickable, unbounded voice-dictation retry on mic failure, installer/updater "aborted" retry on mid-download network drops, the `/workflows` agent-list layout polish, and the MCP `url`-without-`type` error-message improvement. Source: `~/.claude/cache/changelog.md` (bundled CC 2.1.201–2.1.202); online `code.claude.com/docs` still behind.
 
@@ -522,13 +522,13 @@ Out of scope (no blueprint impact): the inline Ctrl+R history-search crash, tran
 Changelog range 2.1.203–2.1.204 reconciled with the blueprint. Source: the changelog bundled with the installed CLI at `~/.claude/cache/changelog.md`, cross-checked against the upstream `CHANGELOG.md`; the installed version is 2.1.204. This range is almost entirely a hardening pass on the background-agent, worktree-isolation, and headless-hook paths the overnight and Step-5 flows depend on: every item is a platform-internal fix (pure benefit), so no skill or chain file needs a code change. Two items carry a correctness or reliability weight worth stating precisely.
 
 - **Worktree-isolated subagents no longer run shell commands in the parent checkout** (sec. 3.10, sec. 11, ADR-0016): CC 2.1.203 fixes worktree-isolated subagents that sometimes executed Bash in the parent checkout instead of their own worktree. The `coder` sub-agent runs with `isolation: worktree` and the Step-5 workflow coder path uses worktrees, so before the fix a coder's shell steps (test runs, shell-driven edits) could have touched the main tree and mis-attributed the `step5-report.json` file list. This is a correctness fix, not a convenience one; it closes the last known worktree-shell gap alongside the 2.1.198 edit-block and 2.1.200 plugin-load fixes. Source: `~/.claude/cache/changelog.md` v2.1.203.
-- **Headless `SessionStart` hooks no longer idle-reap the worker mid-hook** (sec. 7, ADR-0022): CC 2.1.204 fixes hook events not streaming during `SessionStart` hooks in headless sessions, which could get a remote or background worker idle-reaped in the middle of the hook. The system runs a `SessionStart` hook (session-context-inject, chain-memory surfacing) that fires in every session including the headless `nightly-autopilot` and `autopilot-build` runs, so this removes a real unattended-failure mode on the overnight path. Distinct from the ADR-0016 `hook_verified` blocker, which concerns `PreToolUse`/`PostToolUse` propagation inside Workflow subagents — a different hook event in a different context, and still open. Source: v2.1.204.
+- **Headless `SessionStart` hooks no longer idle-reap the worker mid-hook** (sec. 7, ADR-0022): CC 2.1.204 fixes hook events not streaming during `SessionStart` hooks in headless sessions, which could get a remote or background worker idle-reaped in the middle of the hook. The system runs a `SessionStart` hook (session-context-inject, chain-memory surfacing) that fires in every session including the headless `autopilot` and `autopilot-build` runs, so this removes a real unattended-failure mode on the overnight path. Distinct from the ADR-0016 `hook_verified` blocker, which concerns `PreToolUse`/`PostToolUse` propagation inside Workflow subagents — a different hook event in a different context, and still open. Source: v2.1.204.
 - **Forked background sessions honor `effortLevel` from settings.json** (sec. 3.9, sec. 3.10): CC 2.1.203 fixes background sessions ignoring `effortLevel` changes when forked through the daemon. This complements the 2026-06-23 workflow model-pinning note: a workflow subagent dispatched with an explicit `effort` (or reading the settings default) now gets it honored even on the forked background path, so per-agent reasoning effort holds in Step-5/6 dispatch. Source: v2.1.203.
 - **`TaskStop`/`TaskOutput` resolve agents spawned by another agent** (ADR-0016): CC 2.1.203 fixes these failing to find background agents spawned by another agent, and errors now list running agents by id and description. This hardens the Workflow orchestrator's inspect and kill path for nested dispatch; no contract change, the `step5-report.json` handoff and the Agent-tool fallback are unchanged. Source: v2.1.203.
 - **Subagents are less likely to re-delegate their whole task** (sec. 2, sec. 2.2): CC 2.1.203 makes an agent less likely to hand its entire task to another subagent. This reinforces the blueprint's flat "sub-agents do NOT spawn sub-agents" invariant natively rather than by convention alone; the design is unchanged, the platform default now leans the same way. Source: v2.1.203.
-- **Login-expiry warning before background sessions are interrupted** (ADR-0022, RUNBOOK): CC 2.1.203 adds a warning when the login is about to expire, so a re-authentication can happen before background sessions break. Relevant to long overnight runs; the RUNBOOK pre-flight (fresh auth before launch) stays the primary control since the warning is interactive, but it narrows the window where an expiring login silently halts a nightly run. Source: v2.1.203.
+- **Login-expiry warning before background sessions are interrupted** (ADR-0022, RUNBOOK): CC 2.1.203 adds a warning when the login is about to expire, so a re-authentication can happen before background sessions break. Relevant to long overnight runs; the RUNBOOK pre-flight (fresh auth before launch) stays the primary control since the warning is interactive, but it narrows the window where an expiring login silently halts an autopilot run. Source: v2.1.203.
 
-Background and daemon reliability (sec. 7, ADR-0022): CC 2.1.203 fixes a large cluster the unattended path relies on — a background daemon auto-upgrade failure silently killing all running sessions, background agents crash-looping when their working directory is deleted or replaced (now one clean error), a stale daemon session token now auto-recovering instead of leaving the session permanently unresponsive, `claude agents` no longer silently stopping running subagents and re-running from scratch on return, and worktree creation no longer rejecting nested repositories in multi-repo workspaces. No config change; the nightly-autopilot and worktree-coder runtimes hold up better unattended.
+Background and daemon reliability (sec. 7, ADR-0022): CC 2.1.203 fixes a large cluster the unattended path relies on — a background daemon auto-upgrade failure silently killing all running sessions, background agents crash-looping when their working directory is deleted or replaced (now one clean error), a stale daemon session token now auto-recovering instead of leaving the session permanently unresponsive, `claude agents` no longer silently stopping running subagents and re-running from scratch on return, and worktree creation no longer rejecting nested repositories in multi-repo workspaces. No config change; the autopilot and worktree-coder runtimes hold up better unattended.
 
 Out of scope (no blueprint impact): the Windows-only stale-`PATH` and dropped-`ANTHROPIC_BASE_URL` background fixes (macOS host here, no custom base URL), the `argument list too long` Bash fix in many-worktree repos, assorted `claude agents` view and composer fixes, the grey ⏸ manual-mode footer badge, MCP `roots/list` additional-working-directories exposure, the ~7 MB binary and startup-memory reduction, the context-usage indicator CPU regression fix, transcript-scroll and bash-mode flicker fixes, the reattach escape-code and `/clear` empty-output-on-Windows fixes, LSP-only plugin disuse-flagging, and the `[VSCode]` remote-control toggle. Source: `~/.claude/cache/changelog.md` (bundled CC 2.1.203–2.1.204), cross-checked against upstream `CHANGELOG.md`; online `code.claude.com/docs` still behind.
 
@@ -536,14 +536,14 @@ Out of scope (no blueprint impact): the Windows-only stale-`PATH` and dropped-`A
 
 Changelog range 2.1.205 reconciled with the blueprint. Source: the changelog bundled with the installed CLI at `~/.claude/cache/changelog.md`, cross-checked against the upstream `CHANGELOG.md`. Note on versions: the installed CLI reports `2.1.206`, but upstream has published no changelog entry, no git tag, and no GitHub release for it — tags stop at `v2.1.205`. The 2.1.206 binary shipped ahead of its notes, so it is deliberately **not** covered here and must be reconciled once Anthropic publishes them. This range is a guardrail-and-observability release: the two new auto-mode rules and the notification-provenance fix land on the permission strategy (sec. 10) and on the unattended path, while the rest is agent-view and platform-internal polish. Every item is a platform-internal fix or a native guardrail (pure benefit), so no skill, hook, or chain file needs a code change. One item carries real safety weight for the unattended flows and is stated precisely first.
 
-- **Fabricated in-transcript approvals can no longer be acted on** (sec. 10, ADR-0020, ADR-0022): CC 2.1.205 makes background task notifications explicitly state that no human input has occurred, so an agent cannot read a synthesized notification as though a human had approved something. This is upstream hardening for exactly the failure mode the unattended ADRs were designed around. The defense in this system has always been structural — `autopilot-build` takes only local reversible actions, `nightly-autopilot` publishes only behind a committed per-repo opt-in marker, and neither treats any in-transcript text as authorization — so the boundary is unchanged. What changes is that the same hole is now also closed at the notification layer: a second, independent barrier under the first. The HITL gates (commit, push, deploy, schema change, permanent deletion) and the `AskUserQuestion` contract are untouched. Source: `~/.claude/cache/changelog.md` v2.1.205.
+- **Fabricated in-transcript approvals can no longer be acted on** (sec. 10, ADR-0020, ADR-0022): CC 2.1.205 makes background task notifications explicitly state that no human input has occurred, so an agent cannot read a synthesized notification as though a human had approved something. This is upstream hardening for exactly the failure mode the unattended ADRs were designed around. The defense in this system has always been structural — `autopilot-build` takes only local reversible actions, `autopilot` publishes only behind a committed per-repo opt-in marker, and neither treats any in-transcript text as authorization — so the boundary is unchanged. What changes is that the same hole is now also closed at the notification layer: a second, independent barrier under the first. The HITL gates (commit, push, deploy, schema change, permanent deletion) and the `AskUserQuestion` contract are untouched. Source: `~/.claude/cache/changelog.md` v2.1.205.
 - **Auto mode blocks tampering with session transcript files** (sec. 10, sec. 7): CC 2.1.205 adds an auto-mode rule denying writes to session transcript files. The transcript is the audit record an unattended run leaves behind, and `protect-files.sh` plus the hook-deny rules already guard the sensitive paths this system cares about. The layered-defense posture (hook-deny overrides any permission mode) is unchanged; the outermost layer now covers transcripts natively rather than by convention. Source: v2.1.205.
 - **Auto mode asks before `rm -rf` on an unresolved variable** (sec. 10, sec. 7): CC 2.1.205 makes auto mode prompt before running `rm -rf` on a variable it cannot resolve from context. This is native coverage of ground the destructive-command guardrail already holds (never run `rm -rf` or `DROP TABLE` without asking). It narrows the blast radius of an unattended run without displacing the hook-level deny, which stays authoritative. Source: v2.1.205.
 - **The `--json-schema` fix is the headless CLI flag, not Workflow `agent({schema})`** (ADR-0016): CC 2.1.205 fixed `--json-schema` silently producing unstructured output when the schema was invalid, and schemas using the `format` keyword being rejected. This concerns the headless CLI flag. Workflow structured output — `agent(prompt, {schema})`, which validates at the tool-call layer and makes the subagent retry on mismatch — is a separate mechanism. Step 5 does not depend on `--json-schema` (it hands off through `.claude/step5-report.json`), so this is informational and must not be read as touching the workflow path. Source: v2.1.205.
-- **Session-to-PR linking now catches a PR opened from a large Bash call** (ADR-0022, RUNBOOK): CC 2.1.205 fixed session-to-PR linking missing a PR created in a Bash call whose output exceeded the 30K inline limit. `nightly-autopilot` opens each feature PR with `gh pr create` in Bash, and a verbose `gh` invocation can cross that limit, so overnight PRs previously risked not appearing linked in `claude agents`. Observability only; the `NIGHTLY-PUBLISH` status line and `nightly-report.json` remain the authoritative morning record. Source: v2.1.205.
+- **Session-to-PR linking now catches a PR opened from a large Bash call** (ADR-0022, RUNBOOK): CC 2.1.205 fixed session-to-PR linking missing a PR created in a Bash call whose output exceeded the 30K inline limit. `autopilot` opens each feature PR with `gh pr create` in Bash, and a verbose `gh` invocation can cross that limit, so overnight PRs previously risked not appearing linked in `claude agents`. Observability only; the `AUTOPILOT-PUBLISH` status line and `autopilot-report.json` remain the authoritative morning record. Source: v2.1.205.
 - **`/doctor` is now a full setup checkup, `/checkup` its alias** (RUNBOOK): CC 2.1.205 turned `/doctor` into a setup checkup that can diagnose and fix issues. Useful as a pre-flight before the one-time per-repo bootstrap, where a broken hook path or an unauthenticated `gh` surfaces cheaply. Not a launch precondition; the RUNBOOK pre-flight checks stay the primary control. Source: v2.1.205.
 
-Agent-view observability (ADR-0022, RUNBOOK): CC 2.1.205 improves the morning read of an overnight run. Rows now show a colored state word and a classifier-written headline instead of raw tool-call text, and the peek opens with full status including the exact ask for a blocked session; sessions that edit, merge, comment on, or push to an existing PR now link it; background agents no longer stay shown as "failed" or "completed" after being resumed with `SendMessage`; background jobs no longer flip from "needs input" back to "working" when a turn contained no readable text; `claude attach` waits for a background agent mid-upgrade-restart instead of erroring; and Remote Control panels no longer show a stale "Running" status. A halted nightly run is faster to triage. No config change, no contract change.
+Agent-view observability (ADR-0022, RUNBOOK): CC 2.1.205 improves the morning read of an overnight run. Rows now show a colored state word and a classifier-written headline instead of raw tool-call text, and the peek opens with full status including the exact ask for a blocked session; sessions that edit, merge, comment on, or push to an existing PR now link it; background agents no longer stay shown as "failed" or "completed" after being resumed with `SendMessage`; background jobs no longer flip from "needs input" back to "working" when a turn contained no readable text; `claude attach` waits for a background agent mid-upgrade-restart instead of erroring; and Remote Control panels no longer show a stale "Running" status. A halted autopilot run is faster to triage. No config change, no contract change.
 
 Still open, not resolved by this range: the ADR-0016 `hook_verified` blocker. No 2.1.205 item addresses `PreToolUse`/`PostToolUse` hook propagation inside Workflow subagents, so the Step-5 smoke test gating the workflow path (and the Agent-tool fallback when `hook_verified=false`) remains required exactly as before. The smoke test was deliberately not re-run for this range. All items above are assumed-not-verified-live.
 
@@ -649,7 +649,7 @@ sync, same disclosed convention as ADR-0024 through ADR-0035.
 Changelog range 2.1.206–2.1.209 reconciled with the blueprint. Source: the changelog bundled with the installed CLI at `~/.claude/cache/changelog.md` (installed version 2.1.209), cross-checked against the upstream `CHANGELOG.md` (fetched 2026-07-14). This range also closes the version-gap debt the 2026-07-09 audit recorded: Anthropic has since published the 2.1.206 notes, so 2.1.206 is reconciled here rather than left open. Character of the range: one settings-surface behavior change (`autoMode` scope), two native guardrail and validation wins (the substitution-wrapped catastrophic-removal prompt and the agent tools-list error), and a broad reliability cluster for background and headless runs. Verified against this repo before writing: no skill, hook, chain, or settings file needs a code change for this range.
 
 - **`autoMode` is no longer read from repo-level `.claude/settings.local.json`** (sec. 10, sec. 16): from CC 2.1.207 only user-level `~/.claude/settings.json`, `--settings`, and managed settings are honored for `autoMode`. This system is unaffected: its `autoMode.allow` rules live in `staging/user/settings.json` and deploy to the user level. The generic settings-precedence list in sec. 16 must not be read as applying to this key, so a carve-out note is added there. The motivation is the same threat model as the 2.1.207 plugin fixes below: a cloned repo must not be able to widen auto mode's authority. Source: `~/.claude/cache/changelog.md` v2.1.207.
-- **Catastrophic removals wrapped in `$(…)`, backticks, or `<(…)` now prompt even in auto mode and `--dangerously-skip-permissions`** (sec. 7, sec. 10, ADR-0020, ADR-0022): CC 2.1.208 extends the plain-form protection (e.g. `rm -rf ~`) to command-substitution forms, which are exactly the shapes the hook-deny layer targets. The layered-defense posture is unchanged and the hook-deny rules stay authoritative; what changes is that the outermost native layer no longer has the substitution blind spot. Consequence for the unattended paths: such a command now stalls on a prompt instead of executing silently. That is the safe direction, and ADR-0022 plus the nightly RUNBOOK record the stall shape. Source: v2.1.208.
+- **Catastrophic removals wrapped in `$(…)`, backticks, or `<(…)` now prompt even in auto mode and `--dangerously-skip-permissions`** (sec. 7, sec. 10, ADR-0020, ADR-0022): CC 2.1.208 extends the plain-form protection (e.g. `rm -rf ~`) to command-substitution forms, which are exactly the shapes the hook-deny layer targets. The layered-defense posture is unchanged and the hook-deny rules stay authoritative; what changes is that the outermost native layer no longer has the substitution blind spot. Consequence for the unattended paths: such a command now stalls on a prompt instead of executing silently. That is the safe direction, and ADR-0022 plus the autopilot RUNBOOK record the stall shape. Source: v2.1.208.
 - **The Agent tool now fails with a clear error, naming the unrecognized entries, when a subagent's `tools` list resolves to nothing** (sec. 3, ADR-0036): before CC 2.1.208 such a subagent launched silently with no tools. This validates the scoped frontmatter issue #40 shipped (`Bash(git *)`, `Bash(rg *)`, and the rest) at no cost: a typo in any entry now surfaces as a named error on first dispatch instead of a mute agent. Recommended post-upgrade action (not part of this audit): one smoke dispatch per custom agent to let the validation run once. Source: v2.1.208.
 - **Plugin-hook shell-injection fix** (sec. 7): CC 2.1.207 rejects `${user_config.*}` in shell-form plugin hook, monitor, and headersHelper commands (exec-form `args` arrays or `$CLAUDE_PLUGIN_OPTION_<KEY>` are the supported paths), and plugin option values (`pluginConfigs`) are no longer read from project-level `.claude/settings.json`. Verified: no staged plugin hook uses either mechanism; informational only. Source: v2.1.207.
 - **Background/overnight reliability cluster** (ADR-0016, ADR-0020, ADR-0022 addendum): the background daemon no longer fails permanently after an update replaces the binary a running `claude agents` process was launched from (2.1.208), and background agents now upgrade in the background right after a CLI update instead of paying a slow stale-session upgrade on attach (2.1.206). Completed background agents stay listed in `/tasks` until cleanup instead of vanishing (2.1.208). Session transcript size drops up to 79x in edit-heavy sessions with checkpoint disk usage bounded, 2.1.208 fixes several long-session memory leaks (MCP stdio stderr capped instead of accumulating up to 64 MB per server, LSP documents on a 50-doc LRU, tool-result payload growth in headless/SDK sessions), and the false "100% context used" indicator after a CLI auto-update is gone. This continues the background-agent hardening thread running since 2.1.193; no contract change on our side. Source: v2.1.206, v2.1.208.
@@ -707,7 +707,7 @@ staged skill).
 - **`ultracode` keyword no longer fires from non-human-originated input** (ADR-0016, ADR-0023
   Phase P): CC 2.1.210 fixes the `ultracode` Dynamic Workflows trigger firing on webhook payloads
   and relayed PR comments. `spec-from-issue` reads GitHub issue bodies verbatim, and
-  `nightly-autopilot` processes PR activity, so a labeled issue or a bot-relayed comment
+  `autopilot` processes PR activity, so a labeled issue or a bot-relayed comment
   containing the word could previously have misfired workflow orchestration unattended. Closes a
   narrow but real injection surface on both paths.
 - **Hook-callback timeout no longer misreported as a user rejection** (ADR-0020, ADR-0022): CC
@@ -754,8 +754,8 @@ behavior, not frontmatter parsing).
   background agent now waits for real completion instead of synthesizing a result. Both continue
   the background-agent hardening thread since 2.1.193 (sec. "Background/overnight reliability
   cluster" above) and extend the `claude stop`-is-honored fix from 2.1.199 (sec. above, "retry
-  watchdog widened"). Relevant to the nightly-autopilot morning report and to any Step-5 Workflow
-  dispatch that inspects a background coder's status; no contract change, `nightly-report.json`
+  watchdog widened"). Relevant to the autopilot morning report and to any Step-5 Workflow
+  dispatch that inspects a background coder's status; no contract change, `autopilot-report.json`
   and `step5-report.json` stay the authoritative record. See the ADR-0022 addendum below for the
   overnight-specific read.
 - **"Always allow" permission approvals now save at the repository root instead of the worktree**
@@ -763,9 +763,9 @@ behavior, not frontmatter parsing).
   is persisted, so an approval granted inside a git worktree now survives across sessions and
   worktrees instead of being scoped to that one worktree. Directly affects the `coder` agent's
   `isolation: worktree` path (sec. 3.2) and TOFU-trust approvals for `.claude/test-cmd`: before
-  this fix, a nightly-autopilot run touching several feature-branch worktrees overnight could have
+  this fix, a autopilot run touching several feature-branch worktrees overnight could have
   re-prompted for the same approval in each new worktree, one more path to the stall
-  `nightly-guard` is designed to catch. See the ADR-0022 addendum below.
+  `autopilot-guard` is designed to catch. See the ADR-0022 addendum below.
 - **Auto mode no longer overrides a `PreToolUse` hook's `ask` decision for unsandboxed Bash**
   (sec. 7, sec. 10): CC 2.1.211 fixes auto mode silently proceeding past a hook that returned
   `ask`, instead flooring the decision at a prompt. `db-backup-guardrail.sh:232` is the one hook
@@ -842,7 +842,7 @@ skill, hook, chain, or settings file needs a code change for this range**.
   adds a default 200-subagent-per-session cap (`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`) and a default
   200-WebSearch-per-session cap (`CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION`), both to stop runaway
   delegation/search loops; `/clear` resets both budgets. This is a session-wide ceiling, separate from
-  Dynamic Workflows' own 1000-agent lifetime cap (ADR-0016) — a large `nightly-autopilot`/
+  Dynamic Workflows' own 1000-agent lifetime cap (ADR-0016) — a large `autopilot`/
   `project-conductor` roadmap run (the 2026-07-07 13-feature roadmap spawned 49 agents total, per
   session memory) sits comfortably under 200 today, but this is a ceiling worth watching as roadmaps
   grow, not an immediate gap.
@@ -858,7 +858,7 @@ skill, hook, chain, or settings file needs a code change for this range**.
 - **Fixed scheduled tasks refusing their own configured prompt as untrusted input** (ADR-0022): CC
   2.1.214 fixes a `Cron`-scheduled task's fired prompt being treated as untrusted input instead of being
   delivered as the session's assigned task. `CronCreate` is explicitly deferred in both
-  `nightly-autopilot` and `autopilot-build` ("wrap once the Phase 4 smoke test passes") — this fix
+  `autopilot` and `autopilot-build` ("wrap once the Phase 4 smoke test passes") — this fix
   removes a real blocker for that eventual wrap-up, since a self-injection false-positive on the
   scheduler's own prompt would have made unattended Cron dispatch unreliable regardless of the smoke
   test's outcome.
@@ -898,7 +898,7 @@ already verified in this repo.
 - **Workflow saves and scheduled-task writes no longer follow a symlink at `.claude`** (sec. 7,
   ADR-0016): CC 2.1.216 fixes writes redirecting outside the project through a symlinked `.claude`
   directory. Directly relevant to the Step-5 Workflow file handoff (`.claude/step5-report.json`,
-  ADR-0016) and to the eventual `CronCreate` wrap-up in `nightly-autopilot`/`autopilot-build` — both
+  ADR-0016) and to the eventual `CronCreate` wrap-up in `autopilot`/`autopilot-build` — both
   assume a write to `.claude/...` lands inside the project, an assumption this fix now backs.
 - **Telemetry no longer misreports failed permission-prompt requests or user interrupts as
   rejections** (ADR-0022): CC 2.1.216 is the fourth fix in the hook-halt-misreport thread this
@@ -906,10 +906,10 @@ already verified in this repo.
   `continue:false` drop). See the ADR-0022 addendum below.
 - **Resumed background agent sessions no longer revert to the default agent** (sec. 3, sec. 3.10,
   ADR-0022): CC 2.1.216 restores the agent's prompt and tool restrictions on resume instead of falling
-  back to the default. Before this fix, a `nightly-autopilot`/`project-conductor` background session
+  back to the default. Before this fix, a `autopilot`/`project-conductor` background session
   resumed after an interruption could have lost an agent's scoped tool grants (for example `reviewer`'s
   narrow read-only Bash set, ADR-0036/ADR-0038) and continued with the unrestricted default agent
-  instead. No contract change to `nightly-guard` or the morning report; this closes one more concrete
+  instead. No contract change to `autopilot-guard` or the morning report; this closes one more concrete
   path to a silently-widened tool surface on the overnight path.
 - **`AskUserQuestion` free-text answers asking Claude to wait or explain no longer get told to
   continue anyway** (sec. 11): CC 2.1.216 fixes the wording sent back for a free-text answer so it no
@@ -943,7 +943,7 @@ already verified in this repo.
   default; no conflict, no change needed.
 - **`--max-budget-usd` now stops background subagents once the cap is reached** (sec. 3.10): CC
   2.1.217 denies new spawns and halts running background agents when the budget cap is hit, rather
-  than only blocking new spawns. Relevant to any future cost-ceiling flag on a `nightly-autopilot` or
+  than only blocking new spawns. Relevant to any future cost-ceiling flag on a `autopilot` or
   `project-conductor` roadmap run; no current usage of `--max-budget-usd` in this system, noted for
   when it is adopted.
 
@@ -997,7 +997,7 @@ behavior (`/code-review ultra`, `/ultrareview`) or harden a pattern this system 
 - **`/code-review ultra` no longer silently runs a local review in non-interactive sessions** (sec. 16):
   CC 2.1.218 fixes a correctness bug, not just wording — a non-interactive session invoking
   `/code-review ultra` was previously getting the cheap local path with no indication the cloud review
-  never launched. `nightly-autopilot` and `autopilot-build` run unattended but neither currently invokes
+  never launched. `autopilot` and `autopilot-build` run unattended but neither currently invokes
   `/code-review ultra` (they drive `review-triage-fix` and the `reviewer` agent directly), so no chain
   is retroactively affected; this closes a latent trap for any future unattended use of the ultra path.
 - **Agent frontmatter hooks now require the agent file's own folder to have accepted workspace trust**
@@ -1039,7 +1039,7 @@ behavior (`/code-review ultra`, `/ultrareview`) or harden a pattern this system 
   2.1.216) — that thread is hook/telemetry infrastructure misreporting a platform fault as a human "no";
   this fix is a transcript-integrity bug after an interrupted tool call (e.g. `Esc` or `Ctrl+C` mid-tool)
   producing a misleading message and a dangling `tool_use` block. Not added to the ADR-0022 addendum:
-  no hook or `nightly-guard` decision point is misled by this specific bug, it is a display/transcript
+  no hook or `autopilot-guard` decision point is misled by this specific bug, it is a display/transcript
   artifact. Noted here for completeness, not as a sixth entry in that thread.
 
 Out of scope (no blueprint impact): screen-reader announcements for word/line deletions, Windows
@@ -1139,7 +1139,7 @@ before implementation.
   (ADR-0018) and does not exist on this path.
 - Invariant 14 in `manifest-validate.sh` is conditional on the field being present, so every
   manifest written before this change stays valid without migration. `autopilot-build` and
-  `nightly-autopilot` needed no edit: they reuse Step 5 by reference and the default is `none`.
+  `autopilot` needed no edit: they reuse Step 5 by reference and the default is `none`.
 - Harness `step5-checkpoint-review.test.sh`, 13 cases, in both CI workflows.
 
 Detail: `docs/architecture/ADR-0039-early-coder-feedback.md`.
@@ -1251,7 +1251,7 @@ manual step.
 - **The CI template gains two advisory steps** (sec. 11, `project-templates/ci/ci.yml`): inside
   the existing `ci` job, guarded on `[ -x .claude/scripts/<script>.sh ]`. The job name `ci` and
   the `__TEST_CMD__` token are untouched — `set-branch-protection.sh` requires the first and
-  `nightly-autopilot/tests/run-tests.sh` asserts on the second. **Both steps are inert in a
+  `autopilot/tests/run-tests.sh` asserts on the second. **Both steps are inert in a
   freshly generated project**: nothing yet copies the scripts into a target repo's
   `.claude/scripts/`, which is issue #108's, so they print a skip notice rather than failing a
   build.
@@ -1297,7 +1297,7 @@ every one of them without changing a byte of the detector or the skill it lives 
   `weakening_findings` in `step5-report.json` is a record written by the agent under examination;
   the orchestrator's own scan is the gate — the same "do not trust the agent's self-report" rule
   `review-triage-fix` Step 3 already applies to its own circuit breakers. `autopilot-build` and
-  `nightly-autopilot` inherit the halt by reference rather than running a second scan; `commit`
+  `autopilot` inherit the halt by reference rather than running a second scan; `commit`
   Step 1 gets its own call, advisory in attended mode, `--autopilot`-abort unattended.
 - **A gap found while wiring, not in the SPEC:** `autopilot-build` Step 6's circuit breaker only
   reads test colour, so weakening introduced by the *fix* cycle was flagged by CIRCUIT BREAKER B
@@ -1364,7 +1364,7 @@ Step 6 gate beside #100's reporters and #101's weakening scan.
 - **No manifest field, no schema bump.** `step5-report.json` gains one additive
   `requirement_coverage` object, the fourth extension of that schema on the same additive terms as
   `step5_mode`, `checkpoint_reviews`, and `weakening_findings`. `autopilot-build`,
-  `nightly-autopilot`, `project-conductor`, `commit` and `review-triage-fix` are untouched — the
+  `autopilot`, `project-conductor`, `commit` and `review-triage-fix` are untouched — the
   c2c gate halts before any of them gets a turn.
 
 Detail: `docs/architecture/ADR-0048-102-requirement-ids-coverage.md`.
@@ -1578,7 +1578,7 @@ Use sequential-thinking MCP when the design space is complex.
 Update your memory with patterns and decisions you discover.
 ```
 
-> **Deployment note (2026-07-11, ADR-0036):** the deployed/staging `architect.md` widens `tools` beyond the two entries above -- `Bash(git *), Bash(rg *)` stay unchanged, plus `Bash(bash *), Bash(npx markdownlint-cli2*), Bash(npx --yes markdownlint-cli2*), Bash(python3 *), Bash(shasum *)` for the verification-by-execution this roadmap's architect dispatches routinely use (test harness, `npx markdownlint-cli2`, frontmatter/YAML checks, content hashing) -- still far short of unrestricted Bash for direct invocations (the interpreter-class entries `bash`/`python3` remain a disclosed wrapped-command residual — ADR-0036 Consequences). `permissionMode: plan` is deliberately **not** restored: verified against `code.claude.com/docs/en/agent-sdk/permissions` (2026-07-11), plan mode blocks every file write pending manual approval "regardless of existing allow rules," and architect's only deliverable is writing the ADR and the plan -- every unattended dispatch (`autopilot-build`, `nightly-autopilot`) would stall on that gate. `effort: xhigh`, not `max` (`max` does not persist in file-based agent config -- `code.claude.com/docs/en/model-config`, 2026-07-11). `memory: project` (shown above) stays absent, superseded by ADR-0012/ADR-0013; not reintroduced. `Write` itself carries no path-scoped rule -- `code.claude.com/docs/en/tools-reference` (2026-07-11) documents path pattern matching for `Read`/`Grep`/`Edit` only, not `Write` -- the write-scope guard stays prompt-level plus the global `protect-files.sh` denylist, a disclosed residual gap. Full reasoning: ADR-0036.
+> **Deployment note (2026-07-11, ADR-0036):** the deployed/staging `architect.md` widens `tools` beyond the two entries above -- `Bash(git *), Bash(rg *)` stay unchanged, plus `Bash(bash *), Bash(npx markdownlint-cli2*), Bash(npx --yes markdownlint-cli2*), Bash(python3 *), Bash(shasum *)` for the verification-by-execution this roadmap's architect dispatches routinely use (test harness, `npx markdownlint-cli2`, frontmatter/YAML checks, content hashing) -- still far short of unrestricted Bash for direct invocations (the interpreter-class entries `bash`/`python3` remain a disclosed wrapped-command residual — ADR-0036 Consequences). `permissionMode: plan` is deliberately **not** restored: verified against `code.claude.com/docs/en/agent-sdk/permissions` (2026-07-11), plan mode blocks every file write pending manual approval "regardless of existing allow rules," and architect's only deliverable is writing the ADR and the plan -- every unattended dispatch (`autopilot-build`, `autopilot`) would stall on that gate. `effort: xhigh`, not `max` (`max` does not persist in file-based agent config -- `code.claude.com/docs/en/model-config`, 2026-07-11). `memory: project` (shown above) stays absent, superseded by ADR-0012/ADR-0013; not reintroduced. `Write` itself carries no path-scoped rule -- `code.claude.com/docs/en/tools-reference` (2026-07-11) documents path pattern matching for `Read`/`Grep`/`Edit` only, not `Write` -- the write-scope guard stays prompt-level plus the global `protect-files.sh` denylist, a disclosed residual gap. Full reasoning: ADR-0036.
 
 > **Correction (2026-07-25, ADR-0042, issue #91):** two claims in the note above are superseded. `Bash(git *)` does **not** stay unchanged: it is replaced by `Bash(git log*), Bash(git diff*), Bash(git show*), Bash(git status*), Bash(git rev-parse*)`, a deliberate divergence from the example block above. It also never meant what the note implied — the space before the wildcard enforces a word boundary and nothing more, so `Bash(git *)` matched `git commit` and `git push` too, while ADR-0036 §2.1 asserted in the same paragraph that both were excluded and no `permissions.deny` entry covered them. The write-scope gap is closed as well: `agent-write-scope.sh` (ADR-0041, issue #58) is a `PreToolUse` hook confining architect writes to `docs/architecture/` and `docs/superpowers/plans/` — the second root matters, because `concept-to-code` Step 2 requires the plan there and hard-aborts without it. Still open, and disclosed in both notes: the interpreter-class entries `bash`/`python3` let a wrapped `bash -c "git commit …"` through (issue #58 gap 1).
 
