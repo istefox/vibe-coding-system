@@ -6,7 +6,7 @@
 # (spec-from-issue) and an issue title (roadmap-from-issues.sh) are attacker-controllable text
 # that becomes an unattended overnight agent's input. This is a MITIGATION, not a boundary
 # (ADR-0059 §D1) — the mechanism reading the text is the same mechanism under attack. The real
-# boundary is capability (§D2: nightly-autopilot never merges, force-pushes, or writes main).
+# boundary is capability (§D2: autopilot never merges, force-pushes, or writes main).
 #
 # ASSERTION LABELS ARE U-PREFIXED (UA1, UB3, ...) — confirmed unused by any of the 35 pre-existing
 # test files in this directory before this file was written.
@@ -167,14 +167,14 @@ fi
 # mechanism Step 2 already uses for a thin body (ADR-0059 §D3), not a second one. Checked at both
 # entry points named in the plan: spec-from-issue (body) and roadmap-from-issues.sh (title).
 #
-# The write target changed from `.claude/needs-human` to `.claude/nightly-state/skipped-features`
+# The write target changed from `.claude/needs-human` to `.claude/autopilot-state/skipped-features`
 # under ADR-0060 §D3 (issue #114): before that fix, spec-from-issue's thin-issue writer and this
 # same injection-suspect writer (at both entry points) shared the run-level needs-human file, so
 # one thin or suspect issue silently halted every other feature in the roadmap. UC1-UC3 assert the
-# CURRENT, correct mechanism — see nightly-guard.sh's own header comment and
-# nightly-autopilot/SKILL.md §3.3 "Marker contract" for the full split.
+# CURRENT, correct mechanism — see autopilot-guard.sh's own header comment and
+# autopilot/SKILL.md §3.3 "Marker contract" for the full split.
 # ==============================================================================================
-if grep -qF '.claude/nightly-state/skipped-features' "$STEP15" && grep -qF '[~]' "$STEP15" \
+if grep -qF '.claude/autopilot-state/skipped-features' "$STEP15" && grep -qF '[~]' "$STEP15" \
    && grep -qF 'spec-from-issue #<n> · SKIP ·' "$STEP15"; then
   ok "UC1: Step 1.5's SKIP block reuses the per-feature skip note, [~] marking, and SKIP emit format"
 else
@@ -183,7 +183,7 @@ fi
 
 STEP2="$TMP/sfi_step2.txt"
 awk '/^### Step 2 —/{f=1} /^### Step 3 —/{f=0} f' "$SFI" >"$STEP2"
-if grep -qF '.claude/nightly-state/skipped-features' "$STEP2" && grep -qF '[~]' "$STEP2" \
+if grep -qF '.claude/autopilot-state/skipped-features' "$STEP2" && grep -qF '[~]' "$STEP2" \
    && grep -qF 'spec-from-issue #<n> · SKIP ·' "$STEP2"; then
   ok "UC2: Step 2 (the pre-existing thin-body gate) uses the identical skipped-features/[~]/SKIP shape"
 else
@@ -191,7 +191,7 @@ else
 fi
 
 RFI="$STAGING/plugin/scripts/roadmap-from-issues.sh"
-if grep -qF 'untrusted-input-scan.sh' "$RFI" && grep -qF '.claude/nightly-state/skipped-features' "$RFI" \
+if grep -qF 'untrusted-input-scan.sh' "$RFI" && grep -qF '.claude/autopilot-state/skipped-features' "$RFI" \
    && ! grep -qF '.claude/needs-human' "$RFI"; then
   ok "UC3: roadmap-from-issues.sh (the other entry point, plan Task 4) calls the detector and reuses the per-feature skip note, not needs-human"
 else
@@ -280,7 +280,7 @@ fi
 # the required mitigation-not-boundary language is present, and the forbidden overclaim phrasing
 # is absent — across every file this feature adds or modifies.
 # ==============================================================================================
-UG_FILES="$SCAN $SFI $RFI $STAGING/plugin/skills/nightly-autopilot/SKILL.md"
+UG_FILES="$SCAN $SFI $RFI $STAGING/plugin/skills/autopilot/SKILL.md"
 
 UG1_OK=0
 for f in $UG_FILES; do

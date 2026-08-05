@@ -331,7 +331,7 @@ fi
 # - POPULATION BOUNDARY: this checker reads concept-to-code/SKILL.md only, by design, not by
 #   oversight -- it takes the file as an argument precisely so a later issue can point it at one of
 #   the others without editing it. autopilot-build (9 bare of 15), project-conductor (8 of 8),
-#   nightly-autopilot (5 of 7), commit (1) and deep-refactor (1) sit outside it. A green run here
+#   autopilot (5 of 7), commit (1) and deep-refactor (1) sit outside it. A green run here
 #   says nothing about any of them.
 # - DERIVED-GUARD NUMBERING, reported not fixed: instance 10 is claimed twice, once by
 #   conductor-entry-failure-split.test.sh and once in prose by

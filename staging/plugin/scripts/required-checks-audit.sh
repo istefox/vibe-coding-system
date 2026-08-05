@@ -2,7 +2,7 @@
 # required-checks-audit.sh v1.0 — is every status check `main` REQUIRES something this repo can
 # actually produce? Issue #322, ADR-0114. Bash 3.2 clean: no assoc array, no mapfile, no ${v^^}.
 #
-# WHY THIS EXISTS. `nightly-autopilot` pre-flight check 8 exists so a night of work ends in PRs a
+# WHY THIS EXISTS. `autopilot` pre-flight check 8 exists so a night of work ends in PRs a
 # human can merge in the morning. Its text said *"verify the `ci` check is required on main"* — and
 # it was PROSE, with no mechanism at all: grepping `staging/` for a protection API call returned
 # exactly one hit, inside `set-branch-protection.sh`. Meanwhile this repository's `main` requires

@@ -206,7 +206,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/nightly-guard.sh"
+            "command": "bash ~/.claude/hooks/autopilot-guard.sh"
           }
         ]
       }

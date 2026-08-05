@@ -1,10 +1,10 @@
-# RUNBOOK — nightly-autopilot (overnight roadmap-to-PR)
+# RUNBOOK — autopilot (overnight roadmap-to-PR)
 
 The evening recipe to run a roadmap unattended and wake up to PR-ready branches. Read ADR-0022 for
 the why. This is the how.
 
 **End state by morning:** each roadmap feature on its own `feat/*` branch, pushed, with an open PR to
-`main` and CI green. Nothing merged. A morning report at `.claude/nightly-report.json`. On trouble,
+`main` and CI green. Nothing merged. A morning report at `.claude/autopilot-report.json`. On trouble,
 the guard halts and the report says what blocked it.
 
 ---
@@ -27,7 +27,7 @@ this one-time bootstrap, every night is fully automatic.
 
 1. **`gh auth login`.** Once per machine (needed to push and open PRs).
 
-2. **Opt in.** Create `.claude/nightly-autopilot.yml` in the target repo. For auto-design, add the
+2. **Opt in.** Create `.claude/autopilot.yml` in the target repo. For auto-design, add the
    prep source:
    ```yaml
    publish: true
@@ -44,7 +44,7 @@ this one-time bootstrap, every night is fully automatic.
    ```
    bash ~/.claude/hooks/approve-test-cmd.sh "<repo>"
    ```
-   `nightly-autopilot` never grants trust itself. Re-run this if you later edit `.claude/test-cmd`.
+   `autopilot` never grants trust itself. Re-run this if you later edit `.claude/test-cmd`.
 
 4. **Verify hooks fire once.** Confirm `hook_verified` is set (true or false, not null). The default
    `false` runs on the safe Agent-tool fallback; the Step-5 smoke test in a fresh session promotes it
@@ -87,27 +87,27 @@ auto-design mode you only need the labeled issues and the `prep:` marker (Phase 
 
    The prompts go, the guardrails stay: `stop-gate`, `pre-flight-pattern-enforce`,
    `protect-files`, `db-backup-guardrail`, `write-scope-enforce`, `agent-write-scope`,
-   `agent-command-scope` and `nightly-guard` all still fire, and a hook deny overrides any
+   `agent-command-scope` and `autopilot-guard` all still fire, and a hook deny overrides any
    permission mode (ADR-0022).
 
 2. **Set the outer loop.** Paste the `/goal` template (the skill also prints it). Fill in the turn
    budget:
    ```
    /goal "Every feature in PROJECT.md is [x], committed on feat/*, pushed, and a PR is open,
-   as shown by a NIGHTLY-PUBLISH line for each feature and no NIGHTLY-GUARD HALT line.
+   as shown by a AUTOPILOT-PUBLISH line for each feature and no AUTOPILOT-GUARD HALT line.
    Or stop after 200 turns."
    ```
 
 3. **Launch:**
    ```
-   /skill nightly-autopilot
+   /skill autopilot
    ```
 
 4. Walk away.
 
 `/goal` is the keep-alive: it re-checks the condition after each turn and starts another if unmet. It
 reads only what the run prints to the transcript, which is why the publish step emits a
-`NIGHTLY-PUBLISH` line per feature and the guard emits `NIGHTLY-GUARD HALT` on a stop.
+`AUTOPILOT-PUBLISH` line per feature and the guard emits `AUTOPILOT-GUARD HALT` on a stop.
 
 **Auth freshness (CC 2.1.203+).** A long overnight run can outlive your Claude Code login. From CC
 2.1.203 the CLI warns before the login expires, but that warning is interactive and does not keep an
@@ -125,7 +125,7 @@ is the backstop, the affected feature shows unpublished in the morning report, a
 
 ## Reading the morning report
 
-`.claude/nightly-report.json` (schema v2.0). Look at:
+`.claude/autopilot-report.json` (schema v2.0). Look at:
 
 - `status`: `success` (all features published), `partial` (some halted), `aborted` (pre-flight
   failed, nothing ran).
@@ -141,7 +141,7 @@ you.
 the night. Each row now carries a colored state word and a short written headline instead of raw tool
 call text, and opening a blocked session shows the exact ask. PRs opened by the run are linked there
 too, including one created by a `gh pr create` whose Bash output ran past the 30K inline limit — that
-case used to go unlinked. Treat this as convenience: `nightly-report.json` and the `NIGHTLY-PUBLISH`
+case used to go unlinked. Treat this as convenience: `autopilot-report.json` and the `AUTOPILOT-PUBLISH`
 lines in the transcript are the authoritative record.
 
 ---
@@ -157,21 +157,21 @@ lines in the transcript are the authoritative record.
   publishes in your own later sessions. See the next section.
 
   ```bash
-  bash ~/.claude/hooks/nightly-disarm.sh "$PWD"
+  bash ~/.claude/hooks/autopilot-disarm.sh "$PWD"
   ```
 
 ---
 
 ## The guard is still armed and I cannot push
 
-Symptom: `NIGHTLY-GUARD HALT: ...` on a push, a PR, or a merge — in an ordinary session, with no
-nightly run going on. The guard keys off `.claude/nightly-state/active`, and a run that was
+Symptom: `AUTOPILOT-GUARD HALT: ...` on a push, a PR, or a merge — in an ordinary session, with no
+autopilot run going on. The guard keys off `.claude/autopilot-state/active`, and a run that was
 interrupted, crashed, or ran out of context never reached the step that removes it.
 
 The fix, from the repo root:
 
 ```bash
-bash ~/.claude/hooks/nightly-disarm.sh "$PWD"
+bash ~/.claude/hooks/autopilot-disarm.sh "$PWD"
 ```
 
 It prints what it cleared. Exit codes: `0` cleared (or nothing was armed), `1` refused because the
@@ -180,7 +180,7 @@ arguments, `3` it could not look, which is **not** the same as "nothing was arme
 still blocked.
 
 **The bare form above is your command. `--completing` is not.** That flag is the mirror of this one:
-it is how `nightly-autopilot` Phase 2 clears the state of the run it is itself ending, so it accepts
+it is how `autopilot` Phase 2 clears the state of the run it is itself ending, so it accepts
 the owning session and refuses everyone else. Passing it by hand to clear somebody else's stale
 marker will be refused, and correctly — you are not that run.
 
@@ -188,16 +188,16 @@ It clears the whole transient set, because the marker is only one of five ways t
 
 | file | what it does while present |
 | --- | --- |
-| `.claude/nightly-state/active` | arms the guard; alone it blocks only merges, force-pushes, `--no-verify` and pushes to `main` |
-| `.claude/nightly-state/build-status` reading `RED` | halts every publish, marker or not |
+| `.claude/autopilot-state/active` | arms the guard; alone it blocks only merges, force-pushes, `--no-verify` and pushes to `main` |
+| `.claude/autopilot-state/build-status` reading `RED` | halts every publish, marker or not |
 | `.claude/needs-human` | halts every publish, and prints its first line as the reason |
-| `.claude/nightly-state/rtf-blocker` | halts every publish |
-| `.claude/nightly-state/token-budget` with `spent >= limit` | halts every publish |
+| `.claude/autopilot-state/rtf-blocker` | halts every publish |
+| `.claude/autopilot-state/token-budget` with `spent >= limit` | halts every publish |
 
 When the marker was armed by another session, the halt message names the owner, the time, and this
 command — so you should not need this page twice.
 
-To check without changing anything: `cat .claude/nightly-state/active`. An empty file is a marker
+To check without changing anything: `cat .claude/autopilot-state/active`. An empty file is a marker
 from before this was recorded; that is normal for old runs and the disarm handles it.
 
 ---

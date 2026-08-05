@@ -181,3 +181,13 @@ marker, `docs/specs/`) local to the run.
 - ADR-0008 `docs/architecture/ADR-0008-concept-to-code-workflow-v2-brainstorm.md` — greenfield/brownfield SPEC
 - `~/.claude/skills/concept-to-code/SKILL.md` — `[auto]` brownfield requires an existing SPEC.md
 - `~/.claude/skills/interview-driver/SKILL.md` — SPEC.md structure the generator mirrors
+
+## Correction 2026-08-05 (ADR-0127) — renamed to `autopilot`
+
+Phase P is unchanged in substance, but every name around it moved: the skill is `autopilot`, the
+opt-in marker is `.claude/autopilot.yml`, and `project-conductor`'s mode argument is `autopilot`.
+ADR-0127 also changes where Phase P's outputs land — they are committed on a run-scoped
+`autopilot/prep-<date>` branch that every feature branch forks from, because SPECs written into the
+working tree were reachable only by whichever feature branch committed first.
+
+Body left byte-unchanged (ADR-0034 precedent).

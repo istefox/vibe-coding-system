@@ -5,7 +5,7 @@
 #
 # THE RULE — `project-conductor` must not answer "this feature did not complete" with "the run
 # cannot be trusted". A KNOWN, CONTAINED, per-feature entry failure appends to
-# `.claude/nightly-state/skipped-features`, marks the feature `[~]`, and the roadmap continues; a
+# `.claude/autopilot-state/skipped-features`, marks the feature `[~]`, and the roadmap continues; a
 # genuinely unknown state writes the run-level `.claude/needs-human` marker and halts. Issue #324,
 # ADR-0111. ADR-0060 §D3 drew this exact line for `spec-from-issue`'s two skips and Gate 2c's;
 # Step 5 branch C never got it, so the blast radius survived through a second door.
@@ -37,19 +37,19 @@
 # because there is no derivation to guard. Before adding one, read ADR-0086 §D1.
 #
 # plant: S1 | plugin/skills/project-conductor/SKILL.md | cp "$_spec" "$_root/SPEC.md" || { echo "SPEC-COPY: DID-NOT-RUN | true || { echo "SPEC-COPY: DID-NOT-RUN
-# plant: S2 | plugin/skills/project-conductor/SKILL.md | "$_issue" "$_feature" "$_issue" >> "$_root/.claude/nightly-state/skipped-features" | "$_issue" "$_feature" "$_issue" > "$_root/.claude/needs-human"
+# plant: S2 | plugin/skills/project-conductor/SKILL.md | "$_issue" "$_feature" "$_issue" >> "$_root/.claude/autopilot-state/skipped-features" | "$_issue" "$_feature" "$_issue" > "$_root/.claude/needs-human"
 # plant: S3 | plugin/skills/project-conductor/SKILL.md | can carry any sed metacharacter or delimiter. awk -v f="$_feature" | can carry any sed metacharacter or delimiter. awk -v f="NOMATCH"
 # plant: G2 | plugin/skills/project-conductor/SKILL.md | ENTRY-INIT: TERMINAL (${_out#*|}) | ENTRY-INIT: ADOPT (${_out#*|})
 # plant: G5 | plugin/skills/project-conductor/SKILL.md | echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply" exit 3 fi # Constructed here | exit 3 fi # Constructed here
-# plant: B1 | plugin/skills/project-conductor/SKILL.md | "$_feature" "${_out#*|}" >> "$_root/.claude/nightly-state/skipped-features" | "$_feature" "${_out#*|}" > "$_root/.claude/needs-human"
-# plant: B4 | plugin/skills/project-conductor/SKILL.md | "$_feature" "$_out" > "$_root/.claude/needs-human" | "$_feature" "$_out" >> "$_root/.claude/nightly-state/skipped-features"
+# plant: B1 | plugin/skills/project-conductor/SKILL.md | "$_feature" "${_out#*|}" >> "$_root/.claude/autopilot-state/skipped-features" | "$_feature" "${_out#*|}" > "$_root/.claude/needs-human"
+# plant: B4 | plugin/skills/project-conductor/SKILL.md | "$_feature" "$_out" > "$_root/.claude/needs-human" | "$_feature" "$_out" >> "$_root/.claude/autopilot-state/skipped-features"
 # plant: B6 | plugin/skills/project-conductor/SKILL.md | case "${_out%%|*}" in TERMINAL) | case "${_out%%|*}" in TERMINAL|RESUMABLE|ADOPTABLE)
 # plant: B9 | plugin/skills/project-conductor/SKILL.md | echo "BRANCH-C: DID-NOT-RUN — classifier missing: $_mes" | printf 'x' > "$_root/.claude/needs-human"; echo "BRANCH-C: DID-NOT-RUN — classifier missing: $_mes"
 # plant: B9b | plugin/skills/project-conductor/SKILL.md | [ "$_rc" -eq 0 ] || { echo "BRANCH-C: DID-NOT-RUN — $_out"; exit 3; } | [ "$_rc" -eq 0 ] || { _out="TERMINAL|guessed"; }
-# plant: W1 | plugin/skills/nightly-autopilot/SKILL.md | **Five writers**, the last two added by ADR-0111 | **Three writers**, unchanged since ADR-0060
-# plant: W3 | plugin/skills/nightly-autopilot/SKILL.md | **Branch C is a split, not a downgrade** | **Branch C is relaxed**
-# plant: W4 | plugin/scripts/nightly-guard.sh | v1.4 (2026-08-01, issue #324, ADR-0111) | v1.4 (2026-08-01, unrelated cleanup)
-# plant: W5 | plugin/scripts/nightly-guard.sh | STATE_SUBDIR=".claude/nightly-state" | STATE_SUBDIR=".claude/nightly-state"; _unused="skipped-features"
+# plant: W1 | plugin/skills/autopilot/SKILL.md | **Five writers**, the last two added by ADR-0111 | **Three writers**, unchanged since ADR-0060
+# plant: W3 | plugin/skills/autopilot/SKILL.md | **Branch C is a split, not a downgrade** | **Branch C is relaxed**
+# plant: W4 | plugin/scripts/autopilot-guard.sh | v1.4 (2026-08-01, issue #324, ADR-0111) | v1.4 (2026-08-01, unrelated cleanup)
+# plant: W5 | plugin/scripts/autopilot-guard.sh | STATE_SUBDIR=".claude/autopilot-state" | STATE_SUBDIR=".claude/autopilot-state"; _unused="skipped-features"
 # plant: W6 | plugin/skills/concept-to-code/scripts/manifest-entry-state.sh | run-level halt — was decided by ADR-0111 (issue #324) and is applied by | run-level halt — is deliberately not decided here, and would be applied by
 # plant: W7 | plugin/skills/concept-to-code/SKILL.md | ADR-0111 (issue #324), and it is decided in `project-conductor`, not here | issue #324's subject and is deliberately not decided here
 # plant: W8 | plugin/skills/project-conductor/SKILL.md | _out=$(bash "$_mes" "$_target" 2>&1); _rc=$? | _out="TERMINAL|assumed"; _rc=0
@@ -63,10 +63,10 @@ SKILLS="$STAGING/plugin/skills"
 REPO=$(cd "$STAGING/.." && pwd)
 
 PC="$SKILLS/project-conductor/SKILL.md"
-NA="$SKILLS/nightly-autopilot/SKILL.md"
+NA="$SKILLS/autopilot/SKILL.md"
 C2C="$SKILLS/concept-to-code/SKILL.md"
 MES="$SKILLS/concept-to-code/scripts/manifest-entry-state.sh"
-GUARD="$STAGING/plugin/scripts/nightly-guard.sh"
+GUARD="$STAGING/plugin/scripts/autopilot-guard.sh"
 
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
@@ -155,7 +155,7 @@ done
 # (ADR-0096's `mk_root` bug, met again by the same hand in ADR-0110).
 mk_root() {
   _r="$TMPROOT/$1"
-  mkdir -p "$_r/docs/manifests" "$_r/docs/specs" "$_r/.claude/nightly-state"
+  mkdir -p "$_r/docs/manifests" "$_r/docs/specs" "$_r/.claude/autopilot-state"
   printf -- '- [ ] %s\n- [ ] Another feature  (issue #77)\n' "$FEATURE" > "$_r/PROJECT.md"
   printf '%s' "$_r"
 }
@@ -219,11 +219,11 @@ fi
 # S2: no spec -> exit 1, a per-feature skip note, and NOT the run-level marker. The whole issue.
 R=$(mk_root s2)
 RC=$(run_fence "conductor-step4-nospec-skip" "$PC" "$(setup "$R")")
-if [ "$RC" = "1" ] && grep -q 'no generated SPEC' "$R/.claude/nightly-state/skipped-features" 2>/dev/null \
+if [ "$RC" = "1" ] && grep -q 'no generated SPEC' "$R/.claude/autopilot-state/skipped-features" 2>/dev/null \
    && [ ! -f "$R/.claude/needs-human" ]; then
   ok "S2: a missing spec is a per-feature skip (exit 1, skip note, no needs-human)"
 else
-  bad "S2: rc=$RC needs_human=$( [ -f "$R/.claude/needs-human" ] && echo WRITTEN || echo no ) note=$(cat "$R/.claude/nightly-state/skipped-features" 2>/dev/null | head -1)"
+  bad "S2: rc=$RC needs_human=$( [ -f "$R/.claude/needs-human" ] && echo WRITTEN || echo no ) note=$(cat "$R/.claude/autopilot-state/skipped-features" 2>/dev/null | head -1)"
 fi
 
 # S3: and the feature is marked [~], so Step 2 does not select it again.
@@ -247,7 +247,7 @@ FEATURE_SAVE="$FEATURE"; FEATURE='A pre-designed feature'
 printf -- '- [ ] %s\n' "$FEATURE" > "$R/PROJECT.md"
 RC=$(run_fence "conductor-step4-nospec-skip" "$PC" "$(setup "$R")")
 if [ "$RC" = "0" ] && out_of conductor-step4-nospec-skip | grep -q 'PREDESIGNED' \
-   && [ ! -f "$R/.claude/nightly-state/skipped-features" ]; then
+   && [ ! -f "$R/.claude/autopilot-state/skipped-features" ]; then
   ok "S4: a feature with no issue suffix is PREDESIGNED and is never skipped"
 else
   bad "S4: rc=$RC — $(out_of conductor-step4-nospec-skip | head -1)"
@@ -331,7 +331,7 @@ MAN="$R/docs/manifests/$TODAY-$SLUG.manifest.yml"
 mk_manifest "$MAN" "step_0_init" "aborted"
 RC=$(run_fence "conductor-branch-c-entry-classify" "$PC" "$(setup "$R" "$MAN")")
 if [ "$RC" = "1" ] && [ ! -f "$R/.claude/needs-human" ] \
-   && grep -q 'terminal state' "$R/.claude/nightly-state/skipped-features" 2>/dev/null; then
+   && grep -q 'terminal state' "$R/.claude/autopilot-state/skipped-features" 2>/dev/null; then
   ok "B1: TERMINAL is a contained per-feature skip (exit 1, note, no needs-human)"
 else
   bad "B1: rc=$RC needs_human=$( [ -f "$R/.claude/needs-human" ] && echo WRITTEN || echo no ) — $(out_of conductor-branch-c-entry-classify | head -1)"
@@ -346,10 +346,10 @@ fi
 
 # B3: build-status is NOT set RED on a skip. A skip did not stop the roadmap; writing RED would
 # poison the next publish through publish-feature.sh even though needs-human is absent.
-if [ ! -s "$R/.claude/nightly-state/build-status" ]; then
+if [ ! -s "$R/.claude/autopilot-state/build-status" ]; then
   ok "B3: a contained skip leaves build-status alone"
 else
-  bad "B3: a skip wrote build-status=$(cat "$R/.claude/nightly-state/build-status")"
+  bad "B3: a skip wrote build-status=$(cat "$R/.claude/autopilot-state/build-status")"
 fi
 
 # B4: an in-flight (ADOPTABLE) manifest -> exit 2, needs-human. R-02, the other direction. This is
@@ -359,17 +359,17 @@ MAN="$R/docs/manifests/$TODAY-$SLUG.manifest.yml"
 mk_manifest "$MAN" "step_0_init" "in_progress"
 RC=$(run_fence "conductor-branch-c-entry-classify" "$PC" "$(setup "$R" "$MAN")")
 if [ "$RC" = "2" ] && grep -q 'did not reach completed' "$R/.claude/needs-human" 2>/dev/null \
-   && [ ! -f "$R/.claude/nightly-state/skipped-features" ]; then
+   && [ ! -f "$R/.claude/autopilot-state/skipped-features" ]; then
   ok "B4: ADOPTABLE still halts the run (exit 2, needs-human, no skip note)"
 else
   bad "B4: rc=$RC needs_human=$( [ -f "$R/.claude/needs-human" ] && echo yes || echo MISSING )"
 fi
 
 # B5: and build-status goes RED on a halt — the pre-#324 behaviour, preserved exactly.
-if [ "$(cat "$R/.claude/nightly-state/build-status" 2>/dev/null)" = "RED" ]; then
+if [ "$(cat "$R/.claude/autopilot-state/build-status" 2>/dev/null)" = "RED" ]; then
   ok "B5: a run-level halt still writes build-status RED"
 else
-  bad "B5: build-status=$(cat "$R/.claude/nightly-state/build-status" 2>/dev/null) — the halt path regressed"
+  bad "B5: build-status=$(cat "$R/.claude/autopilot-state/build-status" 2>/dev/null) — the halt path regressed"
 fi
 
 # B6: a mid-implementation stop -> exit 2. THIS IS THE ADR-0047 §D5 CASE. An anti-test-weakening
@@ -421,7 +421,7 @@ _b=$(extract_fence "$PC" "conductor-branch-c-entry-classify")
 { cat "$(setup "$R" "")"; printf '\n'; printf '%s\n' "$_b" | sed 's|\$HOME/.claude/skills/|'"$TMPROOT"'/absent/|g'; } > "$TMPROOT/b9.sh"
 bash "$TMPROOT/b9.sh" >"$TMPROOT/out-b9" 2>&1; RC=$?
 if [ "$RC" = "3" ] && grep -q 'DID-NOT-RUN' "$TMPROOT/out-b9" \
-   && [ ! -f "$R/.claude/needs-human" ] && [ ! -f "$R/.claude/nightly-state/skipped-features" ]; then
+   && [ ! -f "$R/.claude/needs-human" ] && [ ! -f "$R/.claude/autopilot-state/skipped-features" ]; then
   ok "B9: a missing classifier file is exit 3 and writes neither marker"
 else
   bad "B9: rc=$RC — $(head -1 "$TMPROOT/out-b9")"
@@ -436,7 +436,7 @@ printf '#!/bin/bash\necho "boom" >&2\nexit 2\n' > "$STUB/manifest-entry-state.sh
 { cat "$(setup "$R" "")"; printf '\n'; printf '%s\n' "$_b" | sed 's|\$HOME/.claude/skills/|'"$TMPROOT"'/stub/|g'; } > "$TMPROOT/b9b.sh"
 bash "$TMPROOT/b9b.sh" >"$TMPROOT/out-b9b" 2>&1; RC=$?
 if [ "$RC" = "3" ] && grep -q 'DID-NOT-RUN' "$TMPROOT/out-b9b" \
-   && [ ! -f "$R/.claude/needs-human" ] && [ ! -f "$R/.claude/nightly-state/skipped-features" ]; then
+   && [ ! -f "$R/.claude/needs-human" ] && [ ! -f "$R/.claude/autopilot-state/skipped-features" ]; then
   ok "B9b: a classifier that runs and fails is exit 3, never routed as a token"
 else
   bad "B9b: rc=$RC needs_human=$( [ -f "$R/.claude/needs-human" ] && echo WRITTEN || echo no ) — $(head -1 "$TMPROOT/out-b9b")"
@@ -457,7 +457,7 @@ flat "$PC" > "$TMPROOT/pc.flat"
 # W1: §3.3 names five writers, not three. The list is prose that enumerates its writers; leaving
 # it at three is two files disagreeing with no way to tell which is authoritative (ADR-0042).
 if grep -q 'Five writers' "$TMPROOT/na.flat"; then
-  ok "W1: nightly-autopilot §3.3 states five skipped-features writers"
+  ok "W1: autopilot §3.3 states five skipped-features writers"
 else
   bad "W1: §3.3 still claims a different writer count — $(grep -o '[A-Za-z]* writers' "$TMPROOT/na.flat" | head -1)"
 fi
@@ -477,20 +477,20 @@ else
   bad "W3: §3.3 does not bound the split"
 fi
 
-# W4: nightly-guard.sh's header moved with the writers it points at. It is the file that tells the
+# W4: autopilot-guard.sh's header moved with the writers it points at. It is the file that tells the
 # next author where a new skip writer goes; a stale list there sends them to needs-human.
 if grep -q 'issue #324' "$GUARD" && grep -q 'branch C' "$GUARD"; then
-  ok "W4: nightly-guard.sh's marker-contract header names the new writers"
+  ok "W4: autopilot-guard.sh's marker-contract header names the new writers"
 else
-  bad "W4: nightly-guard.sh's header still describes the pre-#324 writer set"
+  bad "W4: autopilot-guard.sh's header still describes the pre-#324 writer set"
 fi
 
 # W5: the guard still reads only needs-human. This feature adds writers to a file the guard must
 # go on ignoring; if it ever started reading skipped-features, every skip would halt the run.
 if ! grep -q 'skipped-features"' "$GUARD" && ! grep -q 'skipped_features' "$GUARD"; then
-  ok "W5: nightly-guard.sh still never reads skipped-features"
+  ok "W5: autopilot-guard.sh still never reads skipped-features"
 else
-  bad "W5: nightly-guard.sh now reads the per-feature note — every skip would halt the run"
+  bad "W5: autopilot-guard.sh now reads the per-feature note — every skip would halt the run"
 fi
 
 # W6/W7: the two sites that deferred this decision must no longer say it is open. Both sent this
@@ -532,14 +532,139 @@ else
 fi
 
 # =====================================================================================
+# ==================================================================================================
+# FK. Fork point and the run ledger (issue #364, ADR-0127 §D4).
+#
+# PROJECT.md is marked [x] ON THE FEATURE BRANCH and never on the base the next feature forks from,
+# so the checkbox for a feature that just published still reads [ ] to the conductor. Forking from
+# main therefore re-picks it for ever; forking from the previous tip stacks every PR. The run's own
+# append-only ledger decides instead, and the fork point is the run-scoped prep branch.
+#
+# FK2-FK5 EXECUTE the fence. A prose assertion would pass on a fence that documents the ledger and
+# never reads it.
+# ==================================================================================================
+COND="$STAGING/plugin/skills/project-conductor/SKILL.md"
+AUTOSK="$STAGING/plugin/skills/autopilot/SKILL.md"
+DISARM="$SCRIPTS/autopilot-disarm.sh"
+FK_FENCE=$(awk '/fence-contract: conductor-published-skip -->/{f=1;next} f&&/^```bash/{g=1;next} g&&/^```/{exit} g' "$COND")
+
+if [ -z "$FK_FENCE" ]; then
+  bad "FK1: the conductor-published-skip fence extracted nothing — an empty extraction is a FAILURE, never a skip"
+else
+  _fkd=$(mktemp -d "${TMPDIR:-/tmp}/fk.XXXXXX")
+  printf '%s\n' "$FK_FENCE" > "$_fkd/f.sh"
+  bash -n "$_fkd/f.sh" 2>/dev/null && ok "FK1: the published-skip fence parses as bash (ADR-0083 F7)" \
+    || bad "FK1: the published-skip fence does not parse"
+  _fk() { ( export _root="$1" _slug="$2" _autopilot="$3"; bash "$_fkd/f.sh" >/dev/null 2>&1; printf '%s' "$?" ) ; }
+
+  mkdir -p "$_fkd/a/.claude/autopilot-state"; printf '102-req-ids\n' > "$_fkd/a/.claude/autopilot-state/published"
+  mkdir -p "$_fkd/b/.claude/autopilot-state"
+
+# plant: FK2 | plugin/skills/project-conductor/SKILL.md | elif grep -qxF "$_slug" "$_led" 2>/dev/null; then | elif false; then
+  [ "$(_fk "$_fkd/a" 102-req-ids true)" = "1" ] \
+    && ok "FK2: a slug already in the ledger returns ALREADY (exit 1) — the conductor cannot re-pick a feature that published in this run" \
+    || bad "FK2: an already-published slug did not return exit 1 — the roadmap would re-pick the feature that just finished, for ever"
+
+  [ "$(_fk "$_fkd/a" 103-other true)" = "0" ] \
+    && ok "FK3: a slug not in the ledger returns PENDING (exit 0)" \
+    || bad "FK3: an unpublished slug did not return exit 0"
+
+  [ "$(_fk "$_fkd/a" 102-req-ids-coverage true)" = "0" ] \
+    && ok "FK4: matching is whole-line — a slug that is a PREFIX of a published one does not collide" \
+    || bad "FK4: '102-req-ids-coverage' collided with published '102-req-ids' — the match is not whole-line"
+
+# plant: FK5 | plugin/skills/project-conductor/SKILL.md | elif [ ! -e "$_led" ]; then | elif false; then
+  [ "$(_fk "$_fkd/b" 102-req-ids true)" = "0" ] \
+    && ok "FK5: an ABSENT ledger returns 0 (nothing published yet) and is distinct from an unreadable one" \
+    || bad "FK5: an absent ledger did not return 0 — 'no feature has published yet' is the common legitimate case and must not read as an error"
+
+  # An unreadable ledger must be exit 3, never confused with an empty one. Skipped when the test
+  # user can read a chmod-000 file (CI often runs as root — ADR-0028's caveat), because there the
+  # fixture cannot express the state at all and a pass would be for the wrong reason.
+  mkdir -p "$_fkd/c/.claude/autopilot-state"; printf 'x\n' > "$_fkd/c/.claude/autopilot-state/published"
+  chmod 000 "$_fkd/c/.claude/autopilot-state/published" 2>/dev/null
+  if [ -r "$_fkd/c/.claude/autopilot-state/published" ]; then
+    ok "FK6 (skipped, not asserted): this user can read a chmod-000 file, so the unreadable-ledger state is not expressible here"
+  else
+    [ "$(_fk "$_fkd/c" 102-req-ids true)" = "3" ] \
+      && ok "FK6: an UNREADABLE ledger returns 3 (did not run), never 0 — a run that cannot tell what it published must stop rather than re-pick" \
+      || bad "FK6: an unreadable ledger did not return 3"
+  fi
+  chmod 644 "$_fkd/c/.claude/autopilot-state/published" 2>/dev/null
+fi
+
+FP_FENCE=$(awk '/fence-contract: conductor-fork-point -->/{f=1;next} f&&/^```bash/{g=1;next} g&&/^```/{exit} g' "$COND")
+if [ -z "$FP_FENCE" ]; then
+  bad "FK11: the conductor-fork-point fence extracted nothing — an empty extraction is a FAILURE, never a skip"
+else
+  _fpd=$(mktemp -d "${TMPDIR:-/tmp}/fp.XXXXXX")
+  printf '%s\n' "$FP_FENCE" > "$_fpd/f.sh"
+  bash -n "$_fpd/f.sh" 2>/dev/null && ok "FK11: the fork-point fence parses as bash" \
+    || bad "FK11: the fork-point fence does not parse"
+  _mkr() { d="$_fpd/$1"; mkdir -p "$d"; git -C "$d" init -q -b main >/dev/null 2>&1
+    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m i >/dev/null 2>&1; printf '%s' "$d"; }
+  _fp() { ( export _root="$1" _fork_from="$2"; bash "$_fpd/f.sh" >/dev/null 2>&1
+      printf '%s|%s' "$?" "$(git -C "$1" branch --show-current)" ) ; }
+
+# plant: FK12 | plugin/skills/project-conductor/SKILL.md | git -C "$_root" checkout -q "$_fork_from" 2>/dev/null | true
+  _r=$(_mkr a); git -C "$_r" branch autopilot/prep-x >/dev/null 2>&1; git -C "$_r" checkout -q -b feat/first >/dev/null 2>&1
+  [ "$(_fp "$_r" autopilot/prep-x)" = "0|autopilot/prep-x" ] \
+    && ok "FK12: from the PREVIOUS feature's tip the fence moves onto the prep ref — this is what stops PR N containing features 1..N" \
+    || bad "FK12: the fence did not move off the previous feature's tip; every feature branch would stack on the last one"
+
+  _r=$(_mkr b)
+  [ "$(_fp "$_r" autopilot/prep-missing)" = "3|main" ] \
+    && ok "FK13: a fork ref that does not resolve is DID-NOT-RUN (exit 3), never a silent fall back to HEAD" \
+    || bad "FK13: an unresolvable fork ref did not return 3 — the run would fork from wherever HEAD happened to be and look correct"
+
+# plant: FK14 | plugin/skills/project-conductor/SKILL.md | elif [ -n "$(git -C "$_root" status --porcelain 2>/dev/null)" ]; then | elif false; then
+  _r=$(_mkr c); git -C "$_r" branch autopilot/prep-x >/dev/null 2>&1; printf 'x' > "$_r/dirty.txt"
+  [ "$(_fp "$_r" autopilot/prep-x)" = "2|main" ] \
+    && ok "FK14: a dirty tree refuses the base switch (exit 2) rather than carrying uncommitted work across branches" \
+    || bad "FK14: a dirty tree did not refuse the base switch"
+
+  _r=$(_mkr d)
+  [ "$(_fp "$_r" "")" = "0|main" ] \
+    && ok "FK15 (unchanged-behaviour guard): with no --fork-from the fence is INACTIVE and HEAD is used as-is" \
+    || bad "FK15: the fence acted without --fork-from — the attended flow must be byte-identical"
+fi
+
+# plant: FK7 | plugin/skills/project-conductor/SKILL.md | printf '%s\n' "<topic-slug>" >> "$_root/.claude/autopilot-state/published" | true
+if grep -qF 'autopilot-state/published' "$COND" && grep -qF '>> "$_root/.claude/autopilot-state/published"' "$COND"; then
+  ok "FK7: the publish block APPENDS to the ledger — the producer the FK2 check consumes"
+else
+  bad "FK7: nothing writes .claude/autopilot-state/published — the skip check would read an empty ledger for ever (the producer/consumer defect this repo has recorded six times)"
+fi
+
+# plant: FK8 | plugin/skills/autopilot/SKILL.md | Prep branch — commit Phase P's outputs | Prep branch — assorted notes
+if grep -qF "Prep branch — commit Phase P's outputs" "$AUTOSK"; then
+  ok "FK8: Phase P has a step that commits its outputs onto the run-scoped prep branch"
+else
+  bad "FK8: Phase P does not commit its outputs — every SPEC it writes would live only on whichever feature branch commits first (VCS-003, observed 2026-08-04)"
+fi
+
+# plant: FK9 | plugin/skills/autopilot/SKILL.md | args="autopilot --fork-from | args="autopilot
+if grep -qF 'args="autopilot --fork-from' "$AUTOSK"; then
+  ok "FK9: the conductor is handed the prep ref to fork from"
+else
+  bad "FK9: no fork point is passed to the conductor — feature N+1 forks from wherever HEAD happens to be"
+fi
+
+# plant: FK10 | plugin/scripts/autopilot-disarm.sh | "$SDIR/published" | "$SDIR/unused-published"
+if grep -qF '"$SDIR/published"' "$DISARM"; then
+  ok "FK10: the disarm clears the run ledger — carried into the next run it would skip features that never ran"
+else
+  bad "FK10: autopilot-disarm.sh does not clear published — the next run would skip every feature this one shipped"
+fi
+
 # Z1: assertion-count floor. A floor, not an exact count: it catches an assertion that VANISHES
 # (ADR-0083 §D3 — a suite reporting fewer assertions does not read as broken, and nobody watches
 # the number) without needing a bump on every addition.
 TOTAL=$((PASS + FAIL))
-if [ "$TOTAL" -ge 26 ]; then
+if [ "$TOTAL" -ge 41 ]; then
   ok "Z1: assertion floor met ($TOTAL)"
 else
-  bad "Z1: only $TOTAL assertions executed, expected >= 26 — did an extraction return empty?"
+  bad "Z1: only $TOTAL assertions executed, expected >= 41 — did an extraction return empty?"
 fi
 
 echo "----"

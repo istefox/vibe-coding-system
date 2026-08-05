@@ -1,10 +1,10 @@
 #!/bin/bash
-# Phase 1 test harness (ADR-0022) — nightly-guard + publish-feature (offline, no network).
+# Phase 1 test harness (ADR-0022) — autopilot-guard + publish-feature (offline, no network).
 # Bash 3.2 clean. Run: bash phase1.test.sh
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
-GUARD="$SCRIPTS/nightly-guard.sh"
+GUARD="$SCRIPTS/autopilot-guard.sh"
 PUBLISH="$SCRIPTS/publish-feature.sh"
 
 PASS=0; FAIL=0
@@ -15,16 +15,16 @@ no()   { FAIL=$((FAIL+1)); printf 'FAIL %s\n' "$1"; }
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-mkroot() { r="$tmp/$1"; mkdir -p "$r/.claude/nightly-state"; printf '%s' "$r"; }
+mkroot() { r="$tmp/$1"; mkdir -p "$r/.claude/autopilot-state"; printf '%s' "$r"; }
 
-# --- nightly-guard --check ---
+# --- autopilot-guard --check ---
 R=$(mkroot clean)
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "guard: clean root allows" || no "guard: clean root allows"
 
-R=$(mkroot red); printf 'RED' > "$R/.claude/nightly-state/build-status"
+R=$(mkroot red); printf 'RED' > "$R/.claude/autopilot-state/build-status"
 out=$("$GUARD" --check "$R" 2>/dev/null); rc=$?
-{ [ $rc -eq 2 ] && printf '%s' "$out" | grep -q 'NIGHTLY-GUARD HALT'; } \
+{ [ $rc -eq 2 ] && printf '%s' "$out" | grep -q 'AUTOPILOT-GUARD HALT'; } \
   && ok "guard: RED build halts" || no "guard: RED build halts"
 
 R=$(mkroot nh); printf 'missing logo asset' > "$R/.claude/needs-human"
@@ -32,22 +32,22 @@ out=$("$GUARD" --check "$R" 2>/dev/null); rc=$?
 { [ $rc -eq 2 ] && printf '%s' "$out" | grep -q 'missing logo asset'; } \
   && ok "guard: needs-human halts with reason" || no "guard: needs-human halts with reason"
 
-R=$(mkroot rtf); printf 'BLOCKER: auth bypass' > "$R/.claude/nightly-state/rtf-blocker"
+R=$(mkroot rtf); printf 'BLOCKER: auth bypass' > "$R/.claude/autopilot-state/rtf-blocker"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "guard: rtf-blocker halts" || no "guard: rtf-blocker halts"
 
-R=$(mkroot budg); printf 'limit=1000\nspent=1200\n' > "$R/.claude/nightly-state/token-budget"
+R=$(mkroot budg); printf 'limit=1000\nspent=1200\n' > "$R/.claude/autopilot-state/token-budget"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "guard: budget exceeded halts" || no "guard: budget exceeded halts"
 
-R=$(mkroot budg2); printf 'limit=1000\nspent=500\n' > "$R/.claude/nightly-state/token-budget"
+R=$(mkroot budg2); printf 'limit=1000\nspent=500\n' > "$R/.claude/autopilot-state/token-budget"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "guard: budget under limit allows" || no "guard: budget under limit allows"
 
 "$GUARD" --check "/no/such/dir/xyz" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "guard: invalid root fail-safe blocks" || no "guard: invalid root fail-safe blocks"
 
-# --- nightly-guard hook mode ---
+# --- autopilot-guard hook mode ---
 if command -v jq >/dev/null 2>&1; then
   R=$(mkroot hookclean)
   echo "{\"tool_input\":{\"command\":\"ls -la\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
@@ -56,16 +56,16 @@ if command -v jq >/dev/null 2>&1; then
   echo "{\"tool_input\":{\"command\":\"git push -u origin feat/x\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
   [ $? -eq 0 ] && ok "guard hook: publish without active marker inert" || no "guard hook: publish without active marker inert"
 
-  touch "$R/.claude/nightly-state/active"
-  printf 'RED' > "$R/.claude/nightly-state/build-status"
+  touch "$R/.claude/autopilot-state/active"
+  printf 'RED' > "$R/.claude/autopilot-state/build-status"
   echo "{\"tool_input\":{\"command\":\"gh pr create --base main\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
   [ $? -eq 2 ] && ok "guard hook: active + RED blocks publish" || no "guard hook: active + RED blocks publish"
 
-  rm -f "$R/.claude/nightly-state/build-status"
+  rm -f "$R/.claude/autopilot-state/build-status"
   echo "{\"tool_input\":{\"command\":\"git push -u origin feat/x\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
   [ $? -eq 0 ] && ok "guard hook: active + clean allows publish" || no "guard hook: active + clean allows publish"
 
-  # Forbidden publishes during a nightly run must be blocked (review finding #1).
+  # Forbidden publishes during an autopilot run must be blocked (review finding #1).
   echo "{\"tool_input\":{\"command\":\"git push origin main\"},\"cwd\":\"$R\"}" | "$GUARD" >/dev/null 2>&1
   [ $? -eq 2 ] && ok "guard hook: blocks push to main" || no "guard hook: blocks push to main"
 
@@ -126,9 +126,9 @@ R=$(mkroot pub)
 "$PUBLISH" --slug demo --root "$R" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "publish: missing opt-in marker refuses" || no "publish: missing opt-in marker refuses"
 
-printf 'publish: true\n' > "$R/.claude/nightly-autopilot.yml"
+printf 'publish: true\n' > "$R/.claude/autopilot.yml"
 out=$("$PUBLISH" --slug demo --root "$R" --dry-run 2>&1); rc=$?
-{ [ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'NIGHTLY-PUBLISH demo'; } \
+{ [ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'AUTOPILOT-PUBLISH demo'; } \
   && ok "publish: opt-in + dry-run prints status line" || no "publish: opt-in + dry-run prints status line"
 
 printf '%s' "$out" | grep -q -- '--force' && no "publish: dry-run must not use --force" || ok "publish: no --force in dry-run"
@@ -137,7 +137,7 @@ printf '%s' "$out" | grep -q -- '--force' && no "publish: dry-run must not use -
 [ $? -eq 2 ] && ok "publish: slug=main refused" || no "publish: slug=main refused"
 
 # guard integration: RED build blocks publish even with opt-in
-printf 'RED' > "$R/.claude/nightly-state/build-status"
+printf 'RED' > "$R/.claude/autopilot-state/build-status"
 "$PUBLISH" --slug demo --root "$R" --dry-run >/dev/null 2>&1
 [ $? -eq 2 ] && ok "publish: guard HALT aborts publish" || no "publish: guard HALT aborts publish"
 

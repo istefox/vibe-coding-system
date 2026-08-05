@@ -12,7 +12,7 @@
 #     wrong manifest and silently mark a feature complete, or auto-resume the wrong chain, without
 #     it ever having run. Fixed with a naming-convention-anchored glob plus an exact-match check
 #     against the candidate manifest's own topic: field.
-#   Section C (Finding 3.11, ~6 tests) -- nightly-autopilot/SKILL.md pre-flight check 6 named a
+#   Section C (Finding 3.11, ~6 tests) -- autopilot/SKILL.md pre-flight check 6 named a
 #     "global smoke-test record written by hook-verify-workflow.sh" that does not exist (verified:
 #     that script is deliberately read-only and stateless -- ADR-0029 Section 1 "Gap flagged for
 #     issue #34"; hook-verify-workflow.sh internals are out of scope for issue #34 -- SPEC.md
@@ -28,7 +28,7 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)              # staging/plugin/scripts
 STAGING=$(cd "$SCRIPTS/../.." && pwd)                    # staging/
 AB_SKILL="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 PC_SKILL="$STAGING/plugin/skills/project-conductor/SKILL.md"
-NA_SKILL="$STAGING/plugin/skills/nightly-autopilot/SKILL.md"
+NA_SKILL="$STAGING/plugin/skills/autopilot/SKILL.md"
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
@@ -201,12 +201,12 @@ B6_OUT=$(run_conductor_lookup "$B_ROOT2" "drift")
   || bad "B6: should not bind when internal topic: field disagrees (got: $B6_OUT)"
 
 # =====================================================================================
-# Section C -- Finding 3.11: nightly-autopilot check 6
+# Section C -- Finding 3.11: autopilot check 6
 # =====================================================================================
 
 extract_check6() {
   awk '
-    index($0, "fence-contract: nightly-autopilot-check-6 -->") { grab=1; next }
+    index($0, "fence-contract: autopilot-check-6 -->") { grab=1; next }
     grab && /^[[:space:]]*```bash/ { infence=1; next }
     grab && infence && /^[[:space:]]*```/ { exit }
     grab && infence { print }
@@ -225,7 +225,7 @@ run_check6() {
   # in CI there is no $HOME/.claude and the second tier would leave the gate failing closed.
   _x6="$(extract_check6)"
   if [ -z "$_x6" ]; then
-    echo "EXTRACTION FAILED: no fence-contract: nightly-autopilot-check-6 marker in $NA_SKILL" >&2
+    echo "EXTRACTION FAILED: no fence-contract: autopilot-check-6 marker in $NA_SKILL" >&2
     return 97
   fi
   ( cd "$1" && CLAUDE_PLUGIN_ROOT="$STAGING/plugin" bash -c "$_x6" )
@@ -362,7 +362,7 @@ fi
 # a single manifest — the one about to be built, which is by definition not completed — so absence
 # should abort and does. But its test is `[ "$hv" = "None" ] || [ -z "$hv" ]`, so any value that is
 # neither of those PASSES: `hook_verified: maybe` sails through and the run then branches on it.
-# Nightly check 6 aborted on too much; this aborts on too little. Same field, same one-liner,
+# Autopilot check 6 aborted on too much; this aborts on too little. Same field, same one-liner,
 # opposite failure — which is why #123's audit had to look at both.
 
 extract_check7() {

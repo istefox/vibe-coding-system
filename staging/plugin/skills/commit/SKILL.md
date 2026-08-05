@@ -21,7 +21,7 @@ Closes the implementation cycle with a HITL-verified Conventional Commit.
 ## Arguments
 
 ```
-/commit [context-hint] [--autopilot] [--no-pr] [--include <path>[,<path>...]]
+/commit [context-hint] [--autopilot] [--no-pr] [--branch <name>] [--include <path>[,<path>...]]
 ```
 
 Optional `context-hint`: brief feature description for the commit body.
@@ -30,6 +30,17 @@ From the concept-to-code chain: `<topic-full-title> (ADR: <adr-path>)`.
 `--autopilot`: when present in args, **skip Step 4 HITL gate** and execute the commit immediately with the generated message. Emit: `"Commit: autopilot — executing commit directly..."` before `git commit`. Step 6 (PR) is also skipped in autopilot mode. **Only set by project-conductor or c2c when `manifest.autopilot=true`** — never set manually unless you explicitly want unattended commits.
 
 `--no-pr`: **skip Step 6 and everything downstream of it** (6, 6b, 6c, 7) — no PR question, no push, no CI watch, no merge proposal. The Step 4 HITL gate is **unaffected**: this flag suppresses publication, never approval, and it is the difference between it and `--autopilot`. The two are orthogonal and may be combined.
+
+`--branch <name>`: **ensure the commit lands on `<name>`, creating it from the current HEAD if it does not exist** (issue #363, ADR-0127 §D3). Orthogonal to `--autopilot` and `--no-pr` exactly as those two are to each other; combinable with all of them.
+
+Without it, Step 3.6 derives a branch name from the commit **subject**, and that derivation is what #363 is about: on the unattended path Gate 4.0's commit is a planning-artifacts commit, so its type is `docs`, so the derived name is `chore/<subject-slug>` — while `publish-feature.sh` pushes `feat/<topic-slug>`. **The two never coincide**, and the 2026-08-04 run published only because a human created the branch by hand first.
+
+Four rules:
+
+1. **It ensures, it does not merely name.** Already on `<name>` → no-op. On any other branch, including the default branch, a detached HEAD, or a run-scoped base like `autopilot/prep-<date>` → check `<name>` out, creating it from the current HEAD when absent. The "any other branch" half is load-bearing: under ADR-0127 §D4 each feature forks from the prep branch, which is *not* the default branch, so a trigger conditioned only on "am I on the default branch" would no-op and commit the feature onto the shared base.
+2. **An existing `<name>` is REUSED, never suffixed.** The derived path appends `-2`, `-3` … on collision, which is right for an accidental slug clash and wrong here: `publish-feature.sh` expects exactly `feat/<slug>`, so a suffixed branch is one nothing will ever push. A pre-existing `<name>` is a resumed feature, not a collision.
+3. **`<name>` must not be the default branch.** Refuse and stop — the invariant this step exists to enforce is not negotiable by an argument.
+4. **Absent, behaviour is byte-identical to today.** The derivation, the collision suffix and the no-op case are untouched for every caller that does not pass it (#363 R-03).
 
 `--include <path>[,<path>...]`: **add these exact paths to the included set, untracked ones too** (issue #234, ADR-0071 §D2's Clarification). Comma-separated, repo-relative or absolute; a path containing a comma cannot be expressed and that limit is deliberate rather than worked around.
 
@@ -326,13 +337,39 @@ fi
 [ -z "$default_branch" ] && default_branch="main"   # brand-new repo, no remote/local ref yet
 ```
 
-**Trigger:** current branch (`git branch --show-current`, empty string means detached HEAD)
-equals `$default_branch`, or is empty.
+**Trigger, two paths.** With `--branch <name>` (`$branch_flag`): runs whenever the current branch
+is not already `<name>`. Without it, the original trigger — current branch
+(`git branch --show-current`, empty string means detached HEAD) equals `$default_branch`, or is
+empty.
 
 <!-- fence-contract: commit-ensure-feature-branch -->
 ```bash
 current_branch=$(git branch --show-current)
-if [ "$current_branch" = "$default_branch" ] || [ -z "$current_branch" ]; then
+
+# --branch <name> (issue #363): ensure, do not merely name. Handled before the derived path
+# because its trigger is different — "not already on <name>" rather than "on the default branch".
+# A trigger conditioned on the default branch alone would no-op on a run-scoped base such as
+# autopilot/prep-<date> (ADR-0127 §D4) and commit the feature onto the shared base.
+if [ -n "${branch_flag:-}" ]; then
+  if [ "$branch_flag" = "$default_branch" ]; then
+    echo "Error: --branch names the default branch ('$default_branch'). Refusing."
+    exit 1
+  fi
+  if [ "$current_branch" = "$branch_flag" ]; then
+    branch_name="$current_branch"          # already there — no-op
+    echo "Branch: already on '$branch_name' (--branch), nothing to do."
+  elif git show-ref --verify --quiet "refs/heads/$branch_flag"; then
+    # REUSE, never suffix: publish-feature.sh expects exactly this name, so a `-2` variant is a
+    # branch nothing will ever push. A pre-existing branch here is a resumed feature.
+    git checkout "$branch_flag" || { echo "Error: could not switch to existing '$branch_flag'."; exit 1; }
+    branch_name="$branch_flag"
+    echo "Branch: switched to existing '$branch_name' (--branch; reused, not suffixed)."
+  else
+    git checkout -b "$branch_flag" || { echo "Error: could not create '$branch_flag'."; exit 1; }
+    branch_name="$branch_flag"
+    echo "Branch: created '$branch_name' from '${current_branch:-detached HEAD}' (--branch)."
+  fi
+elif [ "$current_branch" = "$default_branch" ] || [ -z "$current_branch" ]; then
   # prefix from Step 3's <type> — only feat/fix are literal, everything else
   # (refactor/docs/test/chore/perf, or a genuinely mixed change) is the chore catch-all
   case "$type" in
@@ -654,7 +691,7 @@ commit/push/PR already happened and are reversible; merge must never be proposed
 ### Step 7 — Merge gate (only reached after Step 6b reports fully green)
 
 **Never automatic — propose only.** A pushed branch and an open PR are reversible; a merge is
-not (see `ADR-0022`, `nightly-autopilot`'s "merge stays human" invariant — this step doesn't
+not (see `ADR-0022`, `autopilot`'s "merge stays human" invariant — this step doesn't
 relitigate that decision, it applies the same principle here).
 
 ```bash

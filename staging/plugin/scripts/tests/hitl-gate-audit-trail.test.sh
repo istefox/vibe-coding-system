@@ -14,7 +14,7 @@
 #
 # Gate 4 is the one whose answer has the widest blast radius: it can set `autopilot: true`, which
 # drives five downstream gates to their safe defaults. **And that flag is ambiguous by
-# construction** — `project-conductor`'s nightly roadmap mode sets the same `true` with no human at
+# construction** — `project-conductor`'s autopilot roadmap mode sets the same `true` with no human at
 # Gate 4 at all (ADR-0022). Reading a manifest afterwards, `autopilot: true` cannot distinguish "a
 # human chose unattended implementation" from "a roadmap pre-authorised the whole run". The field
 # that disambiguates it is the one that had no slot.
@@ -132,7 +132,7 @@ FLAT=$(tr '\n' ' ' <"$CC" | tr -d '`*' | tr -s ' ')
 if printf '%s\n' "$FLAT" | grep -q 'cannot distinguish a human choosing unattended implementation from a roadmap'; then
   ok "H6b the Gate 4 recording states what it disambiguates"
 else
-  bad "H6b nothing says why Gate 4's notes matter — autopilot: true alone cannot tell a human choice from a nightly roadmap (ADR-0022)"
+  bad "H6b nothing says why Gate 4's notes matter — autopilot: true alone cannot tell a human choice from an autopilot roadmap (ADR-0022)"
 fi
 
 # ===========================================================================

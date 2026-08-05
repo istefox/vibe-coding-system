@@ -563,11 +563,11 @@ else
     bad "G5: autopilot false did not take the no-op branch (rc=$PF_RC): $PF_OUT"
   fi
 
-  # G6 (the nightly shape): autopilot true + SPEC present + chain_path null -> proceed.
+  # G6 (the autopilot shape): autopilot true + SPEC present + chain_path null -> proceed.
   # null is TOLERATED and the reason is measured: 18 of 41 corpus manifests carry
   # autopilot:true with chain_path:null, all brownfield, all completed. Refusing it would
   # fail the dominant historical shape over a bookkeeping gap, not a routing one.
-  mk_c_fixture "g6-nightly"
+  mk_c_fixture "g6-autopilot"
   G6M="$FIX_MANIFEST"; G6R=$(dirname "$(dirname "$(dirname "$G6M")")")
   sed -i.bak 's/^autopilot: false$/autopilot: true/' "$G6M"
   : > "$G6R/SPEC.md"

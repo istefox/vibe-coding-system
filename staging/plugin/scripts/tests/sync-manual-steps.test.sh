@@ -3,7 +3,7 @@
 # Run: bash sync-manual-steps.test.sh
 #
 # sync-to-claude.sh used to end with one unconditional heredoc printing two MANUAL STEP
-# notices. Checked live on 2026-07-25, both steps were already done — the nightly-guard hook
+# notices. Checked live on 2026-07-25, both steps were already done — the autopilot-guard hook
 # was wired and the retired backup-before-deploy.sh did not exist — yet the script printed
 # them on every run. Fixed noise is what buries the notice that one day matters, so each
 # notice is now gated on the state it describes.
@@ -42,7 +42,7 @@ RETIRED_MARK="MANUAL STEP: retired hook cleanup"
 CLEAR_MARK="no manual steps outstanding"
 BASEREF_MARK="worktree forks from the default branch and the chain's Step 5 pre-flight will refuse to dispatch"
 
-# Two wiring notices now share the "MANUAL STEP: hook wiring" heading (nightly-guard and, since
+# Two wiring notices now share the "MANUAL STEP: hook wiring" heading (autopilot-guard and, since
 # issue #87, write-scope-enforce), so the marks above discriminate on each notice's own body.
 # Matching the shared heading would make the two indistinguishable.
 #
@@ -60,7 +60,7 @@ BASEREF_MARK="worktree forks from the default branch and the chain's Step 5 pre-
 build_home() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   case "$2" in
-    yes) printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
+    yes) printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     no)  printf '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     nofile) : ;;
   esac
@@ -87,7 +87,7 @@ build_home_br() {
     correct) _wt='"worktree":{"baseRef":"head"},' ;;
   esac
   case "$2" in
-    yes) _hooks='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}' ;;
+    yes) _hooks='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}' ;;
     no)  _hooks='{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}' ;;
   esac
   printf '{%s"hooks":%s}\n' "$_wt" "$_hooks" > "$_h/.claude/settings.json"
@@ -100,7 +100,7 @@ build_home_br() {
 OUT=$(run_sync "$(build_home a yes no)")
 case "$OUT" in
   *"$WIRING_MARK"*) bad "A1: wiring notice printed although the hook is wired" ;;
-  *) ok "A1: wiring notice suppressed when nightly-guard is already wired" ;;
+  *) ok "A1: wiring notice suppressed when autopilot-guard is already wired" ;;
 esac
 case "$OUT" in
   *"$RETIRED_MARK"*) bad "A2: retired-hook notice printed although the file is absent" ;;
@@ -115,7 +115,7 @@ esac
 # B. Not wired — the notice must fire, and only that one.
 OUT=$(run_sync "$(build_home b no no)")
 case "$OUT" in
-  *"$WIRING_MARK"*) ok "B1: wiring notice printed when nightly-guard is absent from settings.json" ;;
+  *"$WIRING_MARK"*) ok "B1: wiring notice printed when autopilot-guard is absent from settings.json" ;;
   *) bad "B1: wiring notice suppressed although the hook is NOT wired" ;;
 esac
 case "$OUT" in
@@ -161,14 +161,14 @@ esac
 # either hook suppressed the other's notice, installing one would silently mute the reminder for
 # the one still missing, which is the exact failure #85 set out to remove.
 _h="$TMP/e2"; mkdir -p "$_h/.claude/hooks"
-printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json"
 OUT=$(run_sync "$_h")
 case "$OUT" in
-  *"$WIRING_MARK"*) bad "E1: nightly-guard notice printed although it IS wired" ;;
-  *) ok "E1: nightly-guard notice suppressed when only write-scope is missing" ;;
+  *"$WIRING_MARK"*) bad "E1: autopilot-guard notice printed although it IS wired" ;;
+  *) ok "E1: autopilot-guard notice suppressed when only write-scope is missing" ;;
 esac
 case "$OUT" in
-  *"$SCOPE_MARK"*) ok "E2: write-scope notice fires independently of the nightly-guard one" ;;
+  *"$SCOPE_MARK"*) ok "E2: write-scope notice fires independently of the autopilot-guard one" ;;
   *) bad "E2: write-scope notice suppressed although it is not wired" ;;
 esac
 # E3: five wiring notices now share the "hook wiring" heading. Each must key off its own hook,
@@ -232,8 +232,8 @@ case "$OUT9" in
   *) ok "E10: precompact-guard notice suppressed once wired" ;;
 esac
 case "$OUT9" in
-  *"$WIRING_MARK"*) ok "E11: wiring PreCompact does not suppress the nightly-guard notice" ;;
-  *) bad "E11: nightly-guard notice muted by an unrelated event key being wired" ;;
+  *"$WIRING_MARK"*) ok "E11: wiring PreCompact does not suppress the autopilot-guard notice" ;;
+  *) bad "E11: autopilot-guard notice muted by an unrelated event key being wired" ;;
 esac
 
 
@@ -284,8 +284,8 @@ case "$OUT" in
   *) ok "F4: baseRef notice stays suppressed when correct, even though the six hooks are all unwired" ;;
 esac
 case "$OUT" in
-  *"$WIRING_MARK"*) ok "F4b: the nightly-guard wiring notice still fires independently of a correct baseRef" ;;
-  *) bad "F4b: nightly-guard wiring notice was muted by a correct baseRef value" ;;
+  *"$WIRING_MARK"*) ok "F4b: the autopilot-guard wiring notice still fires independently of a correct baseRef" ;;
+  *) bad "F4b: autopilot-guard wiring notice was muted by a correct baseRef value" ;;
 esac
 
 # F5: fail-safe — no settings.json at all. An unconfirmable state must not read as "already
@@ -311,7 +311,7 @@ REPORT_MARK="-- REPORT: deployed skill(s) neither vendored nor declared --"
 build_home_skills() {
   _n="$1"; shift
   _h="$TMP/$_n"; mkdir -p "$_h/.claude/hooks" "$_h/.claude/skills"
-  printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/nightly-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+  printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json"
   for _s in "$@"; do
     mkdir -p "$_h/.claude/skills/$_s"
   done

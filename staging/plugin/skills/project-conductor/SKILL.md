@@ -21,14 +21,14 @@ Runs a multi-feature project one concept-to-code chain at a time.
 
 ## Arguments
 ```
-/skill project-conductor [nightly]
+/skill project-conductor [autopilot]
 ```
 No arguments (interactive): project root = `$PWD`, PROJECT.md path = `<project-root>/PROJECT.md`.
 
-`nightly` (roadmap-autopilot, ADR-0022): drives the whole roadmap unattended. Every pending feature
+`autopilot` (roadmap-autopilot, ADR-0022): drives the whole roadmap unattended. Every pending feature
 is pre-authorized as autopilot, the per-feature Step 3 gate is skipped, and after each feature's local
-commit the publish step (`publish-feature.sh`) runs. Only launched by `nightly-autopilot` after its
-pre-flight, which verifies the per-repo opt-in marker. Do not invoke `nightly` by hand.
+commit the publish step (`publish-feature.sh`) runs. Only launched by `autopilot` after its
+pre-flight, which verifies the per-repo opt-in marker. Do not invoke `autopilot` by hand.
 
 ---
 
@@ -39,8 +39,15 @@ pre-flight, which verifies the per-repo opt-in marker. Do not invoke `nightly` b
 ```bash
 _root="$PWD"
 _pmd="$_root/PROJECT.md"
-# Roadmap-autopilot mode (ADR-0022): set by the `nightly` argument.
-_nightly=false; [ "$1" = "nightly" ] && _nightly=true
+# Roadmap-autopilot mode (ADR-0022): set by the `autopilot` argument.
+_autopilot=false; [ "$1" = "autopilot" ] && _autopilot=true
+# --fork-from <ref> (issue #364, ADR-0127 §D4): the base every feature branch is created from.
+# Empty in attended mode and on any run that does not pass it, which is exactly today's behaviour.
+_fork_from=""
+_i=1; for _a in "$@"; do
+  [ "$_a" = "--fork-from" ] && { _i=$((_i+1)); eval "_fork_from=\${$_i}"; break; }
+  _i=$((_i+1))
+done
 # Scripts dir: plugin install uses $CLAUDE_PLUGIN_ROOT/scripts; the ~/.claude deployment
 # keeps all shell helpers in ~/.claude/hooks. Prefer the plugin path, fall back to hooks.
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/publish-feature.sh" ]; then
@@ -156,16 +163,50 @@ If ALL features are `[x]` or `[~]`: go to Step 7 (project complete).
 
 Otherwise: find the first `- [ ]` line. Extract `<next-feature>` and `<next-phase>`. Go to Step 3.
 
+**In `autopilot` mode the run's OWN ledger overrides the checkbox (issue #364, ADR-0127 §D4).**
+`PROJECT.md` is marked `[x]` on the feature branch and never on the base the next feature forks
+from, so the checkbox for a feature that just published still reads `[ ]` here and the loop would
+re-pick it forever. The ledger is the run-scoped record of what this run has already published.
+
+This is a **CHECKER**: branch on its exit code. Exit 3 means the ledger could not be read, which is
+not the same as an empty ledger — a run that cannot tell what it has published must stop rather
+than re-pick.
+
+<!-- fence-contract: conductor-published-skip -->
+```bash
+# Free variables, bound by the orchestrator: _root, _slug (the candidate feature's topic slug),
+# _autopilot. Inert unless _autopilot=true.
+_led="$_root/.claude/autopilot-state/published"
+if [ "${_autopilot:-false}" != "true" ]; then
+  echo "PUBLISHED-SKIP: INACTIVE — attended mode, the checkbox is authoritative."
+elif [ ! -e "$_led" ]; then
+  # No ledger yet = nothing published in this run. Distinct from unreadable, below.
+  echo "PUBLISHED-SKIP: NONE — no feature has published in this run yet."
+elif [ ! -r "$_led" ]; then
+  echo "PUBLISHED-SKIP: DID-NOT-RUN — $_led exists but cannot be read."
+  exit 3
+elif grep -qxF "$_slug" "$_led" 2>/dev/null; then
+  echo "PUBLISHED-SKIP: ALREADY — '$_slug' published earlier in this run; advancing past it."
+  exit 1
+else
+  echo "PUBLISHED-SKIP: PENDING — '$_slug' has not published in this run."
+fi
+```
+
+On `ALREADY` (exit 1), skip this line and take the next `- [ ]`; on `DID-NOT-RUN` (exit 3), write
+`needs-human` and halt the run. Matching is `grep -qxF` — whole-line and literal, so a slug that is
+a prefix of another (`102-requirement-ids` against `102-requirement-ids-coverage`) does not collide.
+
 ---
 
 ### Step 3 — HITL gate: confirm next feature
 
-**Roadmap-autopilot bypass (ADR-0022):** if `_nightly=true`, skip this entire gate. Set
+**Roadmap-autopilot bypass (ADR-0022):** if `_autopilot=true`, skip this entire gate. Set
 `_autopilot=true` and go to Step 4. Authorization comes from the per-repo opt-in marker plus the
-single evening launch of `nightly-autopilot`, verified before this skill was invoked; no per-feature
+single evening launch of `autopilot`, verified before this skill was invoked; no per-feature
 prompt is shown. If an in-progress manifest is at `step_4_session_boundary`, auto-resume it
 (`Skill(skill="concept-to-code", args="resume <manifest-path>")`) instead of prompting. This bypass applies only
-in `nightly` mode; see the amended invariant below.
+in `autopilot` mode; see the amended invariant below.
 
 **First check — is there an in-progress manifest for `<next-feature>`?**
 
@@ -226,7 +267,38 @@ options:
 
 Emit: `"── Starting chain for: <next-feature> (autopilot: <on|off>) ──"`
 
-**Just-in-time SPEC copy (ADR-0023, nightly only).** If `_nightly=true`, resolve the feature's
+**Fork point — check out `$_fork_from` BEFORE invoking the chain (issue #364, ADR-0127 §D4).**
+Nothing downstream chooses a base: `commit --branch` in Gate 4.0 creates the feature branch from
+whatever `HEAD` is when it runs, so the fork point is decided *here* or it is decided by accident.
+Left to accident it is the previous feature's tip, which stacks PR *N* on features 1..*N*.
+
+This is a **CHECKER**: branch on its exit code. Inert when `--fork-from` was not passed, so the
+attended flow is byte-identical.
+
+<!-- fence-contract: conductor-fork-point -->
+```bash
+# Free variables: _root, _fork_from (empty unless --fork-from was passed).
+if [ -z "${_fork_from:-}" ]; then
+  echo "FORK-POINT: INACTIVE — no --fork-from; HEAD is used as-is (attended behaviour)."
+elif ! git -C "$_root" rev-parse --verify --quiet "$_fork_from" >/dev/null 2>&1; then
+  echo "FORK-POINT: DID-NOT-RUN — '$_fork_from' does not resolve in $_root."
+  echo "  Phase P records this ref; a run whose base has vanished must stop, not fork from HEAD."
+  exit 3
+elif [ -n "$(git -C "$_root" status --porcelain 2>/dev/null)" ]; then
+  echo "FORK-POINT: DIRTY — refusing to switch base with uncommitted changes present."
+  exit 2
+else
+  git -C "$_root" checkout -q "$_fork_from" 2>/dev/null || {
+    echo "FORK-POINT: DID-NOT-RUN — checkout of '$_fork_from' failed."; exit 3; }
+  echo "FORK-POINT: ON — '$_fork_from'; this feature's branch forks from here."
+fi
+```
+
+`DID-NOT-RUN` (exit 3) and `DIRTY` (exit 2) are both run-level: write `needs-human` and halt. A run
+that cannot place itself on the agreed base would silently produce a stacked branch, which is the
+defect this fence exists to remove.
+
+**Just-in-time SPEC copy (ADR-0023, autopilot only).** If `_autopilot=true`, resolve the feature's
 generated spec **by its issue number** (never by re-deriving the slug from the feature text, which
 would not match the roadmap's number-prefixed slug) and copy it to the single path c2c autopilot
 reads. Features run sequentially, so there is no collision, and this feature's SPEC is committed in
@@ -248,7 +320,7 @@ primary.** `concept-to-code` §2 Form A step 7b is an unattended routing pre-fli
 `autopilot = true` and no `SPEC.md` it transitions the manifest to `aborted` and exits 1. That
 closes the same hole from the other end, for every route to `autopilot = true` — including the
 attended *"Start in autopilot mode"* branch of Step 3, which never reaches the copy below because
-the copy is `_nightly=true` only. **It does not make this block redundant, and the difference is
+the copy is `_autopilot=true` only. **It does not make this block redundant, and the difference is
 which artifacts exist afterwards:** this guard settles the feature before any manifest is created,
 where the c2c pre-flight has to create one and then abort it. Both outcomes are contained
 per-feature skips; this one is cheaper and leaves no record to explain. Do not remove it on the
@@ -261,7 +333,7 @@ into the other.)
 <!-- fence-contract: conductor-step4-nospec-skip -->
 ```bash
 # Free variables, bound by the orchestrator: _root (project root), _feature (the PROJECT.md feature
-# line's text, without the "- [ ] " marker). Runs only when _nightly=true.
+# line's text, without the "- [ ] " marker). Runs only when _autopilot=true.
 # Extract the issue number from the "(issue #N)" suffix of the feature line.
 _issue=$(printf '%s' "$_feature" | sed -n 's/.*(issue #\([0-9][0-9]*\)).*/\1/p')
 if [ -z "$_issue" ]; then
@@ -277,9 +349,9 @@ if [ -n "$_spec" ] && [ -f "$_spec" ]; then
 fi
 [ -f "$_root/PROJECT.md" ] || { echo "SPEC-COPY: DID-NOT-RUN — no PROJECT.md at $_root"; exit 3; }
 # Per-feature skip note (ADR-0060 §D3), NEVER the run-level .claude/needs-human marker.
-mkdir -p "$_root/.claude/nightly-state"
+mkdir -p "$_root/.claude/autopilot-state"
 printf 'issue #%s "%s" skipped: no generated SPEC at docs/specs/%s-*.spec.md\n' \
-  "$_issue" "$_feature" "$_issue" >> "$_root/.claude/nightly-state/skipped-features"
+  "$_issue" "$_feature" "$_issue" >> "$_root/.claude/autopilot-state/skipped-features"
 # Mark [~] by EXACT string match, never a sed regex: a feature title is arbitrary GitHub text and
 # can carry any sed metacharacter or delimiter.
 awk -v f="$_feature" '{ if ($0 == "- [ ] " f) print "- [~] " f "  (skipped)"; else print }' \
@@ -337,7 +409,7 @@ If `_autopilot=true`:
    - **`0`** → continue with step 2 below (`CREATE` → call `manifest-init.sh`; `ADOPT` → update the
      existing manifest in place).
    - **`1`** → contained per-feature skip: append the reason to
-     `<root>/.claude/nightly-state/skipped-features`, mark the feature `[~]` (the exact-match `awk`
+     `<root>/.claude/autopilot-state/skipped-features`, mark the feature `[~]` (the exact-match `awk`
      idiom above, never a sed regex), emit `"project-conductor · SKIP · <token>"`, and **return to
      Step 2**. Never `needs-human`.
    - **`2`** or **`3`** → run-level: write `needs-human` with the printed reason and go to Step 6B.
@@ -374,23 +446,37 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
 **A — `current_step = completed`:**
 - Update PROJECT.md: `- [ ] <next-feature>` → `- [x] <next-feature>  (completed: <YYYY-MM-DD>)` via bash sed.
 - Emit: `"✓ <next-feature> complete."`
-- **Roadmap-autopilot publish (ADR-0022):** if `_nightly=true`, publish this feature before
+- **Roadmap-autopilot publish (ADR-0022):** if `_autopilot=true`, publish this feature before
   advancing. Record the test outcome for the guard, then run the publish helper (it calls
-  `nightly-guard.sh` itself and aborts on HALT):
+  `autopilot-guard.sh` itself and aborts on HALT):
   ```bash
   # build-status: GREEN because the chain reached `completed` only on a green test run.
-  printf 'GREEN' > "$_root/.claude/nightly-state/build-status"
+  printf 'GREEN' > "$_root/.claude/autopilot-state/build-status"
   bash "$_scripts/publish-feature.sh" --slug "<topic-slug>" --base main --root "$_root"
   ```
-  The helper prints a `NIGHTLY-PUBLISH <slug> PR=<url>` line for the `/goal` evaluator and the
+  **`--base main` is the PR BASE, not the fork point, and the two were being conflated (issue #364,
+  ADR-0127 §D4).** Every feature PR targets `main`; every feature BRANCH forks from the run-scoped
+  `autopilot/prep-<date>` created in `autopilot` Phase P. Keeping the PR base at `main` is what makes
+  the PRs independently reviewable and mergeable in any order.
+
+  **On success, append the slug to the run ledger — this is the producer Step 2's
+  `conductor-published-skip` check consumes.** Without it that check reads an empty ledger for ever
+  and the loop re-picks the feature that just published, because `PROJECT.md`'s `[x]` was written on
+  the feature branch and is not visible from the base:
+  ```bash
+  mkdir -p "$_root/.claude/autopilot-state"
+  printf '%s\n' "<topic-slug>" >> "$_root/.claude/autopilot-state/published"
+  ```
+  Append-only and never rewritten, so a re-run that crashes mid-roadmap still knows what shipped.
+  The helper prints a `AUTOPILOT-PUBLISH <slug> PR=<url>` line for the `/goal` evaluator and the
   morning report. If the helper exits non-zero (guard HALT or push/PR failure), the guard's halt
   conditions (`needs-human`, `rtf-blocker`, budget) are run-level, so STOP the roadmap: record the
   halt reason for the report, leave PROJECT.md as `[x]` (the code is committed locally, just not
-  published), print the guard's `NIGHTLY-GUARD HALT` line, and go to Step 6B. Do not attempt the
+  published), print the guard's `AUTOPILOT-GUARD HALT` line, and go to Step 6B. Do not attempt the
   next feature — a poisoned run-level marker would halt every subsequent publish anyway.
-- **H16 — direction check (ADR-0061 §D2/§D3, issue #115).** Attended mode only (`_nightly=false`)
-  — nightly has no human present and `/goal` cannot answer `AskUserQuestion` (ADR-0022), so this
-  entire bullet is skipped when `_nightly=true`. Runs here, right after "✓ `<next-feature>`
+- **H16 — direction check (ADR-0061 §D2/§D3, issue #115).** Attended mode only (`_autopilot=false`)
+  — autopilot has no human present and `/goal` cannot answer `AskUserQuestion` (ADR-0022), so this
+  entire bullet is skipped when `_autopilot=true`. Runs here, right after "✓ `<next-feature>`
   complete", because `$_manifest` (the feature that just finished) and
   `$_root/.claude/step5-report.json` (that same feature's Step 5 report) are both still the
   CURRENT feature's — the next chain's own Step 5 overwrites the report before this skill would
@@ -441,7 +527,7 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
 
 **C — manifest not found or unexpected state:**
 - Emit: `"Warning: could not determine outcome for '<next-feature>' (manifest state: <current_step>). PROJECT.md not updated."`
-- **Roadmap-autopilot (ADR-0022, split by ADR-0111 / issue #324):** if `_nightly=true`, this feature
+- **Roadmap-autopilot (ADR-0022, split by ADR-0111 / issue #324):** if `_autopilot=true`, this feature
   did not reach a clean `completed`, so it is not publishable — but *not publishable* and *the run
   cannot be trusted* are different claims, and this branch used to make only the second one. Writing
   the run-level `needs-human` marker unconditionally meant one wedged feature in a twelve-feature
@@ -477,9 +563,9 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
   case "${_out%%|*}" in
     TERMINAL)
       # Known, contained, per-feature: the chain reached a decided end. Roadmap continues.
-      mkdir -p "$_root/.claude/nightly-state"
+      mkdir -p "$_root/.claude/autopilot-state"
       printf '%s skipped: chain reached a terminal state without completing (%s)\n' \
-        "$_feature" "${_out#*|}" >> "$_root/.claude/nightly-state/skipped-features"
+        "$_feature" "${_out#*|}" >> "$_root/.claude/autopilot-state/skipped-features"
       if [ -f "$_root/PROJECT.md" ]; then
         awk -v f="$_feature" '{ if ($0 == "- [ ] " f) print "- [~] " f "  (skipped)"; else print }' \
           "$_root/PROJECT.md" > "$_root/PROJECT.md.tmp" && mv "$_root/PROJECT.md.tmp" "$_root/PROJECT.md"
@@ -489,8 +575,8 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
     *)
       # Everything else — NONE, ADOPTABLE, BOUNDARY, RESUMABLE, LATE, UNRESUMABLE, UNKNOWN,
       # UNREADABLE — is a state nobody decided. Run-level halt, exactly as before this split.
-      mkdir -p "$_root/.claude/nightly-state"
-      printf 'RED' > "$_root/.claude/nightly-state/build-status"
+      mkdir -p "$_root/.claude/autopilot-state"
+      printf 'RED' > "$_root/.claude/autopilot-state/build-status"
       printf 'feature "%s" did not reach completed (entry state: %s)\n' \
         "$_feature" "$_out" > "$_root/.claude/needs-human"
       echo "BRANCH-C: HALT ${_out%%|*} (${_out#*|}) — not a decided end; the outcome cannot be trusted."
@@ -499,7 +585,7 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
   ```
   - **`1`** (`SKIP`) → emit `"project-conductor · SKIP · <reason>"` and **return to Step 2** for the
     next `[ ]`. The reason reaches `features_skipped[]` in the morning report, not `guard_halts[]`.
-  - **`2`** (`HALT`) → go to Step 6B and let `nightly-autopilot` write the morning report. Do not
+  - **`2`** (`HALT`) → go to Step 6B and let `autopilot` write the morning report. Do not
     prompt, do not advance — a poisoned run-level marker would halt every subsequent publish anyway.
   - **`3`** (`DID-NOT-RUN`) → an unrun check is not a clean result. Write `needs-human` with the
     printed reason (the fence could not) and go to Step 6B.
@@ -587,6 +673,6 @@ Exit.
 
 - **NEVER start a chain for a feature marked `[x]` or `[~]`.**
 - **NEVER modify PROJECT.md with the Edit tool** — always bash sed substitution.
-- **NEVER skip the Step 3 HITL gate** — each feature requires explicit user confirmation before the chain starts. **Exception (ADR-0022):** in `nightly` roadmap-autopilot mode the Step 3 gate is skipped; authorization comes from the per-repo opt-in marker plus the single evening launch of `nightly-autopilot`. In every other mode the gate is mandatory.
+- **NEVER skip the Step 3 HITL gate** — each feature requires explicit user confirmation before the chain starts. **Exception (ADR-0022):** in `autopilot` roadmap-autopilot mode the Step 3 gate is skipped; authorization comes from the per-repo opt-in marker plus the single evening launch of `autopilot`. In every other mode the gate is mandatory.
 - **NEVER re-run setup** if PROJECT.md already exists.
 - **NEVER mark `[x]` without verifying the manifest `current_step = completed`.**

@@ -744,15 +744,15 @@ fi
 #            H5 idiom (compare line numbers of two located literals).
 #   I6      RED   — autopilot-build/SKILL.md's restated conflict-scan paragraph (the block between
 #            "Parallel-conflict scan" and "Dispatch:") says nothing about a halt yet.
-#   I7      RED   — autopilot-build/SKILL.md does not mention "nightly-autopilot" anywhere yet
-#            (confirmed absent by direct grep), so it cannot yet note that nightly-autopilot
+#   I7      RED   — autopilot-build/SKILL.md does not mention "autopilot" anywhere yet
+#            (confirmed absent by direct grep), so it cannot yet note that autopilot
 #            inherits the halt.
 #
 # Task 7's GREEN steps are expected to: (a) rewrite the conflict-scan paragraph from advisory to
 # binding inside `#### Workflow dispatch path — Step 5 implementation`; (b) replace the
 # `<conflict halt, Task 7>` placeholder inside `#### Merge-back and base-fork audit` with the real
 # halt, capturing `$CONFLICTS` BEFORE `git merge --abort` (the abort clears the unmerged paths);
-# (c) add a halt-by-reference plus a nightly-autopilot note to autopilot-build/SKILL.md.
+# (c) add a halt-by-reference plus an autopilot note to autopilot-build/SKILL.md.
 # ==============================================================================================
 
 # ------------------------------------------------------------------------------------------------
@@ -828,7 +828,7 @@ fi
 
 # ------------------------------------------------------------------------------------------------
 # I6 / I7 — the halt is restated by reference in autopilot-build/SKILL.md, which also notes that
-# nightly-autopilot inherits it (it reuses c2c Steps 5-7 verbatim).
+# autopilot inherits it (it reuses c2c Steps 5-7 verbatim).
 # ------------------------------------------------------------------------------------------------
 AB_SCAN_BLOCK=$(block_between "$AB" 'Parallel-conflict scan' 'Dispatch:')
 
@@ -838,10 +838,10 @@ else
   bad "I6: autopilot-build/SKILL.md's parallel-conflict scan paragraph does not mention a halt (R-12) — Task 7 restates the c2c conflict halt by reference here"
 fi
 
-if grep -qi 'nightly-autopilot' "$AB" 2>/dev/null && grep -qi 'inherit' "$AB" 2>/dev/null; then
-  ok "I7: autopilot-build/SKILL.md notes that nightly-autopilot inherits the conflict halt (it reuses c2c Steps 5-7 verbatim)"
+if grep -qi 'autopilot' "$AB" 2>/dev/null && grep -qi 'inherit' "$AB" 2>/dev/null; then
+  ok "I7: autopilot-build/SKILL.md notes that autopilot inherits the conflict halt (it reuses c2c Steps 5-7 verbatim)"
 else
-  bad "I7: autopilot-build/SKILL.md does not mention that nightly-autopilot inherits the conflict halt — Task 7 adds this note"
+  bad "I7: autopilot-build/SKILL.md does not mention that autopilot inherits the conflict halt — Task 7 adds this note"
 fi
 
 # ==============================================================================================

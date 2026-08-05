@@ -18,7 +18,7 @@
 # blocking tool calls. So: diagnostics go to stderr, never stdout.
 #
 # Fail-open by construction. Every other hook in this system chooses its failure direction on
-# purpose (protect-files and nightly-guard fail closed; stop-gate and auto-format fail open). This
+# purpose (protect-files and autopilot-guard fail closed; stop-gate and auto-format fail open). This
 # one has no direction to choose, because it never returns a decision. A malfunctioning probe must
 # never break a session, so every path ends in exit 0.
 #

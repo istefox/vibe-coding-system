@@ -1,5 +1,5 @@
 #!/bin/bash
-# nightly-autopilot test harness (ADR-0022). Layout-aware: runs from the repo staging tree
+# autopilot test harness (ADR-0022). Layout-aware: runs from the repo staging tree
 # (staging/plugin/...) or from the installed ~/.claude tree, resolving script/skill paths in
 # either. Tests the shell helpers, the conductor patch, and the ci.yml token. Bash 3.2 clean.
 set -u
@@ -42,7 +42,7 @@ if [ -f "$SCRIPTS/tests/prep.test.sh" ]; then
 fi
 
 # 2. The helpers exist and are syntax-clean.
-for s in nightly-guard publish-feature set-branch-protection detect-test-cmd roadmap-from-issues spec-issue-gate; do
+for s in autopilot-guard publish-feature set-branch-protection detect-test-cmd roadmap-from-issues spec-issue-gate; do
   if [ -f "$SCRIPTS/$s.sh" ] && bash -n "$SCRIPTS/$s.sh" >/dev/null 2>&1; then
     ok "helper ok: $s.sh"
   else
@@ -50,11 +50,11 @@ for s in nightly-guard publish-feature set-branch-protection detect-test-cmd roa
   fi
 done
 
-# 3. Conductor carries the nightly roadmap-autopilot patch.
-if [ -n "$SKILLS" ] && grep -q '_nightly' "$SKILLS/project-conductor/SKILL.md" 2>/dev/null; then
-  ok "conductor has nightly mode"
+# 3. Conductor carries the autopilot roadmap-autopilot patch.
+if [ -n "$SKILLS" ] && grep -q '_autopilot' "$SKILLS/project-conductor/SKILL.md" 2>/dev/null; then
+  ok "conductor has autopilot mode"
 else
-  no "conductor has nightly mode"
+  no "conductor has autopilot mode"
 fi
 
 # 4. CI template holds the substitution token.

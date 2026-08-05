@@ -4,7 +4,7 @@
 #
 # Covers issue #118 / ADR-0064: four cheap per-task instrumentation metrics (test-count delta,
 # deleted lines, iteration count, elapsed wall time), additive into step5-report.json and
-# nightly-report.json, as INPUTS for future rut detection / trust scoring — not a detector itself.
+# autopilot-report.json, as INPUTS for future rut detection / trust scoring — not a detector itself.
 #
 # ASSERTION LABELS ARE G-PREFIXED (GA1, GB3, GG2, ...) — grepped as unused across the other 40
 # harnesses in this directory before this file was written (no GA/GB/.../GG collision).
@@ -34,7 +34,7 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 AM="$STAGING/plugin/skills/concept-to-code/scripts/agent-metrics.sh"
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
-NA="$STAGING/plugin/skills/nightly-autopilot/SKILL.md"
+NA="$STAGING/plugin/skills/autopilot/SKILL.md"
 ADR22="$REPO/docs/architecture/ADR-0022-morning-report-schema.md"
 TWS="$STAGING/plugin/scripts/test-write-scope.sh"
 USAGE="$STAGING/plugin/scripts/usage-report.py"
@@ -174,7 +174,7 @@ if [ -f "$AM" ]; then
 fi
 
 # ==================================================================================================
-# GA. All four metrics appear in both schema blocks (step5-report.json, nightly-report.json),
+# GA. All four metrics appear in both schema blocks (step5-report.json, autopilot-report.json),
 # additive and conditional-if-present.
 # ==================================================================================================
 if grep -qF '"task_metrics"' "$STEP5"; then
@@ -193,9 +193,9 @@ else
 fi
 
 if [ -f "$NA" ] && [ -f "$ADR22" ]; then
-  ok "GA3a: nightly-autopilot/SKILL.md and ADR-0022-morning-report-schema.md both exist"
+  ok "GA3a: autopilot/SKILL.md and ADR-0022-morning-report-schema.md both exist"
 else
-  bad "GA3a: nightly-autopilot/SKILL.md or ADR-0022-morning-report-schema.md missing"
+  bad "GA3a: autopilot/SKILL.md or ADR-0022-morning-report-schema.md missing"
 fi
 
 NA_ALL="$TMP/na_all.txt"
@@ -205,16 +205,16 @@ cat "$ADR22" > "$ADR22_ALL" 2>/dev/null
 
 for _f in test_count_delta deleted_lines iteration_count elapsed_wall_seconds; do
   if grep -qF "$_f" "$ADR22_ALL" 2>/dev/null; then
-    ok "GA4-$_f: ADR-0022's nightly-report.json schema mentions $_f"
+    ok "GA4-$_f: ADR-0022's autopilot-report.json schema mentions $_f"
   else
-    bad "GA4-$_f: ADR-0022's nightly-report.json schema does not mention $_f"
+    bad "GA4-$_f: ADR-0022's autopilot-report.json schema does not mention $_f"
   fi
 done
 
 if grep -qF 'task_metrics' "$NA_ALL" 2>/dev/null && grep -qF 'ADR-0064' "$NA_ALL" 2>/dev/null; then
-  ok "GA5: nightly-autopilot/SKILL.md references task_metrics and ADR-0064 for its Phase 2 report write"
+  ok "GA5: autopilot/SKILL.md references task_metrics and ADR-0064 for its Phase 2 report write"
 else
-  bad "GA5: nightly-autopilot/SKILL.md is missing the task_metrics/ADR-0064 wiring in Phase 2"
+  bad "GA5: autopilot/SKILL.md is missing the task_metrics/ADR-0064 wiring in Phase 2"
 fi
 
 if grep -qi 'schema bump' "$ADR22_ALL" 2>/dev/null && grep -qF 'ADR-0064' "$ADR22_ALL" 2>/dev/null; then

@@ -2,7 +2,7 @@
 # required-checks-audit.test.sh — offline, hermetic, no network, no $HOME dependency.
 # Issue #322 / ADR-0114. Bash 3.2 clean. Run: bash required-checks-audit.test.sh
 #
-# WHAT IS UNDER TEST. `nightly-autopilot` pre-flight check 8 said *"verify the `ci` check is
+# WHAT IS UNDER TEST. `autopilot` pre-flight check 8 said *"verify the `ci` check is
 # required on main"* and was PROSE with no mechanism, while this repository's `main` requires three
 # contexts. `required-checks-audit.sh` derives the live required set and asks, of each context,
 # whether anything in this repo PRODUCES it.
@@ -23,7 +23,7 @@ SCRIPTS=$(cd "$TESTS/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 RCA="$SCRIPTS/required-checks-audit.sh"
-NA="$STAGING/plugin/skills/nightly-autopilot/SKILL.md"
+NA="$STAGING/plugin/skills/autopilot/SKILL.md"
 BASHBIN=$(command -v bash)
 
 TMP=$(mktemp -d)
@@ -387,7 +387,7 @@ cp "$RCA" "$FH/.claude/hooks/required-checks-audit.sh"
 
 RCA_PROT="$PROTR"; RCA_RUNS="$RUNSR"; export RCA_PROT RCA_RUNS
 cd "$REPO" || exit 1
-RC=$(run_fence "nightly-autopilot-check-8" "$FH")
+RC=$(run_fence "autopilot-check-8" "$FH")
 if [ "$RC" = 0 ] && fout | grep -q '✓ check 8'; then
   ok "F1: check 8's fence runs and passes on a satisfiable gate"
 else
@@ -395,7 +395,7 @@ else
 fi
 
 RCA_PROT="$PROT4"; export RCA_PROT   # the four-context set with an unproduced `codeql`
-RC=$(run_fence "nightly-autopilot-check-8" "$FH")
+RC=$(run_fence "autopilot-check-8" "$FH")
 if [ "$RC" = 1 ] && fout | grep -q 'has no producer'; then
   ok "F2: an unsatisfiable gate aborts check 8, naming the consequence"
 else
@@ -404,26 +404,26 @@ fi
 
 # F3 — the audit missing from ~/.claude aborts the pre-flight, and says the check DID NOT RUN plus
 # the remedy. A gate that degrades to a pass when its own tool is absent is the defect one level up.
-RC=$(run_fence "nightly-autopilot-check-8" "$TMP/emptyhome")
+RC=$(run_fence "autopilot-check-8" "$TMP/emptyhome")
 if [ "$RC" = 1 ] && fout | grep -q 'DID NOT RUN'; then
   ok "F3: a missing audit script aborts check 8 as DID-NOT-RUN"
 else
   bad "F3: expected 1 + 'DID NOT RUN', got rc=$RC — $(fout | head -3)"
 fi
-# plant: F3 | plugin/skills/nightly-autopilot/SKILL.md | echo "✗ check 8: required-checks-audit.sh not found at $_rca — the check DID NOT RUN." | echo "check 8: skipped"
+# plant: F3 | plugin/skills/autopilot/SKILL.md | echo "✗ check 8: required-checks-audit.sh not found at $_rca — the check DID NOT RUN." | echo "check 8: skipped"
 
 # F4 — rc=3 aborts. The whole reason the audit distinguishes "could not look" from "found nothing"
 # is so this branch can exist; a pre-flight that proceeds on an unknown merge gate has verified
 # nothing while reporting PASSED.
 RCA_AUTH=fail; export RCA_AUTH
-RC=$(run_fence "nightly-autopilot-check-8" "$FH")
+RC=$(run_fence "autopilot-check-8" "$FH")
 if [ "$RC" = 1 ] && fout | grep -q 'DID NOT RUN (rc=3)'; then
   ok "F4: rc=3 from the audit aborts check 8 rather than passing it"
 else
   bad "F4: a DID-NOT-RUN audit did not abort the pre-flight — rc=$RC, $(fout | head -3)"
 fi
 RCA_AUTH=ok; export RCA_AUTH
-# plant: F4 | plugin/skills/nightly-autopilot/SKILL.md | *) echo "✗ check 8: the audit DID NOT RUN (rc=$_rc). A roadmap does not start on an unknown" | *) echo "check 8: the audit returned rc=$_rc, continuing"
+# plant: F4 | plugin/skills/autopilot/SKILL.md | *) echo "✗ check 8: the audit DID NOT RUN (rc=$_rc). A roadmap does not start on an unknown" | *) echo "check 8: the audit returned rc=$_rc, continuing"
 
 # ================================================================================================
 # G. The prose that carries the decisions, matched against a flattened, undecorated copy — a clause
@@ -471,7 +471,7 @@ grep -qF 'plugin/scripts/required-checks-audit.sh|hooks/required-checks-audit.sh
   || bad "H1: no PAIRS entry — the fence would exit 1 on every machine"
 # Membership in the chmod statement, never position in it: an assertion matching the name plus
 # whatever follows it holds only while this file is LAST, and goes red on a correct deploy the day
-# something is appended. That is exactly what this feature did to `nightly-guard-disarm.test.sh` P2.
+# something is appended. That is exactly what this feature did to `autopilot-guard-disarm.test.sh` P2.
 _chmod_block=$(sed -n '/chmod +x /,/|| true/p' "$SYNC")
 printf '%s\n' "$_chmod_block" | grep -q 'hooks/required-checks-audit.sh' \
   && ok "H2: the deployed copy is made executable" \

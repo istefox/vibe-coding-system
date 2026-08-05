@@ -85,7 +85,7 @@ skill operating outside its session's CWD, and nothing may precede it. Placed he
 because a blocking mode can deny or prompt on the checks below, so learning about it after six more
 of them wastes the diagnosis.
 
-This runs with no human present, exactly like `nightly-autopilot` Phase M, and reads the **same**
+This runs with no human present, exactly like `autopilot` Phase M, and reads the **same**
 checker for the same reason: two unattended entry points that disagreed about whether a run may
 start would be a defect, not a difference.
 
@@ -261,7 +261,7 @@ hv=$(bash "$_mfs" "$manifest" hook_verified 2>/dev/null) || hv="UNREADABLE"
 # old test was `[ "$hv" = "None" ] || [ -z "$hv" ]`, so anything that was neither — `maybe`, a
 # typo, a string "false" from a quoted YAML value — PASSED, and the run then branched on it.
 #
-# ABSENCE IS AN ABORT HERE, and that is the OPPOSITE of nightly-autopilot check 6, which reads the
+# ABSENCE IS AN ABORT HERE, and that is the OPPOSITE of autopilot check 6, which reads the
 # same field through the same helper and tolerates it. Both are right: that one sweeps a corpus of
 # long-completed chains whose dispatch mode cannot affect anything; this one reads the single
 # manifest about to be built, in flight by definition. The helper reports the state and leaves the
@@ -348,7 +348,7 @@ with no path overlap keep the default parallel dispatch. A merge conflict during
 merge-back halts the run exactly as in c2c (see c2c's `#### Merge-back and base-fork audit`
 Conflict halt): report the worktree branch and the conflicting files, preserve the branch, attempt
 no automatic resolution (no rebase, no `-X ours`, no resolver dispatch), and record the halt in
-`autopilot-report.json` rather than prompting — there is no human to prompt here. `nightly-autopilot`
+`autopilot-report.json` rather than prompting — there is no human to prompt here. `autopilot`
 inherits this same conflict halt unchanged, since it reuses c2c Steps 5–7 verbatim.
 
 **Dispatch:**

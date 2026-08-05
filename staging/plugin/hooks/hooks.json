@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/nightly-guard.sh\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/autopilot-guard.sh\""
           }
         ]
       }

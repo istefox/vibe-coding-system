@@ -1,4 +1,4 @@
-# CI for nightly-autopilot PRs (ADR-0022 D8). Instantiated from
+# CI for autopilot PRs (ADR-0022 D8, renamed by ADR-0127). Instantiated from
 # staging/project-templates/ci/ci.yml with __TEST_CMD__ substituted by the
 # TOFU-trusted command in .claude/test-cmd. The job name `ci` is the required
 # status check on main; docs-ci.yml (markdownlint, links, shell-tests) keeps

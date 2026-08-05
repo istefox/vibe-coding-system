@@ -2,7 +2,7 @@
 # permission-mode-state.test.sh — offline, hermetic, no network. Bash 3.2 clean.
 # Run: bash permission-mode-state.test.sh
 #
-# Issue #320 / ADR-0110. `nightly-autopilot` states its first launch precondition three times in
+# Issue #320 / ADR-0110. `autopilot` states its first launch precondition three times in
 # prose — set a non-blocking permission mode — and verified it NOWHERE. On 2026-07-31 pre-flight
 # printed PASSED, the guard armed, the roadmap started, and the chain died at its first Gate 0
 # write with nobody present. Every other precondition fails loudly and early; this one failed
@@ -32,7 +32,7 @@
 # stub python3 exiting 7 is TRUE — so the guard fired MORE, the assertion passed, and the registry
 # correctly reported a plant that pins nothing. The plant was wrong, not the assertion (ADR-0090).
 # plant: PM9b | plugin/skills/concept-to-code/scripts/permission-mode-state.sh | if [ "$PYRC" -ne 0 ]; then | if [ "$PYRC" -eq 999 ]; then
-# plant: PMF3 | plugin/skills/nightly-autopilot/SKILL.md | Nobody is here to answer it, so the run would stall | All good
+# plant: PMF3 | plugin/skills/autopilot/SKILL.md | Nobody is here to answer it, so the run would stall | All good
 # plant: PMF7 | plugin/skills/autopilot-build/SKILL.md | autopilot-build runs with nobody to answer | it is fine
 set -u
 
@@ -41,7 +41,7 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)
 SKILLS="$STAGING/plugin/skills"
 
 PMS="$SKILLS/concept-to-code/scripts/permission-mode-state.sh"
-NA="$SKILLS/nightly-autopilot/SKILL.md"
+NA="$SKILLS/autopilot/SKILL.md"
 AB="$SKILLS/autopilot-build/SKILL.md"
 SYNC="$STAGING/sync-to-claude.sh"
 
@@ -204,13 +204,13 @@ fence_body() {  # fence_body <file> <marker-literal>
     inb { print }
   ' "$1"
 }
-NA_MARK='fence-contract: nightly-permission-posture -->'
+NA_MARK='fence-contract: autopilot-permission-posture -->'
 AB_MARK='fence-contract: autopilot-build-check-1b -->'
 
 NA_BODY=$(fence_body "$NA" "$NA_MARK")
 AB_BODY=$(fence_body "$AB" "$AB_MARK")
-[ "$(printf '%s\n' "$NA_BODY" | grep -c .)" -ge 20 ] && ok "PMF0 the nightly fence is declared and extracts" \
-  || bad "PMF0 the nightly fence extracted nothing — an empty extraction is a FAILURE, never a skip"
+[ "$(printf '%s\n' "$NA_BODY" | grep -c .)" -ge 20 ] && ok "PMF0 the autopilot fence is declared and extracts" \
+  || bad "PMF0 the autopilot fence extracted nothing — an empty extraction is a FAILURE, never a skip"
 [ "$(printf '%s\n' "$AB_BODY" | grep -c .)" -ge 20 ] && ok "PMF0b the autopilot-build fence is declared and extracts" \
   || bad "PMF0b the autopilot-build fence extracted nothing"
 
@@ -240,21 +240,21 @@ stub_home() {  # stub_home <line-to-print> <exit-code> -> echoes the home dir
 
 bash -n "$TMP/parse-na.sh" 2>/dev/null
 printf '%s\n' "$NA_BODY" >"$TMP/parse-na.sh"; printf '%s\n' "$AB_BODY" >"$TMP/parse-ab.sh"
-bash -n "$TMP/parse-na.sh" 2>/dev/null && ok "PMF1 the nightly fence parses as bash" \
-  || bad "PMF1 the nightly fence does not parse (ADR-0083 F7)"
+bash -n "$TMP/parse-na.sh" 2>/dev/null && ok "PMF1 the autopilot fence parses as bash" \
+  || bad "PMF1 the autopilot fence does not parse (ADR-0083 F7)"
 bash -n "$TMP/parse-ab.sh" 2>/dev/null && ok "PMF1b the autopilot-build fence parses as bash" \
   || bad "PMF1b the autopilot-build fence does not parse"
 
 H=$(stub_home "NONBLOCKING|acceptEdits" 0)
-R=$(run_body "$NA_BODY" "$H"); case "$R" in 0::*"permission posture: acceptEdits"*) ok "PMF2 nightly fence PASSES on NONBLOCKING" ;;
-  *) bad "PMF2 nightly on NONBLOCKING gave '$R'" ;; esac
+R=$(run_body "$NA_BODY" "$H"); case "$R" in 0::*"permission posture: acceptEdits"*) ok "PMF2 autopilot fence PASSES on NONBLOCKING" ;;
+  *) bad "PMF2 autopilot on NONBLOCKING gave '$R'" ;; esac
 R=$(run_body "$AB_BODY" "$H"); case "$R" in 0::*"permission posture: acceptEdits"*) ok "PMF6 autopilot-build fence PASSES on NONBLOCKING" ;;
   *) bad "PMF6 autopilot-build on NONBLOCKING gave '$R'" ;; esac
 
 H=$(stub_home "BLOCKING|auto" 0)
 R=$(run_body "$NA_BODY" "$H")
-case "$R" in 1::*"Nobody is here to answer it, so the run would stall"*) ok "PMF3 nightly fence ABORTS on BLOCKING, saying why" ;;
-  *) bad "PMF3 nightly on BLOCKING gave '$R', expected exit 1 naming the stall" ;; esac
+case "$R" in 1::*"Nobody is here to answer it, so the run would stall"*) ok "PMF3 autopilot fence ABORTS on BLOCKING, saying why" ;;
+  *) bad "PMF3 autopilot on BLOCKING gave '$R', expected exit 1 naming the stall" ;; esac
 case "$R" in *"Shift+Tab"*) ok "PMF3b the abort names the remedy that actually works" ;;
   *) bad "PMF3b the BLOCKING abort does not name Shift+Tab — R-03 asks for the exact remedy, and /permissions is not it" ;; esac
 R=$(run_body "$AB_BODY" "$H")
@@ -263,17 +263,17 @@ case "$R" in 1::*"autopilot-build runs with nobody to answer"*) ok "PMF7 autopil
 
 H=$(stub_home "UNCLASSIFIED|dontAsk" 0)
 R=$(run_body "$NA_BODY" "$H")
-case "$R" in 1::*"not known-bad"*) ok "PMF4 nightly ABORTS on UNCLASSIFIED and says it is unmeasured, not unsafe" ;;
-  *) bad "PMF4 nightly on UNCLASSIFIED gave '$R'; the operator must not be told their mode is bad when nobody measured it" ;; esac
+case "$R" in 1::*"not known-bad"*) ok "PMF4 autopilot ABORTS on UNCLASSIFIED and says it is unmeasured, not unsafe" ;;
+  *) bad "PMF4 autopilot on UNCLASSIFIED gave '$R'; the operator must not be told their mode is bad when nobody measured it" ;; esac
 
 H=$(stub_home "UNOBSERVABLE|no permissionMode recorded" 0)
 R=$(run_body "$NA_BODY" "$H")
-case "$R" in 1::*"fact about this build"*) ok "PMF5 nightly FAILS CLOSED on UNOBSERVABLE, naming the build as the cause" ;;
-  *) bad "PMF5 nightly on UNOBSERVABLE gave '$R', expected exit 1 distinguishing build from mode" ;; esac
+case "$R" in 1::*"fact about this build"*) ok "PMF5 autopilot FAILS CLOSED on UNOBSERVABLE, naming the build as the cause" ;;
+  *) bad "PMF5 autopilot on UNOBSERVABLE gave '$R', expected exit 1 distinguishing build from mode" ;; esac
 
 H="$TMP/emptyhome"; mkdir -p "$H"
 R=$(run_body "$NA_BODY" "$H")
-case "$R" in 1::*"DID NOT RUN"*) ok "PMF8 a missing checker aborts the nightly fence as DID NOT RUN, not as a pass" ;;
+case "$R" in 1::*"DID NOT RUN"*) ok "PMF8 a missing checker aborts the autopilot fence as DID NOT RUN, not as a pass" ;;
   *) bad "PMF8 missing checker gave '$R'" ;; esac
 R=$(run_body "$AB_BODY" "$H")
 case "$R" in 1::*"DID NOT RUN"*) ok "PMF8b a missing checker aborts the autopilot-build fence too" ;;
@@ -284,7 +284,7 @@ NAP=$(printf '%s\n' "$NA_BODY" | grep -c 'concept-to-code/scripts/permission-mod
 ABP=$(printf '%s\n' "$AB_BODY" | grep -c 'concept-to-code/scripts/permission-mode-state.sh')
 [ "$NAP" -ge 2 ] && [ "$ABP" -ge 2 ] \
   && ok "PMF9 both fences resolve the same checker (two-tier, plugin then ~/.claude)" \
-  || bad "PMF9 the two fences do not both resolve concept-to-code/scripts/permission-mode-state.sh (nightly=$NAP autopilot-build=$ABP) — two unattended entry points must not get two answers"
+  || bad "PMF9 the two fences do not both resolve concept-to-code/scripts/permission-mode-state.sh (autopilot=$NAP autopilot-build=$ABP) — two unattended entry points must not get two answers"
 
 # ===========================================================================
 # Section PMP — the prose that was wrong, and the structural note that keeps it from regrowing.
@@ -342,7 +342,7 @@ else
 fi
 
 # PMQ1: every line claiming no per-tool prompt must name bypassPermissions on that same line.
-# plant: PMQ1 | plugin/skills/nightly-autopilot/SKILL.md | echo "✓ permission posture: bypassPermissions — no per-tool prompt can fire." | echo "✓ permission posture: $_pmval — no per-tool prompt can fire."
+# plant: PMQ1 | plugin/skills/autopilot/SKILL.md | echo "✓ permission posture: bypassPermissions — no per-tool prompt can fire." | echo "✓ permission posture: $_pmval — no per-tool prompt can fire."
 PMQ_BAD=$(grep -n 'no per-tool prompt' $PMQ_POP 2>/dev/null | grep -v 'bypassPermissions' || true)
 if [ -z "$PMQ_BAD" ]; then
   ok "PMQ1 every 'no per-tool prompt' claim names bypassPermissions"
@@ -355,7 +355,7 @@ fi
 # that merely stops overpromising still leaves an operator with no way to know the difference.
 # plant: PMQ2 | plugin/skills/autopilot-build/SKILL.md | permissions.allow STILL PROMPTS and nobody is here to answer it | permissions.allow is fine and nobody is here to answer it
 PMQ2_MISS=""
-for _f in "$STAGING/plugin/skills/nightly-autopilot/SKILL.md" \
+for _f in "$STAGING/plugin/skills/autopilot/SKILL.md" \
           "$STAGING/plugin/skills/autopilot-build/SKILL.md"; do
   grep -qF 'STILL PROMPTS' "$_f" || PMQ2_MISS="$PMQ2_MISS $(basename "$(dirname "$_f")")"
 done
@@ -366,13 +366,13 @@ else
 fi
 
 # PMQ3 (R-03): the RUNBOOK must stop presenting /permissions as the way to set the mode. ADR-0110
-# established against the CC 2.1.220 binary that it does not, and nightly-autopilot/SKILL.md has
+# established against the CC 2.1.220 binary that it does not, and autopilot/SKILL.md has
 # said so in terms since — the RUNBOOK is the one an operator actually reads at launch.
 # The `../docs/` prefix is the one non-staging target plant-check accepts, added with this issue:
 # the sandbox already copied docs/ so tests could read it, and no plant could reach it, so a claim
 # living in a RUNBOOK was unplantable by construction.
-# plant: PMQ3 | ../docs/RUNBOOK-nightly-autopilot.md | claude --permission-mode bypassPermissions | /permissions is the way
-PMQ3_RB="$PMQ_REPO/docs/RUNBOOK-nightly-autopilot.md"
+# plant: PMQ3 | ../docs/RUNBOOK-autopilot.md | claude --permission-mode bypassPermissions | /permissions is the way
+PMQ3_RB="$PMQ_REPO/docs/RUNBOOK-autopilot.md"
 if grep -qE '^[[:space:]]*/permissions' "$PMQ3_RB"; then
   bad "PMQ3 the RUNBOOK still offers /permissions as a way to set the permission mode"
 elif grep -qF 'claude --permission-mode bypassPermissions' "$PMQ3_RB"; then

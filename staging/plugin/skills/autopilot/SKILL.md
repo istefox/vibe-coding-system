@@ -1,19 +1,26 @@
 ---
-name: nightly-autopilot
+name: autopilot
 description: >
-  Overnight autonomous roadmap-to-PR runner (ADR-0022). Given a target repo with an
-  opt-in marker, a PROJECT.md roadmap, and TOFU-trusted tests, it drives project-conductor
-  in roadmap-autopilot mode: each feature is implemented, reviewed, committed on feat/*,
-  pushed, and opened as a PR to main with CI green. Never merges, never force-pushes, never
-  touches main. A nightly-guard hook halts on real trouble and leaves a morning report.
+  Unattended roadmap-to-PR runner for long sessions (ADR-0022, repositioned by ADR-0127). Given a
+  target repo with an opt-in marker, a PROJECT.md roadmap, and TOFU-trusted tests, it drives
+  project-conductor in roadmap-autopilot mode: each feature is implemented, reviewed, committed on
+  feat/*, pushed, and opened as a PR to main with CI green. Use it whenever you are stepping away
+  from the machine — an afternoon, a long build, or overnight. Never merges, never force-pushes,
+  never touches main. An autopilot-guard hook halts on real trouble and leaves a run report.
   Set with /goal as the outer keep-alive loop and a non-blocking permission mode.
 ---
 
-# `nightly-autopilot` — Overnight Roadmap-to-PR Runner
+# `autopilot` — Unattended Roadmap-to-PR Runner
 
-Runs an already-designed roadmap unattended and delivers PR-ready branches by morning. The human
-approves SPEC/ADR/plan in the evening (still HITL), sets `/goal` plus a non-blocking permission mode,
-launches this skill, and walks away. Nothing is merged to `main`.
+Runs an already-designed roadmap unattended and delivers PR-ready branches. The human approves
+SPEC/ADR/plan first (still HITL), sets `/goal` plus a non-blocking permission mode, launches this
+skill, and walks away. Nothing is merged to `main`.
+
+**Duration is not what defines this runner (ADR-0127).** It was built for an overnight window, and
+that framing was load-bearing rather than cosmetic: a night is a fixed, self-limiting budget, so the
+original design never had to decide how much a run should attempt or what stops it. A run you start
+after lunch is open-ended. Run scoping and the token bound exist because of that, and they apply to
+a night exactly as they apply to an afternoon.
 
 **Architecture reference:** ADR-0022. Report schema: `ADR-0022-morning-report-schema.md`.
 
@@ -27,13 +34,13 @@ mechanics unchanged.
 ## 1. When to invoke
 
 ```
-/skill nightly-autopilot
+/skill autopilot
 ```
 
 Project root = `$PWD`. Run this only after the evening design gate is done: SPEC/ADR/plan approved for
 each roadmap feature, or a roadmap of features whose chains will run in autopilot.
 
-**Launch order (see `docs/RUNBOOK-nightly-autopilot.md`):**
+**Launch order (see `docs/RUNBOOK-autopilot.md`):**
 1. Set **`bypassPermissions`**. It is the only mode under which no per-tool prompt can fire, and
    an overnight run is exactly the case that needs that.
    **`acceptEdits` is NOT equivalent and the difference is not cosmetic** (issue #339): it
@@ -50,7 +57,7 @@ each roadmap feature, or a roadmap of features whose chains will run in autopilo
 
    The safety layer does not go away with the prompts: `stop-gate`, `pre-flight-pattern-enforce`,
    `protect-files`, `db-backup-guardrail`, `write-scope-enforce`, `agent-write-scope`,
-   `agent-command-scope` and `nightly-guard` all still fire, and a hook deny overrides any
+   `agent-command-scope` and `autopilot-guard` all still fire, and a hook deny overrides any
    permission mode. That is the design ADR-0022 states: autopilot bypasses the human-decision
    layer, never the safety layer.
 2. Set the outer loop: paste the `/goal` template this skill prints (Phase 1).
@@ -73,7 +80,7 @@ chain died at its first Gate 0 write with nobody present to answer the prompt. E
 precondition fails loudly and early; this one is also the only one whose failure is *guaranteed*
 fatal rather than conditional.
 
-<!-- fence-contract: nightly-permission-posture -->
+<!-- fence-contract: autopilot-permission-posture -->
 ```bash
 _pms=""
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/permission-mode-state.sh" ]; then
@@ -148,7 +155,7 @@ Runs before pre-flight, and only when the opt-in marker declares a prep source. 
 step skips whatever already exists. With no `prep:` block the phase is a no-op and the run behaves
 exactly as ADR-0022 (roadmap and specs must pre-exist).
 
-Read the source from `.claude/nightly-autopilot.yml`:
+Read the source from `.claude/autopilot.yml`:
 ```yaml
 publish: true
 prep:
@@ -169,9 +176,31 @@ Steps (each is skip-if-present):
    A thin or vague issue is SKIPPED (marked `[~]` in PROJECT.md with a `needs-human` note), never
    fabricated.
 
+4. **Prep branch — commit Phase P's outputs and make them the fork point (issue #364, ADR-0127
+   §D4).** Everything above is written into the WORKING TREE, so without this step those files exist
+   only wherever the first feature happens to commit them, and every later feature forked from a
+   clean base finds no SPEC of its own. That is not hypothetical: it is `VCS-003` in this
+   repository's own ledger, observed on 2026-08-04 with five SPECs stranded on one feature branch.
+
+   Create `autopilot/prep-<YYYY-MM-DD>` from the default branch, commit `PROJECT.md`,
+   `docs/specs/*.spec.md`, `docs/specs/_issue-map.tsv` and `.claude/test-cmd` onto it, and push it.
+   Use the `commit` skill with `--branch` and `--include` — never hand-rolled git, for the reason
+   Gate 4.0 gives: one commit path in the system.
+
+   **Record the ref as `$_prep_ref`.** §3.3 hands it to `project-conductor`, which forks every
+   feature branch from it. The feature PRs still target `main`.
+
+   Opening a PR for the prep branch itself is OPTIONAL and belongs to the human's morning: it is
+   documentation only, and merging it first is what stops each feature PR from carrying the prep
+   commit. The run does not depend on it being merged.
+
+   **Skip-if-present, like every step above:** if `autopilot/prep-<today>` already exists, reuse it
+   rather than creating a second one. A resumed run must fork from the same base as the run it
+   resumes, or half the features sit on a base the other half cannot see.
+
 Record for the report (schema v2.1 `prep` block): `features_generated`, `features_skipped_thin`,
-`test_cmd_created`. Then fall into Phase 0. Phase 0 still enforces the TOFU-trust and gh-auth wall;
-Phase P grants neither.
+`test_cmd_created`, and `prep_ref`. Then fall into Phase 0. Phase 0 still enforces the TOFU-trust
+and gh-auth wall; Phase P grants neither.
 
 **External-dependency check (G13, ADR-0060) is NOT a Phase P step.** It runs later, per feature,
 at that feature's own Gate 2c inside the per-feature chain §3.3 drives — a plan's declared
@@ -194,12 +223,22 @@ run start" — see `permission-mode-state.sh`'s header for why there is exactly 
 1. **Scope guard (first):** resolve `$PWD`. Every downstream action is scoped to it. If a later
    manifest names a `project_root` outside `$PWD`, abort (same rule as autopilot-build check 1).
 2. **Git repo:** `git rev-parse --git-dir` succeeds.
-3. **Opt-in marker:** `.claude/nightly-autopilot.yml` exists and sets `publish: true`. Absent or
+3. **Opt-in marker:** `.claude/autopilot.yml` exists and sets `publish: true`. Absent or
    `false` → abort with "publish not opted-in for this repo; run stops at local commit, use
    autopilot-build instead."
-   <!-- fence-contract: nightly-autopilot-optin -->
+   **A repo still carrying the pre-ADR-0127 name is DETECTED, never read (§D2.3).** Falling back to
+   the old filename would let two files disagree about whether this repository has authorised
+   unattended `git push`, and that disagreement is silent in the permissive direction.
+   <!-- fence-contract: autopilot-optin -->
    ```bash
-   m="$PWD/.claude/nightly-autopilot.yml"
+   m="$PWD/.claude/autopilot.yml"
+   legacy="$PWD/.claude/nightly-autopilot.yml"
+   if [ ! -f "$m" ] && [ -f "$legacy" ]; then
+     echo "✗ opt-in: found $legacy — this repo predates the ADR-0127 rename."
+     echo "  The old name is not read as a fallback. Migrate, review the result, and commit it:"
+     echo "    bash ~/.claude/hooks/autopilot-migrate.sh --root \"$PWD\""
+     exit 1
+   fi
    test -f "$m" || { echo "✗ opt-in: $m missing"; exit 1; }
    grep -qE '^[[:space:]]*publish:[[:space:]]*true[[:space:]]*$' "$m" || { echo "✗ opt-in: publish not true"; exit 1; }
    ```
@@ -213,7 +252,7 @@ run start" — see `permission-mode-state.sh`'s header for why there is exactly 
    "test-cmd not trusted — review `.claude/test-cmd` then run once:
    `bash ~/.claude/hooks/approve-test-cmd.sh \"$PWD\"`".
 6. **hook_verified known (roadmap-wide, pre-flight):**
-   <!-- fence-contract: nightly-autopilot-check-6 -->
+   <!-- fence-contract: autopilot-check-6 -->
    ```bash
    _manifests=$(ls "$PWD"/docs/manifests/*.manifest.yml 2>/dev/null)
    if [ -z "$_manifests" ]; then
@@ -305,7 +344,7 @@ run start" — see `permission-mode-state.sh`'s header for why there is exactly 
    lighter. A silently-added required check is caught by SATISFIABILITY instead — nothing produces
    it, so the audit aborts.
 
-   <!-- fence-contract: nightly-autopilot-check-8 -->
+   <!-- fence-contract: autopilot-check-8 -->
    ```bash
    _rca="$HOME/.claude/hooks/required-checks-audit.sh"
    if [ ! -f "$_rca" ]; then
@@ -334,7 +373,7 @@ run start" — see `permission-mode-state.sh`'s header for why there is exactly 
 
 On all checks passing:
 ```
-nightly-autopilot · pre-flight PASSED · arming guard, starting roadmap...
+autopilot · pre-flight PASSED · arming guard, starting roadmap...
 ```
 
 No `AskUserQuestion` is called after this point.
@@ -347,31 +386,31 @@ stalls the run. Keep hooks enabled or `/goal` cannot evaluate and the guard cann
 
 ## 3. Phase 1 — Arm and drive the roadmap
 
-### 3.1 Arm the nightly state
+### 3.1 Arm the autopilot state
 
 The marker **records who armed it and when** (issue #321, ADR-0112). Its *presence* is still what
 activates the guard — contents change nothing about that — but a marker that names its owner is the
 difference between a stale one being diagnosable and being a mystery.
 
 ```bash
-mkdir -p "$PWD/.claude/nightly-state"
-# activates nightly-guard for this repo, and records the owner so a stale marker is identifiable
+mkdir -p "$PWD/.claude/autopilot-state"
+# activates autopilot-guard for this repo, and records the owner so a stale marker is identifiable
 printf 'session_id=%s\nstarted_at=%s\n' \
   "${CLAUDE_CODE_SESSION_ID:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  > "$PWD/.claude/nightly-state/active"
-: > "$PWD/.claude/nightly-state/build-status"      # cleared; set GREEN/RED after each test run
+  > "$PWD/.claude/autopilot-state/active"
+: > "$PWD/.claude/autopilot-state/build-status"      # cleared; set GREEN/RED after each test run
 ```
 
 `started_at` for the morning report is read back from that marker. **Do not invent a separate file
 for it.** Before ADR-0112 this step said only *"record `started_at`"* without naming a location, and
-an orchestrator improvised `.claude/nightly-state/started-at` — a real file, in this repository right
+an orchestrator improvised `.claude/autopilot-state/started-at` — a real file, in this repository right
 now, written by nothing in the codebase and read by nothing either. A value with no specified home
 gets one anyway, chosen by whoever runs the step.
 
 **This marker outlives a run that dies.** Phase 2 is the only place that removes it, and a session
 killed by context exhaustion, a crash, or the human pressing stop never reaches Phase 2 — so the
 guard stays armed in the human's own later sessions. That is not a defect in the guard, which is
-right to fail closed; the exit is `nightly-disarm.sh`, documented in the RUNBOOK under
+right to fail closed; the exit is `autopilot-disarm.sh`, documented in the RUNBOOK under
 *"The guard is still armed and I cannot push"*.
 
 ### 3.2 Print the `/goal` template
@@ -381,31 +420,37 @@ Print this for the human to paste (it keys off the status line the publish step 
 
 ```
 /goal "Every feature in PROJECT.md is [x], committed on feat/*, pushed, and a PR is open,
-as shown by a NIGHTLY-PUBLISH line for each feature and no NIGHTLY-GUARD HALT line.
+as shown by a AUTOPILOT-PUBLISH line for each feature and no AUTOPILOT-GUARD HALT line.
 Or stop after <N> turns."
 ```
 
 ### 3.3 Drive project-conductor in roadmap-autopilot
 
-Invoke `Skill(skill="project-conductor", args="nightly")`. The conductor (roadmap-autopilot mode) pre-authorizes
+Invoke `Skill(skill="project-conductor", args="autopilot --fork-from <$_prep_ref>")`, passing the
+prep ref Phase P step 4 recorded. **Every feature branch forks from that ref, and every feature PR
+still targets `main` (issue #364, ADR-0127 §D4).** The two are different questions and were being
+answered by one value: forking from `main` leaves each feature without the SPECs Phase P wrote, and
+forking from the previous feature's tip stacks PR *N* on features 1..*N*.
+
+The conductor (roadmap-autopilot mode) pre-authorizes
 every pending feature, skips the per-feature Step 3 gate, and for each feature:
 architecture (Gate 2, including Gate 2c's G13 external-dependency check — ADR-0060, resolved via
 `~/.claude/hooks/external-dependency-check.sh`, the same script `concept-to-code/SKILL.md` Gate 2c
 calls) → implement → review-triage-fix → local commit → `publish-feature.sh` (guard fires) → print
-the `NIGHTLY-PUBLISH` status line → advance to the next `[ ]`.
+the `AUTOPILOT-PUBLISH` status line → advance to the next `[ ]`.
 
-**Marker contract (read by `nightly-guard`) — two markers, two different scopes, since ADR-0060
+**Marker contract (read by `autopilot-guard`) — two markers, two different scopes, since ADR-0060
 §D3 fixed a pre-existing latent defect (issue #114):**
 
 - **Run-level `needs-human`** (`<root>/.claude/needs-human`): something is wrong with the *run*.
   On a feature that fails to reach `completed` for an unknown-state reason — a coder crash, an
   anti-test-weakening halt (ADR-0047 §D5, below) — the conductor writes this marker, and
-  `nightly-guard` blocks that publish and **every subsequent one**. `rtf-blocker` and
+  `autopilot-guard` blocks that publish and **every subsequent one**. `rtf-blocker` and
   `token-budget` are the other two run-level halts (written by the review step and this skill's
   `/goal` overlay respectively) and behave the same way: once any of the three is set, the guard
   blocks every subsequent publish, so a HALT stops the whole roadmap rather than skipping one
   feature. A halted feature keeps its local commit but has no ready PR.
-- **Per-feature `skipped-features`** (`<root>/.claude/nightly-state/skipped-features`,
+- **Per-feature `skipped-features`** (`<root>/.claude/autopilot-state/skipped-features`,
   append-only): this *one* feature cannot proceed for a known, contained reason, and the roadmap
   continues to the next `[ ]`. **Five writers**, the last two added by ADR-0111 (issue #324):
   `spec-from-issue`'s thin-issue skip (Step 2), `spec-from-issue`'s injection-suspect skip
@@ -415,7 +460,7 @@ the `NIGHTLY-PUBLISH` status line → advance to the next `[ ]`.
   Phase P, since dependencies are not declared until that feature's architect has run — noted here
   because it is this phase's skip mechanism being reused), `project-conductor` Step 4's
   **no-generated-SPEC skip**, and `project-conductor` Step 5 branch C's **`TERMINAL` entry-state
-  skip**. `nightly-guard.sh` never reads this file: its presence has no effect on `--check`, by
+  skip**. `autopilot-guard.sh` never reads this file: its presence has no effect on `--check`, by
   design (see the script's own v1.3 header comment). Every writer also marks the feature `[~]` in
   PROJECT.md with the same reason. The morning report lists these under `features_skipped[]`
   (schema v2.2, §4), separate from `guard_halts[]`.
@@ -441,10 +486,10 @@ halt.
 
 ## 4. Phase 2 — Morning report and disarm
 
-On every exit path, write `<project_root>/.claude/nightly-report.json` (schema v2.2: v2.1 fields
+On every exit path, write `<project_root>/.claude/autopilot-report.json` (schema v2.2: v2.1 fields
 plus `features_skipped[]`, ADR-0060) with per-feature
 `status`, `branch`, `commit_sha`, `pr_url`, `ci_status`, `guard_halt`, the `guard_halts[]` roll-up,
-`features_skipped[]` (read from `<project_root>/.claude/nightly-state/skipped-features`, one entry
+`features_skipped[]` (read from `<project_root>/.claude/autopilot-state/skipped-features`, one entry
 per line, `{feature, reason}` — additive and distinct from `guard_halts[]`: a skip did not stop the
 roadmap, a halt did — §3.3 "Marker contract"), and `spend` (from the `/goal` overlay). Set
 `ended_at` via `date -u`.
@@ -462,7 +507,7 @@ and a `needs-human` left behind halts every publish — so removing only `active
 session blocked by a file the disarm appeared to have handled.
 
 ```bash
-bash ~/.claude/hooks/nightly-disarm.sh --completing "$PWD"
+bash ~/.claude/hooks/autopilot-disarm.sh --completing "$PWD"
 ```
 
 **`--completing` is not decoration, and this step used to be impossible without it.** The bare form
@@ -470,7 +515,7 @@ is the RECOVERY path: it refuses the session that armed the marker, because a se
 a run it does not own is over. This is that session. So Phase 2 was refused on every completed run,
 and the refusal it got said *"finish the run, Phase 2 clears the marker"* while Phase 2 cleared the
 marker by calling this very script. The marker outlived every run through the primary path rather
-than through a crash — the failure `nightly-disarm.sh` exists to remove, reintroduced at the one
+than through a crash — the failure `autopilot-disarm.sh` exists to remove, reintroduced at the one
 place that was assumed to be safe.
 
 `--completing` is the exact mirror: the owner is the permitted caller and a *foreign* session is
@@ -484,7 +529,7 @@ run: report it, and do not treat the guard as cleared.
 
 Emit one terminal line:
 ```
-nightly-autopilot · <status> · report: <project_root>/.claude/nightly-report.json
+autopilot · <status> · report: <project_root>/.claude/autopilot-report.json
 ```
 
 Reconcile CI where possible: for each open PR, `gh pr checks <url>` maps **every required context**
@@ -534,7 +579,7 @@ when it is not.
 - **Guard fails safe.** On any halt condition or internal guard error, the publish is blocked and the
   PR is left not-ready. Nothing broken looks mergeable.
 - **Hooks stay active.** `stop-gate.sh`, `pre-flight-pattern-enforce.sh`, `protect-files.sh`,
-  `db-backup-guardrail.sh`, and `nightly-guard.sh` all fire. Autopilot suppresses human prompts, not
+  `db-backup-guardrail.sh`, and `autopilot-guard.sh` all fire. Autopilot suppresses human prompts, not
   safety mechanisms.
 - **TOFU never auto-granted.** Pre-flight reads the trust file; it never writes it.
 

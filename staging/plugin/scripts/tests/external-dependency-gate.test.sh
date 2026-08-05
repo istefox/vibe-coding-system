@@ -3,7 +3,7 @@
 # Bash 3.2 clean. Run: bash external-dependency-gate.test.sh
 #
 # Covers issue #114 / ADR-0060: G13, the external-dependency feasibility gate, and the marker
-# split (§D3) that fixes a pre-existing latent defect in nightly-guard.sh's needs-human handling.
+# split (§D3) that fixes a pre-existing latent defect in autopilot-guard.sh's needs-human handling.
 #
 # `E`-prefixed section labels are new to this file's own two-letter form (EA-EH). secret-dep-gate
 # .test.sh already uses single-letter `E1..E12` for an unrelated section (dependency-scan.sh); the
@@ -19,7 +19,7 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 GATE="$SCRIPTS/external-dependency-check.sh"
-GUARD="$SCRIPTS/nightly-guard.sh"
+GUARD="$SCRIPTS/autopilot-guard.sh"
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf 'ok   %s\n' "$1"; }
@@ -29,7 +29,7 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 TAB=$(printf '\t')
 
-mkroot() { r="$TMP/$1"; mkdir -p "$r/.claude/nightly-state"; printf '%s' "$r"; }
+mkroot() { r="$TMP/$1"; mkdir -p "$r/.claude/autopilot-state"; printf '%s' "$r"; }
 
 # ==============================================================================================
 # EA — the plan template and architect.md carry the external-dependency declaration (§D1).
@@ -125,30 +125,30 @@ OUT2=$(bash "$GATE" --nonsense </dev/null 2>"$TMP/gerr2"); RC2=$?
 
 # ==============================================================================================
 # EC — the per-feature skip does NOT halt the roadmap (§D3, the most important section here). A
-# skip note is distinct from the run-level needs-human marker, and nightly-guard.sh halts on the
+# skip note is distinct from the run-level needs-human marker, and autopilot-guard.sh halts on the
 # latter and not the former.
 # ==============================================================================================
 if [ -x "$GUARD" ] || [ -f "$GUARD" ]; then
-  ok "EC0: nightly-guard.sh exists (the anchor EC1-EC3 read)"
+  ok "EC0: autopilot-guard.sh exists (the anchor EC1-EC3 read)"
 else
   bad "EC0: $GUARD not found — EC1-EC3 below are meaningless"
 fi
 
 R=$(mkroot ec1)
-printf 'issue #9 "Thin issue" skipped: body too short\n' > "$R/.claude/nightly-state/skipped-features"
+printf 'issue #9 "Thin issue" skipped: body too short\n' > "$R/.claude/autopilot-state/skipped-features"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "EC1: a per-feature skip note alone does not halt the guard" \
   || bad "EC1: guard halted on a skip-note-only root — the marker split is not in place"
 
 R=$(mkroot ec2)
-printf 'issue #9 "Thin issue" skipped: body too short\n' > "$R/.claude/nightly-state/skipped-features"
-: > "$R/.claude/nightly-state/build-status"
+printf 'issue #9 "Thin issue" skipped: body too short\n' > "$R/.claude/autopilot-state/skipped-features"
+: > "$R/.claude/autopilot-state/build-status"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "EC2: a skip note next to an otherwise-clean root still allows publish" \
   || bad "EC2: guard halted with only a skip note present and a clean build-status"
 
 R=$(mkroot ec3)
-: > "$R/.claude/nightly-state/skipped-features"
+: > "$R/.claude/autopilot-state/skipped-features"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "EC3: an empty skip-note file does not halt (structural sanity)" \
   || bad "EC3: guard halted on an empty skip-note file"
@@ -165,15 +165,15 @@ else
   bad "ED0: $SFI not found — ED1-ED4 below are meaningless"
 fi
 
-if grep -q 'nightly-state/skipped-features' "$SFI" 2>/dev/null; then
+if grep -q 'autopilot-state/skipped-features' "$SFI" 2>/dev/null; then
   ok "ED1: spec-from-issue/SKILL.md references the per-feature skip-note path"
 else
-  bad "ED1: spec-from-issue/SKILL.md does not reference nightly-state/skipped-features"
+  bad "ED1: spec-from-issue/SKILL.md does not reference autopilot-state/skipped-features"
 fi
 
 # ED2 — the two writer lines themselves must target the new path, not needs-human.
 SFI_WRITERS=$(grep -c '>> "<root>/.claude/needs-human"' "$SFI" 2>/dev/null); SFI_WRITERS=${SFI_WRITERS:-0}
-SFI_NEWWRITERS=$(grep -c 'nightly-state/skipped-features"' "$SFI" 2>/dev/null); SFI_NEWWRITERS=${SFI_NEWWRITERS:-0}
+SFI_NEWWRITERS=$(grep -c 'autopilot-state/skipped-features"' "$SFI" 2>/dev/null); SFI_NEWWRITERS=${SFI_NEWWRITERS:-0}
 if [ "$SFI_WRITERS" -eq 0 ] && [ "$SFI_NEWWRITERS" -ge 2 ]; then
   ok "ED2: both spec-from-issue writers (thin-issue, injection-suspect) target the per-feature note, none target needs-human"
 else
@@ -191,7 +191,7 @@ fi
 # roadmap silently halts the other nineteen."
 R=$(mkroot ed4)
 printf 'issue #3 "Too thin" skipped: body too short (80 < 120 non-space chars)\n' \
-  > "$R/.claude/nightly-state/skipped-features"
+  > "$R/.claude/autopilot-state/skipped-features"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "ED4: a thin-issue skip note does not halt a later feature's publish (the #114 regression proof)" \
   || bad "ED4: a thin-issue-shaped skip note halted the guard — the defect is not fixed"
@@ -205,7 +205,7 @@ R=$(mkroot ee_clean)
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "EE0: a clean root still allows (forward guard)" || bad "EE0: clean root no longer allows"
 
-R=$(mkroot ee_red); printf 'RED' > "$R/.claude/nightly-state/build-status"
+R=$(mkroot ee_red); printf 'RED' > "$R/.claude/autopilot-state/build-status"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "EE1: RED build still halts (regression guard)" || bad "EE1: RED build no longer halts"
 
@@ -215,18 +215,18 @@ out=$("$GUARD" --check "$R" 2>/dev/null); rc=$?
   && ok "EE2: a genuine run-level needs-human marker still halts with its reason (regression guard)" \
   || bad "EE2: run-level needs-human no longer halts — THIS IS THE CORE REGRESSION RISK"
 
-R=$(mkroot ee_rtf); printf 'BLOCKER: auth bypass' > "$R/.claude/nightly-state/rtf-blocker"
+R=$(mkroot ee_rtf); printf 'BLOCKER: auth bypass' > "$R/.claude/autopilot-state/rtf-blocker"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "EE3: rtf-blocker still halts (regression guard)" || bad "EE3: rtf-blocker no longer halts"
 
-R=$(mkroot ee_budg); printf 'limit=1000\nspent=1200\n' > "$R/.claude/nightly-state/token-budget"
+R=$(mkroot ee_budg); printf 'limit=1000\nspent=1200\n' > "$R/.claude/autopilot-state/token-budget"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "EE4: token budget exceeded still halts (regression guard)" || bad "EE4: budget breach no longer halts"
 
 # EE5 — a needs-human marker halts EVEN WHEN a skip note is also present (the two files must be
 # read independently — the skip note must never mask a genuine run-level halt).
 R=$(mkroot ee_both)
-printf 'issue #9 "Thin issue" skipped: body too short\n' > "$R/.claude/nightly-state/skipped-features"
+printf 'issue #9 "Thin issue" skipped: body too short\n' > "$R/.claude/autopilot-state/skipped-features"
 printf 'unknown-state failure' > "$R/.claude/needs-human"
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "EE5: needs-human still halts even alongside an unrelated skip note" \
@@ -251,14 +251,14 @@ else
 fi
 
 # ==============================================================================================
-# EG — the gate runs at BOTH c2c Gate 2 and nightly Phase P from one implementation (§D4): the
+# EG — the gate runs at BOTH c2c Gate 2 and autopilot Phase P from one implementation (§D4): the
 # same script name is referenced from both skill files, not reimplemented per call site.
 # ==============================================================================================
-NIGHTLY="$STAGING/plugin/skills/nightly-autopilot/SKILL.md"
-if [ -f "$NIGHTLY" ]; then
-  ok "EG0: nightly-autopilot/SKILL.md is where this harness expects it (the anchor EG1-EG2 read)"
+AUTOPILOT_SKILL="$STAGING/plugin/skills/autopilot/SKILL.md"
+if [ -f "$AUTOPILOT_SKILL" ]; then
+  ok "EG0: autopilot/SKILL.md is where this harness expects it (the anchor EG1-EG2 read)"
 else
-  bad "EG0: $NIGHTLY not found — EG1-EG2 below are meaningless"
+  bad "EG0: $AUTOPILOT_SKILL not found — EG1-EG2 below are meaningless"
 fi
 
 if grep -q 'external-dependency-check.sh' "$C2C" 2>/dev/null; then
@@ -267,16 +267,16 @@ else
   bad "EG1: concept-to-code/SKILL.md does not reference external-dependency-check.sh"
 fi
 
-if grep -q 'external-dependency-check.sh' "$NIGHTLY" 2>/dev/null; then
-  ok "EG2: nightly-autopilot/SKILL.md invokes the SAME external-dependency-check.sh (one implementation, two call sites)"
+if grep -q 'external-dependency-check.sh' "$AUTOPILOT_SKILL" 2>/dev/null; then
+  ok "EG2: autopilot/SKILL.md invokes the SAME external-dependency-check.sh (one implementation, two call sites)"
 else
-  bad "EG2: nightly-autopilot/SKILL.md does not reference external-dependency-check.sh"
+  bad "EG2: autopilot/SKILL.md does not reference external-dependency-check.sh"
 fi
 
-if grep -q 'ADR-0060' "$NIGHTLY" 2>/dev/null; then
-  ok "EG3: nightly-autopilot/SKILL.md cites ADR-0060"
+if grep -q 'ADR-0060' "$AUTOPILOT_SKILL" 2>/dev/null; then
+  ok "EG3: autopilot/SKILL.md cites ADR-0060"
 else
-  bad "EG3: nightly-autopilot/SKILL.md does not cite ADR-0060"
+  bad "EG3: autopilot/SKILL.md does not cite ADR-0060"
 fi
 
 # ==============================================================================================

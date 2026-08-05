@@ -708,3 +708,23 @@ The body above is left byte-unchanged (ADR-0034 precedent). The living instructi
 distinguish the two, and `permission-mode-state.test.sh` section `PMQ` derives the rule over them so
 a seventh site cannot reintroduce the claim. This ADR is deliberately outside that population: it is
 a record of its moment, not an instruction anyone follows at launch.
+
+## Correction 2026-08-05 (ADR-0127) — the skill is `autopilot`, and "overnight" was load-bearing
+
+Every `nightly-*` name this ADR establishes has been renamed: the skill is `autopilot`, the hooks
+are `autopilot-guard.sh` / `autopilot-disarm.sh`, the opt-in marker is `.claude/autopilot.yml`, the
+state directory is `.claude/autopilot-state/`, the report is `.claude/autopilot-report.json`, the
+status tokens are `AUTOPILOT-PUBLISH` / `AUTOPILOT-GUARD HALT`, and `project-conductor`'s mode
+argument is `autopilot`. `docs/RUNBOOK-autopilot.md` replaces the old RUNBOOK.
+
+**The rename is the smaller half.** ADR-0127's finding is that *overnight* was not a label but an
+assumption: a night is a fixed, self-limiting budget, so this ADR never had to decide how much a run
+should attempt or what stops it. Both questions became mandatory once the same runner is started at
+lunchtime. What follows from that — run scoping, and a token bound that is actually reachable — is
+recorded in ADR-0127, not here.
+
+Also corrected there: §3's `token-budget` and `rtf-blocker` run-level halts were specified in this
+ADR and **given no producer**, so neither has ever been able to fire.
+
+The body above is left byte-unchanged (ADR-0034 precedent). Its vocabulary is accurate for the
+moment it was written.

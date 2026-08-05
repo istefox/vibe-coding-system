@@ -1,17 +1,17 @@
 #!/bin/bash
-# nightly-guard v1.3 (ADR-0022 D7) — pre-publish fail-safe gate for overnight runs.
+# autopilot-guard v1.3 (ADR-0022 D7) — pre-publish fail-safe gate for overnight runs.
 #
 # Two invocation paths, one logic:
-#   1. PreToolUse hook: reads the tool event JSON on stdin. While a nightly run is active it
+#   1. PreToolUse hook: reads the tool event JSON on stdin. While an autopilot run is active it
 #      HARD-BLOCKS any forbidden publish (merge, auto-merge, force-push, push to main/master)
 #      regardless of state, and runs the halt checks on an allowed publish (push feat/*,
-#      gh pr create). It is inert for non-publish commands and outside a nightly run.
-#   2. In-script gate: `nightly-guard.sh --check <root>` — publish-feature.sh calls this right
-#      before it pushes. Prints "NIGHTLY-GUARD HALT: <reason>" and exits 2 on halt, 0 when clean.
+#      gh pr create). It is inert for non-publish commands and outside an autopilot run.
+#   2. In-script gate: `autopilot-guard.sh --check <root>` — publish-feature.sh calls this right
+#      before it pushes. Prints "AUTOPILOT-GUARD HALT: <reason>" and exits 2 on halt, 0 when clean.
 #
 # Fail-safe: unlike stop-gate (fail-open), this hook BLOCKS on malformed input, a missing jq, or
-# an internal error once it sees a nightly publish. Allowing an unchecked publish is the dangerous
-# direction. Outside a nightly run the hook is inert (exit 0).
+# an internal error once it sees an autopilot publish. Allowing an unchecked publish is the dangerous
+# direction. Outside an autopilot run the hook is inert (exit 0).
 #
 # v1.1 (2026-07-01, review finding #1/#4): the guard now parses the command to block merge /
 # auto-merge / force / push-to-main directly, and fails closed when jq is absent.
@@ -24,12 +24,12 @@
 # once set it blocks every subsequent publish, on purpose. A KNOWN, CONTAINED per-feature problem
 # (a thin issue, a suspected-injection issue, an unprovisioned external dependency) is a different
 # thing and does NOT belong in this file: it now goes to
-# `<root>/.claude/nightly-state/skipped-features` instead, a plain append-only note this script
+# `<root>/.claude/autopilot-state/skipped-features` instead, a plain append-only note this script
 # deliberately never reads. Before this fix, `spec-from-issue`'s thin-issue skip and its
 # injection-suspect skip both wrote needs-human, so one thin issue in a twenty-feature roadmap
 # silently halted the other nineteen. If you are about to add a new writer for a per-feature,
 # known-cause skip: it goes to skipped-features, never here. See
-# `nightly-autopilot/SKILL.md` §3.3 "Marker contract" for the full writer list.
+# `autopilot/SKILL.md` §3.3 "Marker contract" for the full writer list.
 # v1.4 (2026-08-01, issue #324, ADR-0111): still no logic change here, comment only. The writer
 # list grew from three to five — `project-conductor` Step 4's no-generated-SPEC skip and Step 5
 # branch C's `TERMINAL` entry-state skip. Branch C used to write needs-human for EVERY feature that
@@ -41,7 +41,7 @@
 #
 # Bash 3.2 clean: no assoc array, no mapfile, no ${v^^}, no process substitution.
 
-STATE_SUBDIR=".claude/nightly-state"
+STATE_SUBDIR=".claude/autopilot-state"
 
 # marker_field <root> <key>: read `key=value` from the active marker. Empty when the marker is
 # absent, unreadable, or predates issue #321 (a bare `touch`, which is still a valid armed marker —
@@ -66,13 +66,13 @@ STALE_HINT=""
 # print_halt: emit the machine-readable halt line the /goal evaluator keys off, plus a human
 # line on stderr, then exit 2 (block).
 print_halt() {
-  printf 'NIGHTLY-GUARD HALT: %s\n' "$1"
-  printf 'nightly-guard: publish blocked — %s\n' "$1" >&2
+  printf 'AUTOPILOT-GUARD HALT: %s\n' "$1"
+  printf 'autopilot-guard: publish blocked — %s\n' "$1" >&2
   [ -n "$STALE_HINT" ] && printf '%s\n' "$STALE_HINT" >&2
   exit 2
 }
 
-# is_forbidden_publish <cmd>: return 0 if the command is a never-allowed publish during a nightly
+# is_forbidden_publish <cmd>: return 0 if the command is a never-allowed publish during an autopilot
 # run (merge, auto-merge, force-push, or a push whose destination is main/master).
 is_forbidden_publish() {
   c="$1"
@@ -104,7 +104,7 @@ is_forbidden_publish() {
       # whole command, so `git push -u origin feat/x && gh pr create --base main` read the PR's
       # `--base main` as the push's destination and was refused — the most ordinary publish shape
       # there is. `publish-feature.sh` issues push and PR as separate commands, which is why the
-      # nightly path never tripped it and it stayed invisible.
+      # autopilot path never tripped it and it stayed invisible.
       #
       # The `(^|` alternative is GONE, not merely unused: under segment scoping the match starts at
       # `git push`, so a command beginning with `main` is unreachable and leaving the branch would
@@ -204,7 +204,18 @@ if ! is_allowed_publish "$CMD" && ! is_forbidden_publish "$CMD"; then
   exit 0
 fi
 
-# Publish-shaped command, but no active nightly run: guard is inert (do not block manual work).
+# Legacy marker detection (ADR-0127 §D2.3). MUST precede the inert-exit below, because that exit
+# is exactly how an unmigrated repo loses its guard: a run armed under .claude/nightly-state/active
+# is invisible to this script, so a publish-shaped command would fall straight through to `exit 0`
+# and go out UNGUARDED. Halting is the safe direction — a blocked push is recoverable, an
+# unguarded one during a live run is not, and this cannot be resolved by reading the old marker
+# instead (see autopilot-migrate.sh's header for why nothing falls back).
+if [ ! -f "$CWD/$STATE_SUBDIR/active" ] && [ -f "$CWD/.claude/nightly-state/active" ]; then
+  print_halt "legacy nightly-state/active marker found — this repo predates the ADR-0127 rename. Run: bash ~/.claude/hooks/autopilot-migrate.sh --root \"$CWD\""
+  exit 2
+fi
+
+# Publish-shaped command, but no active autopilot run: guard is inert (do not block manual work).
 [ -f "$CWD/$STATE_SUBDIR/active" ] || exit 0
 
 # The marker is present. Decide whether THIS session is the one that armed it (issue #321).
@@ -215,13 +226,13 @@ SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 OWNER=$(marker_field "$CWD" session_id)
 ARMED_AT=$(marker_field "$CWD" started_at)
 if [ -n "$OWNER" ] && [ -n "$SID" ] && [ "$OWNER" != "$SID" ]; then
-  STALE_HINT="nightly-guard: this marker was armed by session $OWNER${ARMED_AT:+ at $ARMED_AT}, not by this session.
-nightly-guard: if that run is over, clear it:  bash ~/.claude/hooks/nightly-disarm.sh \"$CWD\""
+  STALE_HINT="autopilot-guard: this marker was armed by session $OWNER${ARMED_AT:+ at $ARMED_AT}, not by this session.
+autopilot-guard: if that run is over, clear it:  bash ~/.claude/hooks/autopilot-disarm.sh \"$CWD\""
 fi
 
-# Active nightly run. A forbidden publish is blocked unconditionally.
+# Active autopilot run. A forbidden publish is blocked unconditionally.
 if is_forbidden_publish "$CMD"; then
-  print_halt "forbidden publish during a nightly run (merge/auto-merge/force/no-verify/push-to-main)"
+  print_halt "forbidden publish during an autopilot run (merge/auto-merge/force/no-verify/push-to-main)"
 fi
 
 # Allowed publish: run the halt checks (fail-safe blocks on any halt).

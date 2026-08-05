@@ -133,7 +133,7 @@ Behavior:
    esac
    ```
 
-   **Unattended callers.** What a `nightly` run does with a non-`NONE` answer was decided by
+   **Unattended callers.** What a `autopilot` run does with a non-`NONE` answer was decided by
    ADR-0111 (issue #324), and it is decided in `project-conductor`, not here: a `TERMINAL` token
    marks the feature `[~]` with a reason and the roadmap continues; every other token writes the
    run-level `needs-human` marker and halts the run. The policy lives at the two conductor call
@@ -258,7 +258,7 @@ Behavior:
    - **`3`** → the check did not run. Stop **without** transitioning: an unread gate is not a
      clean gate, and guessing here is what issue #329 cost a whole night.
 
-   **`project-conductor`'s just-in-time SPEC copy stays the primary defence for the nightly
+   **`project-conductor`'s just-in-time SPEC copy stays the primary defence for the autopilot
    path** — it settles a missing SPEC before any manifest exists at all, where this fence has to
    create one and then abort it. This is a backstop for every other route to `autopilot = true`,
    including the attended conductor's "Start in autopilot mode", which does not run the SPEC copy.
@@ -2916,7 +2916,7 @@ After click:
 - `[e]` → set `chain_path: express`. Proceed to step 8 (Gate 0b) in §2 Form A — the path begins after Gate 0d routes to `step_e1_plan` (§4 Express).
 - `[h]` → set `chain_path: hybrid`. Proceed to step 8 (Gate 0b) in §2 Form A — the path begins after Gate 0d routes to `step_h1_interview` (§4 Hybrid).
 - `[s]` → proceed to step 8 (Gate 0b) in §2 Form A. Standard path continues unchanged.
-- `[auto]` → set `chain_path: standard` and `manifest.autopilot: true` via bash sed, emit `"Autopilot mode ON — all HITL gates will be auto-approved."`, then proceed to step 8 (Gate 0b) in §2 Form A. Standard path continues with autopilot=true active. **The SPEC.md pre-flight is not here.** It used to be, and inside this branch it was unreachable by the only caller that needs it: on the nightly path `autopilot` is already `true` before Gate 0 renders, so nobody ever clicks `[auto]` and the check never ran (issue #329). It now runs at **§2 Form A step 7b**, once, for every route. Two copies of one safety question is the worst available shape — they can disagree about whether the gate fires.
+- `[auto]` → set `chain_path: standard` and `manifest.autopilot: true` via bash sed, emit `"Autopilot mode ON — all HITL gates will be auto-approved."`, then proceed to step 8 (Gate 0b) in §2 Form A. Standard path continues with autopilot=true active. **The SPEC.md pre-flight is not here.** It used to be, and inside this branch it was unreachable by the only caller that needs it: on the autopilot path `autopilot` is already `true` before Gate 0 renders, so nobody ever clicks `[auto]` and the check never ran (issue #329). It now runs at **§2 Form A step 7b**, once, for every route. Two copies of one safety question is the worst available shape — they can disagree about whether the gate fires.
 
 ---
 
@@ -3371,7 +3371,7 @@ both paths rather than being repeated here:
 
 **Resolution** (`plugin/scripts/`, deployed to `hooks/` — same shape as `secret-scan.sh` /
 `dependency-scan.sh`, not the `skills/concept-to-code/scripts/` shape `spec-coverage.sh` uses,
-because this gate is shared with `nightly-autopilot/SKILL.md` too):
+because this gate is shared with `autopilot/SKILL.md` too):
 ```bash
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/external-dependency-check.sh" ]; then
   _edep="$CLAUDE_PLUGIN_ROOT/scripts/external-dependency-check.sh"
@@ -3424,16 +3424,16 @@ On "Abort": terminate the chain.
 **[Autopilot default: never self-confirm (ADR-0060 §D2 — the same no-self-approval rule as Gate
 2b's TOFU trust and ADR-0023's gh-auth wall: an unattended agent cannot verify its own consent
 flow, so it must not be the one deciding "provisioned: true"). On `_erc = 1`:
-- If `<project-root>/.claude/nightly-state/active` exists (running under `nightly-autopilot`):
-  write a per-feature skip note to `<project-root>/.claude/nightly-state/skipped-features`
+- If `<project-root>/.claude/autopilot-state/active` exists (running under `autopilot`):
+  write a per-feature skip note to `<project-root>/.claude/autopilot-state/skipped-features`
   (append, NOT `.claude/needs-human` — ADR-0060 §D3), mark the feature `[~]` in PROJECT.md with
   the same reason, and return `skipped` to the conductor so the roadmap continues to the next
-  feature. This is the "nightly Phase P" call site referenced by ADR-0060 §D4: it fires here, at
-  this feature's own Gate 2c inside the per-feature chain `nightly-autopilot` §3.3 drives, not
+  feature. This is the "autopilot Phase P" call site referenced by ADR-0060 §D4: it fires here, at
+  this feature's own Gate 2c inside the per-feature chain `autopilot` §3.3 drives, not
   literally inside that skill's Phase P step (dependencies are not declared until the architect
-  runs) — documented in `nightly-autopilot/SKILL.md` because it reuses that phase's per-feature
+  runs) — documented in `autopilot/SKILL.md` because it reuses that phase's per-feature
   skip mechanism (§3.3, "Marker contract").
-- Otherwise (plain `autopilot-build`, no nightly roadmap to continue): hard-abort this chain,
+- Otherwise (plain `autopilot-build`, no autopilot roadmap to continue): hard-abort this chain,
   reporting the `UNMET` lines and the human action required. There is nothing else to skip to.
 On `_erc = 0`, or `$_edep` empty: proceed exactly like the interactive "Confirmed" path (writing
 `external_dependencies` when `_erc = 0`; leaving it unset when the gate could not run), no
@@ -3507,7 +3507,7 @@ a missing audit line is not a reason to stop a chain a human is standing in fron
 
 **Gate 4's notes are load-bearing in a way the others' are not.** `autopilot: true` alone **cannot
 distinguish a human choosing unattended implementation from a roadmap pre-authorising the whole
-run** — `project-conductor`'s nightly mode sets the identical flag with no human at Gate 4 at all
+run** — `project-conductor`'s autopilot mode sets the identical flag with no human at Gate 4 at all
 (ADR-0022). The chosen option name in `notes` is the only thing that tells them apart afterwards.
 
 No status invariant is added to `manifest-validate.sh`, deliberately. A chain legitimately sits at
@@ -3533,11 +3533,26 @@ of this chain already uses it, so there is exactly one commit path in the system
 
 - **Attended** (`manifest.autopilot = false`): invoke `commit` with args
   `<topic-full-title> — planning artifacts (ADR: <manifest.artifacts.adr>) --no-pr
-  --include <spec>,<manifest.artifacts.adr>,<manifest.artifacts.plan>,<manifest-path>`.
+  --branch feat/<manifest.topic> --include
+  <spec>,<manifest.artifacts.adr>,<manifest.artifacts.plan>,<manifest-path>`.
   The Step 4 gate still asks; `--no-pr` suppresses only the PR question, which would otherwise fire
   on every chain run with nothing to publish.
 - **Unattended** (`manifest.autopilot = true`): the same, plus `--autopilot`. Local commit only —
   this changes no autonomy boundary, ADR-0020 already places a local commit inside it.
+
+**`--branch feat/<manifest.topic>` is what makes the branch name agree with the publish step
+(issue #363, ADR-0127 §D3), and the agreement is BY CONSTRUCTION rather than by an orchestrator
+remembering.** Without it, `commit` Step 3.6 derives the name from the commit *subject*: this is a
+planning-artifacts commit, so its type is `docs`, so the derived name is `chore/<subject-slug>` —
+while `publish-feature.sh`'s `BRANCH="feat/$SLUG"` line pushes a name built from the topic slug.
+**They never
+coincide.** The 2026-08-04 run reached `AUTOPILOT-PUBLISH` only because a human created
+`feat/<slug>` by hand beforehand, which is also what Step 5.0.2's own remediation message
+prescribes — a hint the contract was assumed and never written down.
+
+`<manifest.topic>` is the same field `publish-feature.sh` receives as `--slug`, so there is one
+source for the name rather than two that agree today. Do not substitute the subject slug here:
+that is the derivation this argument exists to bypass.
 
 **`--include` is what makes this step able to produce anything at all (issue #234).** On a
 greenfield chain those four artifacts are **untracked**, and `commit`'s default rule never stages

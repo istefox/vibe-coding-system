@@ -504,7 +504,7 @@ fi
 : >"$TMP/re3-plan.md"
 # Corpus = the ARCHIVED specs only. `$REPO/SPEC.md` is deliberately NOT a member: it is the
 # in-flight chain's spec, overwritten by every run, and by convention already a copy of a
-# docs/specs/ file (concept-to-code Step 1 writes it, nightly Phase P copies it from there), so it
+# docs/specs/ file (concept-to-code Step 1 writes it, autopilot Phase P copies it from there), so it
 # adds no coverage this glob does not already have. It was a member until 2026-07-28, when the
 # first SPEC to actually declare R-NN ids in its success criteria — which is what ADR-0048 asked
 # for — made this backward-compatibility loop fail on the correct use of the feature it protects.

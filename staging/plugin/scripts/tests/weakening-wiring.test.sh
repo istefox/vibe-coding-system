@@ -4,7 +4,7 @@
 #
 # Covers issue #101 / ADR-0047: wiring the existing anti-test-weakening detector
 # (review-triage-fix/scripts/weakening-scan.sh) into every unattended path that can
-# produce a commit — concept-to-code Step 5, autopilot-build, nightly-autopilot, commit
+# produce a commit — concept-to-code Step 5, autopilot-build, autopilot, commit
 # Step 1.
 #
 # THE DETECTOR IS NOT MODIFIED BY THIS FEATURE. Not one byte of
@@ -410,8 +410,8 @@ else
 fi
 
 # ==============================================================================================
-# WE. autopilot-build/SKILL.md and nightly-autopilot/SKILL.md — the inherited halt (ADR-0047
-# §D7/§D8). autopilot-build gets its own circuit-breaker bullets; nightly-autopilot only
+# WE. autopilot-build/SKILL.md and autopilot/SKILL.md — the inherited halt (ADR-0047
+# §D7/§D8). autopilot-build gets its own circuit-breaker bullets; autopilot only
 # documents an inherited halt and runs no scan of its own.
 # ==============================================================================================
 AB="$STAGING/plugin/skills/autopilot-build/SKILL.md"
@@ -460,20 +460,20 @@ else
   bad "WE5: autopilot-build/SKILL.md does not name the c2c gate heading '$WE5_NEEDLE'"
 fi
 
-NA="$STAGING/plugin/skills/nightly-autopilot/SKILL.md"
+NA="$STAGING/plugin/skills/autopilot/SKILL.md"
 NA_PHASE1="$TMP/na_phase1.txt"
 awk '/^## 3\. Phase 1 —/{f=1} /^## 4\. Phase 2 —/{f=0} f' "$NA" >"$NA_PHASE1"
 
 if grep -qi 'weakening' "$NA_PHASE1" && grep -qF 'needs-human' "$NA_PHASE1" && grep -qF 'run-level' "$NA_PHASE1"; then
-  ok "WE6: nightly-autopilot Phase 1 states the inherited-halt contract (weakening / needs-human / run-level)"
+  ok "WE6: autopilot Phase 1 states the inherited-halt contract (weakening / needs-human / run-level)"
 else
-  bad "WE6: nightly-autopilot Phase 1 is missing weakening, needs-human, or run-level"
+  bad "WE6: autopilot Phase 1 is missing weakening, needs-human, or run-level"
 fi
 
 if grep -qF 'weakening-scan.sh' "$NA"; then
-  bad "WE7: nightly-autopilot/SKILL.md resolves or invokes weakening-scan.sh itself — ADR-0047 §D8 forbids a fourth call site"
+  bad "WE7: autopilot/SKILL.md resolves or invokes weakening-scan.sh itself — ADR-0047 §D8 forbids a fourth call site"
 else
-  ok "WE7: nightly-autopilot/SKILL.md does not resolve or invoke weakening-scan.sh (no fourth call site, ADR-0047 §D8)"
+  ok "WE7: autopilot/SKILL.md does not resolve or invoke weakening-scan.sh (no fourth call site, ADR-0047 §D8)"
 fi
 
 # ==============================================================================================

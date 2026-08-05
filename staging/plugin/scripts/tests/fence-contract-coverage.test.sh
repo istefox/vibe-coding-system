@@ -51,7 +51,7 @@ TESTS="$SCRIPTS/tests"
 REPO=$(cd "$STAGING/.." && pwd)
 
 AB="$SKILLS/autopilot-build/SKILL.md"
-NA="$SKILLS/nightly-autopilot/SKILL.md"
+NA="$SKILLS/autopilot/SKILL.md"
 CMS="$SKILLS/claude-md-slim/SKILL.md"
 CMT="$SKILLS/commit/SKILL.md"
 
@@ -66,7 +66,7 @@ trap 'rm -rf "$TMPROOT"' EXIT
 # Shared machinery.
 
 # enumerate_fences <file> — one record per bash fence: "<opener-line>\t<marker-or-NONE>".
-# Indentation-tolerant: `nightly-autopilot` indents fences inside numbered list items, and a
+# Indentation-tolerant: `autopilot` indents fences inside numbered list items, and a
 # column-0 anchor undercounts (the issue's own first sweep reported 101 instead of 138).
 enumerate_fences() {
   awk '
@@ -388,7 +388,7 @@ _n=$(enumerate_fences "$SF/marked.md" | cut -f2)
 case "$_n" in *"fence-contract: sf-one -->"*) ok "S2: a marker is attached to the fence below it" ;;
   *) bad "S2: marker not attached (got '$_n')" ;; esac
 
-# S3 is the count-guard lesson applied to indentation: `nightly-autopilot` indents fences inside
+# S3 is the count-guard lesson applied to indentation: `autopilot` indents fences inside
 # numbered lists, and a column-0 anchor silently drops them.
 _n=$(enumerate_fences "$SF/indented.md" | cut -f2)
 case "$_n" in *"fence-contract: sf-indent -->"*) ok "S3: an INDENTED fence and its marker are seen" ;;
@@ -617,21 +617,21 @@ _rc=$(run_fence "autopilot-build-check-8" "$AB" "$TMPROOT/s8bad")
 if [ "$_rc" = "1" ]; then ok "E11: check 8 aborts (exit 1) outside a git repository"
 else bad "E11: check 8 did not abort outside a git repository (rc=$_rc)"; fi
 
-# ---- E12/E13: nightly-autopilot pre-flight 3 — publish opt-in marker --------------------------
-NP="$TMPROOT/nightly"; mkdir -p "$NP/.claude"
-printf 'publish: true\n' >"$NP/.claude/nightly-autopilot.yml"
+# ---- E12/E13: autopilot pre-flight 3 — publish opt-in marker --------------------------
+NP="$TMPROOT/autopilot"; mkdir -p "$NP/.claude"
+printf 'publish: true\n' >"$NP/.claude/autopilot.yml"
 printf 'cd %s\n' "$NP" >"$TMPROOT/sn"
-_rc=$(run_fence "nightly-autopilot-optin" "$NA" "$TMPROOT/sn")
-if [ "$_rc" = "0" ]; then ok "E12: nightly opt-in passes with publish: true"
-else bad "E12: nightly opt-in rejected publish: true (rc=$_rc): $(head -2 "$TMPROOT/out-nightly-autopilot-optin" 2>/dev/null | tr '\n' ' ')"; fi
-printf 'publish: false\n' >"$NP/.claude/nightly-autopilot.yml"
-_rc=$(run_fence "nightly-autopilot-optin" "$NA" "$TMPROOT/sn")
-if [ "$_rc" = "1" ]; then ok "E13: nightly opt-in aborts (exit 1) on publish: false"
-else bad "E13: nightly opt-in did not abort on publish: false (rc=$_rc)"; fi
-rm -f "$NP/.claude/nightly-autopilot.yml"
-_rc=$(run_fence "nightly-autopilot-optin" "$NA" "$TMPROOT/sn")
-if [ "$_rc" = "1" ]; then ok "E14: nightly opt-in aborts (exit 1) when the marker is absent"
-else bad "E14: nightly opt-in did not abort on an absent marker (rc=$_rc)"; fi
+_rc=$(run_fence "autopilot-optin" "$NA" "$TMPROOT/sn")
+if [ "$_rc" = "0" ]; then ok "E12: autopilot opt-in passes with publish: true"
+else bad "E12: autopilot opt-in rejected publish: true (rc=$_rc): $(head -2 "$TMPROOT/out-autopilot-optin" 2>/dev/null | tr '\n' ' ')"; fi
+printf 'publish: false\n' >"$NP/.claude/autopilot.yml"
+_rc=$(run_fence "autopilot-optin" "$NA" "$TMPROOT/sn")
+if [ "$_rc" = "1" ]; then ok "E13: autopilot opt-in aborts (exit 1) on publish: false"
+else bad "E13: autopilot opt-in did not abort on publish: false (rc=$_rc)"; fi
+rm -f "$NP/.claude/autopilot.yml"
+_rc=$(run_fence "autopilot-optin" "$NA" "$TMPROOT/sn")
+if [ "$_rc" = "1" ]; then ok "E14: autopilot opt-in aborts (exit 1) when the marker is absent"
+else bad "E14: autopilot opt-in did not abort on an absent marker (rc=$_rc)"; fi
 
 # ---- E15/E16: claude-md-slim — backup must refuse to overwrite --------------------------------
 CMSD="$TMPROOT/cms"; mkdir -p "$CMSD"

@@ -78,7 +78,7 @@ VA="$STAGING/plugin/skills/concept-to-code/scripts/manifest-validate.sh"
 #   2. a chain that ABORTS keeps its slot pointer for good (7.0b runs on completion): +1, permanent
 #
 # Issue #346 names source 1 and proposes widening the in-flight exclusion from `spec: null` to
-# "not terminal". That closes source 1 and leaves source 2 open — and **a nightly run that halts
+# "not terminal". That closes source 1 and leaves source 2 open — and **an autopilot run that halts
 # mid-feature produces an aborted chain**, so the fix would be re-broken by the first interrupted
 # night, which is the scenario the guard exists to make readable. #288 is already one such instance
 # in 48 manifests.

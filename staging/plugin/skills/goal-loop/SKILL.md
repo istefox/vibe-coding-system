@@ -5,7 +5,7 @@ description: >
   working across turns until a verifiable stop condition holds. Use when the user mentions `/goal`,
   "goal loop", "Ralph loop", wants a long-running autonomous run bounded by a stop condition, or asks
   how to phrase a goal so the evaluator can actually judge it. Differentiator vs `prompt-builder`
-  (which optimizes a single prompt) and `nightly-autopilot` (which drives a whole roadmap): this
+  (which optimizes a single prompt) and `autopilot` (which drives a whole roadmap): this
   skill produces one `/goal` contract and explains how to steer it.
 disable-model-invocation: true
 ---
@@ -118,7 +118,7 @@ Interactive: type `/goal <contract>` in the composer. A `◎ /goal active` indic
 time. The evaluator's most recent reason appears in the status view and the transcript.
 
 Headless: `/goal` works in non-interactive mode. `claude -p "/goal <contract>"` runs the loop to
-completion in a single invocation. Ctrl+C interrupts it. This is the mode `nightly-autopilot` uses
+completion in a single invocation. Ctrl+C interrupts it. This is the mode `autopilot` uses
 (ADR-0022, D4).
 
 ## Controlling a running goal

@@ -2,7 +2,7 @@
 # permission-mode-state.sh v1.0 — THE one place that answers "what permission mode is this session
 # ACTUALLY in?" (issue #320, ADR-0110).
 #
-# WHY THIS EXISTS. `nightly-autopilot` states its first launch precondition three times in prose —
+# WHY THIS EXISTS. `autopilot` states its first launch precondition three times in prose —
 # set a non-blocking permission mode — and Phase 0's eight checks verified it NOWHERE. Every other
 # precondition it checks (opt-in marker, TOFU trust, gh auth, CI) fails loudly and early. This one
 # failed silently and late: on 2026-07-31 pre-flight printed PASSED, the guard armed, the roadmap
@@ -52,7 +52,7 @@
 # CONTRACT
 #   stdout, exactly one line, <TOKEN>|<detail>. Split on the FIRST separator.
 #
-#     NONBLOCKING|<mode>    `acceptEdits` or `bypassPermissions` — the two `nightly-autopilot`
+#     NONBLOCKING|<mode>    `acceptEdits` or `bypassPermissions` — the two `autopilot`
 #                           declares as non-blocking. An unattended run may proceed.
 #
 #                           THE TWO ARE NOT EQUIVALENT, AND A CALLER MUST NOT SAY THEY ARE

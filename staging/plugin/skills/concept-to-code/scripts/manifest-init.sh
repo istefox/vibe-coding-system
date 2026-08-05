@@ -186,7 +186,7 @@ echo "    notes: null" >> "$T"
 # Gate 4 slot added by issue #238 (ADR-0099). It was the only gate with no entry, and the one whose
 # answer has the widest blast radius: it can set autopilot: true, which drives five downstream gates
 # to their safe defaults. Its `notes` is also the only place that can disambiguate that flag —
-# project-conductor's nightly roadmap mode sets the same true with no human at Gate 4 (ADR-0022).
+# project-conductor's autopilot roadmap mode sets the same true with no human at Gate 4 (ADR-0022).
 echo "  - gate: 4" >> "$T"
 echo "    label: \"implementation_mode\"" >> "$T"
 echo "    status: \"pending\"" >> "$T"
