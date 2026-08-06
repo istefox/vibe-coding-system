@@ -1256,11 +1256,39 @@ whole roadmap": a launch today attempts all 33 open rows above, and the only bra
 
 | item | state |
 |---|---|
-| `--features N` / `--only <slug>`, plus a `scope:` block in `.claude/autopilot.yml` | issue #365, Part 4 of ADR-0127. `/skill autopilot` takes no arguments today |
-| a producer for `token-budget` | the halt is READ by `autopilot-guard.sh` and cleared by the disarm; **nothing writes it**, so the bound it implements has never been reachable |
-| a producer for `rtf-blocker`, or its honest removal | ADR-0127 §D6 left it deliberately unproduced pending an ADR-0111-shaped decision; ledger `VCS-010` |
+| `--features N` / `--only <slug>`, plus a `scope:` block in `.claude/autopilot.yml` | issue #365, Part 4 of ADR-0127. `/skill autopilot` takes no arguments today, so this **is** the bound — not one of several |
+| **remove `token-budget` outright**: the read in `autopilot-guard.sh`, the clear in `autopilot-disarm.sh`, and the claim in `autopilot/SKILL.md` | decided 2026-08-06, superseding ADR-0127 Part 4's "wire the dead halt". See the three findings below |
+| a producer for `rtf-blocker`, or its honest removal | ADR-0127 §D6 left it deliberately unproduced pending an ADR-0111-shaped decision; ledger `VCS-010`. Decide it on the same terms: **a halt nothing can raise is not a safeguard, it is a comment** |
 | `autopilot/SKILL.md` stops asserting both producers exist | it states they are "written by the review step and this skill's `/goal` overlay respectively". Neither is. An instruction naming a mechanism that does not exist is the ADR-0109 class |
 | turn budget recalibrated, with the report recording ACTUAL per-feature turns | so the figure is re-derived from runs rather than re-estimated from one |
+
+**Why `token-budget` is removed rather than wired**, in the order the findings landed, because the
+first two look like implementation gaps and only the third settles it:
+
+1. **The proposed producer cannot produce what the consumer reads.** Part 4 accumulates `spent=`
+   from `step5-report.json`'s `task_metrics`, citing ADR-0064 — whose four fields are
+   `test_count_delta`, `deleted_lines`, `iteration_count` and `elapsed_wall_seconds`. **No token
+   count appears in any of them.** The file's name and its stated source are about different
+   quantities.
+2. **That block does not exist anyway.** The only real `step5-report.json` on disk carries no
+   `task_metrics` at all. `agent-metrics.test.sh` GA1/GA2 assert the field name appears in the
+   **schema block inside SKILL.md**, never that a produced report contains it — a green schema over
+   an empty report.
+3. **The halt is structurally unable to do its job.** `autopilot-guard.sh` is a `PreToolUse` hook on
+   `git push` / `gh pr create`, so it gets a turn only at publish — once per feature, at the end —
+   and ADR-0127 R-04 states the bound is checked between features and never mid-feature. A ceiling
+   evaluated afterwards **cannot stop the feature that exceeds it, only the one after**. That is
+   cumulative drift, which is exactly what `--features N` already bounds, deterministically and
+   without a second number to reason about.
+
+**The accepted cost, stated rather than discovered later: there is no spend ceiling.** An anomalous
+feature costs what it costs, and the only brakes are the feature count and `/goal`'s turn budget.
+
+**If a spend ceiling is ever wanted, it does not come from `task_metrics`.** The only place in this
+system that knows about tokens is the transcript — `usage-report.py` and `context-occupancy.sh`
+read `input_tokens`, `output_tokens` and `cache_*` from it. Any future bound starts there, is
+per-session rather than per-feature, and still cannot stop a feature already in flight. Recorded so
+the next author does not rebuild it from the same wrong source.
 
 #### Wave 2 — the two-feature run (needs an issue)
 
