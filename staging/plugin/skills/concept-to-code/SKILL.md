@@ -1308,7 +1308,7 @@ every Edit operation. Auto mode active. No intermediate HITL. `.claude/test-cmd`
 never read, write, or modify it. If the test command needs changing, stop and report it to the
 orchestrator.
 
-**Stage 1 — tester.** Pin `agentType: "tester"`, `model: "sonnet"`, `effort: "medium"`, and
+**Stage 1 — tester.** Pin `agentType: "tester"`, `model: "sonnet"`, `effort: "xhigh"`, and
 `isolation: "worktree"` explicitly on this `agent()` call — the effort table above is
 documentation, not a binding, and an omitted `effort` silently inherits this session's `high`
 (ADR-0018 addendum; ADR-0049 §D6 applies the same rule to this new dispatch site). `tester` has
@@ -1490,9 +1490,9 @@ calibration. Pass the agent's own frontmatter value on every `agent()` call:
 
 | agentType | effort |
 | --- | --- |
-| `architect` | `xhigh` |
-| `coder`, `reviewer`, `debugger` | `high` |
-| `tester`, `refactorer` | `medium` |
+| `architect`, `coder`, `tester` | `xhigh` |
+| `reviewer`, `debugger` | `high` |
+| `refactorer` | `medium` |
 | `doc-writer`, `researcher` | `low` |
 
 If an agent's frontmatter changes, this table is the second place to update — they are not
@@ -2323,7 +2323,7 @@ Phase 2 — Group findings by file (in-script, no agent):
   // agentType is chosen at runtime from fix_type, so effort cannot be a literal — it is
   // looked up by the same key. Values mirror each agent's own frontmatter, exactly as the
   // Step 5 table does; they are not linked, so a frontmatter change means changing this too.
-  const FIX_EFFORT = { debugger: "high", refactorer: "medium", coder: "high" };
+  const FIX_EFFORT = { debugger: "high", refactorer: "medium", coder: "xhigh" };
 
 Phase 3 — Fix in parallel per file group:
   // model: "opus" deliberately overrides the sonnet frontmatter of coder/refactorer/debugger.

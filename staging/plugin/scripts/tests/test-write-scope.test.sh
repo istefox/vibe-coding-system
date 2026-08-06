@@ -281,8 +281,8 @@ fi
 # with model/effort pinned. EXPECTED RED until Tasks 4-5.
 # ==================================================================================================
 if grep -qF 'pipeline(' "$STEP5" 2>/dev/null && grep -qi 'tester' "$STEP5" 2>/dev/null \
-   && grep -qF 'model: "sonnet"' "$STEP5" 2>/dev/null && grep -qF 'effort: "medium"' "$STEP5" 2>/dev/null; then
-  ok "TG1(workflow): Step 5's pipeline() stages a pinned tester(model sonnet, effort medium) call"
+   && grep -qF 'model: "sonnet"' "$STEP5" 2>/dev/null && grep -qF 'effort: "xhigh"' "$STEP5" 2>/dev/null; then
+  ok "TG1(workflow): Step 5's pipeline() stages a pinned tester(model sonnet, effort xhigh) call"
 else
   bad "TG1(workflow): Step 5 pipeline() does not yet pin a tester stage — Task 4"
 fi

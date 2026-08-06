@@ -1336,3 +1336,37 @@ still goes third: the SPECs for all 33 open rows are already generated and corre
 protect *future* generations, while Wave 2 is cheap and has a track record of rewriting the
 priority of everything after it. Wave 1 comes first because every measurement Waves 2-6 depend on
 needs a run that can be stopped.
+
+#### Found by running the Wave 1 chain, 2026-08-06 (issues #374, #375, #376)
+
+Three defects the six waves above did not anticipate, all measured while designing #365 rather than
+by reading the design. They are listed here rather than folded into a wave because two of them are
+not about scoping at all — the chain that found them was simply the first to walk that path
+attended, with someone watching each gate.
+
+**#374 is the one that changes what this product is, and it belongs above Wave 3.** Gate 5's
+autopilot default is "Skip review" and `project-conductor` invokes `concept-to-code` on both
+branches, never `autopilot-build` — so **no unattended run performs a review cycle at all**, and
+every PR the runner opens has passed none. For a runner being repositioned as the primary way this
+repository is coded, whether that is the intended design is a question nothing in the current
+documents answers. It is also the real reason `rtf-blocker` has no producer, which ADR-0127 §D6 had
+attributed to a deferred scoping decision.
+
+Issues #375 and #376 are one defect met from two sides: a root `SPEC.md` with no `**Topic slug:**`
+marker routes **brownfield** and lets a chain silently adopt another feature's SPEC, while on the greenfield
+branch the same missing marker makes Step 1's archive fence exit 3 and **halt the chain**. #376 is a
+third route to that state and the sharpest instance of rule 12 recorded so far: Step 1's stamp
+guards its own idempotence with an unanchored grep, so a SPEC that *mentions* the marker in prose
+satisfies the guard and never gets stamped. The SPEC for #365 documents #375 as a finding, and was
+skipped for exactly that reason.
+
+| issue | finding |
+|---|---|
+| #374 | no unattended run performs a review — Gate 5's autopilot default is Skip, and the conductor always routes through `concept-to-code` |
+| #375 | an unmarked leftover `SPEC.md` is mishandled in both directions: `unknown` routes brownfield and adopts it, greenfield halts on the archive fence |
+| #376 | Step 1's slug stamp skips itself on any SPEC that mentions the marker in prose — an unanchored idempotence guard, rule 12 inside the chain's own machinery |
+
+**A table, like the rest of Phase 11, and for the same reason** — these three are as
+runner-internal as anything above them, so a `- [ ]` row would offer the unattended runner the job
+of repairing the chain it is running inside. The first draft of this block used checkboxes; that
+was the mistake this phase's own opening paragraph exists to prevent.
