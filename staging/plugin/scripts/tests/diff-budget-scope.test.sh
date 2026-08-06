@@ -212,10 +212,59 @@ fi
 # What HAS changed since ADR-0122 wrote "a fourth hand-edit is not the answer" is that the issue it
 # asked for now exists and is scheduled: #358, with its SPEC written and committed. That is the fix;
 # this line is an interim unblock and should be deleted by it, not raised a fifth time.
-if [ "$bb2_skipped" -ge 1 ] && [ "$bb2_skipped" -le 9 ]; then
-  ok "BB2b: the budget-declaring exclusion covers $bb2_skipped plan(s) — small and live"
+#
+# RESOLVED by issue #358 on 2026-08-06, and the five hand-raises above are kept as the evidence
+# that produced this shape rather than deleted (#358 R-06). The ceiling fired a FIFTH time, on
+# #365's plan, for the same reason as the four before it: a healthy feature declared budgets, which
+# is the behaviour ADR-0052 exists to encourage. Five consecutive false positives on five healthy
+# features is not a bound, it is a tax with a red light attached.
+#
+# THE SHAPE, and why it is not another number (#358 R-01/R-05). Every paragraph above states what
+# the bound is FOR in the same words: catching an exclusion that has grown to cover MOST of the
+# corpus, or shrunk to cover NONE. That is a property, and the absolute count was only ever a proxy
+# for it — a proxy that had to be re-fitted by hand every time the corpus grew. The property is now
+# asserted directly: non-empty, and a strict minority of the corpus. It needs no maintenance and
+# introduces no new literal, because there is nothing left to tune.
+#
+# The cost, stated rather than discovered later: this accepts strictly more inputs than the
+# ceiling did — an exclusion may now drift from 15% to 49% with nothing going red. That looseness
+# is bounded by evidence rather than by trust: `bb2b_in_band` is extracted precisely so BB2c/BB2d
+# can exercise the REJECTING half with synthetic values, and BB2e pins the accepting half beside
+# them, because a negative assertion pins nothing without its positive twin. A percentage band
+# (<= 33%) was rejected for re-introducing exactly the unexplained literal this removes, and a
+# committed baseline file for relocating the per-feature hand-edit rather than removing it — the
+# SPEC's own R-05 names its silent-rot risk.
+bb2b_in_band() {
+  [ "${1:-0}" -ge 1 ] || return 1
+  [ $(( ${1:-0} * 2 )) -lt "${2:-0}" ] || return 1
+  return 0
+}
+bb2_corpus=$(( bb2_count + bb2_skipped ))
+# plant: BB2b | plugin/scripts/tests/diff-budget-scope.test.sh | bb2b_in_band "$bb2_skipped" "$bb2_corpus" | bb2b_in_band 0 "$bb2_corpus"
+if bb2b_in_band "$bb2_skipped" "$bb2_corpus"; then
+  ok "BB2b: the budget-declaring exclusion covers $bb2_skipped of $bb2_corpus plan(s) — non-empty and a strict minority"
 else
-  bad "BB2b: $bb2_skipped plan(s) excluded from BB2 — re-derive the exclusion, it no longer bounds anything"
+  bad "BB2b: $bb2_skipped of $bb2_corpus plan(s) excluded from BB2 — the exclusion covers none, or most, so BB2 no longer measures what it claims"
+fi
+# plant: BB2c | plugin/scripts/tests/diff-budget-scope.test.sh | [ "${1:-0}" -ge 1 ] || return 1 | [ "${1:-0}" -ge 0 ] || return 1
+if bb2b_in_band 0 65; then
+  bad "BB2c: the bound accepted an exclusion covering NONE of the corpus (0 of 65) — #358 R-03"
+else
+  ok "BB2c: the bound rejects an exclusion covering none of the corpus (0 of 65)"
+fi
+# plant: BB2d | plugin/scripts/tests/diff-budget-scope.test.sh | [ $(( ${1:-0} * 2 )) -lt "${2:-0}" ] || return 1 | [ $(( ${1:-0} * 1 )) -lt "${2:-0}" ] || return 1
+if bb2b_in_band 33 65; then
+  bad "BB2d: the bound accepted an exclusion covering MOST of the corpus (33 of 65) — #358 R-02"
+else
+  ok "BB2d: the bound rejects an exclusion covering most of the corpus (33 of 65)"
+fi
+# BB2e is BB2d's positive twin. Without it, a bound that rejects EVERYTHING satisfies BB2c and BB2d
+# and pins nothing — the rule ADR-0039 earned and this file must not relearn.
+# plant: BB2e | plugin/scripts/tests/diff-budget-scope.test.sh | [ $(( ${1:-0} * 2 )) -lt "${2:-0}" ] || return 1 | [ $(( ${1:-0} * 3 )) -lt "${2:-0}" ] || return 1
+if bb2b_in_band 32 65; then
+  ok "BB2e: the bound still accepts a large-but-minority exclusion (32 of 65) — it bounds 'most', not 'many'"
+else
+  bad "BB2e: the bound rejected 32 of 65, a strict minority — the band is tighter than the property it claims"
 fi
 if [ "$bb2_count" -ge 5 ]; then
   ok "BB3: the BB2 corpus loop visited $bb2_count files (>= 5) — not a vacuous pass"
@@ -747,10 +796,10 @@ fi
 
 # Z1 — assertion-count floor (ADR-0083 §D3). A floor, not an exact count.
 Z1_TOTAL=$((PASS + FAIL))
-if [ "$Z1_TOTAL" -ge 50 ]; then
+if [ "$Z1_TOTAL" -ge 55 ]; then
   ok "Z1: assertion-count floor met ($Z1_TOTAL executed)"
 else
-  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 50; assertions have gone missing, not passed"
+  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 55; assertions have gone missing, not passed"
 fi
 
 echo "----"
