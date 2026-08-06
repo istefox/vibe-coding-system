@@ -444,6 +444,21 @@ fi
 Read `current_step` from `$_manifest` (empty falls into branch C below, exactly as today's 'manifest not found' case already does).
 
 **A — `current_step = completed`:**
+- **Capture the issue number FIRST, before the checkbox flip (issue #370, ADR-0128 §D2).** The
+  roadmap line `roadmap-from-issues.sh` writes is `- [ ] <title>  (issue #N)`, and the flip below
+  rewrites that line to end in `(completed: <date>)` — so reading the number afterwards can find
+  nothing. Empty is the legitimate case for a roadmap that was not generated from issues, and it
+  stays silent:
+  ```bash
+  _issue=$(grep -F -- "<next-feature>" "$_root/PROJECT.md" 2>/dev/null | head -1 \
+    | sed -n 's/.*(issue #\([0-9][0-9]*\)).*/\1/p')
+  # An empty result has two causes and only one of them is fine. A roadmap with NO issue markers
+  # anywhere is the legitimate silent case; a roadmap that carries them and yielded none for THIS
+  # feature is an extraction that did not work, which must not look identical to it.
+  if [ -z "$_issue" ] && grep -q '(issue #' "$_root/PROJECT.md" 2>/dev/null; then
+    printf 'note: PROJECT.md carries issue markers but none matched this feature — its PR will close nothing\n' >&2
+  fi
+  ```
 - Update PROJECT.md: `- [ ] <next-feature>` → `- [x] <next-feature>  (completed: <YYYY-MM-DD>)` via bash sed.
 - Emit: `"✓ <next-feature> complete."`
 - **Roadmap-autopilot publish (ADR-0022):** if `_autopilot=true`, publish this feature before
@@ -452,8 +467,15 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
   ```bash
   # build-status: GREEN because the chain reached `completed` only on a green test run.
   printf 'GREEN' > "$_root/.claude/autopilot-state/build-status"
-  bash "$_scripts/publish-feature.sh" --slug "<topic-slug>" --base main --root "$_root"
+  bash "$_scripts/publish-feature.sh" --slug "<topic-slug>" --issue "$_issue" \
+    --base main --root "$_root"
   ```
+  **`--issue` is passed unconditionally, empty value and all**, never wrapped in a
+  `${_issue:+--issue $_issue}` conditional expansion. That idiom relies on word splitting to become
+  two arguments, and **this shell may be zsh, where an unquoted expansion does not split** (issue
+  #366) — the flag and its value would arrive as one argument and the parse would fail. An empty
+  `--issue` is defined to mean "no closing reference", which is exactly the state an empty
+  `$_issue` describes.
   **`--base main` is the PR BASE, not the fork point, and the two were being conflated (issue #364,
   ADR-0127 §D4).** Every feature PR targets `main`; every feature BRANCH forks from the run-scoped
   `autopilot/prep-<date>` created in `autopilot` Phase P. Keeping the PR base at `main` is what makes

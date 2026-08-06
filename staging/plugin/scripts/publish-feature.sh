@@ -6,7 +6,7 @@
 # first and aborts on HALT. Re-runs must not duplicate a branch or a PR.
 #
 # Usage:
-#   publish-feature.sh --slug <slug> [--base main] --root <repo> [--dry-run]
+#   publish-feature.sh --slug <slug> [--issue <N>] [--base main] --root <repo> [--dry-run]
 #
 # Bash 3.2 clean.
 
@@ -15,10 +15,11 @@ set -u
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 GUARD="$SCRIPT_DIR/autopilot-guard.sh"
 
-SLUG=""; BASE="main"; ROOT=""; DRY=0
+SLUG=""; BASE="main"; ROOT=""; DRY=0; ISSUE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --slug) SLUG="$2"; shift 2 ;;
+    --issue) ISSUE="$2"; shift 2 ;;
     --base) BASE="$2"; shift 2 ;;
     --root) ROOT="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
@@ -29,6 +30,27 @@ done
 fail() { printf 'publish-feature: %s\n' "$1" >&2; exit 2; }
 
 [ -n "$SLUG" ] || fail "missing --slug"
+
+# --issue is the ISSUE NUMBER this feature closes, and it is an ARGUMENT rather than something
+# this script derives (issue #370, ADR-0128 §D1). The number is known upstream: roadmap-from-issues
+# writes `- [ ] <title>  (issue #N)` into PROJECT.md, and project-conductor reads that very line to
+# pick the feature. Re-deriving it here would mean matching $SLUG — the manifest topic, a slugified
+# and truncated title — against docs/specs/_issue-map.tsv, whose own slug carries a `<N>-` prefix
+# the manifest topic does not. That is a fuzzy match on two names that agree by convention, the
+# exact shape ADR-0096 measured as wrong on 38 of 41 inputs while looking correct.
+#
+# Absent, the body is byte-identical to what it was before this flag existed: a roadmap not
+# generated from issues legitimately has no number, and that case must stay silent, not warn.
+#
+# Malformed is a hard fail, not a warning, and the reasoning matters because a non-zero exit here
+# STOPS the whole roadmap (project-conductor Step 5A treats it as run-level). The only caller
+# passes this after extracting digits from a line it just read, so a malformed value cannot come
+# from the intended path — it is a defect in that extraction, and a broken extraction breaks for
+# EVERY feature. Halting on the first beats opening twelve PRs that all silently close nothing.
+if [ -n "$ISSUE" ]; then
+  printf '%s' "$ISSUE" | grep -qE '^[0-9]+$' \
+    || fail "--issue must be digits only, got: $ISSUE"
+fi
 [ -n "$ROOT" ] || fail "missing --root"
 [ -d "$ROOT" ] || fail "root is not a directory: $ROOT"
 
@@ -98,17 +120,33 @@ if [ "$DRY" -eq 0 ]; then
   [ "$local_head" = "$remote_head" ] || fail "remote $BRANCH head ($remote_head) != local HEAD ($local_head)"
 fi
 
+# PR body. Built here rather than inline at the `gh pr create` call so the dry run can PRINT it —
+# a dry run that hides the body verifies nothing about the body, which is how the missing closing
+# reference survived every offline test this script has (issue #370, ADR-0128 §D3).
+PR_BODY="Automated unattended run (ADR-0022 autopilot, repositioned by ADR-0127). Review and merge manually."
+if [ -n "$ISSUE" ]; then
+  # Own line, blank line before it: GitHub only honours a closing keyword outside a list item or
+  # a code fence, and only when the PR merges into the DEFAULT branch — which is why $BASE stays
+  # `main` for every feature PR (ADR-0127 §D4). A prep PR closes nothing and passes no --issue.
+  PR_BODY="$PR_BODY
+
+Closes #$ISSUE"
+fi
+
 # Open a PR only if none is open for this head branch (idempotent).
 PR_URL=""
 if command -v gh >/dev/null 2>&1; then
   if [ "$DRY" -eq 1 ]; then
+    # stderr, never stdout: stdout carries the AUTOPILOT-PUBLISH status line the /goal evaluator
+    # and the morning report parse, and polluting it would break both.
+    printf 'publish-feature: [dry-run] PR body:\n%s\n' "$PR_BODY" >&2
     PR_URL="[dry-run-pr-url]"
   else
     PR_URL=$(gh pr list --head "$BRANCH" --state open --json url --jq '.[0].url // empty' 2>/dev/null)
     if [ -z "$PR_URL" ]; then
       gh pr create --base "$BASE" --head "$BRANCH" \
         --title "$SLUG" \
-        --body "Automated overnight run (ADR-0022 autopilot). Review and merge manually." \
+        --body "$PR_BODY" \
         >/dev/null 2>&1 || fail "gh pr create failed for $BRANCH"
       PR_URL=$(gh pr list --head "$BRANCH" --state open --json url --jq '.[0].url // empty' 2>/dev/null)
     fi
