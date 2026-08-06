@@ -124,3 +124,65 @@ history per turn is reading mostly material irrelevant to its task.
 - **Leaving `refactorer` at `medium`.** Kept: it is dispatched only by the Step 6 fix cycle on
   structural findings, and the ADR-0016 addendum's reasoning for it is untouched by this
   measurement.
+
+## Correction — 2026-08-06, same day
+
+**§D4's figure was wrong. Sub-agents do not receive the project `CLAUDE.md` at all.**
+
+§D4 states that `CLAUDE.md` is "about 44% of the coder's 150k-token turn" and that "roughly 335M of
+the coder's 763M cache-read tokens are re-reads of it". Both numbers are void.
+
+### What refutes it
+
+The initial context of a dispatched agent — the first assistant turn, before it has read anything —
+is directly measurable as `cache_creation + input + cache_read` on that turn. Measured across the
+same 238 sub-agent transcripts:
+
+| agent | model | runs | median initial context |
+|---|---|---:|---:|
+| `Explore` | opus-5 | 2 | 14,092 |
+| `Plan` | opus-5 | 3 | 15,287 |
+| `reviewer` | sonnet-5 | 18 | **19,712** (min 19,245) |
+| `architect` | sonnet-5 | 15 | 23,165 |
+| `coder` | haiku-4.5 | 3 | 36,982 |
+| `coder` | sonnet-5 | 51 | 52,299 |
+
+`CLAUDE.md` is ~66,000 tokens on its own. **A context that contains it cannot be 14,092 tokens.**
+Several agent types start three times below the file's own size, so the file is not in their system
+prompt.
+
+### The corrected figure
+
+`CLAUDE.md` is loaded by the **orchestrator** only — which is 89.9% of the bill, so the conclusion
+survives while its mechanism changes:
+
+| | |
+|---|---:|
+| orchestrator median initial context | 74,196 tokens |
+| of which `CLAUDE.md` | ~89% |
+| orchestrator assistant turns on record | 16,328 |
+| `CLAUDE.md` re-read across them | ~1.08B tokens |
+| share of the orchestrator's 5.01B cache reads | **21.5%** |
+| cost of those re-reads alone | **~$1,616** |
+
+Not 44% of every agent's turn. **21.5% of the orchestrator's context volume** — about four times the
+coder's entire measured cost, which is why `VCS-006` remains the largest single lever identified and
+why D4's direction is unchanged.
+
+### Method, which is the part worth keeping
+
+**The wrong claim was inferred from an average and never tested against a case that could refute
+it.** `cache_read / turns` for the sonnet coder is 150,002, and a 66k file inside it gives 44%. But
+an average is consistent with many compositions and establishes none of them. The refuting case sat
+in the same table the whole time: `coder @ haiku` averaged ~23,000 tokens of context per turn, which
+is impossible if a 66k file is present in every turn.
+
+**And the obvious test does not work.** Grepping transcripts for text unique to `CLAUDE.md` looks
+decisive and is not: system prompts are not persisted, so main sessions — which certainly do load
+the file — matched on only 4 or 5 of 15, and the 6 sub-agent matches are explained by an agent
+having `Read` the file as a tool call. A test that returns "absent" for a population known to have
+it cannot be used to conclude absence anywhere. The initial-context measurement is the one that
+discriminates, because it reads a quantity the transcript records rather than one it omits.
+
+Nothing in §D1, §D2 or §D3 depends on the void figure; the effort recalibration and its cost model
+are measured independently and stand.
