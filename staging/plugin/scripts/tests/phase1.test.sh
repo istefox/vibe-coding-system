@@ -9,7 +9,12 @@ PUBLISH="$SCRIPTS/publish-feature.sh"
 
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf 'ok   %s\n' "$1"; }
-no()   { FAIL=$((FAIL+1)); printf 'FAIL %s\n' "$1"; }
+# `FAIL: ` with the colon is not cosmetic — plant-check.sh attributes a fired plant with
+# `grep "^FAIL: <id>"`, so a harness printing `FAIL <label>` is one where every plant reports
+# "did not fire" whether the assertion held or collapsed (issue #370, ADR-0128 §D4). Four sibling
+# harnesses still print the colon-less form and none of them declares a plant; plant-check.sh now
+# refuses a plant in such a file rather than mis-reporting it.
+no()   { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
 
 # assert_exit <expected> <label> -- reads actual exit from $? captured by caller
 tmp=$(mktemp -d)
@@ -140,6 +145,91 @@ printf '%s' "$out" | grep -q -- '--force' && no "publish: dry-run must not use -
 printf 'RED' > "$R/.claude/autopilot-state/build-status"
 "$PUBLISH" --slug demo --root "$R" --dry-run >/dev/null 2>&1
 [ $? -eq 2 ] && ok "publish: guard HALT aborts publish" || no "publish: guard HALT aborts publish"
+
+# --- CR: the PR closing reference (issue #370, ADR-0128) ---
+# Before this, publish-feature.sh built the PR body as a fixed inline string, so an unattended run
+# opened a PR that closed nothing and the feature's issue stayed open after the merge. PR #362 /
+# issue #292 is the observed instance: the body had to be edited by hand.
+CRR=$(mkroot pubclose)
+( cd "$CRR" && git init -q && git config user.email t@t && git config user.name t \
+  && git commit -q --allow-empty -m init && git remote add origin https://example.invalid/x.git )
+printf 'publish: true\n' > "$CRR/.claude/autopilot.yml"
+
+# The dry run must PRINT the body, or nothing below can reach it. This is the mechanism CR1-CR3
+# rest on, so it is asserted on its own rather than assumed by them.
+# plant: CR1 | plugin/scripts/publish-feature.sh | printf 'publish-feature: [dry-run] PR body:\n%s\n' "$PR_BODY" >&2 | true
+crout=$("$PUBLISH" --slug demo --root "$CRR" --dry-run 2>&1)
+printf '%s\n' "$crout" | grep -q 'dry-run..*PR body' \
+  && ok "CR1 dry-run prints the PR body" || no "CR1 dry-run prints the PR body"
+
+# The body goes to stderr because stdout carries the AUTOPILOT-PUBLISH line the /goal evaluator and
+# the morning report parse. A body on stdout would corrupt both, and would do it silently.
+# plant: CR2 | plugin/scripts/publish-feature.sh | "$PR_BODY" >&2 | "$PR_BODY"
+crstdout=$("$PUBLISH" --slug demo --root "$CRR" --dry-run 2>/dev/null)
+printf '%s\n' "$crstdout" | grep -q 'PR body' \
+  && no "CR2 the body stays off stdout" || ok "CR2 the body stays off stdout"
+
+# plant: CR3 | plugin/scripts/publish-feature.sh | Closes #$ISSUE | Refs #$ISSUE
+crout=$("$PUBLISH" --slug demo --issue 292 --root "$CRR" --dry-run 2>&1)
+printf '%s\n' "$crout" | grep -q '^Closes #292$' \
+  && ok "CR3 --issue N puts 'Closes #N' in the body, on its own line" \
+  || no "CR3 --issue N puts 'Closes #N' in the body, on its own line"
+
+# GitHub honours a closing keyword only outside a list item or a code fence, so the blank line
+# before it is load-bearing, not formatting.
+printf '%s\n' "$crout" | grep -B1 '^Closes #292$' | head -1 | grep -qE '^[[:space:]]*$' \
+  && ok "CR4 the closing reference is preceded by a blank line" \
+  || no "CR4 the closing reference is preceded by a blank line"
+
+# No --issue must leave the body exactly as it was before the flag existed. A roadmap not generated
+# from issues has no number, and that case stays silent rather than warning.
+crout=$("$PUBLISH" --slug demo --root "$CRR" --dry-run 2>&1)
+printf '%s\n' "$crout" | grep -q 'Closes #' \
+  && no "CR5 no --issue emits no closing reference" || ok "CR5 no --issue emits no closing reference"
+
+# An EMPTY --issue must behave as absent. project-conductor passes the flag unconditionally rather
+# than through `${_issue:+...}`, because that idiom relies on word splitting and this shell may be
+# zsh, where an unquoted expansion does not split (issue #366) — flag and value would arrive as one
+# argument. Empty is therefore a defined, reachable input, not an edge case.
+crout=$("$PUBLISH" --slug demo --issue "" --root "$CRR" --dry-run 2>&1)
+{ printf '%s\n' "$crout" | grep -q 'AUTOPILOT-PUBLISH demo' \
+  && ! printf '%s\n' "$crout" | grep -q 'Closes #'; } \
+  && ok "CR6 an empty --issue behaves as absent" || no "CR6 an empty --issue behaves as absent"
+
+# plant: CR7 | plugin/scripts/publish-feature.sh | fail "--issue must be digits only, got: $ISSUE" | ISSUE=""
+"$PUBLISH" --slug demo --issue "292; rm -rf /" --root "$CRR" --dry-run >/dev/null 2>&1
+[ $? -eq 2 ] && ok "CR7 a malformed --issue is refused" || no "CR7 a malformed --issue is refused"
+
+# CR4, CR5 and CR6 carry NO declared plant, and the reasons differ — an undeclared omission reads
+# as an oversight, which is worse than the gap.
+#   CR4 — removing the blank line before the reference needs a replacement CONTAINING a newline,
+#         which registry v1 cannot express (ADR-0112). Not a weak assertion, an unplantable one.
+#   CR5, CR6 — both are negative ("no closing reference appears"), and deleting a mechanism cannot
+#         break "X must not happen" (ADR-0112 again). Inverting them means flipping the body's
+#         `[ -n "$ISSUE" ]` guard, whose needle is not unique in the file: the same test guards the
+#         argument validation thirty lines above. CR3 is their positive twin and IS planted, which
+#         is what stops the pair going green against a body that never appends anything.
+
+# --- CR8/CR9: the cross-file contract with project-conductor ---
+CONDUCTOR="$SCRIPTS/../skills/project-conductor/SKILL.md"
+# plant: CR8 | plugin/skills/project-conductor/SKILL.md | --issue "$_issue" | --base main
+if [ -f "$CONDUCTOR" ]; then
+  grep -q -- '--issue "\$_issue"' "$CONDUCTOR" \
+    && ok "CR8 project-conductor passes --issue to publish-feature" \
+    || no "CR8 project-conductor passes --issue to publish-feature"
+
+  # The number is read BEFORE the checkbox flip, because the flip rewrites the roadmap line to end
+  # in `(completed: <date>)` and can take the `(issue #N)` marker with it. Ordering, not presence:
+  # both lines can exist and the feature still be broken.
+# plant: CR9 | plugin/skills/project-conductor/SKILL.md | _issue=$(grep -F -- | _issue=$(true --
+  _cap=$(grep -n '_issue=\$(grep -F' "$CONDUCTOR" | head -1 | cut -d: -f1)
+  _flip=$(grep -n 'Update PROJECT.md: `- \[ \]' "$CONDUCTOR" | head -1 | cut -d: -f1)
+  { [ -n "$_cap" ] && [ -n "$_flip" ] && [ "$_cap" -lt "$_flip" ]; } \
+    && ok "CR9 the issue number is captured before the checkbox flip" \
+    || no "CR9 the issue number is captured before the checkbox flip"
+else
+  no "CR8 project-conductor SKILL.md not found"
+fi
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -80,7 +80,10 @@ fi
 
 # --- run each plant -----------------------------------------------------------------------------
 NOFIRE=""; BADPLANT=""
-RUN_N=0
+# RUN_N counts DECLARATIONS — it names the sandbox directory, so it must advance even for one that
+# is rejected. RAN_N counts plants that actually executed. Reporting the first as the second is how
+# "1 run" gets printed for a run in which nothing ran, which is the shape this file exists to catch.
+RUN_N=0; RAN_N=0
 while IFS="$(printf '\t')" read -r tfile payload; do
   [ -n "${tfile:-}" ] || continue
   RUN_N=$((RUN_N + 1))
@@ -93,6 +96,25 @@ while IFS="$(printf '\t')" read -r tfile payload; do
   if [ -z "$aid" ] || [ -z "$tgt" ] || [ -z "$ndl" ]; then
     BADPLANT="$BADPLANT
     $tfile: malformed declaration (need 4 fields separated by ' | ')"
+    continue
+  fi
+
+  # Attribution depends on the declaring harness emitting `FAIL: <id>`, and five harnesses emit
+  # `FAIL <label>` with no colon (external-dependency-gate, hook-probe, hook-verify-workflow,
+  # phase1, prep — measured 2026-08-05, phase1 converted the same day). A plant declared in one of
+  # those can never be seen to fire: the grep below finds nothing whether the assertion held or
+  # collapsed, and the run would report "the assertion still passed with the mechanism removed" —
+  # a definite verdict from a check that could not look. That is this file's own subject one level
+  # up, so it is a BADPLANT (the registry could not run), never a NOFIRE (the assertion pins
+  # nothing).
+  #
+  # Checked HERE, against the real file, before any sandbox is built or any mutation applied:
+  # rejecting after the copy wastes the work and, worse, puts the decision downstream of the very
+  # machinery it exists to declare unusable. The needle is the EMITTER, not the string, so a
+  # comment mentioning the prefix cannot excuse a harness that does not print it.
+  if ! grep -qE "(printf|echo)[^#]*FAIL: " "$TESTS/$tfile"; then
+    BADPLANT="$BADPLANT
+    $tfile [$aid]: harness does not emit the 'FAIL: <id>' prefix — a plant here is unattributable"
     continue
   fi
 
@@ -158,6 +180,7 @@ PY
     continue
   fi
 
+  RAN_N=$((RAN_N + 1))
   OUT=$(bash "$SBX/staging/plugin/scripts/tests/$tfile" 2>&1)
   if printf '%s\n' "$OUT" | grep -q "^FAIL: $aid"; then
     ok "  plant $tfile [$aid] fired"
@@ -170,15 +193,17 @@ done <"$DECLS"
 # PC1 — every plant fired. A plant that does not fire names an assertion pinning nothing, which is
 # the whole reason this file exists.
 if [ -z "$NOFIRE" ]; then
-  ok "PC1 every declared plant fired ($RUN_N run)"
+  ok "PC1 every declared plant fired ($RAN_N of $RUN_N declarations run)"
 else
   bad "PC1 plant(s) that did not fire — those assertions pin nothing:$NOFIRE"
 fi
 
-# PC2 — every plant is itself well-formed. A plant matching zero or many sites proves nothing about
-# the assertion, and reads as coverage.
+# PC2 — every plant is itself USABLE. Three ways it is not: the target does not exist, the needle
+# matches zero or many sites, or the declaring harness cannot be attributed against. All three
+# prove nothing about the assertion while reading as coverage. The pass label named only the
+# middle one, which was already narrower than the check before the third was added.
 if [ -z "$BADPLANT" ]; then
-  ok "PC2 every plant declaration resolved to exactly one site"
+  ok "PC2 every plant declaration is usable (target, single match, attributable harness)"
 else
   bad "PC2 malformed plant(s):$BADPLANT"
 fi
