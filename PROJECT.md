@@ -1214,8 +1214,8 @@ from inside the runner.** #363 and #364 in particular block a multi-feature nigh
 second feature cannot be published until both are resolved, so the waves below stay unreachable
 regardless of how the budget is set.
 
-- [ ] Gate 4.0's branch name and publish-feature.sh's expected branch never coincide  (issue #363)
-- [ ] nothing states what feature N+1's branch forks from  (issue #364)
+- [x] Gate 4.0's branch name and publish-feature.sh's expected branch never coincide  (issue #363)  (completed: 2026-08-05)
+- [x] nothing states what feature N+1's branch forks from  (issue #364)  (completed: 2026-08-05)
 - [ ] a nightly run cannot be scoped to a wave and the turn budget is ~4x miscalibrated  (issue #365)
 - [ ] SKILL.md bash fences assume bash word-splitting and break under zsh  (issue #366)
 
@@ -1223,3 +1223,116 @@ Measured, and worth carrying into whatever fixes #365: **a full standard chain c
 orchestrator turns**, not the ~15 the RUNBOOK's 200-for-13 example implies. A 110-turn budget
 delivered one feature. Re-derive the figure across more than one feature before trusting it —
 n=1, and a 4-task plan will not cost what a 9-task plan did.
+
+A fifth defect, found on 2026-08-06 while preparing the second run: an unattended PR carried no
+closing reference, so a feature's issue survived its own merge (issue #370, ADR-0128, merged in
+PR #371). It is filed under Phase 11 rather than here because it was not found by the run.
+
+### Phase 11 — what autopilot needs before it is the primary way this repo is coded (attended)
+
+**The 33 open rows above are the backlog autopilot is meant to CONSUME. This phase is a different
+thing**: what has to be true before consuming them unattended is a reasonable act rather than a
+gamble. Written 2026-08-06, after #363, #364 and #370 closed, which leaves exactly one structural
+blocker.
+
+**Attended, and a table rather than a checklist, for the Phase 10.0 reason.** `project-conductor`
+takes the first `- [ ]` line in this file; every item below lives inside the runner's own
+machinery, so the runner cannot be the thing that repairs it. A table is invisible to the
+conductor by construction. Phase 10.1 used checkboxes and is the counter-example: two of its rows
+stayed unticked for a day after merging, and a run picking one would have re-implemented finished
+work.
+
+**The measured baseline.** Exactly one feature has ever been delivered end to end unattended
+(#292, PR #362, 2026-08-04). That single run produced four defects, three of which exist only
+while a run is in flight. **Every budget figure in this repository is n=1.** Note also what #370
+did *not* prove: its issue closed because a human wrote the keyword into PR #371 by hand. The
+shipped mechanism is unproven until an unattended run opens its own PR — which is Wave 2.
+
+#### Wave 1 — bound the run (issue #365)
+
+The only structural blocker. Without a bound there is no way to use autopilot except "run the
+whole roadmap": a launch today attempts all 33 open rows above, and the only brakes are the
+`/goal` turn budget and a human hand.
+
+| item | state |
+|---|---|
+| `--features N` / `--only <slug>`, plus a `scope:` block in `.claude/autopilot.yml` | issue #365, Part 4 of ADR-0127. `/skill autopilot` takes no arguments today, so this **is** the bound — not one of several |
+| **remove `token-budget` outright**: the read in `autopilot-guard.sh`, the clear in `autopilot-disarm.sh`, and the claim in `autopilot/SKILL.md` | decided 2026-08-06, superseding ADR-0127 Part 4's "wire the dead halt". See the three findings below |
+| a producer for `rtf-blocker`, or its honest removal | ADR-0127 §D6 left it deliberately unproduced pending an ADR-0111-shaped decision; ledger `VCS-010`. Decide it on the same terms: **a halt nothing can raise is not a safeguard, it is a comment** |
+| `autopilot/SKILL.md` stops asserting both producers exist | it states they are "written by the review step and this skill's `/goal` overlay respectively". Neither is. An instruction naming a mechanism that does not exist is the ADR-0109 class |
+| turn budget recalibrated, with the report recording ACTUAL per-feature turns | so the figure is re-derived from runs rather than re-estimated from one |
+
+**Why `token-budget` is removed rather than wired**, in the order the findings landed, because the
+first two look like implementation gaps and only the third settles it:
+
+1. **The proposed producer cannot produce what the consumer reads.** Part 4 accumulates `spent=`
+   from `step5-report.json`'s `task_metrics`, citing ADR-0064 — whose four fields are
+   `test_count_delta`, `deleted_lines`, `iteration_count` and `elapsed_wall_seconds`. **No token
+   count appears in any of them.** The file's name and its stated source are about different
+   quantities.
+2. **That block does not exist anyway.** The only real `step5-report.json` on disk carries no
+   `task_metrics` at all. `agent-metrics.test.sh` GA1/GA2 assert the field name appears in the
+   **schema block inside SKILL.md**, never that a produced report contains it — a green schema over
+   an empty report.
+3. **The halt is structurally unable to do its job.** `autopilot-guard.sh` is a `PreToolUse` hook on
+   `git push` / `gh pr create`, so it gets a turn only at publish — once per feature, at the end —
+   and ADR-0127 R-04 states the bound is checked between features and never mid-feature. A ceiling
+   evaluated afterwards **cannot stop the feature that exceeds it, only the one after**. That is
+   cumulative drift, which is exactly what `--features N` already bounds, deterministically and
+   without a second number to reason about.
+
+**The accepted cost, stated rather than discovered later: there is no spend ceiling.** An anomalous
+feature costs what it costs, and the only brakes are the feature count and `/goal`'s turn budget.
+
+**If a spend ceiling is ever wanted, it does not come from `task_metrics`.** The only place in this
+system that knows about tokens is the transcript — `usage-report.py` and `context-occupancy.sh`
+read `input_tokens`, `output_tokens` and `cache_*` from it. Any future bound starts there, is
+per-session rather than per-feature, and still cannot stop a feature already in flight. Recorded so
+the next author does not rebuild it from the same wrong source.
+
+#### Wave 2 — the two-feature run (needs an issue)
+
+The only instrument that finds what reading does not: the 2026-08-04 run produced four defects no
+sweep had produced, and this session's reading produced a fifth only because it went looking at
+the PR body. Definition of done is ADR-0127's own verification 6 — **two independent PRs, each
+forked from the prep branch, each based on `main`, with the conductor never re-picking feature 1**
+— plus the first evidence that `publish-feature.sh --issue` closes an issue without a human
+writing the keyword.
+
+#### Wave 3 — design-artifact quality (needs issues)
+
+The coverage is asymmetric, and the asymmetry is invisible until you tabulate it.
+
+| artefact | what checks it today | what does not exist |
+|---|---|---|
+| SPEC | `spec-issue-gate.sh` (thin/vague issue → skip), `spec-coverage.sh` (ids vs plan vs tests), `spec-normalize-ids.sh` (repair) | nothing requires a **generated** SPEC to declare at least one `R-NN`. ADR-0048 §RE makes a SPEC with no ids pass silently — correct for the 68 historical ones, wrong for one a machine just wrote. Measured 2026-08-06: all five Phase-P SPECs do declare ids (3, 4, 3, 5, 6), so this is a guard on a property that currently holds |
+| ADR | `markdownlint`, and nothing else | no structural check (Status, Date, Decisions, Consequences, the `Detail:` pointer), and nothing verifies the `Files:` list matches the diff the ADR ships with |
+| plan | `plan-tasks.sh --count >= 1`, `diff-budget-check.sh` | nothing checks a task traces to a requirement **at the moment the plan is written**. `spec-coverage.sh` catches it at the Step 5 → Step 6 gate, which is after the implementation |
+| PROJECT.md | `roadmap-from-issues.sh` writes one row per issue with an `(issue #N)` marker | nothing verifies the marker survives the edits made to its own line — which is issue #370 one level up, and the checkbox flip is the thing that eats it |
+
+#### Wave 4 — the fences under the real shell (issue #366)
+
+138 bash fences assume bash word-splitting; this shell is zsh, where an unquoted expansion does
+not split. #366 R-02 asks the prior question — are fences portable, or pinned to `bash`? — and the
+answer governs every skill, not just this runner.
+
+#### Wave 5 — observability across runs (ledger `VCS-004`, needs an issue)
+
+`.claude/autopilot-report.json` is gitignored, so a run's spend and per-feature metrics survive
+only on the machine that produced them. Every number in Wave 1's last row depends on this
+existing first: a budget cannot be re-derived from runs that leave no comparable trace.
+
+#### Wave 6 — the permission wall (ADR-0116, needs an issue)
+
+`acceptEdits` is measured insufficient for this chain's Bash surface and `bypassPermissions` is
+the only mode that works, so every launch is a manual mode change. Nothing verifies that a given
+repo's allowlist covers the surface the chain actually invokes; building that means enumerating a
+surface that is currently prose spread across several SKILL.md files.
+
+#### Ordering, and why quality is not first
+
+**1 → 2 → 3, then 4, 5 and 6 re-ranked by what the run shows.** Wave 3 is the stated priority and
+still goes third: the SPECs for all 33 open rows are already generated and correct, so its gates
+protect *future* generations, while Wave 2 is cheap and has a track record of rewriting the
+priority of everything after it. Wave 1 comes first because every measurement Waves 2-6 depend on
+needs a run that can be stopped.
