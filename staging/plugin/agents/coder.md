@@ -3,7 +3,7 @@ name: coder
 description: Use this agent when an approved plan or ADR exists and production code must be implemented to match it. Implements exactly to the plan, matches existing style, verifies before declaring done, and never commits.
 tools: Read, Edit, Write, Glob, Grep, Bash, LSP, Memory, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__eslint__check_file, mcp__eslint__fix_file, mcp__eslint__list_rules
 model: sonnet
-effort: high
+effort: xhigh
 color: green
 isolation: worktree
 memory: local

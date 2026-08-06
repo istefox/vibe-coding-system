@@ -76,7 +76,7 @@ fi
 # =====================================================================================
 # C. Fix agents. agentType is chosen at runtime from fix_type, so the effort cannot be a
 # literal — it needs a lookup keyed by the same value.
-if grep -q 'const FIX_EFFORT = { debugger: "high", refactorer: "medium", coder: "high" };' "$STEP6"; then
+if grep -q 'const FIX_EFFORT = { debugger: "high", refactorer: "medium", coder: "xhigh" };' "$STEP6"; then
   ok "C1: FIX_EFFORT map present with the three fix-agent types"
 else
   bad "C1: FIX_EFFORT map missing or values changed"
