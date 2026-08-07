@@ -165,7 +165,13 @@ CLEARED=""
 # here with the rest of the transient set: it answers "what has THIS run published", so carrying it
 # into the next run would make the conductor skip features that never ran, which is the opposite of
 # the defect it exists to fix. The durable record of what is done stays PROJECT.md's checkboxes.
-for f in "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/token-budget" \
+#
+# `scope` is the run-scoped feature bound written by `autopilot` Phase 0 check 9 (issue #365,
+# ADR-0129 §D1) — `--features`/`--only`, resolved against PROJECT.md and read by the conductor at
+# every re-invocation. It is cleared here for the same reason as `published`: carrying it into the
+# next run would silently bound a run nobody bounded, the mirror of the failure `published` avoids
+# by being cleared rather than kept.
+for f in "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/scope" \
          "$SDIR/published" "$SDIR/started-at" "$ROOT/.claude/needs-human"; do
   [ -e "$f" ] || continue
   if rm -f "$f" 2>/dev/null; then

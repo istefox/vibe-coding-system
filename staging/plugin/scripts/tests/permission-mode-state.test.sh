@@ -296,9 +296,13 @@ printf '%s' "$NAFLAT" | grep -qi 'permissions is not one of them' \
   && ok "PMP1 the launch order says /permissions does not set the mode" \
   || bad "PMP1 the launch order still implies /permissions sets the mode; it manages allow/ask/deny rules"
 
-printf '%s' "$NAFLAT" | grep -qi 'must not be added as a ninth' \
-  && ok "PMP2 Phase 0 says the posture check is not a ninth check there" \
-  || bad "PMP2 nothing stops a future reader adding a second posture check inside Phase 0"
+# PMP2 is re-anchored count-free (issue #365, Task 7): a needle on a count rots at every
+# subsequent addition (ADR-0067 §F5) — check 9 (autopilot-scope-resolve) is what made the old
+# 'a ninth' wording wrong the moment it landed.
+# plant: PMP2 | plugin/skills/autopilot/SKILL.md | is not one of the checks in this section, and must not be added as one | is not one of the checks in this section
+printf '%s' "$NAFLAT" | grep -qi 'is not one of the checks in this section, and must not be added as one' \
+  && ok "PMP2 Phase 0 says the posture check is not one of the section's checks, and must not be added as one" \
+  || bad "PMP2 the count-free clause is missing — nothing stops a future reader re-adding a numbered posture check to Phase 0"
 
 printf '%s' "$ABFLAT" | grep -qi 'nine checks, all read-only Bash' \
   && ok "PMP3 autopilot-build's Phase 0 header counts the new check" \

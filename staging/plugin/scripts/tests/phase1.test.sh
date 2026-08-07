@@ -41,13 +41,9 @@ R=$(mkroot rtf); printf 'BLOCKER: auth bypass' > "$R/.claude/autopilot-state/rtf
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "guard: rtf-blocker halts" || no "guard: rtf-blocker halts"
 
-R=$(mkroot budg); printf 'limit=1000\nspent=1200\n' > "$R/.claude/autopilot-state/token-budget"
-"$GUARD" --check "$R" >/dev/null 2>&1
-[ $? -eq 2 ] && ok "guard: budget exceeded halts" || no "guard: budget exceeded halts"
-
-R=$(mkroot budg2); printf 'limit=1000\nspent=500\n' > "$R/.claude/autopilot-state/token-budget"
-"$GUARD" --check "$R" >/dev/null 2>&1
-[ $? -eq 0 ] && ok "guard: budget under limit allows" || no "guard: budget under limit allows"
+# token-budget's two assertions ("budget exceeded halts" / "budget under limit allows") are
+# removed here: the mechanism they exercised is gone (issue #365, ADR-0129 §D6 — the halt was
+# structurally unable to do its job, evaluated only at publish, after the feature that breached it).
 
 "$GUARD" --check "/no/such/dir/xyz" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "guard: invalid root fail-safe blocks" || no "guard: invalid root fail-safe blocks"

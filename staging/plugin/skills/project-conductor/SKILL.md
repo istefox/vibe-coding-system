@@ -163,6 +163,84 @@ If ALL features are `[x]` or `[~]`: go to Step 7 (project complete).
 
 Otherwise: find the first `- [ ]` line. Extract `<next-feature>` and `<next-phase>`. Go to Step 3.
 
+**In `autopilot` mode this run may be bounded by `--features`/`--only` (issue #365, ADR-0129
+§D1/§D2/§D4/§D5).** `autopilot` Phase 0 check 9 resolves the bound once, before Phase 1 starts, into
+`.claude/autopilot-state/scope`; this gate reads that file, plus the same `published` ledger
+`conductor-published-skip` reads immediately below. **It runs first, immediately before that check,
+because an exhausted run ends regardless of which candidate is next** — exhaustion is a property of
+the run, not of this particular slug — **and both checks read the same ledger**, so deciding "has
+the run run out" before deciding "has THIS slug already published" settles the run-level question
+first, rather than risking two fences drifting on what it means. The two do not share a single
+read: this gate counts `published`'s lines, `conductor-published-skip` matches one slug in it.
+
+This is a **CHECKER**: branch on its exit code. Exit 3 means the scope file exists but could not be
+read, which is not the same as no scope file at all — an unbounded run.
+
+<!-- fence-contract: conductor-scope-gate -->
+```bash
+# Free variables, bound by the orchestrator: _root, _feature (the candidate roadmap line's exact
+# text, no checkbox marker), _autopilot. Inert unless _autopilot=true.
+_sf="$_root/.claude/autopilot-state/scope"
+if [ "${_autopilot:-false}" != "true" ]; then
+  echo "SCOPE-GATE: INACTIVE — attended mode, no bound is in effect."
+elif [ ! -e "$_sf" ]; then
+  echo "SCOPE-GATE: NONE — no scope file; this run is unbounded."
+elif [ ! -r "$_sf" ]; then
+  echo "SCOPE-GATE: DID-NOT-RUN — $_sf exists but cannot be read."
+  exit 3
+else
+  _features=$(grep '^features=' "$_sf" | sed 's/^features=//' | head -1)
+  case "$_features" in
+    ''|*[!0-9]*) _features="" ;;
+  esac
+  _exhausted=0
+  if [ -n "$_features" ]; then
+    _pub="$_root/.claude/autopilot-state/published"
+    if [ -e "$_pub" ]; then
+      _delivered=$(grep -c . "$_pub" 2>/dev/null)
+      case "$_delivered" in
+        ''|*[!0-9]*) _delivered=0 ;;
+      esac
+    else
+      _delivered=0
+    fi
+    [ "$_delivered" -ge "$_features" ] && _exhausted=1
+  fi
+  if [ "$_exhausted" = "1" ]; then
+    echo "SCOPE-GATE: EXHAUSTED — $_delivered/$_features delivered."
+    exit 2
+  elif grep -q '^only=' "$_sf" 2>/dev/null; then
+    if grep -qxF "only=$_feature" "$_sf"; then
+      echo "SCOPE-GATE: IN-SCOPE — '$_feature' is in the only= list."
+    else
+      echo "SCOPE-GATE: OUT-OF-SCOPE — '$_feature' is not in the only= list."
+      exit 1
+    fi
+  else
+    echo "SCOPE-GATE: IN-SCOPE — no only= list; every row is in scope."
+  fi
+fi
+```
+
+Branch on the exit code:
+- **`0`** (`INACTIVE`, `NONE`, `IN-SCOPE`) → proceed to `conductor-published-skip`, below.
+- **`1`** (`OUT-OF-SCOPE`) → skip this line and take the next `- [ ]`, exactly as `ALREADY`.
+- **`2`** (`EXHAUSTED`) → emit `"project-conductor · SCOPE EXHAUSTED · <delivered>/<requested>"` and
+  go to **Step 6B**. Write **no** `[~]`, **no** `skipped-features` entry and **no** `needs-human`.
+- **`3`** (`DID-NOT-RUN`) → write `needs-human` with the printed reason and go to Step 6B.
+
+**Why `2` writes nothing, and this supersedes ADR-0127 §D7 in part (ADR-0129 §D5).** ADR-0127 §D7
+said a bounded run that runs out "marks the next feature `[~]`, appends to `skipped-features`, and
+stops". Measured: Step 2 above always selects the **first** `- [ ]` line, so a `[~]` marker sitting
+on the next feature is invisible to it **permanently** — under §D7's text every bounded run would
+leave a feature behind that no later run ever picks up without a human editing `PROJECT.md` by hand,
+quietly deleting work from the roadmap. A feature count is checked *between* features, never
+mid-feature, so there is nothing half-attempted to mark and nothing to skip: the first unreached
+feature simply stays `- [ ]`, ready for the next run. **The rest of §D7 is not superseded and still
+stands: this branch must never write `needs-human`, and running out of budget must be the *least*
+alarming way for a long session to end** — exactly like reaching the end of the roadmap at Step 7,
+never like a fault.
+
 **In `autopilot` mode the run's OWN ledger overrides the checkbox (issue #364, ADR-0127 §D4).**
 `PROJECT.md` is marked `[x]` on the feature branch and never on the base the next feature forks
 from, so the checkbox for a feature that just published still reads `[ ]` here and the loop would
@@ -490,6 +568,18 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
   printf '%s\n' "<topic-slug>" >> "$_root/.claude/autopilot-state/published"
   ```
   Append-only and never rewritten, so a re-run that crashes mid-roadmap still knows what shipped.
+
+  **This append is also the `delivered` counter `conductor-scope-gate` reads, deliberately not a
+  second counter (issue #365, ADR-0129 §D4).** `--features N` promises N publishes, never N
+  attempts; a separate `delivered` file would be a second producer of the same fact, able to
+  disagree with this one in the window between the push and its own write. If this ledger is ever
+  optimised — deduplicated, rewritten in place, rotated, or replaced by an in-memory count — the
+  scope gate's exhaustion check silently disagrees with what actually shipped: a shrunk or rewritten
+  ledger under-reports `delivered` and the run overshoots its bound; a padded or duplicated one
+  over-reports it and the run stops early, leaving reachable work `- [ ]` for no reason. Append-only,
+  one line per publish, is what keeps `conductor-published-skip` and `conductor-scope-gate` — the
+  two readers of this file — looking at the same fact.
+
   The helper prints a `AUTOPILOT-PUBLISH <slug> PR=<url>` line for the `/goal` evaluator and the
   morning report. If the helper exits non-zero (guard HALT or push/PR failure), the guard's halt
   conditions (`needs-human`, `rtf-blocker`, budget) are run-level, so STOP the roadmap: record the
