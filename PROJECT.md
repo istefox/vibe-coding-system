@@ -1216,7 +1216,7 @@ regardless of how the budget is set.
 
 - [x] Gate 4.0's branch name and publish-feature.sh's expected branch never coincide  (issue #363)  (completed: 2026-08-05)
 - [x] nothing states what feature N+1's branch forks from  (issue #364)  (completed: 2026-08-05)
-- [ ] a nightly run cannot be scoped to a wave and the turn budget is ~4x miscalibrated  (issue #365)
+- [x] a nightly run cannot be scoped to a wave and the turn budget is ~4x miscalibrated  (issue #365) (completed: 2026-08-07)
 - [ ] SKILL.md bash fences assume bash word-splitting and break under zsh  (issue #366)
 
 Measured, and worth carrying into whatever fixes #365: **a full standard chain costs roughly 50
