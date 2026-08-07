@@ -219,9 +219,8 @@ R=$(mkroot ee_rtf); printf 'BLOCKER: auth bypass' > "$R/.claude/autopilot-state/
 "$GUARD" --check "$R" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "EE3: rtf-blocker still halts (regression guard)" || bad "EE3: rtf-blocker no longer halts"
 
-R=$(mkroot ee_budg); printf 'limit=1000\nspent=1200\n' > "$R/.claude/autopilot-state/token-budget"
-"$GUARD" --check "$R" >/dev/null 2>&1
-[ $? -eq 2 ] && ok "EE4: token budget exceeded still halts (regression guard)" || bad "EE4: budget breach no longer halts"
+# EE4 (token budget exceeded still halts) is removed here: the mechanism it exercised is gone
+# (issue #365, ADR-0129 §D6 — the halt was structurally unable to do its job).
 
 # EE5 — a needs-human marker halts EVEN WHEN a skip note is also present (the two files must be
 # read independently — the skip note must never mask a genuine run-level halt).

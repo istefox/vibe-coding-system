@@ -3533,3 +3533,59 @@ Known consequences, recorded rather than fixed:
   both before citing either.
 
 Detail: `docs/architecture/ADR-0125-292-value-domain-guard-two-fields.md`.
+
+## Decisions from the autopilot scope-and-bound chain (ADR-0129)
+
+Closes issue #365, Phase 11 Wave 1. `autopilot` took **no arguments**, so a launch attempted every
+unchecked row of `PROJECT.md` — 33 of them — and the only brakes were the `/goal` turn budget and a
+human hand. It gains `--features N`, `--only <token>`, `--dry-run`, and an optional durable `scope:`
+block in `.claude/autopilot.yml`.
+
+- **`token-budget` is REMOVED, not wired, and the reason that settles it is structural.** Two
+  findings look like implementation gaps: the producer ADR-0127 Part 4 proposed reads
+  `step5-report.json`'s `task_metrics`, whose four ADR-0064 fields carry **no token count**, and no
+  real report has that block at all — `agent-metrics.test.sh` GA1/GA2 assert the field name in the
+  **schema inside SKILL.md**, a green schema over an empty report. The third decides:
+  `autopilot-guard.sh` is a `PreToolUse` hook on the publish, so a ceiling evaluated afterwards
+  **cannot stop the feature that breached it, only the one after** — which is cumulative drift, what
+  `--features N` already bounds. **Accepted cost, stated rather than discovered: there is no spend
+  ceiling.** If one is ever wanted it starts at the transcript (`usage-report.py`,
+  `context-occupancy.sh`), is per-session not per-feature, and still cannot stop a feature in flight.
+- **`rtf-blocker` keeps its mechanism and the verdict is NOT transferred** (§D6, stated in terms so
+  the next reader does not tidy it away for consistency). That halt would work the moment something
+  wrote it; `token-budget`'s could not. Its corrected sentence carries a **measured** reason rather
+  than a deferral: `concept-to-code` Gate 5's autopilot default is "Skip review" and
+  `project-conductor` invokes `concept-to-code` on **both** branches, never `autopilot-build` — so
+  **no review cycle runs during an unattended roadmap run at all**, and a producer inside
+  `review-triage-fix` could never fire where the guard that reads the file exists. That larger gap
+  is recorded in Phase 11, not fixed here.
+- **A slot is consumed by a PUBLISH, and `delivered` is the line count of the existing `published`
+  ledger** (§D4) — one writer, one append per successful publish, already run-scoped and already
+  cleared by the same disarm. A second counter would be a second producer of one fact with a crash
+  window between them. Read with the guard's own idiom, never `grep -c … || echo 0`, which yields a
+  two-line `0\n0` (issue #174).
+- **Running out of slots leaves the roadmap untouched, superseding ADR-0127 §D7 IN PART** (§D5).
+  §D7 said the run marks the next feature `[~]`; measured, `project-conductor` Step 2 selects the
+  first `- [ ]` line, so **`[~]` is permanent** and every bounded run would quietly delete a feature
+  from the roadmap. The other half of §D7 stands: never write `needs-human`. The clause was correct
+  for a *token* bound, which can be reached mid-feature; a feature count is checked between
+  features, so there is nothing to skip. ADR-0042's precedent — one clause, named, rest standing.
+- **The scope travels as a file, `<root>/.claude/autopilot-state/scope`,** on the exact terms
+  `published` already established, and it **stores the roadmap line text, never a re-derived slug**
+  (§D2): the conductor derives a topic-slug in four places and a fifth derivation is ADR-0069's
+  defect. `--only`'s slug form is **match-only**, so a disagreement produces a loud unresolved-token
+  abort, never a silently wrong selection. An argument discards the marker's `scope:` block **whole**
+  — per-key override lets a stale `only:` survive a `--features` that meant something else.
+- **`--only` resolves an issue number first** (`--only 293,294`), a full topic-slug second; a token
+  that resolves as neither **aborts in Phase 0**, before anything is written. The number is already
+  on the roadmap line and is the same source ADR-0128 just made authoritative for `Closes #N`.
+
+Known consequences, recorded rather than fixed: the stale scope file is **ADR-0112's class**,
+mitigated only by the disarm clearing it, exactly as `published` is; three test assertions are
+deleted and `weakening-scan.sh` will flag the diff, which no rule over a diff can distinguish from a
+relaxation (ADR-0073); `autopilot-guard-disarm.test.sh` `D2` counts `>= 6` cleared files, so
+removing `token-budget` without adding `scope` **in the same change** turns it red; Phase 0 gains a
+ninth check, so ADR-0110's own sentence stops carrying a count and `permission-mode-state.test.sh`
+PMP2 is re-anchored count-free.
+
+Detail: `docs/architecture/ADR-0129-365-scope-and-bound-the-autopilot-run.md`.

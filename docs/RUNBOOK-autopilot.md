@@ -95,8 +95,16 @@ auto-design mode you only need the labeled issues and the `prep:` marker (Phase 
    ```
    /goal "Every feature in PROJECT.md is [x], committed on feat/*, pushed, and a PR is open,
    as shown by a AUTOPILOT-PUBLISH line for each feature and no AUTOPILOT-GUARD HALT line.
-   Or stop after 200 turns."
+   Or stop after N × 60 turns."
    ```
+
+   `N` is the number of features you are launching. **60 is ~50 orchestrator turns measured plus
+   margin, from a single chain (sample size: n = 1, ADR-0129 §D11) — not a precise per-feature
+   cost.** The turn budget is a **fail-safe for a run that hangs, not the bound**: the old
+   spend-based ceiling is gone (issue #365), so `--features N` is what actually bounds the run, and
+   this number only exists to stop a stuck session from burning turns forever. Re-derive it from
+   the morning report's `scope.turns_per_feature` rather than re-estimating it by hand, once you have
+   a real run to measure from.
 
 3. **Launch:**
    ```
@@ -184,7 +192,7 @@ it is how `autopilot` Phase 2 clears the state of the run it is itself ending, s
 the owning session and refuses everyone else. Passing it by hand to clear somebody else's stale
 marker will be refused, and correctly — you are not that run.
 
-It clears the whole transient set, because the marker is only one of five ways to be stuck:
+It clears the whole transient set, because the marker is only one of four ways to be stuck:
 
 | file | what it does while present |
 | --- | --- |
@@ -192,7 +200,6 @@ It clears the whole transient set, because the marker is only one of five ways t
 | `.claude/autopilot-state/build-status` reading `RED` | halts every publish, marker or not |
 | `.claude/needs-human` | halts every publish, and prints its first line as the reason |
 | `.claude/autopilot-state/rtf-blocker` | halts every publish |
-| `.claude/autopilot-state/token-budget` with `spent >= limit` | halts every publish |
 
 When the marker was armed by another session, the halt message names the owner, the time, and this
 command — so you should not need this page twice.

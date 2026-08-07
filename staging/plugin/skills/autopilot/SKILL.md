@@ -34,11 +34,34 @@ mechanics unchanged.
 ## 1. When to invoke
 
 ```
-/skill autopilot
+/skill autopilot [--features N] [--only <token>[,<token>]] [--dry-run]
 ```
 
 Project root = `$PWD`. Run this only after the evening design gate is done: SPEC/ADR/plan approved for
 each roadmap feature, or a roadmap of features whose chains will run in autopilot.
+
+**Arguments (issue #365, ADR-0129 §D1/§D3):**
+- `--features N` — cap the run at `N` successful publishes, `N` a positive integer. Absent means
+  uncapped, exactly as before this feature. A publish is a slot consumed; a feature skipped for a
+  known contained reason is not (§D4) — `--features 2` promises two PRs or an exhausted roadmap,
+  never two rows examined.
+- `--only <token>[,<token>]` — scope the run to specific roadmap rows. Each token resolves, in
+  order: first as an issue number (`293`) matched against the roadmap's `(issue #N)` marker with
+  the **closing parenthesis included** in the needle, so `29` never resolves to `(issue #293)`;
+  second as a full topic-slug, for a hand-written row that carries no issue marker (§D3). A token
+  resolving as neither, or resolving to more than one row, aborts Phase 0 pre-flight before any
+  feature starts, naming the token — a bound nobody wrote is worse than no bound.
+- `--dry-run` — resolve and print the scope, touch nothing, and stop. See Phase S below.
+
+**Passing `--features` or `--only` discards the WHOLE `.claude/autopilot.yml` `scope:` block, not
+just the keys it names (ADR-0129 A4).** Per-key override was considered and rejected on a concrete
+failure: an `only:` list left in the marker from last week would survive a `--features 2` that meant
+something else entirely, the operator would get one feature instead of two, and nothing on screen
+would explain why. One source is in effect at a time, printed by Phase S below, never a silent merge
+of two.
+
+With no scoping argument the run behaves exactly as before this feature: uncapped, reading a
+`scope:` block from the opt-in marker if one is present there, none if not (§1.5 Phase P).
 
 **Launch order (see `docs/RUNBOOK-autopilot.md`):**
 1. Set **`bypassPermissions`**. It is the only mode under which no per-tool prompt can fire, and
@@ -68,9 +91,168 @@ will not re-enter after a turn ends.
 
 ---
 
+## 1.3 Phase S — Resolve the run scope (issue #365, ADR-0129)
+
+**Runs FIRST, before Phase M.** A `--features 0` typo must not cost a Phase P run, and a `--dry-run`
+must not trigger Phase P's writes — both phases downstream do real work (Phase M can stall on a
+blocking permission prompt with nobody present, Phase P writes `.claude/test-cmd`, `PROJECT.md` and
+per-feature SPECs), so the argument-and-marker parse that can reject the launch outright runs before
+either gets a turn.
+
+It reads the `--features`/`--only`/`--dry-run` arguments and the opt-in marker
+(`.claude/autopilot.yml`) and **nothing else** — in particular not `PROJECT.md`, which in
+auto-design mode does not exist yet at this point in the launch (§D7).
+
+**This is a CHECKER: the caller branches on the exit code** — the opposite idiom from a REPORTER,
+which always exits 0 and signals through stdout alone (ADR-0047 §D8: this file names no fourth
+call site for that mechanism, so the contrast is stated generically here).
+
+<!-- fence-contract: autopilot-scope-args -->
+```bash
+_cli_features=""
+_cli_only=""
+_dry_run=false
+_has_scoping_arg=0
+_seen_features=0
+_seen_only=0
+
+set -- $_args
+while [ $# -gt 0 ]; do
+  case "$1" in
+    # A value that is absent, or that is itself a flag, counts as NOT SUPPLIED — never as an
+    # empty value silently accepted. `--features` with nothing after it used to set
+    # _has_scoping_arg=1 (discarding the marker's scope: block) while leaving _cli_features
+    # empty, so the positive-integer guard below never ran and the run came out UNBOUNDED.
+    # A one-token operator typo defeated the whole feature with nothing on screen.
+    --features)
+      _seen_features=1
+      _has_scoping_arg=1
+      case "${2:-}" in
+        ''|-*) _cli_features=""; shift ;;
+        *) _cli_features="$2"; shift 2 ;;
+      esac
+      ;;
+    --only)
+      _seen_only=1
+      _has_scoping_arg=1
+      case "${2:-}" in
+        ''|-*) _cli_only=""; shift ;;
+        *) _cli_only="$2"; shift 2 ;;
+      esac
+      ;;
+    --dry-run)
+      _dry_run=true
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+_source=none
+_features=""
+_only=""
+
+if [ "$_has_scoping_arg" -eq 1 ]; then
+  # Any scoping argument discards the marker's scope: block WHOLE (ADR-0129 A4) — no per-key
+  # merge, so a stale only: left in the marker cannot silently survive a --features override.
+  _source=arguments
+  # An absent value is exactly as much an operator error as `0` or `x`, and only the latter two
+  # were ever caught. A bound nobody wrote is worse than no bound, so refuse rather than proceed.
+  if [ "$_seen_features" -eq 1 ] && [ -z "$_cli_features" ]; then
+    echo "✗ scope: --features was passed with no value — say how many features, or omit the flag"
+    exit 2
+  fi
+  if [ "$_seen_only" -eq 1 ] && [ -z "$_cli_only" ]; then
+    echo "✗ scope: --only was passed with no value — name the features, or omit the flag"
+    exit 2
+  fi
+  _features="$_cli_features"
+  _only="$_cli_only"
+else
+  _marker="$_root/.claude/autopilot.yml"
+  if [ -f "$_marker" ]; then
+    if [ ! -r "$_marker" ]; then
+      echo "✗ scope: $_marker exists but is not readable — DID-NOT-RUN"
+      exit 3
+    fi
+    if grep -qE '^scope:[[:space:]]*$' "$_marker"; then
+      _scope_block=$(awk '
+        /^scope:[[:space:]]*$/ { found=1; next }
+        found {
+          if ($0 ~ /^[[:space:]]+/) { print; next }
+          exit
+        }
+      ' "$_marker")
+      if [ -z "$_scope_block" ]; then
+        echo "✗ scope: the scope: block is empty (in $_marker) — a malformed bound must not read as an absent one"
+        exit 2
+      fi
+      _source=marker
+      # Both keys are unwrapped of surrounding double quotes, in the SAME two-step shape, because
+      # they come from one YAML block and `features: "2"` is as legal as `only: "293,294"`.
+      # Stripping one and not the other made a quoting style this very doc block demonstrates
+      # hard-abort the pre-flight. If a third key is ever read here, give it this shape too.
+      _marker_features_raw=$(printf '%s\n' "$_scope_block" | grep -E '^[[:space:]]*features:' | head -1 | sed -E 's/^[[:space:]]*features:[[:space:]]*//')
+      _marker_features=$(printf '%s' "$_marker_features_raw" | sed -E 's/^"//; s/"$//')
+      _marker_only_raw=$(printf '%s\n' "$_scope_block" | grep -E '^[[:space:]]*only:' | head -1 | sed -E 's/^[[:space:]]*only:[[:space:]]*//')
+      _marker_only=$(printf '%s' "$_marker_only_raw" | sed -E 's/^"//; s/"$//')
+      _features="$_marker_features"
+      _only="$_marker_only"
+    fi
+  fi
+fi
+
+if [ -n "$_features" ]; then
+  _feat_bad=0
+  case "$_features" in
+    *[!0-9]*) _feat_bad=1 ;;
+  esac
+  if [ "$_feat_bad" -eq 0 ] && [ "$_features" -eq 0 ]; then
+    _feat_bad=1
+  fi
+  if [ "$_feat_bad" -eq 1 ]; then
+    # Name the SOURCE: this branch is shared by the CLI flag and the marker file, and a message
+    # that always says "--features" sends whoever set `features:` in .claude/autopilot.yml
+    # hunting through their command line for a value that is not there.
+    echo "✗ scope: features value '$_features' (from $_source) must be a positive integer"
+    exit 2
+  fi
+fi
+
+_line="SCOPE-PARSE: OK source=$_source features=$_features"
+if [ -n "$_only" ]; then
+  _line="$_line only=$_only"
+fi
+_line="$_line dry_run=$_dry_run"
+echo "$_line"
+echo "autopilot scope: source '$_source' is in effect (dry_run=$_dry_run)"
+exit 0
+```
+
+On exit 0, the `SCOPE-PARSE:` line is authoritative; carry `source`, `features`, `only` and
+`dry_run` into Phase M. On exit 2 (bad invocation — the offending value or the malformed block is
+named in the message) or exit 3 (the check DID NOT RUN — the marker exists but could not be read),
+abort the launch: an unread scope is not a resolved one.
+
+**`--dry-run` routing.** When `dry_run=true`, skip Phase M, Phase P and Phase 0 checks 1–8 entirely,
+run check 9's fence (`autopilot-scope-resolve`, §2) in read-only mode against the arguments this
+fence already parsed, print the resolved list and its source, and **stop** — no guard is armed, no
+file is written to `.claude/autopilot-state/`, and Phase 1 never runs. Checks 1–8 are deliberately
+skipped: they answer "may this run start" (`gh auth`, TOFU trust, branch protection), not "what
+would this run touch", and two of them make network calls a scope-only probe has no reason to pay
+for. **A dry run requires an existing `PROJECT.md`** — check 9 resolves tokens against the roadmap,
+and a roadmap Phase P has not yet generated cannot be dry-run; the fence exits 3 naming the file in
+that case (ADR-0129 §D8).
+
+On pass with `dry_run=false`, fall into Phase M.
+
+---
+
 ## 1.4 Phase M — Permission posture (issue #320, ADR-0110)
 
-**Runs FIRST, before Phase P.** Phase P writes `.claude/test-cmd`, `PROJECT.md` and per-feature
+**Runs after Phase S, before Phase P.** Phase P writes `.claude/test-cmd`, `PROJECT.md` and per-feature
 SPECs; a blocking mode stalls all of that before Phase 0 would ever get a turn, which is the same
 silent-and-late failure this check exists to close, one phase up.
 
@@ -161,7 +343,15 @@ publish: true
 prep:
   source: issues
   issues_label: release-blocker
+scope:
+  features: 2
+  only: "293,294"
 ```
+
+**The `scope:` block is optional and sets the DURABLE default Phase S reads when no `--features` or
+`--only` argument is given (issue #365, ADR-0129 §D1).** Absent, the run behaves exactly as it did
+before this feature. Passing `--features` or `--only` at launch discards this block whole, never
+merges with it (§D3/A4 — see §1 "When to invoke").
 
 Steps (each is skip-if-present):
 
@@ -215,10 +405,10 @@ reason) via the same per-feature `skipped-features` note §3.3 describes, never 
 
 Any failure writes an `aborted` report and stops. No dispatch, no push. Emit one line per check.
 
-**The permission posture is NOT one of these eight, and must not be added as a ninth.** It is
-checked in Phase M, above Phase P, because Phase P writes files and a blocking mode would stall it
-before this section ran at all (ADR-0110). Adding a copy here would be a second answer to "may this
-run start" — see `permission-mode-state.sh`'s header for why there is exactly one.
+**The permission posture is not one of the checks in this section, and must not be added as one.**
+It is checked in Phase M, above Phase P, because Phase P writes files and a blocking mode would
+stall it before this section ran at all (ADR-0110). Adding a copy here would be a second answer to
+"may this run start" — see `permission-mode-state.sh`'s header for why there is exactly one.
 
 1. **Scope guard (first):** resolve `$PWD`. Every downstream action is scoped to it. If a later
    manifest names a `project_root` outside `$PWD`, abort (same rule as autopilot-build check 1).
@@ -371,6 +561,124 @@ run start" — see `permission-mode-state.sh`'s header for why there is exactly 
    it will be green** — nothing at launch time can know whether tomorrow's markdown lints. That
    half is the morning report's per-context reconciliation in §4.
 
+9. **Run scope resolves (issue #365, ADR-0129 §D7 fence 2):**
+
+   **This is not the permission posture, and it is not the second check the header sentence above
+   forbids.** That sentence stops a SECOND answer to "may this run start" from being added to this
+   section; it does not cap the section at eight items. A ninth check answering a different question
+   — which roadmap rows this run may touch — is exactly what the reworded sentence still allows.
+
+   It resolves `--only`'s tokens against the `PROJECT.md` check 4, immediately above, has just
+   asserted exists — a genuine dependency on check 4 having already run, not a repeated existence
+   probe. A token that resolves to no row, or to more than one, aborts here, before any feature
+   starts, naming the token: the same "fail fast and loudly" direction every check in this section
+   already takes.
+
+   <!-- fence-contract: autopilot-scope-resolve -->
+   ```bash
+   # Free variables: _root ($PWD), and _scope_source/_scope_features/_scope_only/_dry_run from
+   # Phase S's SCOPE-PARSE line (source/features/only/dry_run). CHECKER: the caller branches on the
+   # exit code, the opposite idiom from a REPORTER, which always exits 0 and signals through stdout
+   # alone (ADR-0047 §D8 — this file names no fourth call site for that mechanism, so the contrast
+   # is stated generically here, as Phase S's fence already does).
+   if [ ! -f "$_root/PROJECT.md" ]; then
+     echo "✗ scope: $_root/PROJECT.md not found -- the check DID-NOT-RUN"
+     exit 3
+   fi
+   if [ ! -r "$_root/PROJECT.md" ]; then
+     echo "✗ scope: $_root/PROJECT.md exists but is not readable -- the check DID-NOT-RUN"
+     exit 3
+   fi
+
+   _resolved=""
+
+   # Zero --only tokens means EVERY roadmap row is in scope, never none (ADR-0129 §D1): the fence
+   # branches on the list being empty rather than writing an empty only= line, because the two
+   # readings of "empty" are the difference between an unscoped run and a run that does nothing.
+   if [ -n "$_scope_only" ]; then
+     _toks=$(printf '%s' "$_scope_only" | tr ',' ' ')
+     for _tok in $_toks; do
+       [ -n "$_tok" ] || continue
+
+       # 1. Issue number first (ADR-0129 §D3). The needle carries the CLOSING PARENTHESIS: "(issue
+       #    #29)" is not a substring of "(issue #293)" -- the literal ')' immediately after the
+       #    digits is what stops the token "29" resolving to the "293" row.
+       _matches=$(grep -F "(issue #$_tok)" "$_root/PROJECT.md" 2>/dev/null)
+
+       if [ -z "$_matches" ]; then
+         # 2. Full topic-slug, MATCH-ONLY (ADR-0129 §D3/A7). This is a second derivation of a value
+         #    project-conductor's own prose also derives, and the two derivations can disagree -- but
+         #    what is STORED below is the roadmap line's EXACT TEXT (§D2), never this slug, so a
+         #    disagreement here can only fail to resolve a token. It can never select the wrong
+         #    feature.
+         _slug_hits=""
+         while IFS= read -r _line; do
+           [ -n "$_line" ] || continue
+           _title=$(printf '%s' "$_line" | sed -E 's/^- \[[ xX~]\][[:space:]]*//')
+           _cslug=$(printf '%s' "$_title" | tr '[:upper:]' '[:lower:]' \
+             | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')
+           if [ "$_cslug" = "$_tok" ]; then
+             if [ -z "$_slug_hits" ]; then _slug_hits="$_line"; else _slug_hits="$_slug_hits"$'\n'"$_line"; fi
+           fi
+         done < "$_root/PROJECT.md"
+         _matches="$_slug_hits"
+       fi
+
+       if [ -z "$_matches" ]; then _n=0; else _n=$(printf '%s\n' "$_matches" | wc -l | tr -d ' '); fi
+       case "$_n" in
+         0)
+           echo "✗ scope: --only token '$_tok' resolves to no roadmap row (matched neither an issue number nor a topic-slug)"
+           exit 1
+           ;;
+         1)
+           _title=$(printf '%s' "$_matches" | sed -E 's/^- \[[ xX~]\][[:space:]]*//')
+           if [ -z "$_resolved" ]; then _resolved="$_title"; else _resolved="$_resolved"$'\n'"$_title"; fi
+           ;;
+         *)
+           echo "✗ scope: --only token '$_tok' matches more than one roadmap row -- ambiguous, refusing to guess:"
+           printf '%s\n' "$_matches" | sed -E 's/^- \[[ xX~]\][[:space:]]*/    /'
+           exit 1
+           ;;
+       esac
+     done
+   fi
+
+   if [ -n "$_resolved" ]; then
+     _rn=$(printf '%s\n' "$_resolved" | wc -l | tr -d ' ')
+   else
+     _rn=0
+   fi
+
+   echo "SCOPE-RESOLVE: OK source=$_scope_source features=$_scope_features resolved=$_rn"
+   if [ -n "$_resolved" ]; then
+     printf '%s\n' "$_resolved" | sed 's/^/  only: /'
+   else
+     echo "  (no --only tokens -- every roadmap row is in scope)"
+   fi
+
+   if [ "$_dry_run" = "true" ]; then
+     echo "scope: --dry-run -- resolution printed above, no scope file written"
+     exit 0
+   fi
+
+   _sf="$_root/.claude/autopilot-state/scope"
+   mkdir -p "$_root/.claude/autopilot-state"
+   {
+     echo "source=$_scope_source"
+     echo "features=$_scope_features"
+     if [ -n "$_resolved" ]; then
+       printf '%s\n' "$_resolved" | sed 's/^/only=/'
+     fi
+   } > "$_sf"
+   echo "scope: wrote $_sf"
+   exit 0
+   ```
+
+   On exit 0, the scope file at `<root>/.claude/autopilot-state/scope` is written — or, under
+   `--dry-run`, only printed, matching Phase S's routing paragraph. On exit 1 the message names the
+   token(s) that did not resolve or resolved ambiguously, and no scope file is written. On exit 3 the
+   check DID NOT RUN (no readable `PROJECT.md` — distinct from exit 1's "read it, found nothing").
+
 On all checks passing:
 ```
 autopilot · pre-flight PASSED · arming guard, starting roadmap...
@@ -445,11 +753,29 @@ the `AUTOPILOT-PUBLISH` status line → advance to the next `[ ]`.
 - **Run-level `needs-human`** (`<root>/.claude/needs-human`): something is wrong with the *run*.
   On a feature that fails to reach `completed` for an unknown-state reason — a coder crash, an
   anti-test-weakening halt (ADR-0047 §D5, below) — the conductor writes this marker, and
-  `autopilot-guard` blocks that publish and **every subsequent one**. `rtf-blocker` and
-  `token-budget` are the other two run-level halts (written by the review step and this skill's
-  `/goal` overlay respectively) and behave the same way: once any of the three is set, the guard
-  blocks every subsequent publish, so a HALT stops the whole roadmap rather than skipping one
-  feature. A halted feature keeps its local commit but has no ready PR.
+  `autopilot-guard` blocks that publish and **every subsequent one**. `rtf-blocker` is the other
+  run-level halt and behaves the same way: once either marker is set, the guard blocks every
+  subsequent publish, so a HALT stops the whole roadmap rather than skipping one feature. A halted
+  feature keeps its local commit but has no ready PR. (`token-budget` was a third run-level halt;
+  it is removed — see below.)
+
+  **`rtf-blocker` is deliberately unproduced, and the reason is measured, not a deferral**
+  (issue #365, ADR-0129 §D6): `concept-to-code` Gate 5's autopilot default is "Skip review", and
+  `project-conductor` invokes `concept-to-code` for every feature on both branches — the
+  `_autopilot=true` path and the `_autopilot=false` path — never `autopilot-build`. So no review
+  cycle runs during an unattended roadmap run, and a producer inside `review-triage-fix` could
+  never fire on the one path where the guard that reads this file exists.
+
+  **`token-budget`'s verdict is deliberately not transferred to `rtf-blocker`, and this paragraph
+  exists so a future reader does not "tidy" the second away for consistency with the first.** The
+  two cases differ in kind: `token-budget`'s halt was **structurally unable to work** — evaluated
+  after the only thing it could have stopped — whereas `rtf-blocker`'s halt **would work correctly
+  the moment something wrote it**. Removing a mechanism that cannot work is a correction; removing
+  one that works and is merely unreached is deleting a safeguard because the path it guards is
+  currently unused. `VCS-010` in `TODO.md` and PROJECT.md Phase 11 Wave 1 both asked for "a
+  producer or its honest removal"; the honest answer is the third one — the mechanism is sound,
+  the reason it is unreached is a larger finding about unattended review (see ADR-0129's *Findings
+  recorded, not fixed*), and this file now says so.
 - **Per-feature `skipped-features`** (`<root>/.claude/autopilot-state/skipped-features`,
   append-only): this *one* feature cannot proceed for a known, contained reason, and the roadmap
   continues to the next `[ ]`. **Five writers**, the last two added by ADR-0111 (issue #324):
@@ -500,6 +826,35 @@ feature's own `task_metrics` array in its `step5-report.json`, when present. The
 not findings (ADR-0064 §D2): nothing in this Phase branches on them, they are never surfaced as
 requiring action, and a feature whose `step5-report.json` carries no `task_metrics` leaves all
 four fields absent on that feature entry — never `0` (ADR-0064 §D3).
+
+The report also carries an additive `scope` object (issue #365, ADR-0129 §D10 — schema v2.2, no
+version bump, the block is additive):
+
+```json
+"scope": {
+  "source": "arguments",
+  "requested": { "features": 2, "only": ["…", "…"] },
+  "delivered": 2,
+  "remaining_in_roadmap": 29,
+  "turns_per_feature": [ { "feature": "…", "turns": 48 } ]
+}
+```
+
+`delivered` is read from `published` (a count of its lines) and `source`/`requested` from `scope`
+— **both before the disarm**, which deletes both. This section already runs prior to the disarm
+call below; stating the dependency here matters because two files whose reader sits a few lines
+above their deleter is exactly the ordering that gets "tidied" by a later edit.
+
+This field is mechanical: the count of `- [ ]` rows in `PROJECT.md`, taken **at report time**, not
+at run start.
+
+**`turns_per_feature` is an orchestrator self-report, and is labelled as one.** No per-turn counter
+is exposed to a skill; it is derived by the orchestrator counting its own turns between the
+`AUTOPILOT-PUBLISH` lines Phase 1 already prints. ADR-0047 §A3's rule against trusting a
+self-report does not apply here (ADR-0073's reasoning): that rule is about a self-report a **gate**
+acts on, and this figure feeds a human re-deriving a turn budget — a disclosure feeding a human
+decision can only add information, never remove a check. `turns_per_feature` is **never read by a
+gate**.
 
 Disarm the guard. This clears the whole transient set, not just the marker (ADR-0112): a
 `build-status` left reading `RED` halts the in-script `--check` gate **regardless of the marker**,
