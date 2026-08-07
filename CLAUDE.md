@@ -3589,3 +3589,64 @@ ninth check, so ADR-0110's own sentence stops carrying a count and `permission-m
 PMP2 is re-anchored count-free.
 
 Detail: `docs/architecture/ADR-0129-365-scope-and-bound-the-autopilot-run.md`.
+
+## Decisions from the plan-tasks mode-binding chain (ADR-0131)
+
+Closes issue #294. `plan-tasks.sh` has two modes with **opposite failure directions** — `--count`
+over-counts (safe for a `>= 1` guard, wrong for arithmetic), `--count-openers` can legitimately
+return 0 (safe for arithmetic that tests zero, wrong for a guard) — and the only thing stopping a
+caller from picking the wrong one was a sentence in the script header. ADR-0100 is the proof that
+is not enough: it fixed exactly that defect at one call site.
+
+- **Three invocations, not two, and the SPEC's own premise did not reproduce.** `--count` and
+  `--count-openers` sit in the **same** `concept-to-code-step5-plan-structure` fence, plus `--count`
+  in `autopilot-build-check-5`. The batch-dispatch policy the SPEC calls a call site **invokes
+  nothing** — it consumes `$openers` ~900 lines away. That killed the per-fence declaration design
+  outright, before it was written.
+- **The marker names the QUESTION, never the mode**, as a trailing comment on the invocation line:
+  `# plan-tasks-question: guard`. Repeating the mode would add a field that can drift from the flag
+  two words to its left. Naming only the question catches a changed flag, a changed marker, a new
+  unmarked invocation and a copied call site — with less to go stale. Trailing rather than
+  preceding, because the two c2c invocations are two lines apart with an `rc=$?` between them and a
+  preceding marker for the second would read as belonging to neither.
+- **The mode → question binding is EXTRACTED; the guard machinery is NOT** — ADR-0086's criterion
+  applied in both directions in one feature. Two answers to "which question is `--count` for" is a
+  defect by definition, so it lives in `plan-tasks.sh` as `# mode-contract:` lines and is loaded,
+  never restated. The population derivation, marker syntax and count guards are instance **13** of
+  the derived-guard pattern and stay a copy: a shared source failing would disable thirteen guards
+  at once, in the stay-green way this repository has watched three times.
+- **`mode-binding-check.sh` is a CHECKER placed where it cannot deploy** —
+  `staging/plugin/scripts/tests/`, no `.test.sh` suffix, so it is outside `.claude/test-cmd`'s glob,
+  outside `docs-ci.yml`'s explicit named list, and outside `pairs-completeness.test.sh`'s
+  **non-recursive** `plugin/scripts/*.sh` population. No `PAIRS` entry, **no inert-until-sync failure
+  mode** — the class that has bitten six recent ADRs. Precedents: `path-rule-check.sh` (ADR-0117),
+  `transition-pair-count.sh` (ADR-0120). Exit 3 means DID NOT RUN and is never collapsed into a
+  zero; it prints no `CLEAN` sentinel and must never grow one.
+- **R-02 is per-call-site and EXACT, not a floor**, because ADR-0124's lesson is that **a floor
+  absorbs its own plant**: with `>= 1`, removing one invocation still passes and the assertion pins
+  nothing. The checker's own `invocations >= 3` denominator guard stays a floor and is *only* a
+  vacuity guard; the division of labour is stated at both sites so nobody later consolidates one
+  into the other.
+- **The bound variable is asserted, and deliberately not as "that paragraph must not contain
+  `$tasks`"** — it legitimately contains `$tasks` twice while explaining why not to use it, so such
+  an assertion fails on correct text. Rule 12, for the seventh recorded time.
+
+Known consequences, recorded rather than fixed:
+- **The marker declares intent and nothing verifies it is honest.** A site declaring `guard` and
+  feeding the number to arithmetic passes. A green run must never be read as closing #242's
+  semantic class.
+- `--count` is a strict **prefix** of `--count-openers`, so substring matching silently attributes
+  the second invocation to the guard mode and reports agreement. Only the declared plant makes that
+  visible.
+- **Two live harness defects found on the way, both the same shape:** `plan-task-count.test.sh`
+  `Z1` tests `>= 48` while both its messages say "floor 43"; `batch-dispatch-openers.test.sh` tests
+  `>= 16` and says "floor 13". A *passing* assertion prints the wrong number — grep the message
+  strings whenever a literal in an assertion changes.
+- The derived-guard instance numbering has collided a **second** time: instance 12 is claimed by
+  both ADR-0119 and ADR-0125 (ADR-0117 recorded the first, at 10). Re-derive the next free number
+  from the files, never from a brief.
+- `--count`'s new exit-3 assertion passes the day it is written (the script's exit-3 branch is
+  shared), so it is a **forward guard, not fix evidence**, and its plant is the only thing making
+  it mean anything.
+
+Detail: `docs/architecture/ADR-0131-294-plan-tasks-mode-binding.md`.
