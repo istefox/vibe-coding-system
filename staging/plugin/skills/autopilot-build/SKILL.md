@@ -190,7 +190,10 @@ done
 # grep here: the architect is allowed BOTH `### Task 3 — …` headings and `- [ ]` checkbox items,
 # and a checkbox-only count aborts this unattended run on 7 of the 57 plans in the corpus — with a
 # message blaming the plan. Cross-skill call, same terms as the manifest-*.sh calls above.
-tasks=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count "$plan"); rc=$?
+# The trailing `# plan-tasks-question:` comment above declares which question this invocation
+# answers; mode-binding-check.sh compares it against plan-tasks.sh's own mode-contract table
+# (issue #294, ADR-0131).
+tasks=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count "$plan"); rc=$?   # plan-tasks-question: guard
 # rc 2/3 mean the check DID NOT RUN. Aborting is still correct unattended, but say which it was.
 [ "$rc" -eq 0 ] || { echo "✗ plan: task check did not run (plan-tasks.sh exit $rc)."; exit 1; }
 [ "$tasks" -ge 1 ] || { echo "✗ plan: no recognisable task found. A task is a '## Task N — …' heading (H2-H4) or a '- [ ]' checklist item. The plan may be malformed."; exit 1; }

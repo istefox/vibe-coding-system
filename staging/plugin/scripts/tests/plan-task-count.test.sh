@@ -43,6 +43,22 @@
 # plant: PTH2 | plugin/scripts/tests/plan-shape-baseline.tsv | 2026-07-30-222-vendor-deployed-only-skills.md 38 7 | 2026-07-30-222-vendor-deployed-only-skills.md 38 9
 # plant: PTE4 | plugin/skills/concept-to-code/scripts/plan-task-predicate.awk | return (lvl >= 2 && lvl <= 4) && (l ~ /Task/) | return (lvl >= 2 && lvl <= 4) && (l ~ /Task|Step/)
 # plant: PTJ1 | plugin/skills/concept-to-code/scripts/plan-task-predicate.awk | return rest ~ /^[Tt]ask[ \t]+[0-9]+/ | return rest ~ /^([Tt]ask|[Ss]tep)[ \t]+[0-9]+|^T[0-9]+[ \t]/
+# PTK1-PTK9 back the mode-binding mechanism (issue #294, ADR-0131 §D3-D4). One plant per
+# assertion, each removing exactly one mechanism: PTK1 the checker's exit-code discipline, PTK2 the
+# marker on a real call site, PTK3 the derived mode count on the stderr summary (isolated: PTK2
+# still passes under it), PTK4 UNBOUND detection, PTK5 the exact-equality mode comparison (the
+# prefix-trap guard itself), PTK6 the zero-invocation exit-3 contract, PTK7 the uncovered-mode /
+# stale-contract cross-check, PTK8 the exact per-call-site variable binding, PTK9 the awk-failed
+# exit-3 branch shared by both modes.
+# plant: PTK1 | plugin/scripts/tests/mode-binding-check.sh | if [ "$#" -ne 2 ]; then | exit 42; if [ "$#" -ne 2 ]; then
+# plant: PTK2 | plugin/skills/concept-to-code/SKILL.md | # plan-tasks-question: guard | # plan-tasks-marker: guard
+# plant: PTK3 | plugin/scripts/tests/mode-binding-check.sh | print_stats() { | print_stats() { MODE_COUNT=0;
+# plant: PTK4 | plugin/scripts/tests/mode-binding-check.sh | printf "%s:%d: UNBOUND %s\n", file, line, tok | printf "%s:%d: NOTAFINDING %s\n", file, line, tok
+# plant: PTK5 | plugin/scripts/tests/mode-binding-check.sh | file = $1; line = $2; tok = $3; mk = $4 | file = $1; line = $2; tok = $3; mk = $4; for (pmi = 1; pmi <= nm; pmi++) if (substr(tok, 1, length(marr[pmi])) == marr[pmi]) { tok = marr[pmi]; break }
+# plant: PTK6 | plugin/scripts/tests/mode-binding-check.sh | invocations of $(basename "$SCRIPT") found under $ROOT (population: *.sh excluding */tests/*, and fenced \`\`\`bash blocks in *.md, non-comment executable context only)" >&2 FINDINGS_TOTAL=0 print_stats exit 3 | invocations of $(basename "$SCRIPT") found under $ROOT (population: *.sh excluding */tests/*, and fenced \`\`\`bash blocks in *.md, non-comment executable context only)" >&2; FINDINGS_TOTAL=0; print_stats; exit 0
+# plant: PTK7 | plugin/scripts/tests/mode-binding-check.sh | for (i = 1; i <= nraw; i++) { if (rawtok[i] == "--help") continue covered = 0 for (j = 1; j <= ncontract; j++) if (cflag[j] == rawtok[i]) { covered = 1; break } if (!covered) printf "FINDING\tUNCOVERED-MODE\t%s\t%d\n", rawtok[i], rawline[i] } for (j = 1; j <= ncontract; j++) { accepted = 0 for (i = 1; i <= nraw; i++) if (rawtok[i] == cflag[j]) { accepted = 1; break } if (!accepted) printf "FINDING\tSTALE-CONTRACT\t%s\t%d\n", cflag[j], cline[j] if (creasonlen[j] < 40) printf "FINDING\tSHORT-REASON\t%s\t%d\n", cflag[j], cline[j] } | if (0) { }
+# plant: PTK8 | plugin/skills/concept-to-code/SKILL.md | openers=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count-openers | openers2=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count-openers
+# plant: PTK9 | plugin/skills/concept-to-code/scripts/plan-tasks.sh | awk failed on %s — the check did not run\n' "$SELF" "$PLAN" >&2; exit 3; } | awk failed on %s — the check did not run\n' "$SELF" "$PLAN" >&2; exit 0; }
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -556,14 +572,184 @@ else
   bad "PTH0 (denominator guard): baseline missing or holds only $pth_rows row(s) (need >= 55) at $BASELINE — PTH1/PTH2 skipped"
 fi
 
+# ==================================================================================================
+# PTK. Mode binding (issue #294, ADR-0131). `--count` and `--count-openers` answer opposite
+#      questions with opposite failure directions, and until now nothing beyond a sentence in the
+#      script's own header stopped a caller mixing them up. R-01 makes that checkable:
+#      mode-binding-check.sh derives the parser's modes, the header's `# mode-contract:` table, and
+#      every invocation under a population root, then compares all three.
+#
+#      WHAT A GREEN RUN DOES NOT MEAN (ADR-0131 Consequences/negative — stated here because this is
+#      where a reader decides how much to trust it): a green run means every invocation DECLARES its
+#      question and the declaration AGREES with its flag, never that no invocation is used for the
+#      wrong question. A call site that declares `guard`, invokes `--count`, and then feeds the
+#      number to arithmetic passes every check here. That is #242's exact shape and this feature does
+#      not close it.
+#
+#      PTK1-PTK8 are EXPECTED RED at this point in the chain: mode-binding-check.sh does not exist
+#      yet (Task 3), and the three call sites carry no marker yet (Task 4). PTK9 is expected GREEN
+#      already — it exercises plan-tasks.sh's own pre-existing exit-3 contract for --count, which
+#      this feature does not change, and is labelled a forward guard rather than fix evidence for
+#      that reason: the branch it exercises is shared by both modes.
+# ==================================================================================================
+
+MBC="$(dirname "$0")/mode-binding-check.sh"
+
+# PTK1 (static/dynamic): the checker exists and is invocable by bash — same shape as F1 in
+# concept-to-code-manifest-helpers-guards.test.sh.
+if [ -f "$MBC" ] && [ -r "$MBC" ]; then
+  bash "$MBC" "$PLAN_TASKS" "$STAGING" >/dev/null 2>&1
+  ptk1_rc=$?
+  case "$ptk1_rc" in
+    0|1|2|3) ok "PTK1: mode-binding-check.sh exists and is invocable by bash (rc=$ptk1_rc)" ;;
+    *) bad "PTK1: mode-binding-check.sh exists but exited unexpectedly (rc=$ptk1_rc)" ;;
+  esac
+else
+  bad "PTK1: mode-binding-check.sh is missing or unreadable at $MBC"
+fi
+
+# PTK2 (fix evidence): the real tree, checked with the real script and the whole staging tree as the
+# population root, is clean — exit 0 with EMPTY stdout.
+ptk2_out=$(bash "$MBC" "$PLAN_TASKS" "$STAGING" 2>/dev/null)
+ptk2_rc=$?
+{ [ "$ptk2_rc" -eq 0 ] && [ -z "$ptk2_out" ]; } \
+  && ok "PTK2 (fix evidence): the real tree is clean under mode-binding-check.sh — exit 0, empty stdout" \
+  || bad "PTK2: real tree gave rc=$ptk2_rc, stdout=[$ptk2_out] — expected rc=0 with empty stdout"
+
+# PTK3 (denominator guard): read off the checker's own always-printed stderr summary line. A
+# derivation that stops resolving reports nothing and reads exactly like a fully bound tree.
+ptk3_err=$(bash "$MBC" "$PLAN_TASKS" "$STAGING" 2>&1 >/dev/null)
+ptk3_modes=$(printf '%s\n' "$ptk3_err" | sed -n 's/.*modes=\([0-9][0-9]*\).*/\1/p' | head -1)
+ptk3_invocations=$(printf '%s\n' "$ptk3_err" | sed -n 's/.*invocations=\([0-9][0-9]*\).*/\1/p' | head -1)
+ptk3_modes=${ptk3_modes:-0}
+ptk3_invocations=${ptk3_invocations:-0}
+{ [ "$ptk3_modes" -ge 2 ] && [ "$ptk3_invocations" -ge 3 ]; } \
+  && ok "PTK3 (denominator guard): modes=$ptk3_modes invocations=$ptk3_invocations" \
+  || bad "PTK3 (denominator guard): modes=$ptk3_modes invocations=$ptk3_invocations from stderr=[$ptk3_err] — a derivation that stops resolving reports nothing and reads exactly like a fully bound tree"
+
+# PTK4 (positive twin of PTK2): a fixture invocation carrying a mode and no marker is UNBOUND.
+mkdir -p "$TMP/ptk4root"
+printf '# Fixture\n\n```bash\ntasks=$(bash /nowhere/plan-tasks.sh --count "$plan")\n```\n' > "$TMP/ptk4root/fixture.md"
+ptk4_out=$(bash "$MBC" "$PLAN_TASKS" "$TMP/ptk4root" 2>/dev/null)
+ptk4_rc=$?
+{ [ "$ptk4_rc" -eq 1 ] && printf '%s\n' "$ptk4_out" | grep -q 'UNBOUND'; } \
+  && ok "PTK4: an invocation with a mode and no marker exits 1 and reports UNBOUND" \
+  || bad "PTK4: unbound-invocation fixture gave rc=$ptk4_rc, stdout=[$ptk4_out] — expected rc=1 with UNBOUND"
+
+# PTK5: the prefix-trap guard. `--count` is a strict prefix of `--count-openers`; under substring
+# matching a `--count-openers` invocation would resolve to the `guard` question, and a marker
+# declaring `guard` would wrongly read as agreeing. Exact token equality must report MISMATCH.
+mkdir -p "$TMP/ptk5root"
+printf '# Fixture\n\n```bash\nopeners=$(bash /nowhere/plan-tasks.sh --count-openers "$plan")   # plan-tasks-question: guard\n```\n' > "$TMP/ptk5root/fixture.md"
+ptk5_out=$(bash "$MBC" "$PLAN_TASKS" "$TMP/ptk5root" 2>/dev/null)
+ptk5_rc=$?
+{ [ "$ptk5_rc" -eq 1 ] && printf '%s\n' "$ptk5_out" | grep -q 'MISMATCH'; } \
+  && ok "PTK5 (prefix-trap guard): a --count-openers invocation marked guard is MISMATCH, not silently absorbed by --count" \
+  || bad "PTK5: prefix-trap fixture gave rc=$ptk5_rc, stdout=[$ptk5_out] — expected rc=1 with MISMATCH; substring matching would report this clean"
+
+# PTK6 (R-03 applied to the mechanism itself): a population root with no invocation at all is
+# "did not run", not a clean zero — exit 3, and stdout stays empty so the two cannot be confused.
+mkdir -p "$TMP/ptk6root"
+printf '# Fixture\n\nJust prose. No invocation of plan-tasks.sh anywhere in this file.\n' > "$TMP/ptk6root/fixture.md"
+ptk6_out=$(bash "$MBC" "$PLAN_TASKS" "$TMP/ptk6root" 2>/dev/null)
+ptk6_rc=$?
+{ [ "$ptk6_rc" -eq 3 ] && [ -z "$ptk6_out" ]; } \
+  && ok "PTK6: zero invocations exits 3 with empty stdout — found nothing is not did-not-run" \
+  || bad "PTK6: zero-invocation fixture gave rc=$ptk6_rc, stdout=[$ptk6_out] — expected rc=3 with empty stdout"
+
+# PTK7: two fixtures against a COPY of plan-tasks.sh, never the real script. (a) the parser gains a
+# third --<word>) arm with no matching # mode-contract: line -> UNCOVERED-MODE. (b) the parser loses
+# --count-openers while a # mode-contract: line for it remains -> STALE-CONTRACT. Both copies are
+# built by re-reading $PLAN_TASKS at run time, so the fixture holds regardless of whether Task 2 has
+# already added the real contract lines.
+mkdir -p "$TMP/ptk7a" "$TMP/ptk7b"
+
+: > "$TMP/ptk7a/plan-tasks.sh"
+ptk7a_ins=0
+while IFS= read -r ptk7_line || [ -n "$ptk7_line" ]; do
+  printf '%s\n' "$ptk7_line" >> "$TMP/ptk7a/plan-tasks.sh"
+  case "$ptk7_line" in
+    *'--count-openers) MODE="openers"'*)
+      if [ "$ptk7a_ins" -eq 0 ]; then
+        printf '%s\n' '    --count-third) MODE="third"; shift; [ $# -gt 0 ] || usage "--count-third needs a plan file"; PLAN="$1"; shift ;;' >> "$TMP/ptk7a/plan-tasks.sh"
+        ptk7a_ins=1
+      fi
+      ;;
+  esac
+done < "$PLAN_TASKS"
+
+: > "$TMP/ptk7b/plan-tasks.sh"
+ptk7b_ins=0
+while IFS= read -r ptk7_line || [ -n "$ptk7_line" ]; do
+  case "$ptk7_line" in
+    '#!/bin/bash')
+      printf '%s\n' "$ptk7_line" >> "$TMP/ptk7b/plan-tasks.sh"
+      if [ "$ptk7b_ins" -eq 0 ]; then
+        printf '%s\n' '# mode-contract: --count-openers | arithmetic | fixture-only stale contract line kept on purpose while the parser arm below is removed' >> "$TMP/ptk7b/plan-tasks.sh"
+        ptk7b_ins=1
+      fi
+      ;;
+    *'--count-openers) MODE="openers"'*)
+      : # dropped on purpose — the parser must no longer accept --count-openers
+      ;;
+    *)
+      printf '%s\n' "$ptk7_line" >> "$TMP/ptk7b/plan-tasks.sh"
+      ;;
+  esac
+done < "$PLAN_TASKS"
+
+ptk7a_out=$(bash "$MBC" "$TMP/ptk7a/plan-tasks.sh" "$STAGING" 2>/dev/null)
+ptk7a_rc=$?
+ptk7b_out=$(bash "$MBC" "$TMP/ptk7b/plan-tasks.sh" "$STAGING" 2>/dev/null)
+ptk7b_rc=$?
+{ [ "$ptk7a_rc" -eq 1 ] && printf '%s\n' "$ptk7a_out" | grep -q 'UNCOVERED-MODE' \
+  && [ "$ptk7b_rc" -eq 1 ] && printf '%s\n' "$ptk7b_out" | grep -q 'STALE-CONTRACT'; } \
+  && ok "PTK7: a new uncontracted parser arm reports UNCOVERED-MODE; a removed arm with its contract line left behind reports STALE-CONTRACT" \
+  || bad "PTK7: fixture (a) rc=$ptk7a_rc out=[$ptk7a_out]; fixture (b) rc=$ptk7b_rc out=[$ptk7b_out] — expected UNCOVERED-MODE and STALE-CONTRACT"
+
+# PTK8 (R-02, EXACT counts, not floors): the per-call-site tuple. A floor absorbs its own plant
+# (ADR-0124), so this must count exactly, on the fence bodies PTB1/PTB2 already extracted above.
+# PTK3's invocations >= 3 is a vacuity guard on the DENOMINATOR only — do not consolidate the two.
+count_ptk8() {
+  # $1=fence text  $2=var prefix  $3=mode token  $4=token to exclude (or empty)  $5=marker word
+  printf '%s\n' "$1" | awk -v var="$2" -v mode="$3" -v excl="$4" -v marker="$5" '
+    index($0, var) && index($0, mode) && (excl == "" || !index($0, excl)) \
+      && index($0, "# plan-tasks-question: " marker) { n++ }
+    END { print n+0 }
+  '
+}
+ptk8_cc_guard=$(count_ptk8 "$CC_STEP5" "tasks=" "--count" "--count-openers" "guard")
+ptk8_cc_arith=$(count_ptk8 "$CC_STEP5" "openers=" "--count-openers" "" "arithmetic")
+ptk8_ab_guard=$(count_ptk8 "$AB_BLOCK" "tasks=" "--count" "--count-openers" "guard")
+{ [ "$ptk8_cc_guard" = "1" ] && [ "$ptk8_cc_arith" = "1" ] && [ "$ptk8_ab_guard" = "1" ]; } \
+  && ok "PTK8 (R-02, exact): concept-to-code binds tasks=/--count/guard once and openers=/--count-openers/arithmetic once; autopilot-build binds tasks=/--count/guard once" \
+  || bad "PTK8: concept-to-code tasks/guard=$ptk8_cc_guard openers/arithmetic=$ptk8_cc_arith, autopilot-build tasks/guard=$ptk8_ab_guard — expected 1/1/1"
+
+# PTK9 (forward guard, NOT fix evidence — the exit-3 branch is shared by both modes and predates this
+# feature; the legitimate-zero twins already exist, PTF2/PTE4 for --count and BOV1/PTJ1 for
+# --count-openers). --count against a broken predicate must exit 3, closing the one measured R-03
+# asymmetry: BO3c already covers --count-openers, nothing covered --count. Built the way BO3c is.
+PTK9_FAKE="$TMP/ptk9fake"; mkdir -p "$PTK9_FAKE"
+cp "$PLAN_TASKS" "$PTK9_FAKE/plan-tasks.sh"
+printf '%s\n' 'this is not awk {{{' > "$PTK9_FAKE/plan-task-predicate.awk"
+bash "$PTK9_FAKE/plan-tasks.sh" --count "$TMP/plan-two.md" >/dev/null 2>&1
+ptk9_rc=$?
+[ "$ptk9_rc" -eq 3 ] \
+  && ok "PTK9 (forward guard, not fix evidence): --count against a broken predicate exits 3" \
+  || bad "PTK9: --count against a broken predicate gave rc=$ptk9_rc, expected 3 — a broken awk would read as 'no tasks' rather than 'did not run'"
+
 echo
 # Z1: assertion-count FLOOR. PTC0/PTF0 fail loudly on an empty extraction, but their DEPENDENTS
 # are skipped, and a run reporting fewer assertions than before does not look like a defect. The
 # floor is what makes a vanished assertion visible; lowering it needs a deliberate edit.
+# Raised 48 -> 57 (issue #294, ADR-0131 §D6/D7, PTK1-PTK9 added): when you change a literal in an
+# assertion, grep the message strings in the same edit — this floor PASSED for a while against a
+# test of `>= 48` while both its own messages still said "floor 43", printing the wrong number on
+# a passing run (ADR-0120's RH2 lesson). The next person to raise this floor reads the message.
 _TOTAL=$((PASS + FAIL))
-[ "$_TOTAL" -ge 48 ] \
-  && ok "Z1: $_TOTAL assertions ran (floor 43) — none silently vanished" \
-  || bad "Z1: only $_TOTAL assertions ran, floor 43 — assertions disappeared, they did not fail"
+[ "$_TOTAL" -ge 57 ] \
+  && ok "Z1: $_TOTAL assertions ran (floor 57) — none silently vanished" \
+  || bad "Z1: only $_TOTAL assertions ran, floor 57 — assertions disappeared, they did not fail"
 
 echo "plan-task-count: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
