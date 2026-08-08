@@ -1168,7 +1168,7 @@ wave order.
 - [x] a bold-wrapped requirement id is invisible to both the checker and the repairer  (issue #291)  (completed: 2026-08-03)
 - [x] the value-domain guard covers step5_mode only  (issue #292)  (completed: 2026-08-04)
 - [ ] task_num extracts digits only so a lettered task collides with its sibling  (issue #293)
-- [ ] plan-tasks.sh has two modes with opposite failure directions and nothing stops a caller picking the wrong one  (issue #294)
+- [x] plan-tasks.sh has two modes with opposite failure directions and nothing stops a caller picking the wrong one  (issue #294)  (completed: 2026-08-08)
 - [ ] MALFORMED is dropped silently by any caller filtering BUDGET or SCOPE  (issue #295)
 - [ ] a per-file budget ceiling is parsed and then summed so one file can exceed its own  (issue #296)
 - [ ] the dirty-classify fence reads porcelain v1 so a renamed artifact classifies as OTHER  (issue #297)
@@ -1216,7 +1216,7 @@ regardless of how the budget is set.
 
 - [x] Gate 4.0's branch name and publish-feature.sh's expected branch never coincide  (issue #363)  (completed: 2026-08-05)
 - [x] nothing states what feature N+1's branch forks from  (issue #364)  (completed: 2026-08-05)
-- [ ] a nightly run cannot be scoped to a wave and the turn budget is ~4x miscalibrated  (issue #365)
+- [x] a nightly run cannot be scoped to a wave and the turn budget is ~4x miscalibrated  (issue #365) (completed: 2026-08-07)
 - [ ] SKILL.md bash fences assume bash word-splitting and break under zsh  (issue #366)
 
 Measured, and worth carrying into whatever fixes #365: **a full standard chain costs roughly 50

@@ -35,12 +35,18 @@
 # >= 6 and over-counted — so a caller that batches by ranges gets ranges over tasks that do not
 # exist. On #222's plan: 38 lines, 7 openers.
 #
-# THE TWO MODES ARE NOT INTERCHANGEABLE IN EITHER DIRECTION. --count over-counts, which is safe for
-# a guard and wrong for arithmetic. --count-openers returns 0 on two corpus plans, not three shapes
-# — `deep-refactor-skill.md` (`### T1 —`) and `claude-md-slim.md` (`### Step N —`, whose first
-# heading is `### Step 0 —`), exempted by name in ADR-0070 §PTG9 and ADR-0069 §PTE2 — which is safe
-# for arithmetic that checks for zero and wrong for a guard. A caller picks the one matching its
-# question and says which, at the call site.
+# --count-openers returns 0 on two corpus plans, not three shapes — `deep-refactor-skill.md`
+# (`### T1 —`) and `claude-md-slim.md` (`### Step N —`, whose first heading is `### Step 0 —`),
+# exempted by name in ADR-0070 §PTG9 and ADR-0069 §PTE2. THE TWO MODES ARE NOT INTERCHANGEABLE IN
+# EITHER DIRECTION — see the mode-contract table below for which question each one answers and why.
+#
+# THE TABLE BELOW IS THE BINDING, not this header's prose. The paragraphs above describe the two
+# modes; the table decides which question each one answers, and mode-binding-check.sh compares
+# every call site against these two lines only — never against this prose (issue #294, ADR-0131
+# §D2). If you need this somewhere new, load the table: do not paste the answer, the same rule
+# ADR-0069 §D2 already applies to the predicate itself.
+# mode-contract: --count | guard | over-counts by design (a `## Tasks` heading and every checkbox sub-step match): safe for a `>= 1` malformed-plan guard, wrong for arithmetic.
+# mode-contract: --count-openers | arithmetic | returns 0 on the two corpus plans naming tasks another word: safe for arithmetic that tests for zero, wrong for a guard.
 #
 # Bash 3.2 clean: no assoc arrays, no mapfile, no process substitution, no <<<.
 set -u

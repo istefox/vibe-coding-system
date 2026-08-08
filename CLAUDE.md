@@ -3533,3 +3533,120 @@ Known consequences, recorded rather than fixed:
   both before citing either.
 
 Detail: `docs/architecture/ADR-0125-292-value-domain-guard-two-fields.md`.
+
+## Decisions from the autopilot scope-and-bound chain (ADR-0129)
+
+Closes issue #365, Phase 11 Wave 1. `autopilot` took **no arguments**, so a launch attempted every
+unchecked row of `PROJECT.md` — 33 of them — and the only brakes were the `/goal` turn budget and a
+human hand. It gains `--features N`, `--only <token>`, `--dry-run`, and an optional durable `scope:`
+block in `.claude/autopilot.yml`.
+
+- **`token-budget` is REMOVED, not wired, and the reason that settles it is structural.** Two
+  findings look like implementation gaps: the producer ADR-0127 Part 4 proposed reads
+  `step5-report.json`'s `task_metrics`, whose four ADR-0064 fields carry **no token count**, and no
+  real report has that block at all — `agent-metrics.test.sh` GA1/GA2 assert the field name in the
+  **schema inside SKILL.md**, a green schema over an empty report. The third decides:
+  `autopilot-guard.sh` is a `PreToolUse` hook on the publish, so a ceiling evaluated afterwards
+  **cannot stop the feature that breached it, only the one after** — which is cumulative drift, what
+  `--features N` already bounds. **Accepted cost, stated rather than discovered: there is no spend
+  ceiling.** If one is ever wanted it starts at the transcript (`usage-report.py`,
+  `context-occupancy.sh`), is per-session not per-feature, and still cannot stop a feature in flight.
+- **`rtf-blocker` keeps its mechanism and the verdict is NOT transferred** (§D6, stated in terms so
+  the next reader does not tidy it away for consistency). That halt would work the moment something
+  wrote it; `token-budget`'s could not. Its corrected sentence carries a **measured** reason rather
+  than a deferral: `concept-to-code` Gate 5's autopilot default is "Skip review" and
+  `project-conductor` invokes `concept-to-code` on **both** branches, never `autopilot-build` — so
+  **no review cycle runs during an unattended roadmap run at all**, and a producer inside
+  `review-triage-fix` could never fire where the guard that reads the file exists. That larger gap
+  is recorded in Phase 11, not fixed here.
+- **A slot is consumed by a PUBLISH, and `delivered` is the line count of the existing `published`
+  ledger** (§D4) — one writer, one append per successful publish, already run-scoped and already
+  cleared by the same disarm. A second counter would be a second producer of one fact with a crash
+  window between them. Read with the guard's own idiom, never `grep -c … || echo 0`, which yields a
+  two-line `0\n0` (issue #174).
+- **Running out of slots leaves the roadmap untouched, superseding ADR-0127 §D7 IN PART** (§D5).
+  §D7 said the run marks the next feature `[~]`; measured, `project-conductor` Step 2 selects the
+  first `- [ ]` line, so **`[~]` is permanent** and every bounded run would quietly delete a feature
+  from the roadmap. The other half of §D7 stands: never write `needs-human`. The clause was correct
+  for a *token* bound, which can be reached mid-feature; a feature count is checked between
+  features, so there is nothing to skip. ADR-0042's precedent — one clause, named, rest standing.
+- **The scope travels as a file, `<root>/.claude/autopilot-state/scope`,** on the exact terms
+  `published` already established, and it **stores the roadmap line text, never a re-derived slug**
+  (§D2): the conductor derives a topic-slug in four places and a fifth derivation is ADR-0069's
+  defect. `--only`'s slug form is **match-only**, so a disagreement produces a loud unresolved-token
+  abort, never a silently wrong selection. An argument discards the marker's `scope:` block **whole**
+  — per-key override lets a stale `only:` survive a `--features` that meant something else.
+- **`--only` resolves an issue number first** (`--only 293,294`), a full topic-slug second; a token
+  that resolves as neither **aborts in Phase 0**, before anything is written. The number is already
+  on the roadmap line and is the same source ADR-0128 just made authoritative for `Closes #N`.
+
+Known consequences, recorded rather than fixed: the stale scope file is **ADR-0112's class**,
+mitigated only by the disarm clearing it, exactly as `published` is; three test assertions are
+deleted and `weakening-scan.sh` will flag the diff, which no rule over a diff can distinguish from a
+relaxation (ADR-0073); `autopilot-guard-disarm.test.sh` `D2` counts `>= 6` cleared files, so
+removing `token-budget` without adding `scope` **in the same change** turns it red; Phase 0 gains a
+ninth check, so ADR-0110's own sentence stops carrying a count and `permission-mode-state.test.sh`
+PMP2 is re-anchored count-free.
+
+Detail: `docs/architecture/ADR-0129-365-scope-and-bound-the-autopilot-run.md`.
+
+## Decisions from the plan-tasks mode-binding chain (ADR-0131)
+
+Closes issue #294. `plan-tasks.sh` has two modes with **opposite failure directions** — `--count`
+over-counts (safe for a `>= 1` guard, wrong for arithmetic), `--count-openers` can legitimately
+return 0 (safe for arithmetic that tests zero, wrong for a guard) — and the only thing stopping a
+caller from picking the wrong one was a sentence in the script header. ADR-0100 is the proof that
+is not enough: it fixed exactly that defect at one call site.
+
+- **Three invocations, not two, and the SPEC's own premise did not reproduce.** `--count` and
+  `--count-openers` sit in the **same** `concept-to-code-step5-plan-structure` fence, plus `--count`
+  in `autopilot-build-check-5`. The batch-dispatch policy the SPEC calls a call site **invokes
+  nothing** — it consumes `$openers` ~900 lines away. That killed the per-fence declaration design
+  outright, before it was written.
+- **The marker names the QUESTION, never the mode**, as a trailing comment on the invocation line:
+  `# plan-tasks-question: guard`. Repeating the mode would add a field that can drift from the flag
+  two words to its left. Naming only the question catches a changed flag, a changed marker, a new
+  unmarked invocation and a copied call site — with less to go stale. Trailing rather than
+  preceding, because the two c2c invocations are two lines apart with an `rc=$?` between them and a
+  preceding marker for the second would read as belonging to neither.
+- **The mode → question binding is EXTRACTED; the guard machinery is NOT** — ADR-0086's criterion
+  applied in both directions in one feature. Two answers to "which question is `--count` for" is a
+  defect by definition, so it lives in `plan-tasks.sh` as `# mode-contract:` lines and is loaded,
+  never restated. The population derivation, marker syntax and count guards are instance **13** of
+  the derived-guard pattern and stay a copy: a shared source failing would disable thirteen guards
+  at once, in the stay-green way this repository has watched three times.
+- **`mode-binding-check.sh` is a CHECKER placed where it cannot deploy** —
+  `staging/plugin/scripts/tests/`, no `.test.sh` suffix, so it is outside `.claude/test-cmd`'s glob,
+  outside `docs-ci.yml`'s explicit named list, and outside `pairs-completeness.test.sh`'s
+  **non-recursive** `plugin/scripts/*.sh` population. No `PAIRS` entry, **no inert-until-sync failure
+  mode** — the class that has bitten six recent ADRs. Precedents: `path-rule-check.sh` (ADR-0117),
+  `transition-pair-count.sh` (ADR-0120). Exit 3 means DID NOT RUN and is never collapsed into a
+  zero; it prints no `CLEAN` sentinel and must never grow one.
+- **R-02 is per-call-site and EXACT, not a floor**, because ADR-0124's lesson is that **a floor
+  absorbs its own plant**: with `>= 1`, removing one invocation still passes and the assertion pins
+  nothing. The checker's own `invocations >= 3` denominator guard stays a floor and is *only* a
+  vacuity guard; the division of labour is stated at both sites so nobody later consolidates one
+  into the other.
+- **The bound variable is asserted, and deliberately not as "that paragraph must not contain
+  `$tasks`"** — it legitimately contains `$tasks` twice while explaining why not to use it, so such
+  an assertion fails on correct text. Rule 12, for the seventh recorded time.
+
+Known consequences, recorded rather than fixed:
+- **The marker declares intent and nothing verifies it is honest.** A site declaring `guard` and
+  feeding the number to arithmetic passes. A green run must never be read as closing #242's
+  semantic class.
+- `--count` is a strict **prefix** of `--count-openers`, so substring matching silently attributes
+  the second invocation to the guard mode and reports agreement. Only the declared plant makes that
+  visible.
+- **Two live harness defects found on the way, both the same shape:** `plan-task-count.test.sh`
+  `Z1` tests `>= 48` while both its messages say "floor 43"; `batch-dispatch-openers.test.sh` tests
+  `>= 16` and says "floor 13". A *passing* assertion prints the wrong number — grep the message
+  strings whenever a literal in an assertion changes.
+- The derived-guard instance numbering has collided a **second** time: instance 12 is claimed by
+  both ADR-0119 and ADR-0125 (ADR-0117 recorded the first, at 10). Re-derive the next free number
+  from the files, never from a brief.
+- `--count`'s new exit-3 assertion passes the day it is written (the script's exit-3 branch is
+  shared), so it is a **forward guard, not fix evidence**, and its plant is the only thing making
+  it mean anything.
+
+Detail: `docs/architecture/ADR-0131-294-plan-tasks-mode-binding.md`.

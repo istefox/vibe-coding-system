@@ -340,12 +340,12 @@ fi
 R=$(mk_root d1); arm "$R" "session-AAA"
 printf 'RED'          > "$R/.claude/autopilot-state/build-status"
 printf 'blocker\n'    > "$R/.claude/autopilot-state/rtf-blocker"
-printf 'limit=1\nspent=9\n' > "$R/.claude/autopilot-state/token-budget"
+printf 'source=arguments\nfeatures=1\n' > "$R/.claude/autopilot-state/scope"
 printf '2026-07-31T21:03:40Z' > "$R/.claude/autopilot-state/started-at"
 printf 'a reason\n'   > "$R/.claude/needs-human"
 OUT=$(CLAUDE_CODE_SESSION_ID=session-BBB bash "$DISARM" "$R" 2>&1); RC=$?
 LEFT=""
-for f in active build-status rtf-blocker token-budget started-at; do
+for f in active build-status rtf-blocker scope started-at; do
   [ -e "$R/.claude/autopilot-state/$f" ] && LEFT="$LEFT $f"
 done
 [ -e "$R/.claude/needs-human" ] && LEFT="$LEFT needs-human"

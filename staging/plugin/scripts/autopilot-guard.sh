@@ -38,6 +38,19 @@
 # from `manifest-entry-state.sh`, which reads `current_step` AND `status`) takes the skip path; a
 # crash, a mid-flight stop, an unparseable manifest and the anti-test-weakening halt all still land
 # here as run-level halts.
+# v1.5 (2026-08-06, issue #365, ADR-0129 §D6): the per-run token budget halt is REMOVED, not wired
+# — finding 3 of that ADR settles it: this guard is a PreToolUse hook on the publish, so it gets a
+# turn only once per feature, at the end, and a ceiling it evaluates afterwards cannot stop the
+# feature that breached it, only the one after (cumulative drift, which --features N now bounds
+# deterministically instead). `rtf-blocker`'s halt is DELIBERATELY KEPT, byte-unchanged, and this is
+# not the same case made smaller: the removed halt was structurally unable to work; rtf-blocker's
+# halt would work correctly the moment something wrote it. No review cycle runs during an unattended
+# roadmap run (concept-to-code Gate 5's autopilot default is "Skip review", and project-conductor
+# invokes concept-to-code — never autopilot-build — on every feature), which is why rtf-blocker is
+# currently unproduced. That is a measured reason it is unreached, not evidence its mechanism is
+# unsound — removing a halt that cannot work is a correction, removing one that works and is merely
+# unreached is deleting a safeguard because the path it guards is currently idle. See
+# autopilot/SKILL.md §3.3.
 #
 # Bash 3.2 clean: no assoc array, no mapfile, no ${v^^}, no process substitution.
 
@@ -147,16 +160,6 @@ run_halt_checks() {
     reason=$(head -1 "$sdir/rtf-blocker" 2>/dev/null)
     [ -z "$reason" ] && reason="review-triage-fix raised a BLOCKER"
     print_halt "$reason"
-  fi
-
-  if [ -f "$sdir/token-budget" ]; then
-    limit=$(grep '^limit=' "$sdir/token-budget" 2>/dev/null | head -1 | sed 's/^limit=//')
-    spent=$(grep '^spent=' "$sdir/token-budget" 2>/dev/null | head -1 | sed 's/^spent=//')
-    case "$limit" in ''|*[!0-9]*) limit=0;; esac
-    case "$spent" in ''|*[!0-9]*) spent=0;; esac
-    if [ "$limit" -gt 0 ] && [ "$spent" -ge "$limit" ]; then
-      print_halt "token budget exceeded ($spent >= $limit)"
-    fi
   fi
 
   return 0

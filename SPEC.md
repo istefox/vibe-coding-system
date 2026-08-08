@@ -1,26 +1,24 @@
-# SPEC — the value-domain guard covers step5_mode only
+# SPEC — plan-tasks.sh has two modes with opposite failure directions and nothing stops a caller picking the wrong one
 
-Source: GitHub issue #292
+Source: GitHub issue #294
 
 ## Objectives
 
-1. For each of the two uncovered fields, `hook_verified` and `step5_review_mode`, find every
-   producer (what writes it) and the documented domain (what `manifest-field-state.sh`'s header
-   claims).
-2. Compare the two sets in **both** directions over the 41 manifests in `docs/manifests/` — the
-   reverse direction, a documented value nothing writes, is what caught #240.
-3. Extend the value-domain guard to both fields with count guards on both derivations, and with no
-   waiver mechanism.
+1. Make it impossible for a caller of `plan-tasks.sh` to silently pick the wrong mode, through a
+   checkable mechanism rather than a sentence in the script header.
+2. Assert that both existing call sites still resolve to the mode they use today.
+3. Preserve the exit-3 "did not run" contract for both modes, kept distinct from a legitimate zero.
 
 ## Scope
 
-In: the written and documented value domains of `hook_verified` and `step5_review_mode`; the
-derivation extending `manifest-field-state.test.sh` section `V`; the count guards on both
-derivations; the wrap-tolerant reading of the helper's header.
+In: `plan-tasks.sh`'s two modes (`--count`, `--count-openers`), the mechanism that binds a caller to
+the mode matching the question it is asking, an enumeration of every current caller with its mode
+and its question, and assertions per call site. The exit-3 contract for both modes.
 
-Out: `step5_mode`, already covered by ADR-0092's section `V`. Out: rewriting historical manifests —
-ADR-0092 left the 18 carrying `agent_batch` untouched because they are accurate. Out: converting
-`manifest-validate.sh`'s 28 invariants, which ADR-0076 explicitly declined.
+Out: the predicate itself — `is_task_line()` and `is_task_opener()` in `plan-task-predicate.awk`
+are two deliberately different predicates (ADR-0070) and this issue is not about changing either.
+The batching arithmetic that consumes `--count-openers` (settled by ADR-0100). The identifier model
+(#293).
 
 ## Stack
 
@@ -31,43 +29,42 @@ CI (`ci`, `markdownlint`, `links`). No application runtime.
 
 ## Architecture
 
-- `staging/plugin/skills/concept-to-code/scripts/manifest-field-state.sh` — the helper whose header
-  documents the domains: "hook_verified is a boolean, step5_mode is workflow|agent_batch|null,
-  step5_review_mode is none|checkpoint". That sentence **wraps across comment lines**, which is what
-  R-02 is about.
-- Producers of `hook_verified`, measured at spec time:
-  `staging/plugin/skills/concept-to-code/scripts/manifest-init.sh` (the `false` default),
-  `staging/plugin/skills/concept-to-code/SKILL.md` (the `manifest-set-flag.sh … hook_verified
-  true|false` call sites keyed on the hook-verify exit code),
-  `staging/plugin/skills/autopilot-build/SKILL.md` and
-  `staging/plugin/skills/nightly-autopilot/SKILL.md` (readers, and pre-flight consumers),
-  `staging/plugin/skills/deep-refactor/SKILL.md`,
-  `staging/plugin/skills/concept-to-code/scripts/manifest-validate.sh`.
-- Producers of `step5_review_mode`: `manifest-init.sh` (the `none` default),
-  `staging/plugin/skills/concept-to-code/SKILL.md` (the `sed` flip on the additive field —
-  `manifest-set-flag.sh` cannot do it, being boolean-only), `manifest-validate.sh` invariant 14
-  (conditional, "if present").
-- `docs/manifests/` — the corpus, 41 manifests measured at spec time.
-- `staging/plugin/scripts/tests/manifest-field-state.test.sh` — section `V` (`V0b` written-set count
-  guard, `V1` forward, `V2` reverse, `V3` corpus, `V4` the source pin), the pattern to extend.
+- `staging/plugin/skills/concept-to-code/scripts/plan-tasks.sh` — the two-mode entry point. Its
+  header already states that the modes are not interchangeable in either direction; that statement
+  is precisely what R-01 says is insufficient.
+- `staging/plugin/skills/concept-to-code/scripts/plan-task-predicate.awk` — the loaded predicate
+  supplying both `is_task_line()` and `is_task_opener()`; the source of the two different answers.
+- `staging/plugin/skills/concept-to-code/SKILL.md` — Step 5 call sites: the pre-dispatch plan
+  structure validation (a `>= 1` guard) and the Agent-tool batch dispatch (arithmetic). Both are
+  anchored by `fence-contract:` markers rather than by heading, per ADR-0083 §D3.
+- `staging/plugin/skills/autopilot-build/SKILL.md` — check 5 of the unattended pre-flight ("Plan has
+  tasks"), a guard.
+- `staging/plugin/scripts/tests/plan-task-count.test.sh`,
+  `staging/plugin/scripts/tests/batch-dispatch-openers.test.sh`, and
+  `staging/plugin/scripts/tests/scope-guards.test.sh` — the harness files that already extract and
+  execute these call sites; where the per-call-site assertions belong.
 - `staging/plugin/scripts/tests/plant-check.sh` — the plant registry runner (ADR-0108).
-- `docs/architecture/ADR-0092-240-step5-mode-value-domain.md` (the source; anchor on its "covers
-  `step5_mode` only" sentence, not `:88`), `docs/architecture/ADR-0076-195-additive-field-state.md`,
-  `docs/architecture/ADR-0016-dynamic-workflows-step5.md`.
+- `docs/architecture/ADR-0100-242-batch-dispatch-openers.md` — the source, whose quoted line number
+  will have moved; and `docs/architecture/ADR-0069-172-plan-task-form.md`, which established the
+  shared predicate.
 
 ## Data model
 
-- `hook_verified` — documented as a boolean; `manifest-init.sh` defaults it to `false`.
-- `step5_review_mode` — documented as `none|checkpoint`; `manifest-init.sh` defaults it to `none`.
-- Both are **additive** fields: a manifest written before the field simply does not carry it, which
-  is a distinct state from invalid and from unreadable (ADR-0076 §THE RULE).
+Per caller, the tuple that must be recorded and checkable: call site (file plus fence id), mode
+invoked, and the question being asked (guard versus arithmetic). The failure direction of each mode
+is the property that binds the two: `--count` over-counts, safe for a guard and wrong for
+arithmetic; `--count-openers` can legitimately return 0, safe for arithmetic that checks zero and
+wrong for a guard.
 
 ## API / Interfaces
 
-`manifest-field-state.sh <manifest> <field>` — reports `PRESENT|<value>`, `ABSENT|<current_step>`,
-or `UNREADABLE`, with exit 3 for "could not run". It reports; it never decides. The value domain
-stays the caller's, which is exactly why the documented domain in its header is the artefact that
-must be checked against the producers.
+- `plan-tasks.sh --count <plan-file>` — one integer, task LINES, loose predicate.
+- `plan-tasks.sh --count-openers <plan-file>` — one integer, task BLOCK OPENERS, strict predicate.
+- Exit codes: 0 with an integer on stdout; exit 3 for "the check did not run" (predicate missing,
+  awk failed, non-integer result). Exit 2 for bad invocation.
+
+Whatever mechanism R-01 introduces becomes part of this interface and must not collapse exit 3 into
+a zero result.
 
 ## UI flows
 
@@ -75,30 +72,22 @@ None.
 
 ## Edge cases
 
-- **The reverse direction is the one that catches the defect.** A documented value nothing writes is
-  what #240 was; without `V2`'s shape the header could name anything and the forward check would
-  still pass.
-- **A wrapped sentence yields an empty documented set**, which makes the reverse assertion vacuously
-  true — ADR-0092 records that the first line-based derivation returned nothing. R-02 requires the
-  derivation to survive the wrap; the count guard is what makes a failed derivation loud.
-- **A boolean domain is not shaped like an enum domain.** `hook_verified`'s producers write YAML
-  booleans through `manifest-set-flag.sh`; ADR-0076 records that a **quoted** `"true"` reads `true`,
-  not `True`, and that this strictness is deliberate. The derivation must not "fix" that.
-- **`step5_review_mode` is written by `sed` on an additive field**, not by a helper, so its producer
-  is prose in a SKILL.md rather than a script — a differently shaped producer, which is the stated
-  reason ADR-0092 left both fields out.
-- **No waiver mechanism** (R-03): a value domain with an exemption is not a domain. This diverges
-  deliberately from the exemption-carrying derived guards elsewhere in the harness.
-- **A manifest predating a field is not a domain violation.** The `ABSENT` state must not be fed
-  into the written set, or every pre-field manifest reads as writing an undocumented value.
-- **The wrong string sat in the live worked example for months.** #240 was latent because nothing
-  checked, and the example is the one ADR-0076 tells the next author to follow.
+- A plan whose `--count-openers` is legitimately 0 (the two corpus plans using `### T1 —` and
+  `### Step 0 —`) — a real zero, which must stay distinguishable from exit 3.
+- A malformed plan a guard must reject: `--count-openers` would pass it, which is the silent
+  failure in the first direction.
+- Arithmetic fed by `--count`: 38 versus 7 on #222's plan, dispatching against tasks that do not
+  exist — the silent failure in the second direction.
+- A future third caller, which is the population the mechanism must actually cover; two call sites
+  asserted is necessary and not sufficient.
+- A new mode added later: whether the mechanism extends or has to be rewritten.
+- Per the standing rules in the issue footer, the mechanism is a checker if it branches on an exit
+  code, and must not adopt a reporter's always-exit-0 idiom by copying one.
 
 ## Success criteria
 
-- [ ] R-01 — written set and documented set derived at run time for both fields and compared in both
-      directions, with count guards on both derivations.
-- [ ] R-02 — the derivation must survive a sentence that wraps across comment lines; ADR-0092
-      records that the first line-based derivation returned nothing and would have been vacuously
-      true.
-- [ ] R-03 — no waiver mechanism: a value domain with an exemption is not a domain.
+- [ ] R-01 — a caller cannot silently pick the wrong mode; the mechanism must be checkable, not a
+      sentence in a header.
+- [ ] R-02 — both existing call sites still resolve to the mode they use today, asserted.
+- [ ] R-03 — the exit-3 "did not run" contract preserved for both modes, distinct from a legitimate
+      zero.

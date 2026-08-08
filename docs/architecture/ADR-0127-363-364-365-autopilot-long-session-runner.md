@@ -263,3 +263,25 @@ is the backstop.
   pins that they are obeyed. Same standing limitation as ADR-0047 and ADR-0048.
 - **#366 is not addressed here.** Its R-02 asks whether all 138 fences must be shell-portable or
   constrained to `bash`, which governs every skill rather than this runner. Separate chain.
+
+## Correction 2026-08-06 (issue #365, ADR-0129) — Part 4 is superseded
+
+§D5's `--budget` argument is never built. The runner does take arguments, as this section says, but
+there is no token ceiling for a `--budget` value to set (ADR-0129 §D1).
+
+§D6 is superseded **in full**: `token-budget` is removed rather than given the producer this section
+proposed — a ceiling evaluated at publish cannot stop the feature that breached it, only the one
+after. `rtf-blocker` keeps its mechanism, byte-unchanged; only its stated cause changes (ADR-0129
+§D6).
+
+§D7's `[~]`/`skipped-features` clause is superseded **in part**: measured, `project-conductor`
+Step 2 always selects the first `- [ ]` line, so `[~]` is permanently invisible to it and every
+bounded run would quietly delete a feature from the roadmap. The rest of §D7 stands — the run must
+never write `needs-human`, and running out of budget stays the least alarming way for it to end
+(ADR-0129 §D5).
+
+§D8's "D6's token bound is the primary one and this is the backstop" is reversed: with the token
+bound gone, `--features N` is the bound and the turn budget is now the fail-safe, restated as
+`N × 60` with its `n = 1` sample size (ADR-0129 §D11).
+
+The body above is left byte-unchanged (ADR-0034 precedent).

@@ -1163,9 +1163,12 @@ If either path is missing on disk: do NOT dispatch coder. Present to user:
 # This is a CHECKER — branch on its exit code. The anti-test-weakening scan four blocks below and
 # the diff-budget reporter are the opposite contract (always exit 0, signal on stdout, print
 # CLEAN). Do not copy one block's branching into the other.
-tasks=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count "<manifest.artifacts.plan>")
+# The trailing `# plan-tasks-question:` comment on each invocation declares which question it
+# answers; mode-binding-check.sh compares that declaration against plan-tasks.sh's own
+# mode-contract table, never against this prose (issue #294, ADR-0131).
+tasks=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count "<manifest.artifacts.plan>")   # plan-tasks-question: guard
 rc=$?
-openers=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count-openers "<manifest.artifacts.plan>")
+openers=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count-openers "<manifest.artifacts.plan>")   # plan-tasks-question: arithmetic
 orc=$?
 ```
 
