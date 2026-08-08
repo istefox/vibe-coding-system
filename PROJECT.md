@@ -1172,7 +1172,7 @@ wave order.
 - [ ] MALFORMED is dropped silently by any caller filtering BUDGET or SCOPE  (issue #295)
 - [ ] a per-file budget ceiling is parsed and then summed so one file can exceed its own  (issue #296)
 - [ ] the dirty-classify fence reads porcelain v1 so a renamed artifact classifies as OTHER  (issue #297)
-- [ ] BB2b's absolute ceiling was hand-raised three times in one session on three healthy features  (issue #358)
+- [x] BB2b's absolute ceiling was hand-raised three times in one session on three healthy features  (issue #358)  (completed: 2026-08-06, PR #373)
 
 ##### Wave 2 — MED: shared scripts with multiple live callers, and the guard populations
 
@@ -1460,3 +1460,59 @@ One orchestrator error, no code change: the Batch A tester was dispatched withou
 `isolation: "worktree"`, so it wrote into the shared checkout. No work was lost. The second-order
 finding is the durable one — **the escape check could not have caught it**, because it reads
 `git ls-files --others` and the edited file was tracked.
+
+#### Found by running the Wave 1 chain attended, 2026-08-08 (issues #388, #389, #390, #391)
+
+Four defects the four waves above did not anticipate, all found by **executing** the chain on
+issue #385 rather than by reading it, and three of them found by making a mistake and then asking
+why nothing caught it. Listed here rather than folded into a wave, following the Phase 11 precedent,
+because they are as runner-internal as everything above them.
+
+**#389 is the one that generalises.** Two gate transitions were performed before the gate was
+presented. One was refused (`illegal transition step_3_project_memory → step_4_session_boundary`);
+the other was accepted in silence. The reason is measurable: `step_3_project_memory` has exactly
+one legal exit, while `gate_1b_brainstorm_decision` has two, because the bypass edge is the
+correct route when `detect-macos.sh` says `NOT_MACOS`. **The discriminator is computed and thrown
+away** — that verdict is in no manifest field — so no invariant about conditional-gate routing can
+ever be written. Six branch points share the shape; five have an unrecorded discriminator, and the
+sixth (`ready_for_implementation`, keyed on `tracer_bullet_verdict`) is the proof it is fixable.
+
+**#390 is the one that already cost something.** Gate 4.0 commits the manifest *before* the gate is
+answered, and the answer plus the transition to `ready_for_implementation` are then written to an
+**uncommitted** file — across the session boundary the same gate tells the operator to cross. A
+`git stash` took them. ADR-0089 made the manifest exempt from the Step 5.0.1 dirty check, correctly;
+exempt is not durable, and `VCS-011` already records tracked files vanishing from this shared
+checkout.
+
+**#391 is F14's systemic half.** The dispatch templates *are* guarded — `worktree-isolation-contract.test.sh`
+`H1`/`H1b`/`H1c`/`H2`/`H2b` require every named site to pin `isolation`. What is unguarded is the
+runtime, and its backstop has a blind spot: the merge-back escape check reads
+`git ls-files --others`, untracked only, so an agent editing a **tracked** file from the shared
+checkout is invisible by construction — which is exactly what happened.
+
+**#388 is narrow and is included for the pattern.** `detect-macos.sh` fired on a SPEC about bash
+fences because one word, `SwiftUI`, was written as prose while the three technical names beside it
+on the same line were backticked. ADR-0093 closed two measured classes; this is a third neither
+covers.
+
+| issue | finding |
+|---|---|
+| #389 | five of six skippable-gate branch points have a discriminator the manifest never records |
+| #390 | the Gate 4 answer and the `ready_for_implementation` transition live only in the working tree |
+| #391 | the merge-back escape check reads untracked files only, so a dispatch that ran without isolation is invisible |
+| #388 | a framework name in prose trips Gate 1c inside a non-UI document |
+
+**Ordering, and it is not the severity ordering.** #390 first: it is the only one that has already
+destroyed state, its fix is one commit at one named place, and it protects every later run of this
+same list. #391 second: it restores the runtime backstop the other three findings were caught
+*without*. #389 third: it is the largest and needs its own measurement of which gates deserve a
+state at all — and note that its Option 2 (remove the state) is ADR-0105 applied a second time.
+Then #388 last: one gate, one optional design step, no run misrouted.
+
+**None of the four is an autopilot candidate**, and the reason is per-issue rather than a blanket
+rule: #389 edits `manifest-transition.sh`, which the run calls at every step; #390 edits the Gate 4
+block the run passes through; #391 edits the merge-back the run executes after every dispatch
+stage. A run that breaks one of them breaks itself mid-flight, and its own green stops being
+evidence. #388 could run unattended on its own, but ADR-0093 calibrated those keywords against a
+measured corpus and the change must be verified in the failing direction, which is the thing an
+unreviewed run is least able to do (see #374).
