@@ -93,6 +93,8 @@ if [ "$rc" -eq 2 ]; then ok "BO3b an unreadable plan exits 2, not 0-with-zero"
 else bad "BO3b expected exit 2 on an unreadable plan, got $rc"; fi
 
 # The did-not-run channel must survive the new mode: a broken predicate is not "no tasks".
+# BO3c is the --count-openers half of R-03; its --count sibling is PTK9 in plan-task-count.test.sh
+# (issue #294, ADR-0131 §D7) — the pair is now discoverable from either side.
 FAKE="$TMP/fake"; mkdir -p "$FAKE"
 cp "$PT" "$FAKE/plan-tasks.sh"
 printf '%s\n' 'this is not awk {{{' >"$FAKE/plan-task-predicate.awk"
@@ -184,11 +186,14 @@ else
 fi
 
 # ===========================================================================
-# Z1 — assertion-count floor (ADR-0083 §D3).
+# Z1 — assertion-count floor (ADR-0083 §D3). Threshold unchanged at 16 (issue #294 adds no
+# assertion here); only the messages move — they said "floor 13" against a test of `>= 16`, a
+# passing Z1 printing the wrong number. When you change a literal in an assertion, grep the
+# message strings in the same edit (ADR-0120), so the next person to raise the floor reads it.
 # ===========================================================================
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 16 ]; then ok "Z1 assertion-count floor ($_total >= 13)"
-else bad "Z1 assertion count fell to $_total (floor 13) — assertions vanished from this file"; fi
+if [ "$_total" -ge 16 ]; then ok "Z1 assertion-count floor ($_total >= 16)"
+else bad "Z1 assertion count fell to $_total (floor 16) — assertions vanished from this file"; fi
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"
