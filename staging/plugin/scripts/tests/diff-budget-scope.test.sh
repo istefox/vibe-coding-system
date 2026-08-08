@@ -713,8 +713,18 @@ BK8_OUT=$(bash "$DBC" --plan "$TMP/bk8-plan.md" --tasks 1 <"$TMP/stat_in")
 #
 # The old parser is embedded below as the SPECIFICATION of what must not change, and every
 # single-ceiling declaration in the real corpus must parse to the same (files, ceiling) pair under
-# both. Only the per-file declarations may differ, and BK9b bounds how many do — otherwise "the
+# both. Only the per-file declarations may differ, and BK9b pins WHICH ones do — otherwise "the
 # corpus agrees" could be satisfied by a parser that rejects everything.
+#
+# BK9b CHECKS A CLASS, NOT A COUNT, and the reason is this file's own history. It used to assert
+# `1 <= bk9_diff <= 5`, an absolute ceiling fixed when the corpus held three per-file declarations.
+# ADR-0117 added a fourth; the ADR-0132 plan added eight more, and the assertion went red on a
+# feature that had done nothing wrong. That is `BB2b`'s disease one assertion over in the same
+# file — CLAUDE.md already records it firing three times on three consecutive healthy features,
+# with the note that a fourth hand-edit is the wrong remedy. A count cannot distinguish "the
+# rewrite moved the single-ceiling population" from "the corpus grew"; set equality can, and it
+# has no threshold to maintain. The property asserted is exact and two-directional: a declaration
+# parses differently IF AND ONLY IF it is a per-file (multi-group) form.
 #
 # ITS BOUNDARY, STATED: BK9 extracts and compares the parse_budget FUNCTION, so it is blind to a
 # script that defines the function correctly and does not call it. Verified rather than assumed —
@@ -757,10 +767,55 @@ if [ "$bk9_n" -ge 10 ]; then
 else
   bad "BK9a (count guard): only $bk9_n Budget: line(s) found — the derivation is broken, not the corpus clean"
 fi
-if [ "$bk9_diff" -ge 1 ] && [ "$bk9_diff" -le 5 ]; then
-  ok "BK9b: exactly $bk9_diff of $bk9_n declarations parse differently — the per-file ones, and nothing else"
+# Per-Budget-line CLASS, emitted in the same order and count as the two parser outputs above, so
+# the three files line up index by index. MULTI = more than one paren group carrying both a digit
+# and the word "line", i.e. the per-file form ADR-0091 introduced. The qualifying-group test is
+# parse_budget's own recognisable-attempt rule, restated here rather than borrowed, because this
+# file must be able to disagree with the script it is checking.
+cat >"$TMP/bk9-class.awk" <<'AWKEOF'
+function trim(s){gsub(/^[ \t]+/,"",s);gsub(/[ \t]+$/,"",s);return s}
+/[Bb]udget:/ {
+  rest=trim(substr($0, index($0,"udget:")+6)); q=0; s=rest
+  while (match(s, /\([^()]*\)/)) {
+    # st/ln are captured BEFORE the digit test below, and that is not defensive style: match()
+    # writes RSTART/RLENGTH globally, so the inner match() overwrites the outer one's position
+    # and `substr(s, RSTART+RLENGTH)` would advance the cursor by the DIGIT's offset instead of
+    # the group's. Measured, not reasoned: on `Budget: a.md (~50 lines)` the cursor moved back
+    # into the same parenthesis and counted it twice, reporting a single-ceiling line as MULTI.
+    st=RSTART; ln=RLENGTH
+    inner=substr(s,st+1,ln-2); low=tolower(inner)
+    if (match(inner,/[0-9]+/) && index(low,"line")>0) q++
+    s=substr(s,st+ln)
+  }
+  print (q>1 ? "MULTI" : "SINGLE")
+}
+AWKEOF
+awk -f "$TMP/bk9-class.awk" "$REPO"/docs/superpowers/plans/*.md >"$TMP/bk9-class.out" 2>/dev/null
+bk9_multi=$(grep -cx MULTI "$TMP/bk9-class.out" 2>/dev/null || true); [ -n "$bk9_multi" ] || bk9_multi=0
+# Set equality, both directions at once: a MULTI line that did NOT change and a SINGLE line that
+# DID are both violations, and both are counted here.
+bk9_mismatch=0
+if [ "$bk9_n" -gt 0 ] && [ "$bk9_n" = "$(grep -c . "$TMP/bk9-class.out" 2>/dev/null || true)" ]; then
+  bk9_mismatch=$(paste "$TMP/bk9-old.out" "$TMP/bk9-new.out" "$TMP/bk9-class.out" \
+    | awk -F'\t' '{ differs = ($1 != $2); multi = ($3 == "MULTI"); if (differs != multi) print }' \
+    | grep -c . || true)
 else
-  bad "BK9b: $bk9_diff of $bk9_n declarations changed — expected a small, bounded set (the per-file forms); a large number means the rewrite moved the single-ceiling population too"
+  bk9_mismatch=-1   # the three derivations disagree on line count: broken, not clean
+fi
+# Two plants, from opposite ends, because the iff has two ways to be hollow. The first widens the
+# CLASS (every line with one qualifying group becomes MULTI), so single-ceiling declarations are
+# called per-file while parsing identically. The second inverts the COMPARISON, so conforming
+# lines are counted as violations. A check that survived either would be asserting nothing.
+# plant: BK9b | plugin/scripts/tests/diff-budget-scope.test.sh | q>1 ? "MULTI" : "SINGLE" | q>0 ? "MULTI" : "SINGLE"
+# plant: BK9b | plugin/scripts/tests/diff-budget-scope.test.sh | if (differs != multi) print | if (differs == multi) print
+if [ "$bk9_mismatch" -eq 0 ] && [ "$bk9_diff" -ge 1 ]; then
+  ok "BK9b: a declaration parses differently iff it is a per-file form ($bk9_diff of $bk9_n differ, $bk9_multi are multi-group) — the single-ceiling population is untouched"
+elif [ "$bk9_diff" -lt 1 ]; then
+  bad "BK9b: no declaration parses differently at all — the per-file parse is gone, so #246's fix is not in this parser"
+elif [ "$bk9_mismatch" -lt 0 ]; then
+  bad "BK9b: the class derivation produced a different line count than the parsers — the sweep is broken, not the corpus clean"
+else
+  bad "BK9b: $bk9_mismatch declaration(s) break the iff — a multi-group form that parses identically, or a single-ceiling form that moved ($bk9_diff differ, $bk9_multi multi-group, of $bk9_n)"
 fi
 bk9_regress=$(paste "$TMP/bk9-old.out" "$TMP/bk9-new.out" \
   | awk -F'\t' '$1!=$2 && $2=="<none>|-"' | grep -c . || true)
