@@ -18,7 +18,7 @@ Source: GitHub issue #385
 new guard; the ADR and the `CLAUDE.md` record; any new `scripts/*.sh` or `*.awk` files the fix
 requires, plus their `PAIRS` entries in `staging/sync-to-claude.sh`.
 
-**Out:** `swiftui-pro:84`, which is `$0` in a `swift` fence — a SwiftUI binding closure, legitimate,
+**Out:** `swiftui-pro:84`, which is `$0` in a `swift` fence — a `SwiftUI` binding closure, legitimate,
 and outside a bash-fence population by construction. Out too: changing what any fence *does*. This
 feature moves logic out of a rendered document and must not alter its behaviour. Deployment to
 `~/.claude` is a separate human step (`staging/sync-to-claude.sh --apply`).
