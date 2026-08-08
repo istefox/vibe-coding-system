@@ -1168,7 +1168,7 @@ wave order.
 - [x] a bold-wrapped requirement id is invisible to both the checker and the repairer  (issue #291)  (completed: 2026-08-03)
 - [x] the value-domain guard covers step5_mode only  (issue #292)  (completed: 2026-08-04)
 - [ ] task_num extracts digits only so a lettered task collides with its sibling  (issue #293)
-- [ ] plan-tasks.sh has two modes with opposite failure directions and nothing stops a caller picking the wrong one  (issue #294)
+- [x] plan-tasks.sh has two modes with opposite failure directions and nothing stops a caller picking the wrong one  (issue #294)  (completed: 2026-08-08)
 - [ ] MALFORMED is dropped silently by any caller filtering BUDGET or SCOPE  (issue #295)
 - [ ] a per-file budget ceiling is parsed and then summed so one file can exceed its own  (issue #296)
 - [ ] the dirty-classify fence reads porcelain v1 so a renamed artifact classifies as OTHER  (issue #297)
