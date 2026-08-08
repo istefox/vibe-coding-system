@@ -1,7 +1,7 @@
-<!-- project-tasks: prefix=VCS lastId=13 -->
+<!-- project-tasks: prefix=VCS lastId=14 -->
 # PROJECT TASKS
 
-Updated: 2026-08-08 · Open: 5 (P1: 0) · In progress: 0
+Updated: 2026-08-08 · Open: 5 (P1: 0) · In progress: 1
 
 This ledger holds only what is **not** already a GitHub issue or a `PROJECT.md` roadmap row.
 Duplicating those here would create the second source of truth ADR-0024 forbids. Anything with an
@@ -17,7 +17,7 @@ issue number lives there; this file is for what would otherwise be lost when the
 
 ## In Progress
 
-_none_
+- [-] `VCS-014` **P2** the concept-to-code chain for issue #385 is paused at `ready_for_implementation` on `feat/385-skill-args-substituted-in-fences`, which is **local-only** and therefore carries `VCS-001`'s exposure — a branch prune deletes `ADR-0132` (8 decisions), a 9-task plan with 5/5 requirement coverage, and the SPEC. Gate 4 answered ("fresh session, attended"), `main` merged in at `c58a46b`, harness 74/74, tree clean. Resume with `/skill concept-to-code resume docs/manifests/2026-08-08-385-skill-args-substituted-in-fences.manifest.yml` in a **fresh** session. Two human steps are required inside it: `bash staging/sync-to-claude.sh --apply` before Task 9, and `plant-check.sh` backgrounded (> 25 min). The plan predicts a red across six tasks (`SFP4`: 19 → 12 → 10 → 5 → 2 → 1 → 0) — read that table before treating any checkpoint red as a regression <!-- src:session opened:2026-08-08 -->
 
 ## Backlog / To Add
 
