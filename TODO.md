@@ -1,7 +1,7 @@
 <!-- project-tasks: prefix=VCS lastId=13 -->
 # PROJECT TASKS
 
-Updated: 2026-08-06 · Open: 6 (P1: 0) · In progress: 2
+Updated: 2026-08-08 · Open: 5 (P1: 0) · In progress: 0
 
 This ledger holds only what is **not** already a GitHub issue or a `PROJECT.md` roadmap row.
 Duplicating those here would create the second source of truth ADR-0024 forbids. Anything with an
@@ -17,8 +17,7 @@ issue number lives there; this file is for what would otherwise be lost when the
 
 ## In Progress
 
-- [-] `VCS-008` **P2** the autopilot reposition is mid-chain — ADR-0127 Parts 1-3 (#363, #364) are merged; **Part 4 is now the #365 chain**, tracked as `VCS-013`. One clause of Part 4 is superseded: the `token-budget` producer is **not** built, the halt is removed outright (ADR-0129 §D6), because a ceiling checked at publish cannot stop the feature that breached it. `rtf-blocker` keeps its mechanism and its corrected sentence <!-- src:session opened:2026-08-05 -->
-- [-] `VCS-013` **P2** the concept-to-code chain for issue #365 is paused at Gate 4 on `feat/365-scope-and-bound-the-autopilot-run`, which is **local-only** and therefore carries `VCS-001`'s exposure — a branch prune deletes `SPEC.md` (11 requirement ids), `ADR-0129` (11 decisions) and a 9-task plan whose coverage gate reads 11/11. Manifest at `ready_for_implementation`, tree clean, harness 0 red of 73 after merging `main` in at `c771806`. Resume with `/skill concept-to-code resume docs/manifests/2026-08-06-365-scope-and-bound-the-autopilot-run.manifest.yml` in a **fresh** session — that was the Gate 4 choice, taken for orchestrator headroom across 9 task groups <!-- src:session opened:2026-08-06 -->
+_none_
 
 ## Backlog / To Add
 
@@ -38,6 +37,8 @@ _none_
 
 ## Done
 
+- [x] `VCS-013` The #365 chain ran to completion and merged in PR **#382** at `58e9486`. The local-only exposure it shared with `VCS-001` is resolved: `SPEC.md`, `ADR-0129` and the 9-task plan are all on `main`, and the branch survives at `origin/feat/365-scope-and-bound-the-autopilot-run` as well. What the shipped bound then proved is separate and lives in `PROJECT.md` Phase 12, not here: the first run under it (`--features 1 --only 294`, PR #383) refused #293 `OUT-OF-SCOPE` and stopped at `EXHAUSTED 1/1` without writing `[~]`, a `skipped-features` entry or `needs-human` (2026-08-08)
+- [x] `VCS-008` The autopilot reposition is no longer mid-chain: ADR-0127 Parts 1-3 (#363, #364) and Part 4 (#365, PR #382) are all merged. The superseded clause stands as recorded — the `token-budget` producer was **not** built and the halt was removed outright (ADR-0129 §D6), because a ceiling checked at publish cannot stop the feature that breached it; `rtf-blocker` keeps its mechanism and its corrected sentence, tracked as issue #374 (2026-08-08)
 - [x] `VCS-006` Filed as issue **#380** and therefore leaves this ledger, which holds only what is not already a GitHub issue. Re-measured before filing and the entry's own numbers were understated: the file is 3,592 lines / 274 KB / ~68,500 tokens and **98%** of it is 90 ADR blocks, against 80 lines of everything else. The cost claim is now measured rather than asserted — ~21.5% of the orchestrator's cache-read volume, ~$1,616, about four times the coder's entire cost. Sub-agents are unaffected: they do not load the project `CLAUDE.md` (ADR-0130 `## Correction`) (2026-08-06)
 - [x] `VCS-007` Issue #370, ADR-0128, merged in PR #371 at `5af6e55`: `publish-feature.sh --issue <N>` puts `Closes #N` in the body and `project-conductor` reads the number off the roadmap line before the checkbox flip. The mechanism is shipped but **unproven end to end** — #370 closed because a human wrote the keyword into #371 by hand; the first unattended PR is the evidence, tracked as Phase 11 Wave 2 (2026-08-06)
 - [x] `VCS-009` The ADR-0127 rename is deployed: `~/.claude/settings.json` names `autopilot-guard.sh`, zero stale `nightly-guard.sh` references, zero `~/.claude/hooks/nightly-*.sh` remaining, `sync-to-claude.sh --apply` proceeds (2026-08-05)
