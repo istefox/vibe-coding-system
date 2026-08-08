@@ -1370,3 +1370,93 @@ skipped for exactly that reason.
 runner-internal as anything above them, so a `- [ ]` row would offer the unattended runner the job
 of repairing the chain it is running inside. The first draft of this block used checkboxes; that
 was the mistake this phase's own opening paragraph exists to prevent.
+
+### Phase 12 — what the first bounded autopilot run exposed (attended, audit 2026-08-08)
+
+Subject: the `/skill autopilot --features 1 --only 294` run of 2026-08-07 22:30Z → 2026-08-08
+01:15Z. It **succeeded** — PR #383, 1/1 delivered, four CI checks green, nothing merged. This phase
+is about what it exposed on the way. Full evidence per finding:
+`docs/AUTOPILOT-RUN-AUDIT-2026-08-08.md`.
+
+**Attended, and a table rather than a checklist, for the Phase 11 reason** — every item below lives
+inside the runner's own machinery, and `project-conductor` takes the first `- [ ]` line in this
+file, so a checkbox would offer the unattended runner the job of repairing the chain it is running
+inside. R13 is the one exception and is a repo-admin action, not a code change.
+
+**The baseline moves from n=1 to n=2.** #292 (PR #362, 2026-08-04) was the first unattended
+delivery; this is the second, and the first with a bound in effect. ADR-0129's bound was verified
+in **both** directions: #293 was refused `OUT-OF-SCOPE` and the run stopped at `EXHAUSTED 1/1`
+without writing `[~]`, a `skipped-features` entry or `needs-human`.
+
+#### Wave 1 — the rendering defect (P0)
+
+**Skill arguments are substituted into `$<digit>` tokens inside the skill body, 0-indexed, before
+the body reaches the model.** Bash fences are text, so they are rewritten too. Measured on seven
+on-disk-versus-rendered pairs across three skills in one run; 0-indexing confirmed from the
+`concept-to-code` invocation's own title words.
+
+This is the root cause and every other P0/P1 below is independent of it only by luck. ADR-0083's
+whole fence-contract mechanism rests on the rendered text being the executable text; here it is
+not, and the corruption is silent because it produces syntactically valid shell that does the wrong
+thing. Had the fences been executed as rendered, `autopilot`'s own argument parser would not have
+parsed `--features`/`--only` and the run would have gone **unbounded across all 30 pending rows** —
+the exact failure ADR-0129 §A4 exists to prevent, reintroduced one layer above it. Three further
+consequences reproduce shipped bugs at render time: c2c Step 5.0.1's `rel()` reintroduces
+ADR-0089's defect inside the fence written to fix it, and both TOFU probes reintroduce ADR-0102's.
+
+The run survived only because the orchestrator read every fence from disk rather than executing the
+rendered text — an ad-hoc workaround, not a designed mitigation. **Undocumented**: no ADR and no
+line of `CLAUDE.md` mentions the mechanism.
+
+Population: **20 lines across 6 staged `SKILL.md` files** — `concept-to-code` 9, `autopilot` 4,
+`project-conductor` 3, `autopilot-build` 2, `commit` 1, `swiftui-pro` 1.
+
+| item | state |
+|---|---|
+| move every `$<digit>` out of every staged `SKILL.md` bash fence | not "escape them" — stop putting logic needing positional params or awk field refs inside a rendered document. Shell parsers move to `skills/<name>/scripts/`; awk programs to `.awk` files loaded with `awk -f`. Both patterns already exist here. A file is never rendered |
+| a derived guard: no `$<digit>` inside a bash fence in any staged `SKILL.md` | count-guard the denominator — an unmatched glob must fail loudly, never read as full coverage. One-line declared waiver for a genuine prose mention. Verify in the failing direction |
+| record the mechanism in `CLAUDE.md` and an ADR | undocumented today, so the next author writes `$1` into a fence for the same good reasons the current 20 were written |
+
+**Wave verification:** re-run `/skill autopilot --dry-run --only <n>` and confirm the rendered
+fence is byte-identical to the file. That is the only check that tests the actual failure; a green
+harness proves nothing here, because the harness reads files.
+
+#### Wave 2 — publish quality and chain correctness (P0/P1)
+
+| item | state |
+|---|---|
+| `publish-feature.sh` takes a real PR title | `:148` passes `--title "$SLUG"`, so #383 is titled `plan-tasks-sh-has-two-modes-with-opposit`. **It is the first PR this system has ever created through `publish-feature.sh`** — latent since ADR-0022, surfaceable only by a genuinely unattended publish. Default to the branch's last non-snapshot commit subject; assert the title is not the slug when the tip carries a Conventional Commits subject |
+| `project-conductor` passes `mode` to `manifest-init.sh` | Step 4 calls it itself and omits the 4th argument, so the manifest was created `greenfield` while `gate0-detect.sh` said `brownfield`. Uncorrected, c2c Step 1 dispatches `interview-driver` — interactive, nobody present: the #329 failure class through a door #329 did not close. Assert in both directions, so a hardcoded `brownfield` fails too |
+| merge-back deletes the merged worktree branch | the success path runs `git worktree remove` and never touches `$WB`; the *conflict* path withholds deletion deliberately. 20 branches before this run, 23 after — one per dispatched stage, forever. Use `git branch -d`, never `-D`, never on the conflict or halt paths |
+| `plan_deviations` covers the tester | ADR-0073 §D1 put the `PLAN DEVIATIONS:` block in the **coder** brief only; ADR-0049 then made the tester a first-class producer and the disclosure did not follow. Measured: the tester added a finding token absent from ADR-0131's §D3 taxonomy, and it reached Gate 5 as prose in an agent report rather than as a rendered deviation |
+| scope hook audit logs by project | `~/.claude/state/<hook>/audit.log` is shared across every repo. During this run a concurrent session interleaved its entries: `agent-command-scope` logged 874 events, **16** of them this repo's. The session id is already in column 2 and no consumer filters on it — the ADR-0029 lesson, not carried across |
+
+#### Wave 3 — Phase P and the write-scope collision (P2)
+
+| item | state |
+|---|---|
+| Phase P step 3 honours the resolved scope | it iterates every row of `_issue-map.tsv` with an absent SPEC, with no reference to the bound Phase S resolved minutes earlier. This run: 4 SPEC generations for closed issues inside a run bounded to one feature. **ADR-0129 bounded what a run implements and left what it designs unbounded** |
+| Phase P step 4 gets an explicit "nothing generated" branch | it has a skip-if-present branch for an existing prep branch and none for steps 1–3 all having skipped, which is the normal brownfield case and was this run's. The orchestrator used `main` and recorded it; the skill does not sanction that |
+| decide the `tests/`-directory collision | `test-write-scope.sh`'s predicate is a `tests/` path component; ADR-0131 §D3 deliberately places a 431-line production checker under `staging/plugin/scripts/tests/` for three separate reasons. Both decisions are individually correct and they collide — the checker had to be dispatched to the **tester**. **Do not resolve it by moving the checker** |
+| resolve whether `test-write-scope.sh` observes tester writes at all | the hook logged 3 events in this window, all from the coder. The three tester dispatches produced **no entry**. Either it does not observe them or it exits before logging on some path. It is ADR-0088's backstop, so if the backstop does not exist that has to be said plainly |
+| make `shell-tests` a required check on `main` | known since ADR-0114, measured again: the job running the whole 74-file harness *and* the plant registry does not gate a merge. Repo-admin action, the one item here that is not a code change |
+
+#### Wave 4 — long tail (P3)
+
+| item | state |
+|---|---|
+| stamp the topic slug on the brownfield path | issue #375, confirmed still live: `gate0-detect.sh` reported `spec_topic_match=unknown`, c2c Step 1 stamps the marker only on the greenfield branch, and the conductor's JIT copy does not stamp either. Every conductor-driven chain routes with an unverifiable SPEC identity. Fix in one place, not both |
+| bound `plant-check.sh` runtime | 268 plants each re-running a harness file: **> 25 minutes**, measured. It timed out a 10-minute foreground run. Parallelism, or only plants whose target changed — but the full-sweep mode must stay available, since a partial run that reads like a full one is this repository's signature failure |
+
+#### What the run did NOT expose
+
+Recorded so the absence is not later read as coverage. No gate mis-fired: all five HITL gates
+recorded `approved` with notes, the first complete ADR-0099 trail in the corpus. `secret-scan`,
+`dependency-scan` and `weakening-scan` all ran clean and **none was tested against a real
+positive**. ADR-0102's Gate 2b trust skip, ADR-0104's snapshot collapse, ADR-0106's
+archive-on-completion and ADR-0128's `Closes #N` all worked as designed.
+
+One orchestrator error, no code change: the Batch A tester was dispatched without
+`isolation: "worktree"`, so it wrote into the shared checkout. No work was lost. The second-order
+finding is the durable one — **the escape check could not have caught it**, because it reads
+`git ls-files --others` and the edited file was tracked.
