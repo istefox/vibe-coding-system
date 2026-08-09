@@ -48,7 +48,19 @@
 # ran, verified live (ADR-0112's `echo "..." >&2 exit 0` lesson, met again with printf).
 # plant: RRP1 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | [ -n "$TARGET" ] || exit 0 | [ -n "$TARGET" ] || echo NONEMPTY-BUG
 # plant: RRP2 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | _t2=$(git -C "$_d" rev-parse --show-toplevel 2>/dev/null) || { printf '%s' "$TARGET"; exit 0; } | _t2=$(git -C "$_d" rev-parse --show-cdup 2>/dev/null) || { printf '%s' "$TARGET"; exit 0; }
-# plant: RRP3 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | _t2=$(git -C "$_d" rev-parse --show-toplevel 2>/dev/null) || { printf '%s' "$TARGET"; exit 0; } | _t2=$(git -C "$_d" rev-parse --show-cdup 2>/dev/null) || { printf '%s' "$TARGET"; exit 0; }
+# RRP3 gets NO plant, declared here rather than left silent, and the reason is the FILESYSTEM, not
+# the assertion: the #344 precondition (a root reachable under a different case) can only be BUILT
+# on a case-insensitive filesystem. On the CI runner it cannot, so RRP3 takes its self-naming
+# NOT EXERCISED branch and passes regardless of what the mechanism does — no mutation can make it
+# fail there, so a plant on it is unfirable by construction and PC1 reports it, correctly.
+# Nothing is lost: the file's own note above says RRP2 and RRP3 share the SAME mutation site, and
+# RRP2's plant fires on both platforms. RRP3 itself still runs, and is still genuinely exercised
+# on a case-insensitive filesystem.
+# Its twin RJ13 is the same shape and DOES carry a plant that reports as fired — do not read that
+# as evidence the two disagree. plant-check.sh matches ^FAIL: <id> as a PREFIX (issue #355, open),
+# so RJ13's plant is credited to RJ13b going red under the same mutation. RJ13b is exercised on
+# every platform; RRP3 has no such sibling, which is why it is the honest one of the pair. If #355
+# lands, expect RJ13's plant to start failing PC1 for exactly the reason written here.
 # plant: RRP4 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | { [ -n "$_t2" ] && [ "$_t2" -ef "$_top" ]; } || { printf '%s' "$TARGET"; exit 0; } | :
 # plant: RRP5 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | [ -d "$_d" ] || { printf '%s' "$TARGET"; exit 0; } | [ -d "$_d" ] || { printf 'WRONG-%s' "$TARGET"; exit 0; }
 # plant: RRP6 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | not a git repository: %s\n' "$SELF" "$TOP" >&2 exit 3 | not a git repository: %s\n' "$SELF" "$TOP" >&2; exit 0
