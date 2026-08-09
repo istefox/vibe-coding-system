@@ -112,25 +112,49 @@ if grep -qF "weakening-scan.sh" "$COMMIT_SKILL" && grep -qi 'broader predicate' 
 else
   bad "HIA6b: commit/SKILL.md does not name weakening-scan.sh's predicate as the chosen one"
 fi
-if grep -qE 'is_test_path' "$COMMIT_SKILL"; then
-  ok "HIA6c: an is_test_path helper is defined in commit/SKILL.md"
+# HIA6c (RE-ANCHORED — ADR-0132 §D3, issue #385). This assertion used to grep for the IDENTIFIER
+# of the classification helper anywhere in commit/SKILL.md — a name that could survive in a stray
+# comment on a mechanism-less file just as easily as on a correct one. Task 7 eliminates that
+# function outright and inlines its grep -qE at the single call site inside the classification
+# loop, so a name-grep would go red on a CORRECT file. Re-pointed at the MECHANISM instead: a
+# grep -qE call, applying the classification ERE, co-located with $_f inside the
+# `for _f in $staged $tracked_modified $untracked` loop itself — not merely present somewhere in
+# the file.
+# PLANT DECLARED HERE, NOT AT ITS ORIGINAL RE-ANCHORING (same reason as SFP4 in
+# skill-fence-positional-tokens.test.sh): HIA6c was EXPECTED RED before Task 7 inlined the call, so
+# a plant declared then would have been worthless — plant-check.sh cannot tell a plant firing from
+# an assertion that was already red. Now that Task 7 has landed and HIA6c is green, the deferred
+# plant is declared and re-verified from scratch against an isolated copy (not trusted from the
+# comment that deferred it): needle "grep -qE" matches exactly once in commit/SKILL.md — the single
+# inlined call site inside the classification loop — and mutating it to "grep -q -E" (functionally
+# identical, textually distinct) makes HIA6c fail, printing the exact "no grep -qE ... was found"
+# message, while HIA7a/HIA7b (which assert the unrelated ERE pattern string, not the command name)
+# stay unaffected in both directions.
+# plant: HIA6c | plugin/skills/commit/SKILL.md | grep -qE | grep -q -E
+LOOP_HDR='for _f in $staged $tracked_modified $untracked; do'
+LOOP_BLOCK=$(awk -v hdr="$LOOP_HDR" '$0==hdr{f=1} f{print} f && /^done$/{exit}' "$COMMIT_SKILL")
+FLAT_LOOP=$(printf '%s' "$LOOP_BLOCK" | tr '\n' ' ')
+if [ -n "$LOOP_BLOCK" ] && printf '%s' "$FLAT_LOOP" | grep -q 'grep -qE' && printf '%s' "$FLAT_LOOP" | grep -qF '$_f'; then
+  ok "HIA6c: the classification grep -qE is applied to \$_f inside the classification for-loop (mechanism, not a helper's former name)"
 else
-  bad "HIA6c: no is_test_path helper found"
+  bad "HIA6c: no grep -qE applying the classification ERE to \$_f was found inside the for _f in \$staged \$tracked_modified \$untracked loop"
 fi
 
 # HIA7: no third predicate — the regex used must be the SAME shape as weakening-scan.sh's is_test()
 # (directory match on tests?/ or spec/, plus the basename patterns), not a hand-rolled narrower one.
 WSCAN="$STAGING/plugin/skills/review-triage-fix/scripts/weakening-scan.sh"
 # weakening-scan.sh's fragment is awk-literal syntax (backslash-escaped slashes inside /.../);
-# commit/SKILL.md's is_test_path uses plain grep -E syntax (unescaped slashes) for the same
-# semantic pattern — the two representations differ in escaping by construction, not by drift.
+# commit/SKILL.md's inlined classification grep -qE (ADR-0132 §D3 — the is_test_path() function it
+# used to live in was eliminated, not relocated) uses plain grep -E syntax (unescaped slashes) for
+# the same semantic pattern — the two representations differ in escaping by construction, not by
+# drift.
 if [ -f "$WSCAN" ] && grep -qE '\(\^\|\\/\)tests\?\\/' "$WSCAN"; then
   ok "HIA7a: anchor — weakening-scan.sh's is_test() directory-match fragment found (the pattern HIA7b compares against)"
 else
   bad "HIA7a: could not find weakening-scan.sh's is_test() directory-match fragment — HIA7b is meaningless"
 fi
 if grep -qE '\(\^\|/\)tests\?/' "$COMMIT_SKILL" && grep -qE '\(\^\|/\)spec/' "$COMMIT_SKILL"; then
-  ok "HIA7b: commit/SKILL.md's is_test_path uses the same directory-match fragments as weakening-scan.sh's is_test()"
+  ok "HIA7b: commit/SKILL.md's inlined classification grep -qE uses the same directory-match fragments as weakening-scan.sh's is_test()"
 else
   bad "HIA7b: commit/SKILL.md's predicate does not reuse weakening-scan.sh's directory-match fragments — looks like a third predicate was written"
 fi

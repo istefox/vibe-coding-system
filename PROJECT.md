@@ -1413,9 +1413,12 @@ Population: **20 lines across 6 staged `SKILL.md` files** — `concept-to-code` 
 
 | item | state |
 |---|---|
-| move every `$<digit>` out of every staged `SKILL.md` bash fence | not "escape them" — stop putting logic needing positional params or awk field refs inside a rendered document. Shell parsers move to `skills/<name>/scripts/`; awk programs to `.awk` files loaded with `awk -f`. Both patterns already exist here. A file is never rendered |
-| a derived guard: no `$<digit>` inside a bash fence in any staged `SKILL.md` | count-guard the denominator — an unmatched glob must fail loudly, never read as full coverage. One-line declared waiver for a genuine prose mention. Verify in the failing direction |
-| record the mechanism in `CLAUDE.md` and an ADR | undocumented today, so the next author writes `$1` into a fence for the same good reasons the current 20 were written |
+| move every `$<digit>` out of every staged `SKILL.md` bash fence | **done** — #385, ADR-0132. not "escape them" — stop putting logic needing positional params or awk field refs inside a rendered document. Shell parsers move to `skills/<name>/scripts/`; awk programs to `.awk` files loaded with `awk -f`. Both patterns already exist here. A file is never rendered |
+| a derived guard: no `$<digit>` inside a bash fence in any staged `SKILL.md` | **done** — #385, ADR-0132, `skill-fence-positional-tokens.test.sh`. count-guard the denominator — an unmatched glob must fail loudly, never read as full coverage. One-line declared waiver for a genuine prose mention. Verify in the failing direction |
+| record the mechanism in `CLAUDE.md` and an ADR | **done** — #385, ADR-0132. undocumented before, so the next author writes a positional-parameter token into a fence for the same good reasons the current 20 were written |
+
+**Detail:** `docs/architecture/ADR-0132-385-skill-args-in-fences.md`. Wave 1 shipped 19 → **0**
+occurrences; the population re-measured to **162** bash fences, not the 160 the ADR states.
 
 **Wave verification:** re-run `/skill autopilot --dry-run --only <n>` and confirm the rendered
 fence is byte-identical to the file. That is the only check that tests the actual failure; a green

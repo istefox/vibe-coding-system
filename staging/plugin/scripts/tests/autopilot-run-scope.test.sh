@@ -435,6 +435,13 @@ fi
 #   leading underscore is present only at the initialiser), confirmed to flip the flag's own default
 #   from false to true when mutated.
 #
+#   RETARGETED (issue #385 dispatch, Batch 3 test-authoring pass). Task 5 moved the initialisers
+#   and the parse loop out of autopilot/SKILL.md's fence and into scope-args-parse.sh (ADR-0132
+#   §D2 — only that narrow excision, not the marker branch or the output line, which stay in the
+#   fence). `_dry_run=false` now matches exactly once, in the new script, and zero times in
+#   SKILL.md — measured, not assumed. AR1-AR7, AR9 are untouched: their needles sit in the
+#   marker/validation/output section that did NOT move.
+#
 #   AR9 collided with Fence 2's own two DID-NOT-RUN sites (RS9's territory, added by Task 7). Bare
 #   "DID-NOT-RUN" now matches three places across this one file. Re-anchored on
 #   "exists but is not readable — DID-NOT-RUN" (Fence 1's exact message, em-dash and all — Fence 2's
@@ -449,7 +456,7 @@ fi
 # plant: AR5 | plugin/skills/autopilot/SKILL.md | must be a positive integer | must be a whole number
 # plant: AR6 | plugin/skills/autopilot/SKILL.md | must be a positive integer | must be a whole number
 # plant: AR7 | plugin/skills/autopilot/SKILL.md | block is empty | block is unusual
-# plant: AR8 | plugin/skills/autopilot/SKILL.md | _dry_run=false | _dry_run=true
+# plant: AR8 | plugin/skills/autopilot/scripts/scope-args-parse.sh | _dry_run=false | _dry_run=true
 # plant: AR9 | plugin/skills/autopilot/SKILL.md | exists but is not readable — DID-NOT-RUN | exists but is not readable — DID_NOT_RUN
 
 # mk_ar_root <name> — a scratch root for Fence 1 (Phase S). No PROJECT.md, no docs/: ADR-0129 §D7
@@ -462,11 +469,19 @@ mk_ar_root() {
 }
 
 # setup_ar <root> <args> — binds the two free variables Fence 1 declares: _root and _args (the raw
-# argument string), per ADR-0129 §D7 / Task 5's bullet 2.
+# argument string), per ADR-0129 §D7 / Task 5's bullet 2. CLAUDE_PLUGIN_ROOT is bound to the
+# STAGING copy (issue #385, ADR-0132 §D2/§D4): once Task 5's coder sub-step lands, the fence
+# resolves scope-args-parse.sh two-tier through this variable first, exactly the pattern
+# conductor-entry-failure-split.test.sh's setup() and recovery-preflight.test.sh's rj_run() already
+# bind. An unbound CLAUDE_PLUGIN_ROOT falls through to $HOME/.claude and can make an assertion pass
+# from the deployed copy instead of staging/ — that exact defect was found in this session's own
+# RJ14 and it was green while testing nothing. Inert today: no fence in this file references the
+# variable yet, so no currently-passing assertion changes behaviour from this binding alone.
 setup_ar() {
   cat >"$TMPROOT/setup-ar.sh" <<SETUP_EOF
 _root='$1'
 _args='$2'
+CLAUDE_PLUGIN_ROOT='$STAGING/plugin'
 SETUP_EOF
   printf '%s' "$TMPROOT/setup-ar.sh"
 }
@@ -1187,13 +1202,18 @@ fi
 # inverting the guard (`-z` -> `-n`) makes it fire on a well-formed `--features 2`, so it takes out
 # AR2/AR4/AR5/AR6 as well and attributes nothing. `_seen_features` is read by the empty-value guard
 # and by nothing else, so zeroing it isolates the case. Verified by running each mutation.
-# plant: AV1 | plugin/skills/autopilot/SKILL.md | _seen_features=1 | _seen_features=0
-# plant: AV2 | plugin/skills/autopilot/SKILL.md | _seen_only=1 | _seen_only=0
+#
+# RETARGETED, all three (issue #385 dispatch, Batch 3 test-authoring pass). Task 5 moved the
+# initialisers and the parse loop — where all three needles live — out of autopilot/SKILL.md's
+# fence into scope-args-parse.sh (ADR-0132 §D2). Each needle now matches exactly once in the new
+# script and zero times in SKILL.md, measured with grep before retargeting, not assumed.
+# plant: AV1 | plugin/skills/autopilot/scripts/scope-args-parse.sh | _seen_features=1 | _seen_features=0
+# plant: AV2 | plugin/skills/autopilot/scripts/scope-args-parse.sh | _seen_only=1 | _seen_only=0
 # The needle below carries a BARE `|` with no surrounding spaces. That is correct and must not be
 # "escaped": plant-check.sh splits fields on the regex ` \| ` (space-pipe-space), so only a pipe
 # with spaces around it would collide. A `\|` here matches nothing in the source and silently
 # demotes the plant to BADPLANT — which is exactly what the first draft of this line did.
-# plant: AV3 | plugin/skills/autopilot/SKILL.md | ''|-*) _cli_features=""; shift ;; | '') _cli_features=""; shift ;;
+# plant: AV3 | plugin/skills/autopilot/scripts/scope-args-parse.sh | ''|-*) _cli_features=""; shift ;; | '') _cli_features=""; shift ;;
 
 # AV1: a bare `--features` (last token on the line) -> exit 2, message names the flag. Without
 # this the run is unbounded and nothing says so.
@@ -1232,6 +1252,168 @@ else
   bad "AV3: rc=$RC — $(printf '%s' "$OUT" | head -2)"
 fi
 
+# =====================================================================================
+# SAP. Task 5 (issue #385, ADR-0132 §D2/§D4): scope-args-parse.sh, the initialisers and parse
+# loop excised from Phase S's autopilot-scope-args fence (SKILL.md 112-151) — `_cli_features` …
+# `_seen_only`, `set -- $_args`, the `while`/`case`. Everything below that (the marker branch, the
+# positive-integer guard, the `SCOPE-PARSE:` line) STAYS in the fence — the narrow excision moves
+# 4 plants instead of 12 (ADR-0132 §A3, measured). Six `key=value` lines:
+# has_scoping_arg, seen_features, seen_only, cli_features, cli_only, dry_run — everything the
+# marker branch, the positive-integer guard and the SCOPE-PARSE line need to finish the job.
+#
+# EXPECTED RED (tester dispatch, issue #385 Task 5). scope-args-parse.sh does not exist yet, so
+# SAP1-SAP6 fail on a missing file (bash: …: No such file or directory, rc=127); SAP8/SAP9 fail
+# because the fence still inlines the parser and never references the script at all — never
+# because of a defect in this test file. NO PLANTS ARE DECLARED HERE — a separate tester pass
+# declares them once the coder's implementation turns these green (ADR-0108/ADR-0115 PC4's own
+# reasoning, applied to the caller side, and this dispatch's own instruction).
+#
+# PLANTS (issue #385 dispatch, Batch 3 test-authoring pass — coder's implementation is green now).
+# Each targets the MECHANISM the assertion's own output check depends on, not the message text.
+# SAP1/SAP3/SAP4/SAP5 target the six `printf 'key=%s\n' "$var"` output lines, one apiece — each
+# appears exactly once, so hardcoding a wrong literal into one output line cannot be confused with
+# any other. SAP2 targets the `--only` value-capture arm specifically, the one thing SAP2 checks
+# that no sibling assertion also checks (both flags' VALUES captured together). SAP6 targets the
+# default `*)` arm as a single \s+-joined needle spanning its three physical lines — verified to
+# match exactly once before declaring, per this dispatch's own instruction.
+# plant: SAP1 | plugin/skills/autopilot/scripts/scope-args-parse.sh | printf 'has_scoping_arg=%s\n' "$_has_scoping_arg" | printf 'has_scoping_arg=%s\n' "1"
+# plant: SAP2 | plugin/skills/autopilot/scripts/scope-args-parse.sh | _cli_only="$2"; shift 2 | _cli_only=""; shift 2
+# plant: SAP3 | plugin/skills/autopilot/scripts/scope-args-parse.sh | printf 'cli_features=%s\n' "$_cli_features" | printf 'cli_features=%s\n' "${_cli_features}X"
+# plant: SAP4 | plugin/skills/autopilot/scripts/scope-args-parse.sh | printf 'dry_run=%s\n' "$_dry_run" | printf 'dry_run=%s\n' "false"
+# plant: SAP5 | plugin/skills/autopilot/scripts/scope-args-parse.sh | printf 'seen_only=%s\n' "$_seen_only" | printf 'seen_only=%s\n' "1"
+# plant: SAP6 | plugin/skills/autopilot/scripts/scope-args-parse.sh | *) shift ;; | *) _has_scoping_arg=1; shift ;;
+#
+# SAP7 mirrors MR9/CDA6's own PAIRS-entry technique (same dispatch, sibling file): both sides of
+# the pipe-delimited entry renamed identically, so the exact literal SAP7 greps for no longer
+# exists. SAP8 removes the DID-NOT-RUN token from the fence's own not-deployed message, the one
+# thing SAP8's grep depends on that RC=3 alone does not prove. SAP9 quotes the argument string the
+# fence hands to scope-args-parse.sh — exactly the regression SAP9's own negative assertion exists
+# to catch, since a quoted "$_args" collapses every multi-token launch into one opaque word.
+# plant: SAP7 | sync-to-claude.sh | plugin/skills/autopilot/scripts/scope-args-parse.sh|skills/autopilot/scripts/scope-args-parse.sh | plugin/skills/autopilot/scripts/scope-args-parse-RENAMED.sh|skills/autopilot/scripts/scope-args-parse-RENAMED.sh
+# plant: SAP8 | plugin/skills/autopilot/SKILL.md | not deployed — DID-NOT-RUN, the arguments were not parsed | not deployed — the arguments were not parsed
+# plant: SAP9 | plugin/skills/autopilot/SKILL.md | _sap_out=$(bash "$_sap" $_args) || { | _sap_out=$(bash "$_sap" "$_args") || {
+
+SAP_SCRIPT="$SKILLS/autopilot/scripts/scope-args-parse.sh"
+
+# SAP1: no arguments -> all six fields at their zero value, exit 0.
+OUT=$(bash "$SAP_SCRIPT" 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'has_scoping_arg=0' \
+   && printf '%s\n' "$OUT" | grep -qxF 'seen_features=0' \
+   && printf '%s\n' "$OUT" | grep -qxF 'seen_only=0' \
+   && printf '%s\n' "$OUT" | grep -qxF 'cli_features=' \
+   && printf '%s\n' "$OUT" | grep -qxF 'cli_only=' \
+   && printf '%s\n' "$OUT" | grep -qxF 'dry_run=false'; then
+  ok "SAP1: no arguments -> all six fields at their zero value, exit 0"
+else
+  bad "SAP1: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# SAP2: --features 2 --only 293,294 -> both flags seen and both values captured, exit 0.
+OUT=$(bash "$SAP_SCRIPT" --features 2 --only 293,294 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'has_scoping_arg=1' \
+   && printf '%s\n' "$OUT" | grep -qxF 'seen_features=1' \
+   && printf '%s\n' "$OUT" | grep -qxF 'seen_only=1' \
+   && printf '%s\n' "$OUT" | grep -qxF 'cli_features=2' \
+   && printf '%s\n' "$OUT" | grep -qxF 'cli_only=293,294' \
+   && printf '%s\n' "$OUT" | grep -qxF 'dry_run=false'; then
+  ok "SAP2: --features 2 --only 293,294 -> both flags seen, both values captured, exit 0"
+else
+  bad "SAP2: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# SAP3: a bare --features (last token on the line, nothing after it) -> seen but empty, never
+# swallowed as a value (ADR-0129 A4, the AV1 case one layer down).
+OUT=$(bash "$SAP_SCRIPT" --features 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'has_scoping_arg=1' \
+   && printf '%s\n' "$OUT" | grep -qxF 'seen_features=1' \
+   && printf '%s\n' "$OUT" | grep -qxF 'cli_features=' \
+   && printf '%s\n' "$OUT" | grep -qxF 'dry_run=false'; then
+  ok "SAP3: a bare --features (last token) -> seen_features=1, cli_features= empty (not swallowed)"
+else
+  bad "SAP3: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# SAP4: --features followed by a flag (--dry-run) -> the flag is NOT swallowed as the value; it is
+# processed on its own next iteration. Distinguishes "missing value" from "value consumed the next
+# flag" — without the `-*` arm dry_run would stay false here, which is the AV3 shape one layer
+# down (header there: "without the -* arm the token is swallowed as a value").
+OUT=$(bash "$SAP_SCRIPT" --features --dry-run 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'seen_features=1' \
+   && printf '%s\n' "$OUT" | grep -qxF 'cli_features=' \
+   && printf '%s\n' "$OUT" | grep -qxF 'dry_run=true'; then
+  ok "SAP4: --features followed by a flag -> cli_features= empty AND the flag is still processed (dry_run=true)"
+else
+  bad "SAP4: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# SAP5: --dry-run alone -> only dry_run flips; the scoping fields stay at their zero value.
+OUT=$(bash "$SAP_SCRIPT" --dry-run 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'has_scoping_arg=0' \
+   && printf '%s\n' "$OUT" | grep -qxF 'seen_features=0' \
+   && printf '%s\n' "$OUT" | grep -qxF 'seen_only=0' \
+   && printf '%s\n' "$OUT" | grep -qxF 'cli_features=' \
+   && printf '%s\n' "$OUT" | grep -qxF 'cli_only=' \
+   && printf '%s\n' "$OUT" | grep -qxF 'dry_run=true'; then
+  ok "SAP5: --dry-run alone -> only dry_run flips, the scoping fields stay at zero"
+else
+  bad "SAP5: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# SAP6: an unrecognised flag is skipped -> exit 0, every field at its zero value (the `*) shift ;;`
+# arm, never an error on an unknown token).
+OUT=$(bash "$SAP_SCRIPT" --bogus 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'has_scoping_arg=0' \
+   && printf '%s\n' "$OUT" | grep -qxF 'seen_features=0' \
+   && printf '%s\n' "$OUT" | grep -qxF 'seen_only=0' \
+   && printf '%s\n' "$OUT" | grep -qxF 'dry_run=false'; then
+  ok "SAP6: an unrecognised flag is silently skipped -> exit 0, every field at zero"
+else
+  bad "SAP6: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# SAP7 -- the PAIRS entry. pairs-completeness.test.sh cannot see a skill scripts/ file (its
+# check_complete covers plugin/skills with */SKILL.md only -- ADR-0043), so this is the only guard
+# (ADR-0109 MES0b / ADR-0069 PTB7 / MR9 precedent, same sibling file).
+if grep -qF 'plugin/skills/autopilot/scripts/scope-args-parse.sh|skills/autopilot/scripts/scope-args-parse.sh' "$SYNC"; then
+  ok "SAP7: the PAIRS entry for scope-args-parse.sh exists in sync-to-claude.sh"
+else
+  bad "SAP7: no PAIRS entry for scope-args-parse.sh in sync-to-claude.sh"
+fi
+
+# SAP8: the fence takes its documented exit-3 DID-NOT-RUN branch when scope-args-parse.sh is
+# unresolvable, with the sync remedy printed (ADR-0132 §D4: "the code that fence already documents
+# as 'the check DID NOT RUN'" — Phase S's own AR9 case, exit 3). Same renamed-path-substring
+# technique as MR7/MR8/G5 in the sibling file: today the fence has no reference to the script at
+# all, so the substitution matches nothing, the fence runs its CURRENT inline body unchanged, and
+# this goes red for that reason — never a defect in this test.
+R=$(mk_ar_root sap8)
+_sap_body=$(extract_fence "$NA" "autopilot-scope-args")
+_sap_broken=$(printf '%s\n' "$_sap_body" | sed 's|autopilot/scripts/scope-args-parse\.sh|autopilot/scripts/DOES-NOT-EXIST-scope-args-parse.sh|g')
+{ cat "$(setup_ar "$R" "")"; printf '\n'; printf '%s\n' "$_sap_broken" | subst_paths; } > "$TMPROOT/sap8.sh"
+bash "$TMPROOT/sap8.sh" >"$TMPROOT/out-sap8" 2>&1
+RC=$?
+if [ "$RC" = "3" ] && grep -q 'DID-NOT-RUN' "$TMPROOT/out-sap8" && grep -q 'sync-to-claude.sh --apply' "$TMPROOT/out-sap8"; then
+  ok "SAP8: an unresolvable scope-args-parse.sh takes the exit-3 DID-NOT-RUN branch and prints the sync remedy"
+else
+  bad "SAP8: rc=$RC — $(head -2 "$TMPROOT/out-sap8" 2>/dev/null | tr '\n' ' ') — still inlines the parser, or does not yet resolve the helper two-tier"
+fi
+
+# SAP9: the fence invokes the resolved script with the argument string UNQUOTED, preserving
+# today's `set -- $_args` word-split (ADR-0132 §D2, Task 5's own bullet 3) — both conditions
+# together: the fence must NAME the script (never true today, since it still inlines the parser)
+# and must never carry a QUOTED "$_args" anywhere (a quoted single argument would defeat the
+# case/while match on --features/--only entirely, collapsing every multi-token invocation to one
+# opaque word). Static, on the extracted fence body — not a re-run of AR2, which only exercises
+# the property incidentally through the fence's end-to-end output.
+_sap_body2=$(extract_fence "$NA" "autopilot-scope-args")
+if printf '%s\n' "$_sap_body2" | grep -qF 'scope-args-parse.sh' \
+   && printf '%s\n' "$_sap_body2" | grep -qF '$_args' \
+   && ! printf '%s\n' "$_sap_body2" | grep -qF '"$_args"'; then
+  ok "SAP9: the fence names scope-args-parse.sh and invokes it with the argument string unquoted, never quoted"
+else
+  bad "SAP9: the fence does not yet name scope-args-parse.sh, or quotes the argument string at the call site (the word-split would be lost)"
+fi
+
 # Z1 -- assertion-count floor (ADR-0083 §D3). NO PLANT: the floor's inversion is "an assertion block
 # silently stops running", a multi-line structural deletion (a whole `if`/`ok`/`bad` triple gone),
 # not a one-line needle->replacement content mutation -- said here rather than omitted silently, per
@@ -1244,20 +1426,24 @@ fi
 # carries no plant either; this one follows that norm.
 #
 # MARGIN, not equality (ADR-0083 §D3: "a floor, not an exact count"). Measured, not assumed: the
-# total right before this check runs is 48 -- 43 pre-existing (Sections KB/RB/TU/AR/RS/CG) plus the
-# five RP assertions just above, ALL FIVE counted toward PASS+FAIL regardless of their RED/GREEN
-# colour, because `_z1_total` sums executed assertions, not passing ones -- a failing assertion still
-# ran. Set at 47, one below that measured total, per ADR-0124's own correction to a Z1-shaped floor
-# (spec-pointer-archive's, raised 13->16 the same day): "left at 13 this floor would carry three
-# units of slack and three assertions could vanish while it stayed green." A one-unit margin leaves
-# no slack for a second assertion to vanish silently alongside a legitimate one-line edit, while
-# staying a floor rather than an equality -- the coder's own IMPL sub-step for this task edits
-# SKILL.md prose and docs-ci.yml, not this test file, so it adds nothing to this count regardless.
+# total right before this check runs is 61 -- 43 pre-existing (Sections KB/RB/TU/AR/RS/CG) plus the
+# five RP assertions, plus AV1-AV3, plus the nine SAP assertions just above (issue #385 Task 5),
+# ALL of them counted toward PASS+FAIL regardless of their RED/GREEN colour, because `_z1_total`
+# sums executed assertions, not passing ones -- a failing assertion still ran (the nine SAP cases
+# are exactly that: expected-red today, still counted). Raised from the prior floor (50, itself one
+# below a since-stale measured 48 -- corrected here rather than left, per the rule "grep the message
+# strings whenever a literal in an assertion changes") to 60, one below the new measured total, per
+# ADR-0124's own correction to a Z1-shaped floor (spec-pointer-archive's, raised 13->16 the same
+# day): "left at 13 this floor would carry three units of slack and three assertions could vanish
+# while it stayed green." A one-unit margin leaves no slack for a second assertion to vanish
+# silently alongside a legitimate one-line edit, while staying a floor rather than an equality --
+# Task 5's own coder sub-step edits SKILL.md prose and sync-to-claude.sh, not this test file, so it
+# adds nothing to this count regardless.
 _z1_total=$((PASS + FAIL))
-if [ "$_z1_total" -ge 50 ]; then
-  ok "Z1: assertion-count floor ($_z1_total >= 50)"
+if [ "$_z1_total" -ge 60 ]; then
+  ok "Z1: assertion-count floor ($_z1_total >= 60)"
 else
-  bad "Z1: only $_z1_total assertions ran -- floor is 50; a section stopped running, not merely failing"
+  bad "Z1: only $_z1_total assertions ran -- floor is 60; a section stopped running, not merely failing"
 fi
 
 echo "----"

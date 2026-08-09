@@ -26,9 +26,54 @@
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
 # RJ13 and RJ13b share a mutation SITE but not a mutation: RJ13's reintroduces the string-prefix
 # strip (#344's actual defect), RJ13b's merely stops asking git, which exercises its third branch.
-# plant: RJ13 | plugin/skills/concept-to-code/SKILL.md | printf '%s%s' "$(git -C "$_d" rev-parse --show-prefix 2>/dev/null)" "$(basename "$1")" | _p=$(cd "$_d" && pwd -P)/$(basename "$1"); case "$_p" in "$_top"/*) printf '%s' "${_p#$_top/}" ;; *) printf '%s' "$1" ;; esac
-# plant: RJ13b | plugin/skills/concept-to-code/SKILL.md | rev-parse --show-prefix | rev-parse --show-cdup
-# plant: RJ14 | plugin/skills/concept-to-code/SKILL.md | { [ -n "$_t2" ] && [ "$_t2" -ef "$_top" ]; } || { printf '%s' "$1"; return 0; } | :
+# RJ13/RJ13b/RJ14 retargeted (issue #385 dispatch, Batch 3): the mechanism moved out of the SKILL.md
+# fence and into repo-rel-path.sh (ADR-0132 §D2), so the old needles — written against the fence's
+# `$1`-parametered inline rel() — matched zero sites in SKILL.md and pinned nothing. Retargeted at
+# the file that now holds the mechanism, with `$1`/`return 0` updated to the script's real `$TARGET`
+# positional parameter and `exit 0` — the same verbatim-with-real-positional-parameters change
+# repo-rel-path.sh's own header describes.
+# plant: RJ13 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | printf '%s%s' "$(git -C "$_d" rev-parse --show-prefix 2>/dev/null)" "$(basename "$TARGET")" | _p=$(cd "$_d" && pwd -P)/$(basename "$TARGET"); case "$_p" in "$_top"/*) printf '%s' "${_p#$_top/}" ;; *) printf '%s' "$TARGET" ;; esac
+# plant: RJ13b | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | rev-parse --show-prefix | rev-parse --show-cdup
+# plant: RJ14 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | { [ -n "$_t2" ] && [ "$_t2" -ef "$_top" ]; } || { printf '%s' "$TARGET"; exit 0; } | :
+#
+# RRP1-RRP9 (issue #385 dispatch, Batch 3): the first direct plants for repo-rel-path.sh's own
+# assertions, now that they are green. RRP2/RRP3 deliberately SHARE a mutation site — both ultimately
+# depend on the SAME git-derived `_t2`, and `-ef` is robust to exactly the string-form differences
+# (symlink, case) that would otherwise separate them, so no smaller mutation isolates one from the
+# other (the RJ13/RJ13b precedent, applied again). RRP4 shares RJ14's exact site/mutation for the
+# same reason. MR5/RRP6 both needed a `;` inserted before `exit N` in the replacement, not just a
+# space: the source has `>&2` and `exit N` on TWO lines, and collapsing them onto one line without a
+# `;` makes `exit N` two more ARGUMENTS to printf (which cycles its format string over them) rather
+# than a second statement — printf's own two-%s format reused itself over "exit"/"0" and no exit ever
+# ran, verified live (ADR-0112's `echo "..." >&2 exit 0` lesson, met again with printf).
+# plant: RRP1 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | [ -n "$TARGET" ] || exit 0 | [ -n "$TARGET" ] || echo NONEMPTY-BUG
+# plant: RRP2 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | _t2=$(git -C "$_d" rev-parse --show-toplevel 2>/dev/null) || { printf '%s' "$TARGET"; exit 0; } | _t2=$(git -C "$_d" rev-parse --show-cdup 2>/dev/null) || { printf '%s' "$TARGET"; exit 0; }
+# RRP3 gets NO plant, declared here rather than left silent, and the reason is the FILESYSTEM, not
+# the assertion: the #344 precondition (a root reachable under a different case) can only be BUILT
+# on a case-insensitive filesystem. On the CI runner it cannot, so RRP3 takes its self-naming
+# NOT EXERCISED branch and passes regardless of what the mechanism does — no mutation can make it
+# fail there, so a plant on it is unfirable by construction and PC1 reports it, correctly.
+# Nothing is lost: the file's own note above says RRP2 and RRP3 share the SAME mutation site, and
+# RRP2's plant fires on both platforms. RRP3 itself still runs, and is still genuinely exercised
+# on a case-insensitive filesystem.
+# Its twin RJ13 is the same shape and DOES carry a plant that reports as fired — do not read that
+# as evidence the two disagree. plant-check.sh matches ^FAIL: <id> as a PREFIX (issue #355, open),
+# so RJ13's plant is credited to RJ13b going red under the same mutation. RJ13b is exercised on
+# every platform; RRP3 has no such sibling, which is why it is the honest one of the pair. If #355
+# lands, expect RJ13's plant to start failing PC1 for exactly the reason written here.
+# plant: RRP4 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | { [ -n "$_t2" ] && [ "$_t2" -ef "$_top" ]; } || { printf '%s' "$TARGET"; exit 0; } | :
+# plant: RRP5 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | [ -d "$_d" ] || { printf '%s' "$TARGET"; exit 0; } | [ -d "$_d" ] || { printf 'WRONG-%s' "$TARGET"; exit 0; }
+# plant: RRP6 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | not a git repository: %s\n' "$SELF" "$TOP" >&2 exit 3 | not a git repository: %s\n' "$SELF" "$TOP" >&2; exit 0
+# plant: RRP7 | plugin/skills/concept-to-code/SKILL.md | echo "PREFLIGHT_NOHELPER" | echo "SOMETHING_ELSE"
+# RRP8 gets NO plant, declared here rather than left silent: it checks three substrings
+# ('PREFLIGHT_NOHELPER', 'PREFLIGHT_NOREPO', 'the check did not run') anywhere across the whole of
+# Step 5, and each one is independently satisfied 2-3 times over — once in the fence's own code
+# (947/913), once in the Remediation prose (1017-1019), and "the check did not run" a further two
+# times for unrelated gates (1086, 1198). No single-point mutation removes every occurrence of any
+# one substring, so no plant can make this assertion fail without rewriting the whole file's
+# redundant-by-design remediation prose (ADR-0122's RG1 class: a real, disclosed limit, not an
+# oversight).
+# plant: RRP9 | sync-to-claude.sh | plugin/skills/concept-to-code/scripts/repo-rel-path.sh|skills/concept-to-code/scripts/repo-rel-path.sh | plugin/skills/concept-to-code/scripts/repo-rel-path-RENAMED.sh|skills/concept-to-code/scripts/repo-rel-path-RENAMED.sh
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -44,6 +89,10 @@ CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
 AB="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 INIT="$STAGING/plugin/skills/concept-to-code/scripts/manifest-init.sh"
 VALIDATE="$STAGING/plugin/skills/concept-to-code/scripts/manifest-validate.sh"
+# REPO_REL — issue #385 (ADR-0132 §D2): rel() extracted into this script. Does not exist yet
+# (tester dispatch); the RRP section and the re-anchored RJ13b below are expected RED for
+# exactly that reason.
+REPO_REL="$STAGING/plugin/skills/concept-to-code/scripts/repo-rel-path.sh"
 
 # ==============================================================================================
 # Anchor + extraction every RA-RF assertion below depends on.
@@ -527,9 +576,22 @@ else
 fi
 
 # The pre-#239 variant, derived from the shipped fence.
+#
+# RE-VERIFIED FOR issue #385 / ADR-0132 §D2. The second sed used to inject a call to `rel(...)`,
+# the bash FUNCTION 5.0.1 used to define inline. Once repo-rel-path.sh replaces that function
+# with a two-tier-resolved external script, a bash function named `rel` no longer exists inside
+# the extracted fence text, and an injected call to it would fail with "command not found" —
+# reproducing nothing, going red for the WRONG reason (rule per this dispatch's own brief: "if it
+# stops reproducing the defect, stop and fix the reconstruction, never the assertion"). The
+# injected snippet below computes the manifest's repo-relative path with the SAME underlying git
+# primitives `rel()`/repo-rel-path.sh both use (`rev-parse --show-prefix` + `basename`), inline
+# and self-contained, so this reconstruction is decoupled from whichever mechanism the live fence
+# currently uses to resolve it. For THIS fixture (an ordinary same-repo, non-symlinked manifest
+# path) every guard `rel()`/repo-rel-path.sh would otherwise apply is a no-op, so the value
+# produced is identical either way — verified by RJ1 staying green with this change in place.
 RJ_PREFIX="$TMP/rj_fence_prefix.sh"
 sed -e 's#^DIRTY=.*#DIRTY=$(git status --porcelain | sed "s/^...//")#' \
-    -e 's#"\$SPEC_REL"|"\$ADR_REL"|"\$PLAN_REL"|CLAUDE.md)#"$SPEC_REL"|"$ADR_REL"|"$PLAN_REL"|"$(rel "$MANIFEST")"|CLAUDE.md)#' \
+    -e 's#"\$SPEC_REL"|"\$ADR_REL"|"\$PLAN_REL"|CLAUDE.md)#"$SPEC_REL"|"$ADR_REL"|"$PLAN_REL"|"$(git -C "$(dirname "$MANIFEST")" rev-parse --show-prefix 2>/dev/null)$(basename "$MANIFEST")"|CLAUDE.md)#' \
     "$RJ_FENCE" >"$RJ_PREFIX"
 
 # rj_repo <dir> — a real throwaway git repo carrying the four chain artifacts plus one unrelated
@@ -546,9 +608,16 @@ rj_repo() {
     git add -A >/dev/null 2>&1; git commit -qm base >/dev/null 2>&1 )
 }
 # rj_run <fence> <repo> — execute with the four free variables bound, print "<rc> <stdout>".
+# CLAUDE_PLUGIN_ROOT is bound to the STAGING copy (issue #385, ADR-0132 §D2/D4): once the
+# classifier calls repo-rel-path.sh through the two-tier resolution, an unbound var here would
+# fall through to $HOME/.claude on this developer's own machine — exercising a deployed copy
+# this PR did not change, exactly the trap subst_paths exists to avoid at the sibling fence
+# harness (conductor-entry-failure-split.test.sh). Harmless no-op today: this fence references
+# no CLAUDE_PLUGIN_ROOT-gated helper yet.
 rj_run() {
   _o=$( cd "$2" && MANIFEST="$2/docs/manifests/m.yml" SPEC="$2/SPEC.md" \
         ADR="$2/docs/architecture/A.md" PLAN="$2/docs/superpowers/plans/p.md" \
+        CLAUDE_PLUGIN_ROOT="$STAGING/plugin" \
         bash "$1" 2>&1 ); _r=$?
   printf '%s %s' "$_r" "$_o"
 }
@@ -672,14 +741,20 @@ else
   ok "RJ13: NOT EXERCISED — this filesystem is case-sensitive, so the #344 precondition cannot be built here. RJ13b carries the check on this platform."
 fi
 
-# RJ13b — the mechanism, asserted out of the fence source so the check survives a case-sensitive
-# filesystem. The banned construct is the string-prefix strip, whichever variable it strips against.
-if grep -qE '[$][{]_p#[$](ROOT|_top)/[}]' "$RJ_FENCE"; then
-  bad "RJ13b: the fence strips a string prefix to derive the repo-relative path again — that form cannot normalise case, which is #344 (and #239 before it, for symlinks)"
-elif grep -q 'rev-parse --show-prefix' "$RJ_FENCE"; then
-  ok "RJ13b: rel() derives the repo-relative path from git, so there is no normalisation left for it to miss"
+# RJ13b — RE-ANCHORED (issue #385, ADR-0132 §D2). This assertion previously read $RJ_FENCE
+# itself, because rel() lived inline in the c2c Step 5.0.1 fence. It now lives in
+# repo-rel-path.sh, a real file where $1/$2 are legal — the fence calls it instead of defining
+# it, so the mechanism this assertion cares about moved out of the fence and into that file.
+# Point BOTH halves at the new file. The message that says the mechanism changed to something
+# unreviewed survives byte-for-byte, because that is exactly the risk a re-anchored
+# name-or-location assertion still carries (ADR-0132 §Consequences names RJ13b by name; the
+# plan's Risk R4).
+if [ -f "$REPO_REL" ] && grep -qE '[$][{]_p#[$](ROOT|_top)/[}]' "$REPO_REL"; then
+  bad "RJ13b: repo-rel-path.sh strips a string prefix to derive the repo-relative path again — that form cannot normalise case, which is #344 (and #239 before it, for symlinks)"
+elif [ -f "$REPO_REL" ] && grep -q 'rev-parse --show-prefix' "$REPO_REL"; then
+  ok "RJ13b: repo-rel-path.sh derives the repo-relative path from git, so there is no normalisation left for it to miss"
 else
-  bad "RJ13b: rel() no longer asks git for the prefix and does not use the banned string strip either — the mechanism changed to something unreviewed; re-read #344 before accepting it"
+  bad "RJ13b: repo-rel-path.sh does not exist, or no longer asks git for the prefix and does not use the banned string strip either — the mechanism changed to something unreviewed; re-read #344 before accepting it"
 fi
 
 # RJ14 — the -ef guard, which is what stops a foreign repository's prefix being applied to a path
@@ -691,10 +766,16 @@ fi
 # and rel() hands back `docs/manifests/m.yml` from the foreign checkout's prefix, which then
 # filters the LOCAL dirty entry and reports CLEAN. A clean local tree would report CLEAN either
 # way — the first draft of this assertion did exactly that and pinned nothing.
+# CLAUDE_PLUGIN_ROOT must be bound here exactly as rj_run() binds it (issue #385 dispatch,
+# recovery-preflight.test.sh Batch 3): the fence now resolves repo-rel-path.sh two-tier, and an
+# unbound var here falls through to $HOME/.claude, which on a dev machine pre-sync has no such
+# script — PREFLIGHT_NOHELPER, exit 3, landing in the case statement's `*)` arm below and calling
+# `ok` WITHOUT ever exercising the -ef guard this assertion exists to pin.
 RJ14_FOREIGN="$TMP/foreign"; rj_repo "$RJ14_FOREIGN"
 printf 'current_step: "q"\n' >>"$RJ_REPO/docs/manifests/m.yml"
 RJ14_OUT=$( cd "$RJ_REPO" && MANIFEST="$RJ14_FOREIGN/docs/manifests/m.yml" SPEC="$RJ_REPO/SPEC.md" \
             ADR="$RJ_REPO/docs/architecture/A.md" PLAN="$RJ_REPO/docs/superpowers/plans/p.md" \
+            CLAUDE_PLUGIN_ROOT="$STAGING/plugin" \
             bash "$RJ_FENCE" 2>&1; printf ' rc=%s' "$?" )
 case "$RJ14_OUT" in
   "PREFLIGHT_CLEAN"*)
@@ -729,6 +810,141 @@ if [ "$(ri_flat '`*.bak` is gitignored' "$STEP5")" -ge 1 ]; then
   ok "RJ12: Step 5 records that 5.0.3's sed -i.bak debris is gitignored, for this fence and for the escape check"
 else
   bad "RJ12: the *.bak fact is unrecorded — a change to .gitignore would break two checks with no warning"
+fi
+
+# ==================================================================================================
+# RK. repo-rel-path.sh — rel() extracted into its own file (issue #385, ADR-0132 §D2). The fence
+# keeps its classification logic and calls the helper four times; this is the mechanism itself,
+# tested directly for the FIRST time — until now rel() could only ever be exercised through the
+# whole fence (RJ9/RJ13/RJ13b/RJ14 above).
+#
+# EXPECTED RED (tester dispatch, issue #385 Task 4). repo-rel-path.sh does not exist yet. Every
+# assertion below fails because the script is missing, or because the fence still defines rel()
+# inline rather than resolving and calling it — never because of a defect in this test file. NO
+# PLANTS ARE DECLARED HERE: every assertion is red at the end of this dispatch, and
+# plant-check.sh cannot distinguish a plant firing from an assertion that was already red
+# (ADR-0108). Declare plants once the coder's implementation turns these green.
+# ==================================================================================================
+
+RRP_BASE="$TMP/rrp-base"; mkdir -p "$RRP_BASE/docs/manifests"
+( cd "$RRP_BASE" && git init -q >/dev/null 2>&1 && git config user.email t@example.invalid \
+  && git config user.name t && printf 'x\n' >docs/manifests/m.yml \
+  && git add -A >/dev/null 2>&1 && git commit -qm base >/dev/null 2>&1 )
+RRP_TOP=$(cd "$RRP_BASE" && git rev-parse --show-toplevel)
+
+# RRP1 — empty path: print nothing, exit 0 (today's `[ -n "${1:-}" ] || return 0`, ADR-0132 Task 4).
+OUT=$(bash "$REPO_REL" "$RRP_TOP" "" 2>&1); RC=$?
+if [ "$RC" = "0" ] && [ -z "$OUT" ]; then
+  ok "RRP1: repo-rel-path.sh with an empty path prints nothing and exits 0"
+else
+  bad "RRP1: rc=$RC out='$OUT' — expected empty output, exit 0"
+fi
+
+# RRP2 — a symlinked root (the #239 case). The path is reached through the symlink; the answer
+# must still be the plain repo-relative form, same shape as RJ9.
+RRP_LINK="$TMP/rrp-link"; ln -sf "$RRP_BASE" "$RRP_LINK" 2>/dev/null
+RRP_LINK_TOP=$(cd "$RRP_LINK" && git rev-parse --show-toplevel)
+OUT=$(bash "$REPO_REL" "$RRP_LINK_TOP" "$RRP_LINK/docs/manifests/m.yml" 2>&1); RC=$?
+if [ "$RC" = "0" ] && [ "$OUT" = "docs/manifests/m.yml" ]; then
+  ok "RRP2: a symlinked root still resolves to the correct repo-relative path"
+else
+  bad "RRP2: rc=$RC out='$OUT' — expected 'docs/manifests/m.yml' via the symlinked root"
+fi
+
+# RRP3 — a differently-cased root (the #344 case, same platform-dependent probe as RJ13: this
+# assertion can only be BUILT on a case-insensitive filesystem, so it names itself NOT EXERCISED
+# rather than silently skipping on a case-sensitive one).
+RRP_CASE_PROBE="$TMP/RrpCaseProbe"; mkdir -p "$RRP_CASE_PROBE"
+if [ -d "$TMP/rrpcaseprobe" ]; then
+  RRP_CASE_REPO="$TMP/RrpCaseRepo"; mkdir -p "$RRP_CASE_REPO/docs/manifests"
+  ( cd "$RRP_CASE_REPO" && git init -q >/dev/null 2>&1 && git config user.email t@example.invalid \
+    && git config user.name t && printf 'x\n' >docs/manifests/m.yml \
+    && git add -A >/dev/null 2>&1 && git commit -qm base >/dev/null 2>&1 )
+  RRP_CASE_TOP=$(cd "$TMP/rrpcaserepo" && git rev-parse --show-toplevel)
+  OUT=$(bash "$REPO_REL" "$RRP_CASE_TOP" "$TMP/rrpcaserepo/docs/manifests/m.yml" 2>&1); RC=$?
+  if [ "$RC" = "0" ] && [ "$OUT" = "docs/manifests/m.yml" ]; then
+    ok "RRP3: a differently-cased root still resolves via git, not a string compare (#344)"
+  else
+    bad "RRP3: rc=$RC out='$OUT' — a differently-cased path broke the resolution"
+  fi
+else
+  ok "RRP3: NOT EXERCISED — this filesystem is case-sensitive, so the #344 precondition cannot be built here (see RJ13)"
+fi
+
+# RRP4 — a path inside a FOREIGN checkout (the -ef device+inode identity guard, RJ14's shape).
+# It must come back UNCHANGED — a foreign path is never shortened by a different repo's prefix.
+RRP_FOREIGN="$TMP/rrp-foreign"; mkdir -p "$RRP_FOREIGN/docs/manifests"
+( cd "$RRP_FOREIGN" && git init -q >/dev/null 2>&1 && git config user.email t@example.invalid \
+  && git config user.name t && printf 'x\n' >docs/manifests/m.yml \
+  && git add -A >/dev/null 2>&1 && git commit -qm base >/dev/null 2>&1 )
+RRP_FOREIGN_PATH="$RRP_FOREIGN/docs/manifests/m.yml"
+OUT=$(bash "$REPO_REL" "$RRP_TOP" "$RRP_FOREIGN_PATH" 2>&1); RC=$?
+if [ "$RC" = "0" ] && [ "$OUT" = "$RRP_FOREIGN_PATH" ]; then
+  ok "RRP4: a path in a foreign checkout is returned unchanged — the -ef guard answers 'same directory' by identity, not by string"
+else
+  bad "RRP4: rc=$RC out='$OUT' — expected the unmodified foreign path"
+fi
+
+# RRP5 — a path whose directory does not exist. Today's rel() falls back and returns the input
+# unchanged (`[ -d "$_d" ] || { printf '%s' "$1"; return 0; }`); the extraction must not change it.
+RRP_NOPATH="$TMP/rrp-does-not-exist-dir/f.txt"
+OUT=$(bash "$REPO_REL" "$RRP_TOP" "$RRP_NOPATH" 2>&1); RC=$?
+if [ "$RC" = "0" ] && [ "$OUT" = "$RRP_NOPATH" ]; then
+  ok "RRP5: a path whose directory does not exist is returned unchanged, exit 0"
+else
+  bad "RRP5: rc=$RC out='$OUT' — expected the unmodified path for a nonexistent directory"
+fi
+
+# RRP6 — exit 3 outside a repo (ADR-0132 §D4: the uniform 0/2/3 contract every one of the four
+# new scripts carries). A <toplevel> argument that is not itself a git repository is a case the
+# ORIGINAL rel() never had to answer (it always fell back silently to exit 0 on a per-path basis);
+# wrapped as a standalone script, "the caller handed me a toplevel that is not a repo at all" is
+# the "could not run" case, not a fourth silent fallback.
+RRP_NOTREPO="$TMP/rrp-notrepo"; mkdir -p "$RRP_NOTREPO"
+OUT=$(bash "$REPO_REL" "$RRP_NOTREPO" "$RRP_NOTREPO/f.txt" 2>&1); RC=$?
+if [ "$RC" = "3" ]; then
+  ok "RRP6: repo-rel-path.sh given a <toplevel> that is not a git repository exits 3 (could not run)"
+else
+  bad "RRP6: rc=$RC out='$OUT' — expected exit 3 when <toplevel> does not resolve to a git repository"
+fi
+
+# RRP7 — the FENCE'S new PREFLIGHT_NOHELPER exit-3 branch when repo-rel-path.sh is unresolvable.
+# Same renamed-filename substitution technique as conductor-entry-failure-split.test.sh's MR7/MR8:
+# it targets the LITERAL PATH SUBSTRING the two-tier resolution will use, so it correctly finds
+# nothing to break TODAY (the fence still defines rel() inline) and correctly breaks BOTH tiers
+# once the coder adds the resolution, regardless of which tier is checked first.
+RRP_HELPER_REPO="$TMP/rrp-helper-repo"; rj_repo "$RRP_HELPER_REPO"
+RRP_NOHELP=$(rj_extract | sed 's|concept-to-code/scripts/repo-rel-path\.sh|concept-to-code/scripts/DOES-NOT-EXIST-repo-rel-path.sh|g')
+printf '%s\n' "$RRP_NOHELP" >"$TMP/rj_nohelper.sh"
+RRP7_OUT=$( cd "$RRP_HELPER_REPO" && MANIFEST="$RRP_HELPER_REPO/docs/manifests/m.yml" \
+            SPEC="$RRP_HELPER_REPO/SPEC.md" ADR="$RRP_HELPER_REPO/docs/architecture/A.md" \
+            PLAN="$RRP_HELPER_REPO/docs/superpowers/plans/p.md" \
+            CLAUDE_PLUGIN_ROOT="$STAGING/plugin" \
+            bash "$TMP/rj_nohelper.sh" 2>&1; printf ' rc=%s' "$?" )
+case "$RRP7_OUT" in
+  *PREFLIGHT_NOHELPER*rc=3)
+    ok "RRP7: the classifier fence exits 3 with PREFLIGHT_NOHELPER when repo-rel-path.sh is unresolvable" ;;
+  *)
+    bad "RRP7: rc/output did not show PREFLIGHT_NOHELPER exit 3 for an unresolvable repo-rel-path.sh (got: $RRP7_OUT) — the fence still defines rel() inline" ;;
+esac
+
+# RRP8 — the Remediation list names PREFLIGHT_NOHELPER beside PREFLIGHT_NOREPO/PREFLIGHT_NOMANIFEST,
+# in the same words: the check did not run, do not report it as a clean tree.
+if [ "$(ri_flat 'PREFLIGHT_NOHELPER' "$STEP5")" -ge 1 ] \
+   && [ "$(ri_flat 'PREFLIGHT_NOREPO' "$STEP5")" -ge 1 ] \
+   && [ "$(ri_flat 'the check did not run' "$STEP5")" -ge 1 ]; then
+  ok "RRP8: Step 5's Remediation list names PREFLIGHT_NOHELPER beside PREFLIGHT_NOREPO / PREFLIGHT_NOMANIFEST, in the same words"
+else
+  bad "RRP8: Step 5's Remediation list does not yet name PREFLIGHT_NOHELPER beside PREFLIGHT_NOREPO/PREFLIGHT_NOMANIFEST"
+fi
+
+# RRP9 — the PAIRS entry. pairs-completeness.test.sh cannot see a skill scripts/ file (its
+# check_complete covers plugin/skills with */SKILL.md only — ADR-0043), so this is the only guard
+# (ADR-0109 MES0b / ADR-0069 PTB7 precedent).
+if grep -qF 'plugin/skills/concept-to-code/scripts/repo-rel-path.sh|skills/concept-to-code/scripts/repo-rel-path.sh' "$SYNCSH"; then
+  ok "RRP9: the PAIRS entry for repo-rel-path.sh exists in sync-to-claude.sh"
+else
+  bad "RRP9: no PAIRS entry for repo-rel-path.sh in sync-to-claude.sh"
 fi
 
 # ==================================================================================================
@@ -820,10 +1036,10 @@ fi
 # Z1 — assertion-count floor (ADR-0083 §D3: six assertions vanished from a suite once and the
 # suite still read as passing). A floor, not an exact count, so adding assertions needs no bump.
 Z1_TOTAL=$((PASS + FAIL))
-if [ "$Z1_TOTAL" -ge 76 ]; then
+if [ "$Z1_TOTAL" -ge 86 ]; then
   ok "Z1: assertion-count floor met ($Z1_TOTAL executed)"
 else
-  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 76; assertions have gone missing, not passed"
+  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 86; assertions have gone missing, not passed"
 fi
 
 echo "----"

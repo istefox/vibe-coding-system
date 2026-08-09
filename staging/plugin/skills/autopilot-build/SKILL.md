@@ -146,10 +146,13 @@ esac
 ```bash
 bash ~/.claude/skills/concept-to-code/scripts/manifest-validate.sh "<manifest-path>" || exit 1
 # `sed 's/^current_step: *//;s/"//g'` is manifest-validate.sh's idiom, used at 17 sites there and
-# by check 1 above. Do NOT go back to `awk '{print $2}'`: manifest-init.sh and
-# manifest-transition.sh both write the value QUOTED, so awk yields `"ready_for_implementation"`
-# with the quotes and this check aborted on every manifest the system has ever produced (issue
-# #218) — with a message that reads as nonsense and blames the manifest.
+# by check 1 above. Do NOT go back to extracting the second whitespace-separated field with awk:
+# manifest-init.sh and manifest-transition.sh both write the value QUOTED, so a bare field split
+# yields `"ready_for_implementation"` with the quotes and this check aborted on every manifest the
+# system has ever produced (issue #218) — with a message that reads as nonsense and blames the
+# manifest. The banned idiom is described here and never written out: an awk field reference is a
+# `$<digit>` token, and the skill-argument substituter rewrites those inside a bash fence
+# (ADR-0132), so a comment spelling it would corrupt this fence at render time.
 step=$(grep '^current_step:' "<manifest-path>" | sed 's/^current_step: *//;s/"//g' | head -1)
 [ "$step" = "ready_for_implementation" ] || { echo "✗ state: current_step is $step, not ready_for_implementation. Complete the interactive chain through Gate 3 first."; exit 1; }
 ```
@@ -240,7 +243,7 @@ case "$tcp" in
   *)              echo "✗ test-cmd: test_cmd_placeholder is \"${tcp#PRESENT|}\" — must be true or false. The manifest is corrupted or was hand-edited; fix or re-init."; exit 1 ;;
 esac
 # TOFU trust check
-hash=$(shasum -a 256 "$tcf" | awk '{print $1}')
+hash=$(shasum -a 256 "$tcf" | cut -d' ' -f1)
 root_n=$(cd "$project_root" && pwd -P | tr '[:upper:]' '[:lower:]')
 grep -qxF "${hash}	${root_n}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null \
   || { echo "✗ test-cmd: not TOFU-trusted. Run the interactive chain (concept-to-code resume) to approve the test command for this project."; exit 1; }

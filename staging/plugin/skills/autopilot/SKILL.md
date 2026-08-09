@@ -109,46 +109,43 @@ call site for that mechanism, so the contrast is stated generically here).
 
 <!-- fence-contract: autopilot-scope-args -->
 ```bash
-_cli_features=""
-_cli_only=""
-_dry_run=false
-_has_scoping_arg=0
-_seen_features=0
-_seen_only=0
-
-set -- $_args
-while [ $# -gt 0 ]; do
-  case "$1" in
-    # A value that is absent, or that is itself a flag, counts as NOT SUPPLIED — never as an
-    # empty value silently accepted. `--features` with nothing after it used to set
-    # _has_scoping_arg=1 (discarding the marker's scope: block) while leaving _cli_features
-    # empty, so the positive-integer guard below never ran and the run came out UNBOUNDED.
-    # A one-token operator typo defeated the whole feature with nothing on screen.
-    --features)
-      _seen_features=1
-      _has_scoping_arg=1
-      case "${2:-}" in
-        ''|-*) _cli_features=""; shift ;;
-        *) _cli_features="$2"; shift 2 ;;
-      esac
-      ;;
-    --only)
-      _seen_only=1
-      _has_scoping_arg=1
-      case "${2:-}" in
-        ''|-*) _cli_only=""; shift ;;
-        *) _cli_only="$2"; shift 2 ;;
-      esac
-      ;;
-    --dry-run)
-      _dry_run=true
-      shift
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
+# The initialisers and the argument parse loop live in scope-args-parse.sh (issue #385,
+# ADR-0132 §D1/§D2). This markdown body is RENDERED before the model executes it, and the
+# renderer substitutes this skill's own invocation arguments into every positional-parameter
+# token in it — a fence is just text. The parse loop is the code that reads those tokens, so it
+# was the first thing that rewriting corrupted, silently and into valid shell. A file is never
+# rendered. ONLY that loop moved: everything below — the marker branch, the positive-integer
+# guard, the SCOPE-PARSE line — deliberately stays here, where a human approving an overnight
+# launch reads the mechanism at the point of decision.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/autopilot/scripts/scope-args-parse.sh" ]; then
+  _sap="$CLAUDE_PLUGIN_ROOT/skills/autopilot/scripts/scope-args-parse.sh"
+elif [ -f "$HOME/.claude/skills/autopilot/scripts/scope-args-parse.sh" ]; then
+  _sap="$HOME/.claude/skills/autopilot/scripts/scope-args-parse.sh"
+else
+  # Exit 3, this fence's own documented code for "the check DID NOT RUN". Phase M below exits 1
+  # on its own unresolved helper: the two are NOT reconciled and must not be (ADR-0132 §D4).
+  # Each fence carries its own exit vocabulary, its own tests assert it, and a "consistency" pass
+  # that renumbers either one changes a contract.
+  echo "✗ scope: scope-args-parse.sh not deployed — DID-NOT-RUN, the arguments were not parsed"
+  echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 3
+fi
+# UNQUOTED on purpose: this reproduces the word split the moved `set --` performed, so
+# `--features 2 --only 293,294` arrives as five arguments and not as one opaque word. Quoting it
+# would collapse every multi-token launch into a single unrecognised token, which the parser's
+# skip-anything arm would then discard in silence.
+_sap_out=$(bash "$_sap" $_args) || {
+  echo "✗ scope: scope-args-parse.sh failed — DID-NOT-RUN, the arguments were not parsed"
+  echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 3
+}
+_has_scoping_arg=$(printf '%s\n' "$_sap_out" | sed -n 's/^has_scoping_arg=//p')
+_seen_features=$(printf '%s\n' "$_sap_out" | sed -n 's/^seen_features=//p')
+_seen_only=$(printf '%s\n' "$_sap_out" | sed -n 's/^seen_only=//p')
+_cli_features=$(printf '%s\n' "$_sap_out" | sed -n 's/^cli_features=//p')
+_cli_only=$(printf '%s\n' "$_sap_out" | sed -n 's/^cli_only=//p')
+_dry_run=$(printf '%s\n' "$_sap_out" | sed -n 's/^dry_run=//p')
 
 _source=none
 _features=""
@@ -178,12 +175,13 @@ else
       exit 3
     fi
     if grep -qE '^scope:[[:space:]]*$' "$_marker"; then
+      # Field-free on purpose (ADR-0132): a bare /re/ pattern already matches the whole record, so
+      # naming the record adds nothing and would put a token the skill-argument substituter
+      # rewrites into a bash fence. Same program; do not "simplify" the record back in.
       _scope_block=$(awk '
         /^scope:[[:space:]]*$/ { found=1; next }
-        found {
-          if ($0 ~ /^[[:space:]]+/) { print; next }
-          exit
-        }
+        found && /^[[:space:]]+/ { print; next }
+        found { exit }
       ' "$_marker")
       if [ -z "$_scope_block" ]; then
         echo "✗ scope: the scope: block is empty (in $_marker) — a malformed bound must not read as an absent one"

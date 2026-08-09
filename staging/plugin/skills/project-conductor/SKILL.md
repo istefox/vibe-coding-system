@@ -36,18 +36,50 @@ pre-flight, which verifies the per-repo opt-in marker. Do not invoke `autopilot`
 
 ### Step 0 — Load and reconcile PROJECT.md
 
+**Free variable, bound by the orchestrator: `_args`** — this skill's own argument string, exactly
+as it was invoked (empty when it was invoked with none). Both parses below read it, and the
+`autopilot` skill's §1.3 Phase S binds its own launch arguments the same way.
+
+**This block's behaviour changes on purpose (issue #385, ADR-0132 §D2/§D5).** The mode detection
+used to read the first positional parameter while the `--fork-from` scan walked the argument list
+and read its length. Those are two different sources once the block is a fence: the renderer fills
+in the first before the model ever sees the text, while the list and its length belong to the
+shell that executes the fence — which has no positional parameters at all. **So neither parse has
+ever worked as written** (audit §F1). The designed semantics are unchanged; what changes is that
+they now happen.
+
+<!-- fence-contract: conductor-step0-args -->
 ```bash
 _root="$PWD"
 _pmd="$_root/PROJECT.md"
+# Both parses live in conductor-args.sh, because this markdown body is RENDERED before the model
+# executes it and the renderer rewrites positional-parameter tokens in it. A file is never
+# rendered. There is NO safe default if it cannot be resolved: false would prompt a human who is
+# not present (the #329 class), true would run a whole roadmap unattended when nobody asked for
+# that — so this refuses, which is what makes the fence abort-capable (ADR-0132 §D4/§D5).
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/project-conductor/scripts/conductor-args.sh" ]; then
+  _ca="$CLAUDE_PLUGIN_ROOT/skills/project-conductor/scripts/conductor-args.sh"
+elif [ -f "$HOME/.claude/skills/project-conductor/scripts/conductor-args.sh" ]; then
+  _ca="$HOME/.claude/skills/project-conductor/scripts/conductor-args.sh"
+else
+  echo "CONDUCTOR-ARGS: DID-NOT-RUN — argument parser not deployed: conductor-args.sh"
+  echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 3
+fi
+# UNQUOTED on purpose: the word split is what turns the argument string back into the separate
+# tokens both parses expect. Quoting it would make `autopilot --fork-from main` one opaque word,
+# which matches neither parse.
+_ca_out=$(bash "$_ca" $_args) || {
+  echo "CONDUCTOR-ARGS: DID-NOT-RUN — conductor-args.sh failed"
+  echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 3
+}
 # Roadmap-autopilot mode (ADR-0022): set by the `autopilot` argument.
-_autopilot=false; [ "$1" = "autopilot" ] && _autopilot=true
+_autopilot=$(printf '%s\n' "$_ca_out" | sed -n 's/^autopilot=//p')
 # --fork-from <ref> (issue #364, ADR-0127 §D4): the base every feature branch is created from.
 # Empty in attended mode and on any run that does not pass it, which is exactly today's behaviour.
-_fork_from=""
-_i=1; for _a in "$@"; do
-  [ "$_a" = "--fork-from" ] && { _i=$((_i+1)); eval "_fork_from=\${$_i}"; break; }
-  _i=$((_i+1))
-done
+_fork_from=$(printf '%s\n' "$_ca_out" | sed -n 's/^fork_from=//p')
 # Scripts dir: plugin install uses $CLAUDE_PLUGIN_ROOT/scripts; the ~/.claude deployment
 # keeps all shell helpers in ~/.claude/hooks. Prefer the plugin path, fall back to hooks.
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/publish-feature.sh" ]; then
@@ -426,14 +458,30 @@ if [ -n "$_spec" ] && [ -f "$_spec" ]; then
   exit 0
 fi
 [ -f "$_root/PROJECT.md" ] || { echo "SPEC-COPY: DID-NOT-RUN — no PROJECT.md at $_root"; exit 3; }
+# Mark [~] by EXACT string match, never a sed regex: a feature title is arbitrary GitHub text and
+# can carry any sed metacharacter or delimiter. The program lives in mark-roadmap-skipped.sh
+# because a bash fence in a SKILL.md is RENDERED before the model executes it, and the renderer
+# substitutes the skill's own invocation arguments into it — so awk's whole-record reference was
+# being replaced by an unrelated word at run time (issue #385, ADR-0132 §D1). It is the SAME file
+# branch C loads: one question, one answer, so a row marked by one path and not the other is no
+# longer expressible (ADR-0069-style extraction, ADR-0132 §D2). Resolved BEFORE the skip note is
+# written, so an undeployed helper leaves no half-finished state behind.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/project-conductor/scripts/mark-roadmap-skipped.sh" ]; then
+  _mrs="$CLAUDE_PLUGIN_ROOT/skills/project-conductor/scripts/mark-roadmap-skipped.sh"
+elif [ -f "$HOME/.claude/skills/project-conductor/scripts/mark-roadmap-skipped.sh" ]; then
+  _mrs="$HOME/.claude/skills/project-conductor/scripts/mark-roadmap-skipped.sh"
+else
+  echo "SPEC-COPY: DID-NOT-RUN — roadmap marker helper not deployed: mark-roadmap-skipped.sh"
+  echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 3
+fi
 # Per-feature skip note (ADR-0060 §D3), NEVER the run-level .claude/needs-human marker.
 mkdir -p "$_root/.claude/autopilot-state"
 printf 'issue #%s "%s" skipped: no generated SPEC at docs/specs/%s-*.spec.md\n' \
   "$_issue" "$_feature" "$_issue" >> "$_root/.claude/autopilot-state/skipped-features"
-# Mark [~] by EXACT string match, never a sed regex: a feature title is arbitrary GitHub text and
-# can carry any sed metacharacter or delimiter.
-awk -v f="$_feature" '{ if ($0 == "- [ ] " f) print "- [~] " f "  (skipped)"; else print }' \
-  "$_root/PROJECT.md" > "$_root/PROJECT.md.tmp" && mv "$_root/PROJECT.md.tmp" "$_root/PROJECT.md"
+bash "$_mrs" "$_root/PROJECT.md" "$_feature" \
+  || { echo "SPEC-COPY: DID-NOT-RUN — mark-roadmap-skipped.sh failed on $_root/PROJECT.md"; exit 3; }
 echo "SPEC-COPY: SKIP no generated SPEC for issue #$_issue"
 exit 1
 ```
@@ -487,8 +535,9 @@ If `_autopilot=true`:
    - **`0`** → continue with step 2 below (`CREATE` → call `manifest-init.sh`; `ADOPT` → update the
      existing manifest in place).
    - **`1`** → contained per-feature skip: append the reason to
-     `<root>/.claude/autopilot-state/skipped-features`, mark the feature `[~]` (the exact-match `awk`
-     idiom above, never a sed regex), emit `"project-conductor · SKIP · <token>"`, and **return to
+     `<root>/.claude/autopilot-state/skipped-features`, mark the feature `[~]` (through
+     `mark-roadmap-skipped.sh`, resolved two-tier exactly as the block above resolves it — an exact
+     whole-line match, never a sed regex), emit `"project-conductor · SKIP · <token>"`, and **return to
      Step 2**. Never `needs-human`.
    - **`2`** or **`3`** → run-level: write `needs-human` with the printed reason and go to Step 6B.
 2. Set `autopilot: true` in the manifest via bash sed (create the manifest via `manifest-init.sh` on
@@ -675,12 +724,28 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
   case "${_out%%|*}" in
     TERMINAL)
       # Known, contained, per-feature: the chain reached a decided end. Roadmap continues.
+      # The [~] program lives in mark-roadmap-skipped.sh, the SAME file Step 4's skip loads: an
+      # exact whole-line match, never a sed regex, because a feature title is arbitrary GitHub
+      # text and can carry any sed metacharacter or delimiter. It is a file rather than a fence
+      # because the renderer substitutes the skill's invocation arguments into awk's whole-record
+      # reference (issue #385, ADR-0132 §D1/§D2). Resolved before anything is written, so an
+      # undeployed helper leaves no half-finished state behind.
+      if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+         && [ -f "$CLAUDE_PLUGIN_ROOT/skills/project-conductor/scripts/mark-roadmap-skipped.sh" ]; then
+        _mrs="$CLAUDE_PLUGIN_ROOT/skills/project-conductor/scripts/mark-roadmap-skipped.sh"
+      elif [ -f "$HOME/.claude/skills/project-conductor/scripts/mark-roadmap-skipped.sh" ]; then
+        _mrs="$HOME/.claude/skills/project-conductor/scripts/mark-roadmap-skipped.sh"
+      else
+        echo "BRANCH-C: DID-NOT-RUN — roadmap marker helper not deployed: mark-roadmap-skipped.sh"
+        echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+        exit 3
+      fi
       mkdir -p "$_root/.claude/autopilot-state"
       printf '%s skipped: chain reached a terminal state without completing (%s)\n' \
         "$_feature" "${_out#*|}" >> "$_root/.claude/autopilot-state/skipped-features"
       if [ -f "$_root/PROJECT.md" ]; then
-        awk -v f="$_feature" '{ if ($0 == "- [ ] " f) print "- [~] " f "  (skipped)"; else print }' \
-          "$_root/PROJECT.md" > "$_root/PROJECT.md.tmp" && mv "$_root/PROJECT.md.tmp" "$_root/PROJECT.md"
+        bash "$_mrs" "$_root/PROJECT.md" "$_feature" \
+          || { echo "BRANCH-C: DID-NOT-RUN — mark-roadmap-skipped.sh failed on $_root/PROJECT.md"; exit 3; }
       fi
       echo "BRANCH-C: SKIP TERMINAL (${_out#*|}) — decided end, roadmap continues."
       exit 1 ;;

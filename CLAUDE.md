@@ -3650,3 +3650,79 @@ Known consequences, recorded rather than fixed:
   it mean anything.
 
 Detail: `docs/architecture/ADR-0131-294-plan-tasks-mode-binding.md`.
+
+## Decisions from the skill-argument substitution chain (ADR-0132)
+
+Closes issue #385, Phase 12 Wave 1 — the P0 the first bounded `autopilot` run exposed. **When a
+skill is invoked with arguments, Claude Code whitespace-splits the argument list and substitutes it
+into every `$<digit>` token in the skill's own markdown body, 0-indexed, before the body reaches the
+model.** A bash fence is text, so it is rewritten too: `autopilot` invoked with
+`--features 1 --only 294` holds a `case` over its first positional parameter on disk and renders
+`case "1" in`. Measured three times independently in one run (audit §F1), **build-stamped to CC
+2.1.226**.
+
+**THE RULE — a bash fence in a `SKILL.md` must contain no positional-parameter token; logic that
+needs one lives in a `skills/<name>/scripts/` file, because a file is never rendered.** An awk field
+reference is the same defect in different clothes: it moves too, or is rewritten field-free.
+
+- **It outranks every other finding in that audit because ADR-0083's whole fence-contract mechanism
+  rests on the rendered text being the executable text.** Here it was not, and the corruption is
+  *silent* — syntactically valid shell that does the wrong thing. Three shipped fixes were being
+  reintroduced at render time inside the very fences written to fix them (c2c Step 5.0.1's `rel()`
+  reproduced ADR-0089's defect, both TOFU probes ADR-0102's), and `autopilot`'s own parser was
+  corrupted, so ADR-0129's bound would not have parsed and the run would have gone unbounded across
+  all 30 pending roadmap rows. **It survived only because the orchestrator read every fence from
+  disk instead of executing the rendered text** — an ad-hoc workaround, not a designed mitigation.
+- **Population re-measured rather than inherited: 30 staged `SKILL.md` files, 162 bash fences, 19
+  occupied lines inside them, now 0.** Two counts in the design artifacts were wrong and both are
+  corrected here rather than quietly reconciled. (1) The ADR's §Context table says **160** bash
+  fences; the live figure is **162**, and it is not a parser artifact —
+  `skill-fence-positional-tokens.test.sh` and `fence-contract-coverage.test.sh`'s independent,
+  differently-written enumerator both report 162. (2) The plan's Task 2 heading says "the **eight**
+  in-place rewrites" while its own sub-steps (3+2+1+1), its file list (7 line references) and its
+  residual table (19 → 12) all describe **seven**; the eighth is `commit`'s, which the ADR's in-place
+  table counts and the plan assigns to Task 7.
+- **Four new scripts, excising the CASE and never the FENCE** (§D2): `scope-args-parse.sh`
+  (`autopilot` Phase S), `conductor-args.sh` and `mark-roadmap-skipped.sh` (`project-conductor`
+  Step 0, and the two `[~]` sites), `repo-rel-path.sh` (c2c Step 5.0.1). The three most affected
+  fences are gates a human must read at the point of decision, so everything not needing a positional
+  parameter stays in the document. Each new dependency fails **closed** in its own fence's exit
+  vocabulary — an unresolved helper is *the check did not run*, never *the check found nothing*.
+- **`commit`'s predicate is ELIMINATED, not relocated** (§D3), the one deliberate divergence from the
+  SPEC's "they require external files". It had exactly one call site, so inlining its `grep -qE`
+  deletes the token outright rather than moving it. A helper would have added a hard `~/.claude`
+  dependency paid by `concept-to-code` Step 7, `project-init` and `autopilot-build`, whose
+  unresolved-helper fallback could only be *no test files found* — the silent omission the H4 gate
+  exists to prevent.
+- **The guard partitions, it does not merely grep** (§D6). `skill-fence-positional-tokens.test.sh`
+  splits every occurrence three ways — BASH fence / non-BASH fence / outside any fence — and asserts
+  the buckets sum to the file-wide count. A denominator guard catches a glob that stopped resolving;
+  only the sum identity catches a fence predicate that narrowed and now under-reports, which reads
+  exactly like a clean corpus. `swiftui-pro`'s Swift line is not an exclusion-list entry — it is what
+  keeps the non-BASH bucket non-empty, so the language filter is exercised by a real member.
+- **The harness cannot see this defect and never will.** Every test reads a file; the model executes
+  a *rendering* of that file. A green run says nothing about the failing quantity, so the guard is a
+  **regression** guard on a property the harness can check, not evidence the defect is fixed. The
+  only check that reads it is a live invocation compared byte-for-byte against the deployed file.
+
+**Three findings from the run, one family: an assertion green while testing nothing.** `RJ14` never
+exercised the guard it exists to protect — its inline fence invocation did not bind
+`CLAUDE_PLUGIN_ROOT`, so resolution fell through to `$HOME/.claude`, the helper was absent, and the
+assertion passed from the fall-through arm. **Any inline fence invocation in a test must bind
+`CLAUDE_PLUGIN_ROOT`.** `CDA7` asserted a `DID-NOT-RUN` branch its own fixture could never reach,
+because both resolution tiers resolved — **a fixture that cannot produce the state it names pins
+nothing**. And two plant replacements collapsed a `printf … >&2` / `exit N` pair onto one line,
+making the exit two more arguments to `printf`: no exit, plant silently inert (ADR-0112's lesson,
+met twice more here).
+
+Known consequences, recorded rather than fixed: four new hard `~/.claude` dependencies, each failing
+closed, so those gates are **worse than inert until `staging/sync-to-claude.sh --apply`** — most
+exposed is c2c Step 5.0.1, where an un-synced machine refuses *every* Step 5. `project-conductor`
+Step 0's rendered behaviour changes because its rendered behaviour was wrong (`$@`/`$#` were the
+executing shell's, empty, while its first token was filled by the substituter, so neither parse
+worked). Prose occurrences are **reported, not gated** (§D8) — zero today, widening is a named
+follow-up. The measurement is build-stamped: re-run the §Verification probe after a major CC bump
+rather than trusting the date, though the fix is inert-safe either way since removing the tokens is
+correct whether or not they are still substituted.
+
+Detail: `docs/architecture/ADR-0132-385-skill-args-in-fences.md`.

@@ -43,6 +43,13 @@
 - IMPORTANT: HITL gate before commit, push, deploy, DB schema changes, permanent deletions.
 - IMPORTANT: never disable a test to make it pass; if it needs changing, explain why in chat first.
 - If you cannot verify a result, say so — do not assume it works.
+- IMPORTANT: never assert the current state of an SDK, library, API, app, service or spec from
+  memory or from training data. Always check the live source first: the installed package in
+  `node_modules`/`site-packages`, the registry (`npm view`, `pip index`), the upstream repo's
+  current branch, the official changelog or release notes. State what you checked and when.
+- IMPORTANT: when a claim rests on a constant, a flag or a version number, verify that it is the
+  one that actually governs the behaviour in question. A value read from the wrong constant is
+  worse than no value: it produces a confident, circular argument.
 - Before declaring "done": linter + type check + tests.
 
 ## Git
