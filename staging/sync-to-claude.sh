@@ -143,10 +143,13 @@ plugin/scripts/publish-feature.sh|hooks/publish-feature.sh
 plugin/scripts/required-checks-audit.sh|hooks/required-checks-audit.sh
 plugin/scripts/set-branch-protection.sh|hooks/set-branch-protection.sh
 plugin/skills/autopilot/SKILL.md|skills/autopilot/SKILL.md
+plugin/skills/autopilot/scripts/scope-args-parse.sh|skills/autopilot/scripts/scope-args-parse.sh
 plugin/skills/autopilot/tests/run-tests.sh|skills/autopilot/tests/run-tests.sh
 plugin/scripts/tests/phase1.test.sh|hooks/tests/phase1.test.sh
 plugin/skills/project-conductor/SKILL.md|skills/project-conductor/SKILL.md
+plugin/skills/project-conductor/scripts/conductor-args.sh|skills/project-conductor/scripts/conductor-args.sh
 plugin/skills/project-conductor/scripts/h16-direction-check.sh|skills/project-conductor/scripts/h16-direction-check.sh
+plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh|skills/project-conductor/scripts/mark-roadmap-skipped.sh
 project-templates/ci/ci.yml|templates/ci.yml
 plugin/scripts/detect-test-cmd.sh|hooks/detect-test-cmd.sh
 plugin/scripts/roadmap-from-issues.sh|hooks/roadmap-from-issues.sh
@@ -203,6 +206,7 @@ plugin/skills/concept-to-code/scripts/spec-archive.sh|skills/concept-to-code/scr
 plugin/skills/concept-to-code/scripts/spec-id-predicate.awk|skills/concept-to-code/scripts/spec-id-predicate.awk
 plugin/skills/concept-to-code/scripts/spec-normalize-ids.sh|skills/concept-to-code/scripts/spec-normalize-ids.sh
 plugin/skills/concept-to-code/scripts/plan-tasks.sh|skills/concept-to-code/scripts/plan-tasks.sh
+plugin/skills/concept-to-code/scripts/repo-rel-path.sh|skills/concept-to-code/scripts/repo-rel-path.sh
 plugin/skills/concept-to-code/scripts/spec-coverage.sh|skills/concept-to-code/scripts/spec-coverage.sh
 plugin/skills/concept-to-code/tests/agent-notes-roundtrip.sh|skills/concept-to-code/tests/agent-notes-roundtrip.sh
 plugin/skills/concept-to-code/tests/run-tests.sh|skills/concept-to-code/tests/run-tests.sh

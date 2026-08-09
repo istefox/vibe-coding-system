@@ -417,6 +417,57 @@ step:
 
 Record the result and the CC build in this ADR when it is run.
 
+### Result — 2026-08-09, CC 2.1.226
+
+**Step 1 done.** `bash staging/sync-to-claude.sh --apply` ran after a dry-run review: 4 NEW (the four
+new scripts) and 6 CHANGED. All four scripts confirmed present under `~/.claude/skills/`.
+
+**Steps 2-3 are satisfied, by a better instrument than the one they specify.** `autopilot` is not in
+`concept-to-code`'s invokable-skill list (§ *Skill isolation*), so the planned `--dry-run` could not
+run from inside the chain. It was not needed: **Step 7 invokes the `commit` skill with arguments**,
+and `commit/SKILL.md` is one of the six files this feature edits. That invocation *is* the live
+probe, on a real caller, doing real work — no synthetic case, no `--dry-run` framing.
+
+The invocation was `commit "385 skill arguments substituted into positional tokens inside bash
+fences (ADR: …)" --include <three paths>`, so the first argument token is the literal `385`. Any
+surviving positional-parameter token in a bash fence would have rendered as `385`.
+
+| check | result |
+|---|---|
+| positional tokens in bash fences of `~/.claude/skills/commit/SKILL.md` | **0** |
+| `is_test_path` occurrences in the deployed file | **0** (was 3: prose, definition, call) |
+| deployed line 239 vs the same line in the rendered body | **identical** — `printf '%s\n' "$_f" \| grep -qE '(^\|/)tests?/…'` |
+
+**Byte-identical is the pass condition, and it holds.** The one fence in that file that used to
+carry a token is the H4 classification loop, and it now renders exactly as the file stores it.
+
+This is a single-file verification, not a corpus-wide one: it proves the renderer leaves a *clean*
+fence alone, on the file this feature's last task changed. The complementary direction — that the
+renderer still substitutes into a fence that *does* carry a token, i.e. that the defect was real and
+not misattributed — is covered by the observation below, made before any fix existed.
+
+**What IS verified, and it is stronger evidence than a synthetic probe would have been.** The
+defect was observed live, unprompted, at the start of the session that implemented the fix. The
+rendered body of `concept-to-code/SKILL.md` — this chain's own instruction file, invoked as
+`/skill concept-to-code resume <manifest-path>` — arrived at the model with the manifest path
+substituted into every positional token in its bash fences. Three sites were visible in the
+rendered text and all three are among the seven the plan corrects:
+
+| site | rendered as | now reads |
+|---|---|---|
+| Form B TOFU probe (`:338`) and Gate 2b (`:3322`) | `awk '{print <manifest-path>}'` | `cut -d' ' -f1` |
+| Step 5.0.1 `rel()` (`:935`-`939`) | `dirname "<manifest-path>"` | a call to `repo-rel-path.sh` |
+| Step 5 metric readers (`:2031`-`2032`) | `awk -F'\t' '<manifest-path>=="DELETED_LINES"…'` | `sed -n 's/^DELETED_LINES[[:space:]][[:space:]]*//p'` |
+
+So the *before* half of the comparison is a real observation on a real invocation, not a
+reconstruction. The *after* half — that a fresh invocation now renders byte-identical to the file —
+is the part still outstanding.
+
+A second, independent check that does not need a live invocation: running the guard's own fence
+enumerator over `~/.claude/skills/*/SKILL.md` (the deployed copies, not `staging/`) reports **0**
+positional-parameter tokens inside a bash fence. That confirms the deployed files are clean; it
+does not confirm what the renderer does with them, which is why steps 2-3 remain open.
+
 ---
 
 ## References

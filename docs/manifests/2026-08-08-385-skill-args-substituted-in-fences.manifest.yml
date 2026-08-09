@@ -6,8 +6,8 @@ mode: "brownfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-08-08T09:03:10+00:00"
-last_updated_at: "2026-08-08T09:43:43+00:00"
-current_step: "ready_for_implementation"
+last_updated_at: "2026-08-09T12:26:50+00:00"
+current_step: "step_7_commit"
 status: "in_progress"
 
 # Gate 0 routing result (ADR-0017)
@@ -28,11 +28,11 @@ coder_model: "opus"
 autopilot: false
 
 # Dynamic Workflows Step 5 tracking (ADR-0016) — default false; smoke test flips it true per environment
-hook_verified: false
-step5_mode: null
+hook_verified: true
+step5_mode: "agent_batch"
 
 # Recovery-readiness pre-flight (ADR-0050) — HEAD sha recorded once at Step 5 entry
-recovery_baseline_sha: null
+recovery_baseline_sha: "d903ee46dfb135649deb85dd020e53adbb0aaef3"
 
 # Worktree isolation contract (ADR-0068 §D1, §D11). worktree_baseref_verified is boolean,
 # set true by Step 5.0.4 via manifest-set-flag.sh once worktree.baseRef == "head" is
@@ -42,7 +42,7 @@ recovery_baseline_sha: null
 # it goes via bash sed on the additive field, the step5_review_mode precedent above. Flip
 # with, per merged stage ({stage, agent_type, branch, base_sha, merge_result}):
 # sed -i '' 's/^worktree_merges: \[\]$/worktree_merges: [{stage: ..., agent_type: ..., branch: ..., base_sha: ..., merge_result: ...}]/' <manifest>
-worktree_baseref_verified: false
+worktree_baseref_verified: true
 worktree_merges: []
 
 # Proportional audit depth (ADR-0055) — risk and task_type axes. Absent/null means STRICT
@@ -87,7 +87,7 @@ step6_mode: null
 
 # Artifacts (absolute paths, populated as steps complete)
 artifacts:
-  spec: "/Users/stefer/Developer/vibe-coding-system/SPEC.md"
+  spec: "/Users/stefer/Developer/vibe-coding-system/docs/specs/385-skill-args-substituted-in-fences.spec.md"
   brainstorm: null
   ux_blueprint: null
   adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0132-385-skill-args-in-fences.md"
@@ -119,15 +119,15 @@ hitl_gates:
     notes: "Confirmed — I will /clear and resume (fresh session, attended); Gate 4.0 committed at 64ad5a1"
   - gate: 5
     label: "review_cycle_decision"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-08-09T12:18:18+00:00"
+    notes: "skip review — 4 batches with separated tester/coder plus 3 corrective passes; harness 75/0, 311 plants verified"
 
 # Session boundary tracking
 session_boundary:
   pre_step_4_session_id: null
   fresh_session_started_at: null
-  resumed_at: null
+  resumed_at: "2026-08-08T16:45:38+00:00"
 
 # Failure tracking (populated only on status=failed)
 failure:

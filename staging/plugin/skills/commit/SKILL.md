@@ -226,17 +226,17 @@ That is why the broader predicate wins here even though it is the one ADR-0048 f
 over-matching `.spec.md` files for spec-coverage.sh's different (discovery) purpose.
 
 ```bash
-# is_test_path replicates weakening-scan.sh's is_test() ERE exactly (see prose above for why the
-# broader, over-matching predicate — not spec-coverage.sh's narrower one — is the correct choice
-# for a section that SHOWS a diff to a human rather than gating on it).
-is_test_path() {
-  printf '%s\n' "$1" | grep -qE '(^|/)tests?/|(^|/)spec/|test_[^/]*\.[A-Za-z]+$|_test\.[A-Za-z]+$|\.test\.[A-Za-z]+$|\.spec\.[A-Za-z]+$|Tests?\.[A-Za-z]+$'
-}
-
+# The classification ERE below replicates weakening-scan.sh's is_test() exactly (see prose above
+# for why the broader, over-matching predicate — not spec-coverage.sh's narrower one — is the
+# correct choice for a section that SHOWS a diff to a human rather than gating on it).
+# It is INLINED at its single call site — no helper, no scripts/ file, no PAIRS entry, no ~/.claude
+# dependency (ADR-0132 §D3, issue #385): an external helper would be paid for by concept-to-code
+# Step 7, project-init and autopilot-build, and its unresolved-helper fallback could only be "no
+# test files found", which is the silent omission this gate exists to prevent.
 test_files=""
 for _f in $staged $tracked_modified $untracked; do
   [ -n "$_f" ] || continue
-  is_test_path "$_f" && test_files="$test_files
+  printf '%s\n' "$_f" | grep -qE '(^|/)tests?/|(^|/)spec/|test_[^/]*\.[A-Za-z]+$|_test\.[A-Za-z]+$|\.test\.[A-Za-z]+$|\.spec\.[A-Za-z]+$|Tests?\.[A-Za-z]+$' && test_files="$test_files
 $_f"
 done
 test_files=$(printf '%s\n' "$test_files" | sed '/^$/d' | sort -u)

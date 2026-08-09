@@ -38,7 +38,13 @@
 #
 # plant: S1 | plugin/skills/project-conductor/SKILL.md | cp "$_spec" "$_root/SPEC.md" || { echo "SPEC-COPY: DID-NOT-RUN | true || { echo "SPEC-COPY: DID-NOT-RUN
 # plant: S2 | plugin/skills/project-conductor/SKILL.md | "$_issue" "$_feature" "$_issue" >> "$_root/.claude/autopilot-state/skipped-features" | "$_issue" "$_feature" "$_issue" > "$_root/.claude/needs-human"
-# plant: S3 | plugin/skills/project-conductor/SKILL.md | can carry any sed metacharacter or delimiter. awk -v f="$_feature" | can carry any sed metacharacter or delimiter. awk -v f="NOMATCH"
+# S3 retargeted (issue #385 dispatch, Batch 3): the awk match program moved out of the two
+# SKILL.md fences and into mark-roadmap-skipped.sh (ADR-0132 §D2), so the old needle — spanning the
+# comment immediately above the fence's inline awk call and the call itself — matched zero sites in
+# SKILL.md; the file's own explanatory comment and the invocation are now ~65 lines apart. Retargeted
+# at the invocation itself: forcing the compared value to a literal "NOMATCH" breaks the whole-line
+# match for any real feature title, which is exactly what marks S3's row [~].
+# plant: S3 | plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh | -v f="$FEATURE" | -v f="NOMATCH"
 # plant: G2 | plugin/skills/project-conductor/SKILL.md | ENTRY-INIT: TERMINAL (${_out#*|}) | ENTRY-INIT: ADOPT (${_out#*|})
 # plant: G5 | plugin/skills/project-conductor/SKILL.md | echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply" exit 3 fi # Constructed here | exit 3 fi # Constructed here
 # plant: B1 | plugin/skills/project-conductor/SKILL.md | "$_feature" "${_out#*|}" >> "$_root/.claude/autopilot-state/skipped-features" | "$_feature" "${_out#*|}" > "$_root/.claude/needs-human"
@@ -46,6 +52,23 @@
 # plant: B6 | plugin/skills/project-conductor/SKILL.md | case "${_out%%|*}" in TERMINAL) | case "${_out%%|*}" in TERMINAL|RESUMABLE|ADOPTABLE)
 # plant: B9 | plugin/skills/project-conductor/SKILL.md | echo "BRANCH-C: DID-NOT-RUN — classifier missing: $_mes" | printf 'x' > "$_root/.claude/needs-human"; echo "BRANCH-C: DID-NOT-RUN — classifier missing: $_mes"
 # plant: B9b | plugin/skills/project-conductor/SKILL.md | [ "$_rc" -eq 0 ] || { echo "BRANCH-C: DID-NOT-RUN — $_out"; exit 3; } | [ "$_rc" -eq 0 ] || { _out="TERMINAL|guessed"; }
+#
+# MR1-MR9 (issue #385 dispatch, Batch 3): the first direct plants for mark-roadmap-skipped.sh's own
+# assertions, now that they are green. MR5 needed a `;` inserted before `exit N` in the replacement,
+# not just a space: the source has `>&2` and `exit N` on TWO lines, and collapsing them onto one line
+# without a `;` makes `exit N` two more ARGUMENTS to printf (which cycles its format string over
+# them) rather than a second statement — verified live (ADR-0112's `echo "..." >&2 exit 0` lesson,
+# met again with printf; recovery-preflight.test.sh's RRP6 hit the identical shape the same hour).
+# plant: MR1 | plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh | print "- [~] " f "  (skipped)" | print "- [ ] " f "  (skipped)"
+# plant: MR2 | plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh | else print } | else print "MUTATED-" $0 }
+# plant: MR3 | plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh | $0 == "- [ ] " f | $0 ~ "- [ ] " f
+# plant: MR4 | plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh | exit 2 | exit 0
+# plant: MR5 | plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh | readable roadmap file at %s\n' "$SELF" "$MD" >&2 exit 3 | readable roadmap file at %s\n' "$SELF" "$MD" >&2; exit 0
+# plant: MR6 | plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh | exit 0 | echo CLEAN; exit 0
+# plant: MR7 | plugin/skills/project-conductor/SKILL.md | echo "SPEC-COPY: DID-NOT-RUN — roadmap marker helper not deployed: mark-roadmap-skipped.sh" | echo "SPEC-COPY: OK — pretend helper deployed"
+# plant: MR8 | plugin/skills/project-conductor/SKILL.md | echo "BRANCH-C: DID-NOT-RUN — roadmap marker helper not deployed: mark-roadmap-skipped.sh" | echo "BRANCH-C: OK — pretend helper deployed"
+# plant: MR9 | sync-to-claude.sh | plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh|skills/project-conductor/scripts/mark-roadmap-skipped.sh | plugin/skills/project-conductor/scripts/mark-roadmap-skipped-RENAMED.sh|skills/project-conductor/scripts/mark-roadmap-skipped-RENAMED.sh
+#
 # plant: W1 | plugin/skills/autopilot/SKILL.md | **Five writers**, the last two added by ADR-0111 | **Three writers**, unchanged since ADR-0060
 # plant: W3 | plugin/skills/autopilot/SKILL.md | **Branch C is a split, not a downgrade** | **Branch C is relaxed**
 # plant: W4 | plugin/scripts/autopilot-guard.sh | v1.4 (2026-08-01, issue #324, ADR-0111) | v1.4 (2026-08-01, unrelated cleanup)
@@ -67,6 +90,11 @@ NA="$SKILLS/autopilot/SKILL.md"
 C2C="$SKILLS/concept-to-code/SKILL.md"
 MES="$SKILLS/concept-to-code/scripts/manifest-entry-state.sh"
 GUARD="$STAGING/plugin/scripts/autopilot-guard.sh"
+# MRS/SYNCSH — issue #385 (ADR-0132 §D2): mark-roadmap-skipped.sh, the one script the two [~]
+# awk programs at lines 435/682 are extracted into. Does not exist yet (tester dispatch); the
+# MR section below is expected RED for exactly that reason.
+MRS="$SKILLS/project-conductor/scripts/mark-roadmap-skipped.sh"
+SYNCSH="$STAGING/sync-to-claude.sh"
 
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
@@ -175,11 +203,18 @@ TODAY=$(date +%Y-%m-%d)
 
 # setup <root> — binds the free variables every fence in this file declares.
 setup() {
+  # The heredoc terminator (SETUP_EOF) is UNQUOTED, so $STAGING below is expanded by THIS shell
+  # before the line is written — same as $1/$SLUG/$FEATURE above it. The single quotes around it
+  # are literal output characters, producing a normal single-quoted assignment in setup.sh, never
+  # a suppressed expansion. Verified: the generated file carries the real staging path, not the
+  # literal text "$STAGING/plugin" (issue #385 dispatch note — flagged for a second look, checked
+  # empirically before shipping).
   cat >"$TMPROOT/setup.sh" <<SETUP_EOF
 _root='$1'
 _slug='$SLUG'
 _feature='$FEATURE'
 _manifest='${2:-}'
+CLAUDE_PLUGIN_ROOT='$STAGING/plugin'
 SETUP_EOF
   printf '%s' "$TMPROOT/setup.sh"
 }
@@ -443,6 +478,300 @@ else
 fi
 
 # =====================================================================================
+# MR. mark-roadmap-skipped.sh — the two [~] awk programs (lines 435/682) reproduced as one
+# script (issue #385, ADR-0132 §D2). This is an ADR-0069-style EXTRACTION, not an ADR-0086
+# copy: the two [~] sites are ONE question ("mark this roadmap row skipped"), and two answers
+# would be a roadmap disagreeing with itself. These are the FIRST direct tests this program has
+# ever had — until now, [~] marking was only ever exercised indirectly, through the whole fence
+# (S3/S3b/B2 above).
+#
+# EXPECTED RED (tester dispatch, issue #385 Task 3). mark-roadmap-skipped.sh does not exist yet.
+# Every assertion below fails because the script is missing, or because the two fences still
+# inline the awk program rather than resolving and calling it — never because of a defect in
+# this test file. NO PLANTS ARE DECLARED HERE: every assertion is red at the end of this
+# dispatch, and plant-check.sh cannot distinguish a plant firing from an assertion that was
+# already red (ADR-0108/ADR-0115 PC4's own reasoning, applied to the caller side). Declare
+# plants once the coder's implementation turns these green.
+
+mrs_root() {
+  _d="$TMPROOT/$1"; mkdir -p "$_d"
+  printf -- '%s\n' "$2" > "$_d/PROJECT.md"
+  printf '%s' "$_d"
+}
+
+# MR1: a matching row is marked [~] with the "(skipped)" annotation, verbatim from the two
+# existing awk programs, and the script exits 0 ("ran and produced a result" — ADR-0132 §D4).
+MR1_FEAT='Some feature  (issue #42)'
+R=$(mrs_root mr1 "- [ ] $MR1_FEAT")
+bash "$MRS" "$R/PROJECT.md" "$MR1_FEAT" >"$TMPROOT/out-mr1" 2>&1
+RC=$?
+if [ "$RC" = "0" ] && grep -qF -- "- [~] $MR1_FEAT  (skipped)" "$R/PROJECT.md"; then
+  ok "MR1: mark-roadmap-skipped.sh marks a matching row [~] (skipped) and exits 0"
+else
+  bad "MR1: rc=$RC — $(head -1 "$R/PROJECT.md" 2>/dev/null) — $(head -1 "$TMPROOT/out-mr1" 2>/dev/null)"
+fi
+
+# MR2: a non-matching feature title leaves PROJECT.md BYTE-IDENTICAL. Exit 0 either way — the
+# script's own contract is "ran", never "matched" (ADR-0132 §D4: 0 = ran whether or not a row
+# matched).
+R=$(mrs_root mr2 "- [ ] $MR1_FEAT")
+cp "$R/PROJECT.md" "$TMPROOT/mr2-before"
+bash "$MRS" "$R/PROJECT.md" 'A completely different feature  (issue #99)' >"$TMPROOT/out-mr2" 2>&1
+RC=$?
+if [ "$RC" = "0" ] && cmp -s "$TMPROOT/mr2-before" "$R/PROJECT.md"; then
+  ok "MR2: a non-matching feature title leaves PROJECT.md byte-identical (exit 0)"
+else
+  bad "MR2: rc=$RC — PROJECT.md changed on a non-matching title, or exit code was not 0"
+fi
+
+# MR3: a title carrying sed metacharacters ([ . * /) is matched by EXACT WHOLE-LINE comparison,
+# never a regex — both existing call sites carry a comment saying exactly this, and a feature
+# title is arbitrary GitHub text that can carry any sed metacharacter or delimiter.
+MR3_FEAT='Ship a[b].c*d/e  (issue #7)'
+R=$(mrs_root mr3 "- [ ] $MR3_FEAT")
+bash "$MRS" "$R/PROJECT.md" "$MR3_FEAT" >"$TMPROOT/out-mr3" 2>&1
+RC=$?
+if [ "$RC" = "0" ] && grep -qF -- "- [~] $MR3_FEAT  (skipped)" "$R/PROJECT.md"; then
+  ok "MR3: a title carrying [ . * / is matched by exact whole-line comparison, never a regex"
+else
+  bad "MR3: rc=$RC — a sed-metacharacter title was not marked — $(head -1 "$R/PROJECT.md" 2>/dev/null)"
+fi
+
+# MR4 — bad invocation (ADR-0132 §D4: 2 = bad invocation). A missing required argument is the
+# unambiguous case; the script cannot mark anything without a feature title to compare against.
+R=$(mrs_root mr4 "- [ ] $MR1_FEAT")
+bash "$MRS" "$R/PROJECT.md" >"$TMPROOT/out-mr4" 2>&1
+RC=$?
+if [ "$RC" = "2" ]; then
+  ok "MR4: invoking mark-roadmap-skipped.sh with a missing feature-title argument exits 2 (bad invocation)"
+else
+  bad "MR4: rc=$RC, expected 2 for a missing-argument invocation — $(head -1 "$TMPROOT/out-mr4" 2>/dev/null)"
+fi
+
+# MR5 — could not run (ADR-0132 §D4: 3 = could not run). A project-md path that does not exist
+# cannot be read or written; distinct from MR2's "ran, found nothing to mark".
+bash "$MRS" "$TMPROOT/mr5-does-not-exist/PROJECT.md" "$MR1_FEAT" >"$TMPROOT/out-mr5" 2>&1
+RC=$?
+if [ "$RC" = "3" ]; then
+  ok "MR5: a project-md path that does not exist exits 3 (could not run), not 2 or a silent no-op"
+else
+  bad "MR5: rc=$RC, expected 3 for an unreadable/missing PROJECT.md — $(head -1 "$TMPROOT/out-mr5" 2>/dev/null)"
+fi
+
+# MR6 — no CLEAN sentinel, ever (ADR-0132 §D4: this script is not a reporter). Checked across
+# every captured output above.
+if ! grep -qi 'CLEAN' "$TMPROOT"/out-mr[1-5] 2>/dev/null; then
+  ok "MR6: mark-roadmap-skipped.sh never prints a CLEAN sentinel across any of the cases above"
+else
+  bad "MR6: mark-roadmap-skipped.sh printed CLEAN somewhere — it must never grow a reporter sentinel (ADR-0132 §D4)"
+fi
+
+# MR7/MR8 — both fences take their EXISTING DID-NOT-RUN exit-3 branch when mark-roadmap-skipped.sh
+# is unresolvable. The renamed-filename substitution targets the LITERAL PATH SUBSTRING the
+# two-tier resolution will use (the h16-direction-check.sh pattern already used two call sites
+# below, at project-conductor/SKILL.md's Step 5 H16 block), so it correctly finds nothing to
+# break TODAY (the fences still inline the awk program) and correctly breaks BOTH tiers once the
+# coder adds the two-tier resolution, regardless of which tier is checked first.
+
+# MR7: conductor-step4-nospec-skip, on the SKIP path (no generated SPEC — same fixture as S2).
+R=$(mk_root mr7)
+_b=$(extract_fence "$PC" "conductor-step4-nospec-skip")
+_b_broken=$(printf '%s\n' "$_b" | sed 's|project-conductor/scripts/mark-roadmap-skipped\.sh|project-conductor/scripts/DOES-NOT-EXIST-mark-roadmap-skipped.sh|g')
+{ cat "$(setup "$R")"; printf '\n'; printf '%s\n' "$_b_broken" | subst_paths; } > "$TMPROOT/mr7.sh"
+bash "$TMPROOT/mr7.sh" >"$TMPROOT/out-mr7" 2>&1
+RC=$?
+if [ "$RC" = "3" ] && grep -q 'SPEC-COPY: DID-NOT-RUN' "$TMPROOT/out-mr7" \
+   && grep -q 'sync-to-claude.sh --apply' "$TMPROOT/out-mr7"; then
+  ok "MR7: conductor-step4-nospec-skip takes the existing DID-NOT-RUN exit-3 branch when mark-roadmap-skipped.sh is unresolvable"
+else
+  bad "MR7: rc=$RC — $(head -2 "$TMPROOT/out-mr7" 2>/dev/null | tr '\n' ' ') — still inlines the awk program, or does not yet resolve the helper two-tier"
+fi
+
+# MR8: conductor-branch-c-entry-classify, on the TERMINAL path (same fixture as B1).
+R=$(mk_root mr8)
+MAN="$R/docs/manifests/$TODAY-$SLUG.manifest.yml"
+mk_manifest "$MAN" "step_0_init" "aborted"
+_bc=$(extract_fence "$PC" "conductor-branch-c-entry-classify")
+_bc_broken=$(printf '%s\n' "$_bc" | sed 's|project-conductor/scripts/mark-roadmap-skipped\.sh|project-conductor/scripts/DOES-NOT-EXIST-mark-roadmap-skipped.sh|g')
+{ cat "$(setup "$R" "$MAN")"; printf '\n'; printf '%s\n' "$_bc_broken" | subst_paths; } > "$TMPROOT/mr8.sh"
+bash "$TMPROOT/mr8.sh" >"$TMPROOT/out-mr8" 2>&1
+RC=$?
+if [ "$RC" = "3" ] && grep -q 'BRANCH-C: DID-NOT-RUN' "$TMPROOT/out-mr8" \
+   && grep -q 'sync-to-claude.sh --apply' "$TMPROOT/out-mr8"; then
+  ok "MR8: conductor-branch-c-entry-classify takes the existing DID-NOT-RUN exit-3 branch when mark-roadmap-skipped.sh is unresolvable on the TERMINAL path"
+else
+  bad "MR8: rc=$RC — $(head -2 "$TMPROOT/out-mr8" 2>/dev/null | tr '\n' ' ') — still inlines the awk program, or does not yet resolve the helper two-tier"
+fi
+
+# MR9 — the PAIRS entry. pairs-completeness.test.sh cannot see a skill scripts/ file (its
+# check_complete covers plugin/skills with */SKILL.md only — ADR-0043), so this is the only guard
+# (ADR-0109 MES0b / ADR-0069 PTB7 precedent).
+if grep -qF 'plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh|skills/project-conductor/scripts/mark-roadmap-skipped.sh' "$SYNCSH"; then
+  ok "MR9: the PAIRS entry for mark-roadmap-skipped.sh exists in sync-to-claude.sh"
+else
+  bad "MR9: no PAIRS entry for mark-roadmap-skipped.sh in sync-to-claude.sh"
+fi
+
+# =====================================================================================
+# CDA. Task 6 (issue #385, ADR-0132 §D2/§D4/§D5): conductor-args.sh, replacing Step 0's `$1`
+# autopilot check and its `"$@"`/--fork-from scan (SKILL.md 39-56) with real positional parameters
+# — legal inside a script, illegal inside a rendered fence. Prints two lines: `autopilot=<true|
+# false>` and `fork_from=<ref-or-empty>`. This is the ONE call site in this feature that changes
+# RENDERED behaviour on purpose: today `$1` is filled by the substituter while `$@`/`$#` are the
+# EXECUTING SHELL's (empty), so neither parse has ever worked as written.
+#
+# EXPECTED RED (tester dispatch, issue #385 Task 6). conductor-args.sh does not exist yet, so
+# CDA1-CDA5 fail on a missing file (bash: …: No such file or directory, rc=127); CDA6 (the PAIRS
+# entry) fails because nothing has been added to sync-to-claude.sh yet; CDA7 fails via
+# EXTRACT_FAILED because the coder has not yet added `<!-- fence-contract: conductor-step0-args
+# -->` to project-conductor/SKILL.md — never because of a defect in this test. NO PLANTS ARE
+# DECLARED HERE, for the same reason Section MR states: a separate tester pass declares them once
+# the coder's implementation turns these green.
+#
+# CDA7 is also this file's contribution to ADR-0083 §F4 (fence-contract-coverage.test.sh): F4
+# accepts the literal source string `run_fence "<id>"` as proof of execution, independent of
+# whether the call currently succeeds — so the string below is what keeps F3/F4/F6/F7/F9 green
+# once the coder's marker lands, verified by re-running that file in this same dispatch (its own
+# baseline: PASS=45 FAIL=0, unaffected today since "conductor-step0-args" is not yet a declared id).
+#
+# PLANTS (issue #385 dispatch, Batch 3 test-authoring pass — conductor-args.sh is green now).
+# CDA1/CDA3 target the two `_autopilot` sites (the match condition and the default, respectively)
+# so a broken match and a broken default are distinguishable failures. CDA2/CDA4 both sit inside
+# the same --fork-from value-capture line and are kept apart deliberately: CDA2 mutates the index
+# ADVANCE taken only when a value actually follows the flag (so a value-present run captures the
+# wrong slot), CDA4 mutates only the FALLBACK a positional parameter takes when nothing follows it
+# (so an absent value stops defaulting to empty) — neither mutation touches the other's case. CDA5
+# reproduces the exact bug its own comment names: the match condition made to depend on
+# `_autopilot`, so the flag scan stops being independent of the first token's value, which is
+# precisely what CDA5 exists to catch (and CDA2's fixture, whose first token IS "autopilot", is
+# unaffected by it — verified). CDA6 mirrors MR9's own PAIRS-entry technique two sections above.
+# CDA7 removes DID-NOT-RUN from the fence's own not-deployed message — the one thing its grep
+# depends on that rc=3 alone does not prove; it cannot touch the resolvable-path positive control,
+# which never reaches that branch.
+# plant: CDA1 | plugin/skills/project-conductor/scripts/conductor-args.sh | [ "${1:-}" = "autopilot" ] && _autopilot=true | [ "${1:-}" = "autopilot-typo" ] && _autopilot=true
+# plant: CDA2 | plugin/skills/project-conductor/scripts/conductor-args.sh | _i=$((_i+1)); eval | _i=$((_i+2)); eval
+# plant: CDA3 | plugin/skills/project-conductor/scripts/conductor-args.sh | _autopilot=false | _autopilot=true
+# plant: CDA4 | plugin/skills/project-conductor/scripts/conductor-args.sh | _fork_from=\${$_i:-} | _fork_from=\${$_i:-CDA4CRASH}
+# plant: CDA5 | plugin/skills/project-conductor/scripts/conductor-args.sh | [ "$_a" = "--fork-from" ] && { | [ "$_a" = "--fork-from" ] && [ "$_autopilot" = "true" ] && {
+# plant: CDA6 | sync-to-claude.sh | plugin/skills/project-conductor/scripts/conductor-args.sh|skills/project-conductor/scripts/conductor-args.sh | plugin/skills/project-conductor/scripts/conductor-args-RENAMED.sh|skills/project-conductor/scripts/conductor-args-RENAMED.sh
+# plant: CDA7 | plugin/skills/project-conductor/SKILL.md | CONDUCTOR-ARGS: DID-NOT-RUN — argument parser not deployed | CONDUCTOR-ARGS: argument parser not deployed
+
+CAS="$SKILLS/project-conductor/scripts/conductor-args.sh"
+
+# setup_cda <args> — binds the one free variable the fence declares (_args, the raw argument
+# string, exactly the `autopilot` §1.3 Phase S pattern this ADR points at) plus CLAUDE_PLUGIN_ROOT,
+# bound to the STAGING copy for the same reason setup()/setup_ar() already bind it in this and the
+# sibling file: an unbound CLAUDE_PLUGIN_ROOT falls through to $HOME/.claude and can make an
+# assertion pass from the deployed copy instead of staging/ (this session's own RJ14 finding).
+setup_cda() {
+  cat >"$TMPROOT/setup-cda.sh" <<SETUP_EOF
+_args='$1'
+CLAUDE_PLUGIN_ROOT='$STAGING/plugin'
+SETUP_EOF
+  printf '%s' "$TMPROOT/setup-cda.sh"
+}
+
+# CDA1: a bare "autopilot" -> autopilot=true, fork_from empty, exit 0.
+OUT=$(bash "$CAS" autopilot 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'autopilot=true' \
+   && printf '%s\n' "$OUT" | grep -qxF 'fork_from='; then
+  ok "CDA1: a bare 'autopilot' first token -> autopilot=true, fork_from empty"
+else
+  bad "CDA1: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# CDA2: "autopilot --fork-from main" -> autopilot=true, fork_from=main.
+OUT=$(bash "$CAS" autopilot --fork-from main 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'autopilot=true' \
+   && printf '%s\n' "$OUT" | grep -qxF 'fork_from=main'; then
+  ok "CDA2: 'autopilot --fork-from main' -> autopilot=true, fork_from=main"
+else
+  bad "CDA2: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# CDA3: no arguments at all -> autopilot=false, fork_from empty (today's attended-mode default,
+# byte-identical per ADR-0132 §D2's "Empty in attended mode" sentence, unmoved).
+OUT=$(bash "$CAS" 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'autopilot=false' \
+   && printf '%s\n' "$OUT" | grep -qxF 'fork_from='; then
+  ok "CDA3: no arguments -> autopilot=false, fork_from empty"
+else
+  bad "CDA3: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# CDA4: "--fork-from" with nothing after it (the only/last token) -> fork_from stays empty rather
+# than crashing on a reference past the argument list; not an autopilot token either.
+OUT=$(bash "$CAS" --fork-from 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'autopilot=false' \
+   && printf '%s\n' "$OUT" | grep -qxF 'fork_from='; then
+  ok "CDA4: --fork-from with nothing after it -> fork_from stays empty, exit 0 (no crash)"
+else
+  bad "CDA4: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# CDA5: a first token that is not "autopilot" -> autopilot=false, and --fork-from is still scanned
+# for independently of the first token's value.
+OUT=$(bash "$CAS" notautopilot --fork-from feat/x 2>&1); RC=$?
+if [ "$RC" = "0" ] && printf '%s\n' "$OUT" | grep -qxF 'autopilot=false' \
+   && printf '%s\n' "$OUT" | grep -qxF 'fork_from=feat/x'; then
+  ok "CDA5: a first token that is not 'autopilot' -> autopilot=false, fork_from still scanned for"
+else
+  bad "CDA5: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# CDA6 -- the PAIRS entry. pairs-completeness.test.sh cannot see a skill scripts/ file (its
+# check_complete covers plugin/skills with */SKILL.md only -- ADR-0043), so this is the only guard
+# (ADR-0109 MES0b / ADR-0069 PTB7 / MR9 precedent, same file).
+if grep -qF 'plugin/skills/project-conductor/scripts/conductor-args.sh|skills/project-conductor/scripts/conductor-args.sh' "$SYNCSH"; then
+  ok "CDA6: the PAIRS entry for conductor-args.sh exists in sync-to-claude.sh"
+else
+  bad "CDA6: no PAIRS entry for conductor-args.sh in sync-to-claude.sh"
+fi
+
+# CDA7: Step 0's fence takes an exit-3 CONDUCTOR-ARGS: DID-NOT-RUN branch, with the sync remedy
+# printed, when conductor-args.sh is unresolvable — there is NO safe default on this fence
+# (ADR-0132 §D2/§D4: false prompts with nobody present, true runs unattended when nobody asked).
+#
+# RETARGETED (issue #385 dispatch, Batch 3 test-authoring pass). The marker now exists
+# (project-conductor/SKILL.md:51) and Task 6 vendored conductor-args.sh onto staging, so the
+# ORIGINAL fixture — a plain `run_fence` call with nothing renamed — resolves on the FIRST tier
+# (CLAUDE_PLUGIN_ROOT) and returns rc=0: the assertion as first written could never reach the
+# branch it names, because it never made the helper unresolvable. Verified live both ways before
+# writing this.
+#
+# The plain call stays, unlike MR7/MR8's full replacement, and is executed as a genuine positive
+# control: it is also this file's literal contribution to fence-contract-coverage.test.sh F4,
+# which greps *.test.sh for the exact string `run_fence "<id>"` as proof of execution (see this
+# file's own header) — this is the ONLY call site for the "conductor-step0-args" id (CDA1-CDA6
+# call conductor-args.sh directly, not through the fence), so dropping it would silently redden a
+# file this dispatch's own baseline reports GREEN (PASS=45 FAIL=0). A second, RENAMED extraction —
+# the same technique MR7/MR8 already use, two sections above — is what actually exercises the
+# unresolvable branch: it substitutes the helper path INSIDE the extracted fence body, before
+# subst_paths() runs, to a name that cannot exist on either tier (subst_paths rewrites the
+# `$HOME/.claude/skills/` tier onto the SAME staging directory CLAUDE_PLUGIN_ROOT already points
+# at, so only a renamed substring — not an environment override — can break both at once).
+# The fence's SUCCESS path is silent by design: it only sets the internal `_autopilot`/
+# `_fork_from` variables for the steps below it to read (CDA1-CDA5 test those parses directly
+# against conductor-args.sh, not through the fence). So the positive control below asserts rc=0
+# with no DID-NOT-RUN output — the fence's own stdout contract on the resolvable path — never a
+# printed `autopilot=` line, which this block does not emit.
+RC0=$(run_fence "conductor-step0-args" "$PC" "$(setup_cda "autopilot")")
+OUT0=$(out_of conductor-step0-args)
+_b0=$(extract_fence "$PC" "conductor-step0-args")
+_b0_broken=$(printf '%s\n' "$_b0" | sed 's|project-conductor/scripts/conductor-args\.sh|project-conductor/scripts/DOES-NOT-EXIST-conductor-args.sh|g')
+{ cat "$(setup_cda "autopilot")"; printf '\n'; printf '%s\n' "$_b0_broken" | subst_paths; } > "$TMPROOT/cda7.sh"
+bash "$TMPROOT/cda7.sh" >"$TMPROOT/out-cda7" 2>&1
+RC=$?
+OUT=$(cat "$TMPROOT/out-cda7" 2>/dev/null)
+if [ "$RC0" = "0" ] && [ -z "$OUT0" ] \
+   && [ "$RC" = "3" ] && printf '%s' "$OUT" | grep -q 'CONDUCTOR-ARGS: DID-NOT-RUN' \
+   && printf '%s' "$OUT" | grep -q 'sync-to-claude.sh --apply'; then
+  ok "CDA7: Step 0's fence resolves conductor-args.sh when it is deployed (rc=0, silent), and takes the CONDUCTOR-ARGS: DID-NOT-RUN branch (exit 3, sync remedy) when it is not"
+else
+  bad "CDA7: resolvable rc=$RC0 out=$(printf '%s' "$OUT0" | head -1) — unresolvable rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# =====================================================================================
 # W. The writer list and the deferral notes. Static, and every needle targets a MECHANISM or a
 # distinctive clause rather than the name of the thing it asserts about (rule 12 — five instances
 # in one day in this repository, every one an assertion whose needle was the subject's own name).
@@ -659,12 +988,15 @@ fi
 
 # Z1: assertion-count floor. A floor, not an exact count: it catches an assertion that VANISHES
 # (ADR-0083 §D3 — a suite reporting fewer assertions does not read as broken, and nobody watches
-# the number) without needing a bump on every addition.
+# the number) without needing a bump on every addition. Raised 57 -> 64 (issue #385 Task 6): the
+# seven new CDA assertions above, ALL SEVEN counted toward PASS+FAIL regardless of their RED/GREEN
+# colour, because `TOTAL` sums executed assertions, not passing ones — a failing assertion still
+# ran (the seven CDA cases are exactly that: expected-red today, still counted).
 TOTAL=$((PASS + FAIL))
-if [ "$TOTAL" -ge 41 ]; then
+if [ "$TOTAL" -ge 64 ]; then
   ok "Z1: assertion floor met ($TOTAL)"
 else
-  bad "Z1: only $TOTAL assertions executed, expected >= 41 — did an extraction return empty?"
+  bad "Z1: only $TOTAL assertions executed, expected >= 64 — did an extraction return empty?"
 fi
 
 echo "----"

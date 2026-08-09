@@ -335,7 +335,7 @@ Skip entirely if `manifest.test_cmd_candidate` is null or `NONE`.
 Otherwise check trust registration (read-only Bash — safe in auto mode):
 ```bash
 TCF="<project-root>/.claude/test-cmd"
-H=$(shasum -a 256 "$TCF" | awk '{print $1}')
+H=$(shasum -a 256 "$TCF" | cut -d' ' -f1)
 ROOT_N=$(cd "<project-root>" && pwd -P | tr '[:upper:]' '[:lower:]')
 grep -qxF "${H}	${ROOT_N}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null \
   && echo "TRUSTED" || echo "NOT_TRUSTED"
@@ -912,8 +912,8 @@ Four assertions, run once, at the very top of Step 5 — before dispatch-mode se
 # that could not run must not be readable as a checker that found nothing.
 _top=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "PREFLIGHT_NOREPO"; exit 3; }
 [ -n "${MANIFEST:-}" ] || { echo "PREFLIGHT_NOMANIFEST"; exit 3; }
-# rel() ASKS GIT for the repo-relative path. It does not compare strings, and that is the whole
-# point: every string form of this comparison has a normalisation it does not perform.
+# repo-rel-path.sh ASKS GIT for the repo-relative path. It does not compare strings, and that is
+# the whole point: every string form of this comparison has a normalisation it does not perform.
 #
 # The first draft compared `git rev-parse --show-toplevel` (resolved) against the caller's path
 # (not), so `rel()` shortened nothing and EVERY artifact classified as OTHER — including the
@@ -929,22 +929,34 @@ _top=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "PREFLIGHT_NOREPO"; 
 # directory" answered without going back through a string compare, which is the trap being removed.
 # It is what keeps an artifact living in a DIFFERENT repository from being handed that repository's
 # prefix and silently exempted. Pinned by `recovery-preflight.test.sh` RJ9 (symlink), RJ13/RJ13b
-# (case) and RJ14 (foreign repo).
-rel() {
-  [ -n "${1:-}" ] || return 0
-  _d=$(dirname "$1")
-  [ -d "$_d" ] || { printf '%s' "$1"; return 0; }
-  _t2=$(git -C "$_d" rev-parse --show-toplevel 2>/dev/null) || { printf '%s' "$1"; return 0; }
-  { [ -n "$_t2" ] && [ "$_t2" -ef "$_top" ]; } || { printf '%s' "$1"; return 0; }
-  printf '%s%s' "$(git -C "$_d" rev-parse --show-prefix 2>/dev/null)" "$(basename "$1")"
-}
+# (case) and RJ14 (foreign repo) through this fence, and by its RRP section directly.
+#
+# The logic lives in repo-rel-path.sh rather than in a function here because this fence is
+# RENDERED before the model executes it, and the renderer substitutes the skill's own invocation
+# arguments into the parameter that function read — so what ran was a normalisation whose input
+# had been replaced by an unrelated word, reintroducing #239 at render time inside the very block
+# written to fix it (issue #385, ADR-0132 §D1). A file is never rendered. Resolved ONCE here,
+# above the first of the four calls below; an unresolved helper is the check DID NOT RUN, never a
+# clean tree.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/repo-rel-path.sh" ]; then
+  _rrp="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/repo-rel-path.sh"
+elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/repo-rel-path.sh" ]; then
+  _rrp="$HOME/.claude/skills/concept-to-code/scripts/repo-rel-path.sh"
+else
+  echo "PREFLIGHT_NOHELPER"
+  echo "  repo-rel-path.sh is not deployed. Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 3
+fi
 
 # The manifest leaves the dirty set BEFORE anything is classified. Do not put it back — see the
 # paragraph below this fence for why, and read #239 before deciding the exemption looks careless.
-DIRTY=$(git status --porcelain | sed 's/^...//' | grep -vxF "$(rel "$MANIFEST")" || true)
+DIRTY=$(git status --porcelain | sed 's/^...//' | grep -vxF "$(bash "$_rrp" "$_top" "$MANIFEST")" || true)
 [ -n "$DIRTY" ] || { echo "PREFLIGHT_CLEAN"; exit 0; }
 
-SPEC_REL=$(rel "${SPEC:-}"); ADR_REL=$(rel "${ADR:-}"); PLAN_REL=$(rel "${PLAN:-}")
+SPEC_REL=$(bash "$_rrp" "$_top" "${SPEC:-}")
+ADR_REL=$(bash "$_rrp" "$_top" "${ADR:-}")
+PLAN_REL=$(bash "$_rrp" "$_top" "${PLAN:-}")
 CHAIN=""; OTHER=""
 while IFS= read -r f; do
   [ -n "$f" ] || continue
@@ -1002,8 +1014,12 @@ manifest's **dirtiness**, never its **content**.
   Step 5."
 - **`PREFLIGHT_BOTH`** → prescribe the commit first, then the stash, in that order, and say why:
   committing the artifacts is what makes the stash safe.
-- **`PREFLIGHT_NOREPO` / `PREFLIGHT_NOMANIFEST` (exit 3)** → the check did not run. Refuse to
-  dispatch and say so in those words. Do not report it as a clean tree.
+- **`PREFLIGHT_NOREPO` / `PREFLIGHT_NOMANIFEST` / `PREFLIGHT_NOHELPER` (exit 3)** → the check did
+  not run. Refuse to dispatch and say so in those words. Do not report it as a clean tree.
+  `PREFLIGHT_NOHELPER` means `repo-rel-path.sh` is not deployed, and it prints its own remedy: run
+  `bash <repo>/staging/sync-to-claude.sh --apply`, then re-invoke Step 5. This gate is worse than
+  inert until that sync — an un-synced machine refuses **every** Step 5 rather than mis-classifying
+  one, which is the right direction and still a new failure (ADR-0132 §Consequences).
 
 Known limits, stated rather than discovered later: the fence reads porcelain v1, so a **renamed**
 chain artifact arrives as `old -> new` and classifies as `OTHER`, and a path containing a space or
@@ -2028,8 +2044,11 @@ lines, `DELETED_LINES` and `TEST_COUNT_DELTA`:
 ```bash
 if [ -n "$_ametrics" ]; then
   _am=$(git diff "$_pre5" 2>/dev/null | bash "$_ametrics" 2>/dev/null)
-  _dl=$(printf '%s\n' "$_am" | awk -F'\t' '$1=="DELETED_LINES"{print $2}')
-  _tcd=$(printf '%s\n' "$_am" | awk -F'\t' '$1=="TEST_COUNT_DELTA"{print $2}')
+  # The trailing `[[:space:]][[:space:]]*` requires at least one separator, so a longer token
+  # (`DELETED_LINES_X`) cannot satisfy the shorter one's pattern. A negative TEST_COUNT_DELTA
+  # survives: the substitution removes only the token and the separator run.
+  _dl=$(printf '%s\n' "$_am" | sed -n 's/^DELETED_LINES[[:space:]][[:space:]]*//p')
+  _tcd=$(printf '%s\n' "$_am" | sed -n 's/^TEST_COUNT_DELTA[[:space:]][[:space:]]*//p')
 fi
 ```
 If `_ametrics` is empty, or `_dl`/`_tcd` fail to parse as an integer, OMIT that field from this
@@ -3300,7 +3319,7 @@ about whether a safety gate fires.
 <!-- fence-contract: c2c-gate2b-trust-probe -->
 ```bash
 TCF="<project-root>/.claude/test-cmd"
-H=$(shasum -a 256 "$TCF" | awk '{print $1}')
+H=$(shasum -a 256 "$TCF" | cut -d' ' -f1)
 ROOT_N=$(cd "<project-root>" && pwd -P | tr '[:upper:]' '[:lower:]')
 grep -qxF "${H}	${ROOT_N}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null \
   && echo "TRUSTED" || echo "NOT_TRUSTED"
