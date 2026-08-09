@@ -3726,3 +3726,52 @@ rather than trusting the date, though the fix is inert-safe either way since rem
 correct whether or not they are still substituted.
 
 Detail: `docs/architecture/ADR-0132-385-skill-args-in-fences.md`.
+
+## Decisions from the fence execution shell chain (ADR-0133)
+
+Closes issue #394. A bash fence in a `SKILL.md` is executed by the **host shell** — zsh 5.9 on this
+machine — while it was written and tested for bash. zsh does not word-split unquoted parameter
+expansions, so `bash "$_sap" $_args` passes **one** argument where bash passes four, and `autopilot`
+Phase S silently discarded `--features`/`--only`: a launch asking for one feature would have run
+unbounded over all 28 pending roadmap rows.
+
+**THE RULE — a bash fence in the declared population executes its body under `bash`, via a quoted
+heredoc whose terminator sits at column 0, with an `export` prologue for its free variables. The
+harness cannot observe this class at all: it runs extracted fences under bash, so a green suite says
+nothing about the quantity that fails.**
+
+- **Measured, not inherited: 162 bash fences, 32 contracts, 1 illustration, 129 unmarked; 14
+  findings across 13 fences; population 32 ∪ 9 = 41.** ADR-0107 recorded 18 declarations and
+  ADR-0132's Context table 160 fences — both were snapshots, neither is citable. Re-derive every
+  time.
+- **Four sites the issue's own scanner structurally could not see**, because it matched
+  `for X in $VAR` and `set -- $VAR` only. One is `conductor-step0-args` — the **same fail-open shape
+  as Phase S, in a second skill**; two more feed ADR-0048's merge-blocking coverage gate an
+  unrecognised single argument. **A per-idiom guard inherits the blind spots of whoever enumerates
+  the idioms**, which is exactly why the guard here is structural: if the wrapper is present the
+  interpreter is bash and the question is closed regardless of the construct.
+- **The defect predates ADR-0132.** The pre-#385 form `set -- $_args` fails identically, so the
+  `--features` bound has **never** been applied on this machine, from ADR-0129's first run onward.
+  Any earlier claim that a run was bounded must be read against that.
+- **Failure directions differ, and only one is quiet.** Phase S fails **open**. `commit/SKILL.md`'s
+  H4 test-diff gate (ADR-0061 §D1) fails **closed and wrongly**: its predicate receives one blob and
+  classifies **every** changed file as a test file — observed live on 2026-08-08 and **misattributed
+  at the time to an orchestrator scripting error**, which is how a real defect spent a day looking
+  like a typo.
+- **Every clause of the wrapper is earned by a probe, not by style.** An *indented* terminator
+  swallows the rest of the script and **destroys the exit code silently**; the `export` prologue is
+  required because 24 of the 32 contracts carry free variables that do not survive the new process
+  boundary.
+- **No declaration marker for the wrapper** — its presence in the body is the evidence. A marker
+  would be a second source of truth that can disagree with the mechanism, the ADR-0042 shape.
+- **`bash -n` is BLIND to a wrapped body**, measured: it accepts a wrapper whose body contains
+  `if [ ; then`. So `F7` goes **vacuous the day the wrapper lands** — a check silently ceasing to
+  check, on the day it is most needed. Repaired in the same change by parsing the inner body;
+  `fence_body`'s dedent is fixed with it, since a column-0 terminator is otherwise unextractable.
+
+Known consequences, recorded rather than fixed: **121 of 162 fences stay unwrapped by design**, and
+that boundary is the thing most likely to be misread from a green run; `commit/SKILL.md` is invoked
+on three unattended paths, so the first run after this reports differently and that difference is
+the fix, not a regression; the CI job gains a `zsh` install for the executed proof.
+
+Detail: `docs/architecture/ADR-0133-394-fence-execution-shell.md`.
