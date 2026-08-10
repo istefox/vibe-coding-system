@@ -44,6 +44,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
+      # zsh is a BUILD DEPENDENCY of this job, not a convenience (issue #394, ADR-0133 R-06/R-07).
+      # fence-contract-coverage.test.sh's WSA/WSB take one wrapped population fence body, run it
+      # under zsh AND under bash with the same fixture, and compare stdout and exit code — the
+      # executed proof a structural check cannot give, because a guard cannot observe an interpreter
+      # it does not invoke. With zsh absent both assertions FAIL with an explicit `ZSH-ABSENT`
+      # message; there is no skip path, by design (ADR-0032's CI-dark class: a check that did not
+      # run must never read as a check that found nothing). So deleting this step turns the job red
+      # rather than quietly dropping the proof — the correct direction, and it will read as a
+      # regression the first time. Keep it BEFORE the harness loop.
+      - name: Install zsh (required by the WSA/WSB executed proof)
+        run: |
+          set -e
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+          fi
+          zsh --version
+
       # Offline, hermetic, no network. These harnesses pipe synthetic hook-event JSON into the
       # scripts and assert on the output. The scripts target bash 3.2 (macOS); the runner has
       # bash 5, which exercises the logic but not the 3.2 constraint. Keep them 3.2-clean by hand.

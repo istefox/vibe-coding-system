@@ -6,8 +6,8 @@ mode: "greenfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-08-09T19:16:28+00:00"
-last_updated_at: "2026-08-09T19:47:38+00:00"
-current_step: "step_4_session_boundary"
+last_updated_at: "2026-08-10T19:41:31+00:00"
+current_step: "step_7_commit"
 status: "in_progress"
 
 # Gate 0 routing result (ADR-0017)
@@ -29,10 +29,10 @@ autopilot: false
 
 # Dynamic Workflows Step 5 tracking (ADR-0016) — default false; smoke test flips it true per environment
 hook_verified: false
-step5_mode: null
+step5_mode: "agent_batch"
 
 # Recovery-readiness pre-flight (ADR-0050) — HEAD sha recorded once at Step 5 entry
-recovery_baseline_sha: null
+recovery_baseline_sha: "d26553410b92355919d4c93a5c1e3fc1aac1b07b"
 
 # Worktree isolation contract (ADR-0068 §D1, §D11). worktree_baseref_verified is boolean,
 # set true by Step 5.0.4 via manifest-set-flag.sh once worktree.baseRef == "head" is
@@ -42,7 +42,7 @@ recovery_baseline_sha: null
 # it goes via bash sed on the additive field, the step5_review_mode precedent above. Flip
 # with, per merged stage ({stage, agent_type, branch, base_sha, merge_result}):
 # sed -i '' 's/^worktree_merges: \[\]$/worktree_merges: [{stage: ..., agent_type: ..., branch: ..., base_sha: ..., merge_result: ...}]/' <manifest>
-worktree_baseref_verified: false
+worktree_baseref_verified: true
 worktree_merges: []
 
 # Proportional audit depth (ADR-0055) — risk and task_type axes. Absent/null means STRICT
@@ -87,7 +87,7 @@ step6_mode: null
 
 # Artifacts (absolute paths, populated as steps complete)
 artifacts:
-  spec: "/Users/stefer/Developer/vibe-coding-system/SPEC.md"
+  spec: "/Users/stefer/Developer/vibe-coding-system/docs/specs/394-skill-fences-rely-on-word-splitting.spec.md"
   brainstorm: null
   ux_blueprint: null
   adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0133-394-fence-execution-shell.md"
@@ -114,20 +114,20 @@ hitl_gates:
     notes: "CLAUDE.md applied — ADR-0133 section appended (49 lines)"
   - gate: 4
     label: "implementation_mode"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-08-09T19:50:16+00:00"
+    notes: "Confirmed — I will /clear and resume (fresh session, attended)"
   - gate: 5
     label: "review_cycle_decision"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-08-10T19:39:50+00:00"
+    notes: "skip review — 75/75 harness green, 13/13 R-ids covered, 319/319 plants fire"
 
 # Session boundary tracking
 session_boundary:
   pre_step_4_session_id: null
   fresh_session_started_at: null
-  resumed_at: null
+  resumed_at: "2026-08-09T20:18:08+00:00"
 
 # Failure tracking (populated only on status=failed)
 failure:

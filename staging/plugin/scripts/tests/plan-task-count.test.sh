@@ -93,6 +93,36 @@ extract_fence() {
   ' "$1"
 }
 
+# ADR-0133 (issue #394) wrapper-aware bypass. Once concept-to-code-step5-plan-structure is wrapped
+# (Task 6), its body runs inside a `bash <<'FENCE_BASH' … FENCE_BASH` here-document — a
+# SUBPROCESS — so `tasks`/`rc`, bound INSIDE the fence and read only by run_cc_step5's own
+# appended line below (PTF), would die at the closing terminator and read back empty, exactly
+# human-gate-coverage.test.sh's HIB1-HIB4 before their own fix. Same mechanism as that file's and
+# fence-contract-coverage.test.sh's `unwrap_body`: returns the here-document's INNER body when the
+# wrapper is present, and the input UNCHANGED otherwise, so this file keeps working whether or not
+# the fence has been wrapped yet. Does not weaken R-04 for the ORCHESTRATOR, which never runs past
+# the wrapper either way — only this test's own extraction does, for observability.
+UNWRAP_AWK="$TMP/unwrap.awk"
+cat >"$UNWRAP_AWK" <<'UNWRAPEOF'
+BEGIN { mode = "before"; nb = 0 }
+{
+  if (mode == "before") {
+    if ($0 == "bash <<'FENCE_BASH'") { mode = "wrap"; next }
+    nb++; before[nb] = $0
+    next
+  }
+  if (mode == "wrap") {
+    if ($0 == "FENCE_BASH") { mode = "after"; next }
+    print
+    next
+  }
+}
+END {
+  if (mode == "before") { for (i = 1; i <= nb; i++) print before[i] }
+}
+UNWRAPEOF
+unwrap_body() { awk -f "$UNWRAP_AWK" "$1"; }
+
 # ==================================================================================================
 # PTA. Live demonstration of the bug's shape, against `grep` itself.
 #      NOT FIX EVIDENCE — passes before and after by construction.
@@ -325,7 +355,8 @@ else
 
   run_cc_step5() {
     printf '%s\n' "$CC_STEP5" \
-      | sed "s|~/.claude/skills/concept-to-code/scripts|$STAGING/plugin/skills/concept-to-code/scripts|g; s|<manifest.artifacts.plan>|$1|" > "$TMP/ccblock.sh"
+      | sed "s|~/.claude/skills/concept-to-code/scripts|$STAGING/plugin/skills/concept-to-code/scripts|g; s|<manifest.artifacts.plan>|$1|" > "$TMP/ccblock-outer.sh"
+    unwrap_body "$TMP/ccblock-outer.sh" > "$TMP/ccblock.sh"
     printf 'printf "tasks=[%%s] rc=[%%s]\\n" "$tasks" "$rc"\n' >> "$TMP/ccblock.sh"
     bash "$TMP/ccblock.sh" 2>/dev/null
   }

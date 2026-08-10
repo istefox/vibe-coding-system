@@ -109,6 +109,16 @@ call site for that mechanism, so the contrast is stated generically here).
 
 <!-- fence-contract: autopilot-scope-args -->
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not
+# under the host shell. The Bash tool executes a fence under whatever shell the session has — zsh
+# 5.9 here — and zsh does not word-split an unquoted parameter expansion, so the parser call below
+# received ONE argument where bash gives it four, and --features/--only bounded nothing at all
+# from ADR-0129's first run onward. `export` forwards this body's caller-bound free variables
+# across the new process boundary, since a plain shell variable does not survive it. The
+# terminator sits at COLUMN 0 on purpose: an indented one is swallowed into the here-document and
+# destroys this fence's exit code silently. Do not tidy either line.
+export _args _root CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
 # The initialisers and the argument parse loop live in scope-args-parse.sh (issue #385,
 # ADR-0132 §D1/§D2). This markdown body is RENDERED before the model executes it, and the
 # renderer substitutes this skill's own invocation arguments into every positional-parameter
@@ -131,8 +141,12 @@ else
   echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
   exit 3
 fi
-# UNQUOTED on purpose: this reproduces the word split the moved `set --` performed, so
-# `--features 2 --only 293,294` arrives as five arguments and not as one opaque word. Quoting it
+# UNQUOTED on purpose, and the split is guaranteed BY THE WRAPPER above (issue #394, ADR-0133):
+# this body runs under bash, which word-splits an unquoted expansion, so
+# `--features 2 --only 293,294` arrives as five arguments and not as one opaque word. It stays
+# unquoted for exactly that reason. The previous wording here claimed the split "reproduces the
+# word split the moved `set --` performed" — under the host shell it reproduced nothing, and a
+# comment asserting a mechanism that does not run is what let this survive unnoticed. Quoting it
 # would collapse every multi-token launch into a single unrecognised token, which the parser's
 # skip-anything arm would then discard in silence.
 _sap_out=$(bash "$_sap" $_args) || {
@@ -227,6 +241,7 @@ _line="$_line dry_run=$_dry_run"
 echo "$_line"
 echo "autopilot scope: source '$_source' is in effect (dry_run=$_dry_run)"
 exit 0
+FENCE_BASH
 ```
 
 On exit 0, the `SCOPE-PARSE:` line is authoritative; carry `source`, `features`, `only` and
@@ -262,6 +277,13 @@ fatal rather than conditional.
 
 <!-- fence-contract: autopilot-permission-posture -->
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+# `echo` escapes. `export` forwards this body's caller-bound free variables across the new process
+# boundary — a plain shell variable does not survive it. The terminator sits at COLUMN 0 on purpose:
+# an indented one is swallowed into the here-document and destroys this fence's exit code silently.
+export CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
 _pms=""
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/permission-mode-state.sh" ]; then
   _pms="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/permission-mode-state.sh"
@@ -323,6 +345,7 @@ case "$_pmtok" in
   *)
     echo "✗ permission posture: unrecognised token '$_pmtok'"; exit 1 ;;
 esac
+FENCE_BASH
 ```
 
 On pass, fall into Phase P.
@@ -419,6 +442,12 @@ stall it before this section ran at all (ADR-0110). Adding a copy here would be 
    unattended `git push`, and that disagreement is silent in the permissive direction.
    <!-- fence-contract: autopilot-optin -->
    ```bash
+   # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+   # the host shell. No `export` prologue — this body has no free variables. The terminator sits at
+   # COLUMN 0 even though this fence is indented inside a numbered list item: an indented terminator
+   # is swallowed into the here-document and destroys this fence's exit code silently. It is not a
+   # formatting slip — do not tidy it.
+   bash <<'FENCE_BASH'
    m="$PWD/.claude/autopilot.yml"
    legacy="$PWD/.claude/nightly-autopilot.yml"
    if [ ! -f "$m" ] && [ -f "$legacy" ]; then
@@ -429,6 +458,7 @@ stall it before this section ran at all (ADR-0110). Adding a copy here would be 
    fi
    test -f "$m" || { echo "✗ opt-in: $m missing"; exit 1; }
    grep -qE '^[[:space:]]*publish:[[:space:]]*true[[:space:]]*$' "$m" || { echo "✗ opt-in: publish not true"; exit 1; }
+FENCE_BASH
    ```
 4. **PROJECT.md present:** `test -f PROJECT.md`. Phase P generates it from issues; if it is still
    absent (no prep source and none pre-existing) → abort ("no roadmap; add a `prep.issues_label` to
@@ -442,6 +472,15 @@ stall it before this section ran at all (ADR-0110). Adding a copy here would be 
 6. **hook_verified known (roadmap-wide, pre-flight):**
    <!-- fence-contract: autopilot-check-6 -->
    ```bash
+   # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+   # the host shell. Two measured divergences live in this body: the unmatched-glob `ls` below, which
+   # zsh's `nomatch` declines to run at all, and `for _m in $_manifests`, which needs the word split
+   # only bash performs on an unquoted expansion. `export` forwards this body's caller-bound free
+   # variables. The terminator sits at COLUMN 0 even though this fence is indented inside a numbered
+   # list item: an indented terminator is swallowed into the here-document and destroys this fence's
+   # exit code silently. It is not a formatting slip — do not tidy it.
+   export CLAUDE_PLUGIN_ROOT
+   bash <<'FENCE_BASH'
    _manifests=$(ls "$PWD"/docs/manifests/*.manifest.yml 2>/dev/null)
    if [ -z "$_manifests" ]; then
      echo "note: no manifests exist yet (Phase P has not created any feature manifest). Each"
@@ -506,6 +545,7 @@ stall it before this section ran at all (ADR-0110). Adding a copy here would be 
      done
      [ "$_bad" -eq 0 ] || exit 1
    fi
+FENCE_BASH
    ```
    (drives Workflow vs Agent-tool dispatch downstream, per manifest, exactly as before.)
 
@@ -534,6 +574,12 @@ stall it before this section ran at all (ADR-0110). Adding a copy here would be 
 
    <!-- fence-contract: autopilot-check-8 -->
    ```bash
+   # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+   # the host shell. No `export` prologue — this body has no free variables beyond `HOME`/`PWD`,
+   # which every shell exports already. The terminator sits at COLUMN 0 even though this fence is
+   # indented inside a numbered list item: an indented terminator is swallowed into the
+   # here-document and destroys this fence's exit code silently. Do not tidy it.
+   bash <<'FENCE_BASH'
    _rca="$HOME/.claude/hooks/required-checks-audit.sh"
    if [ ! -f "$_rca" ]; then
      echo "✗ check 8: required-checks-audit.sh not found at $_rca — the check DID NOT RUN."
@@ -551,6 +597,7 @@ stall it before this section ran at all (ADR-0110). Adding a copy here would be 
         echo "  merge gate — an unread gate is not a clean gate."
         exit 1 ;;
    esac
+FENCE_BASH
    ```
 
    **`rc=3` aborts, and that is deliberate.** The audit reports "could not look" separately from
@@ -574,6 +621,16 @@ stall it before this section ran at all (ADR-0110). Adding a copy here would be 
 
    <!-- fence-contract: autopilot-scope-resolve -->
    ```bash
+   # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+   # the host shell. `for _tok in $_toks` below needs the word split only bash performs on an
+   # unquoted expansion — under zsh the comma-separated token list arrived as one word and a
+   # multi-token `--only` resolved nothing. `export` forwards the five free variables Phase S hands
+   # over; a plain shell variable does not survive the new process boundary. The terminator sits at
+   # COLUMN 0 even though this fence is indented inside a numbered list item: an indented terminator
+   # is swallowed into the here-document and destroys this fence's exit code silently. Do not tidy
+   # either line.
+   export _root _scope_source _scope_features _scope_only _dry_run
+   bash <<'FENCE_BASH'
    # Free variables: _root ($PWD), and _scope_source/_scope_features/_scope_only/_dry_run from
    # Phase S's SCOPE-PARSE line (source/features/only/dry_run). CHECKER: the caller branches on the
    # exit code, the opposite idiom from a REPORTER, which always exits 0 and signals through stdout
@@ -670,6 +727,7 @@ stall it before this section ran at all (ADR-0110). Adding a copy here would be 
    } > "$_sf"
    echo "scope: wrote $_sf"
    exit 0
+FENCE_BASH
    ```
 
    On exit 0, the scope file at `<root>/.claude/autopilot-state/scope` is written — or, under

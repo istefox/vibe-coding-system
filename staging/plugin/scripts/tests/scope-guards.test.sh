@@ -137,6 +137,36 @@ extract_conductor_lookup() {
   ' "$PC_SKILL"
 }
 
+# ADR-0133 (issue #394) wrapper-aware bypass. Once this lookup (one of the three unmarked
+# project-conductor `_manifest` glob sites the ADR's outbound-direction table names by line) is
+# wrapped, its body runs inside a `bash <<'FENCE_BASH' … FENCE_BASH` here-document — a
+# SUBPROCESS — so `_manifest`, bound INSIDE the fence and read only by run_conductor_lookup's own
+# appended `printf` below, would die at the closing terminator and read back empty, exactly
+# human-gate-coverage.test.sh's HIB1-HIB4 before their own fix. Same mechanism as that file's and
+# fence-contract-coverage.test.sh's `unwrap_body`: returns the here-document's INNER body when the
+# wrapper is present, and the input UNCHANGED otherwise, so this file keeps working whether or not
+# the fence has been wrapped yet.
+UNWRAP_AWK="$TMP/unwrap.awk"
+cat >"$UNWRAP_AWK" <<'UNWRAPEOF'
+BEGIN { mode = "before"; nb = 0 }
+{
+  if (mode == "before") {
+    if ($0 == "bash <<'FENCE_BASH'") { mode = "wrap"; next }
+    nb++; before[nb] = $0
+    next
+  }
+  if (mode == "wrap") {
+    if ($0 == "FENCE_BASH") { mode = "after"; next }
+    print
+    next
+  }
+}
+END {
+  if (mode == "before") { for (i = 1; i <= nb; i++) print before[i] }
+}
+UNWRAPEOF
+unwrap_body() { awk -f "$UNWRAP_AWK" "$1"; }
+
 # run_conductor_lookup <root> <slug> -- runs the extracted lookup with `_root` preset to <root> and
 # <topic-slug> substituted with <slug>, then prints the resulting $_manifest value on stdout (empty
 # if nothing bound). Test fixture roots are always plain mktemp -d paths (no spaces/quote
@@ -145,9 +175,10 @@ extract_conductor_lookup() {
 run_conductor_lookup() {
   RAW="$(extract_conductor_lookup)"
   CMD="${RAW//<topic-slug>/$2}"
+  printf '%s\n' "$CMD" > "$TMP/conductor-cmd-outer.sh"
   {
     printf '_root="%s"\n' "$1"
-    printf '%s\n' "$CMD"
+    unwrap_body "$TMP/conductor-cmd-outer.sh"
     printf 'printf "%%s" "$_manifest"\n'
   } > "$TMP/conductor-cmd.sh"
   bash "$TMP/conductor-cmd.sh"

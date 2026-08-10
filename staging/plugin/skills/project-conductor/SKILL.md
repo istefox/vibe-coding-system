@@ -50,6 +50,17 @@ they now happen.
 
 <!-- fence-contract: conductor-step0-args -->
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not
+# under the host shell. The Bash tool executes a fence under whatever shell the session has — zsh
+# 5.9 here — and zsh does not word-split an unquoted parameter expansion, so the parser call below
+# received ONE argument where bash gives it four. This is the same fail-open shape `autopilot`
+# Phase S carries, in a second skill, and the issue's own scanner could not see it. `export`
+# forwards this body's caller-bound free variables across the new process boundary, since a plain
+# shell variable does not survive it. The terminator sits at COLUMN 0 on purpose: an indented one
+# is swallowed into the here-document and destroys this fence's exit code silently. Do not tidy
+# either line.
+export _args CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
 _root="$PWD"
 _pmd="$_root/PROJECT.md"
 # Both parses live in conductor-args.sh, because this markdown body is RENDERED before the model
@@ -67,9 +78,12 @@ else
   echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
   exit 3
 fi
-# UNQUOTED on purpose: the word split is what turns the argument string back into the separate
-# tokens both parses expect. Quoting it would make `autopilot --fork-from main` one opaque word,
-# which matches neither parse.
+# UNQUOTED on purpose, and the split is guaranteed BY THE WRAPPER above (issue #394, ADR-0133):
+# this body runs under bash, which word-splits an unquoted expansion, which is what turns the
+# argument string back into the separate tokens both parses expect. It stays unquoted for exactly
+# that reason. Under the host shell there was no split at all, so the argument string arrived as
+# one word and neither parse ever saw a flag. Quoting it would make `autopilot --fork-from main`
+# one opaque word, which matches neither parse.
 _ca_out=$(bash "$_ca" $_args) || {
   echo "CONDUCTOR-ARGS: DID-NOT-RUN — conductor-args.sh failed"
   echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
@@ -87,7 +101,18 @@ if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/publish
 else
   _scripts="$HOME/.claude/hooks"
 fi
+FENCE_BASH
 ```
+
+**What this block hands on, and why it does not print it (ADR-0133 §D4).** The wrapper above runs
+this body in a subprocess, so `_autopilot`, `_fork_from`, `_scripts` and `_root` die at the
+terminator. Every later block that reads them already declares them *"bound by the orchestrator"* —
+that contract is now literally true rather than true by the accident of a shared shell, and the
+orchestrator carries the four values forward exactly as it carries `<topic-slug>`. §D4's usual
+remedy is a printed token, and it is deliberately **not** used here: this block's success path is
+asserted to be SILENT by an existing execution (`conductor-entry-failure-split.test.sh`, the CDA7
+case, requires rc=0 with empty output), so a printed `autopilot=` line would break a green assertion
+to satisfy a convention. Do not add one without moving that assertion first.
 
 **If PROJECT.md does not exist:** go to Step 1 (setup).
 
@@ -95,6 +120,25 @@ fi
 1. Read the file.
 2. **Reconcile completed manifests:** for every `- [ ] <feature>` line, derive its `topic-slug` (lowercase kebab, max 40 chars) and check:
    ```bash
+   # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+   # the host shell, which is zsh here. `export` forwards `_root`; a plain shell variable does not
+   # survive the new process boundary. The terminator sits at COLUMN 0 even though this fence is
+   # indented inside a numbered list item: an indented terminator is swallowed into the here-document
+   # and destroys this fence's exit code silently. Do not tidy it.
+   # Divergent in MECHANISM, equivalent in OUTCOME today — stated so nobody later reads the wrapper
+   # as fixing a symptom that was never observed. On an unmatched glob bash runs `ls` against the
+   # literal pattern while zsh's `nomatch` declines to run it at all; either way `_cand` ends empty,
+   # the script continues and the exit code is preserved. Measured: `2>/dev/null` does NOT suppress
+   # zsh's `no matches found:` diagnostic, because the redirection belongs to the `ls` that never
+   # runs. Wrapped because the divergence class is present, not because a symptom was seen.
+   # NO `fence-contract` marker, deliberately (ADR-0133 §D3): this fence joins the wrapper population
+   # through the divergence SCANNER, not through a declaration. It cannot halt a run, so `F3` asks it
+   # for no marker, and adding one would create an `F4` execution obligation this feature did not
+   # budget. The absence is a decision, not an oversight. (The standalone word for halting is avoided
+   # on purpose: `fence_is_abort_capable` matches it as a whole word, so a comment SAYING this fence
+   # cannot halt would classify it as one that can — rule 12.)
+   export _root
+   bash <<'FENCE_BASH'
    # Anchor to the manifest naming convention (YYYY-MM-DD-<topic-slug>.manifest.yml) instead of a bare
    # substring glob, then verify the winning candidate's own topic: field equals the derived slug
    # exactly -- anchoring alone still lets one slug bind to a different slug sharing a hyphen-joined
@@ -106,7 +150,19 @@ fi
      _cand_topic=$(grep '^topic:' "$_cand" | sed 's/topic: *"//' | sed 's/".*//' | sed "s/topic: *//")
      [ "$_cand_topic" = "$_slug" ] && _manifest="$_cand"
    fi
+FENCE_BASH
    ```
+
+   **What this block hands on, and why it does not print it (ADR-0133 §D4).** The wrapper runs the
+   body in a subprocess, so `_manifest` dies at the terminator; the instruction below reads it as a
+   value the orchestrator carries from this block's own run, exactly as it carries `<topic-slug>`
+   into it. §D4's usual remedy is a printed token, and it is deliberately **not** used: this lookup
+   is one of three verbatim copies (here, Step 3's first check, and Step 5), and the Step 5 copy's
+   no-match case is asserted to produce EMPTY output by an existing execution
+   (`scope-guards.test.sh`, section B, case B6). A printed `MANIFEST=` line here would either break
+   that assertion or split the three copies apart, and their being identical is what
+   `scope-guards.test.sh` cases B1-B3 check. Do not add one without moving those assertions first.
+
    Read `current_step` from `$_manifest` (skip this feature's reconciliation if `$_manifest` is empty — no verified manifest exists for it yet). If `current_step = completed` → the chain ran but PROJECT.md was not updated (user skipped the Step 7 prompt). Auto-update: replace `- [ ] <feature>` with `- [x] <feature>  (completed: <YYYY-MM-DD>)` via bash sed. Emit: `"Auto-reconciled: <feature> ✓"`
 3. After reconciliation: go to Step 2 (status).
 
@@ -210,6 +266,15 @@ read, which is not the same as no scope file at all — an unbounded run.
 
 <!-- fence-contract: conductor-scope-gate -->
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+# `echo` escapes. `export` forwards this body's caller-bound free variables across the new process
+# boundary; a plain shell variable does not survive it, and Step 0's fence — which binds
+# `_autopilot` — is now a subprocess of its own, so the orchestrator carries these three in.
+# Terminator at COLUMN 0; an indented one is swallowed into the here-document and destroys this
+# fence's exit code silently.
+export _root _feature _autopilot
+bash <<'FENCE_BASH'
 # Free variables, bound by the orchestrator: _root, _feature (the candidate roadmap line's exact
 # text, no checkbox marker), _autopilot. Inert unless _autopilot=true.
 _sf="$_root/.claude/autopilot-state/scope"
@@ -252,6 +317,7 @@ else
     echo "SCOPE-GATE: IN-SCOPE — no only= list; every row is in scope."
   fi
 fi
+FENCE_BASH
 ```
 
 Branch on the exit code:
@@ -284,6 +350,12 @@ than re-pick.
 
 <!-- fence-contract: conductor-published-skip -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. `export` forwards this body's caller-bound free variables across the new process
+# boundary. Terminator at COLUMN 0; an indented one is swallowed into the here-document and destroys
+# this fence's exit code silently, which here would turn a re-pick guard into a pass.
+export _root _slug _autopilot
+bash <<'FENCE_BASH'
 # Free variables, bound by the orchestrator: _root, _slug (the candidate feature's topic slug),
 # _autopilot. Inert unless _autopilot=true.
 _led="$_root/.claude/autopilot-state/published"
@@ -301,6 +373,7 @@ elif grep -qxF "$_slug" "$_led" 2>/dev/null; then
 else
   echo "PUBLISHED-SKIP: PENDING — '$_slug' has not published in this run."
 fi
+FENCE_BASH
 ```
 
 On `ALREADY` (exit 1), skip this line and take the next `- [ ]`; on `DID-NOT-RUN` (exit 3), write
@@ -322,6 +395,25 @@ in `autopilot` mode; see the amended invariant below.
 
 Derive `topic-slug` from `<next-feature>`. Look for:
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here. `export` forwards `_root`; a plain shell variable does not
+# survive the new process boundary. Terminator at COLUMN 0; an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently.
+# Divergent in MECHANISM, equivalent in OUTCOME today — stated so nobody later reads the wrapper as
+# fixing a symptom that was never observed. On an unmatched glob bash runs `ls` against the literal
+# pattern while zsh's `nomatch` declines to run it at all; either way `_cand` ends empty, the script
+# continues and the exit code is preserved. Measured: `2>/dev/null` does NOT suppress zsh's
+# `no matches found:` diagnostic, because the redirection belongs to the `ls` that never runs, so
+# that message reached this script's stderr unredirected. Wrapped because the divergence class is
+# present, not because a symptom was seen.
+# NO `fence-contract` marker, deliberately (ADR-0133 §D3): this fence joins the wrapper population
+# through the divergence SCANNER, not through a declaration. It cannot halt a run, so `F3` asks it
+# for no marker, and adding one would create an `F4` execution obligation this feature did not
+# budget. The absence is a decision, not an oversight. (The standalone word for halting is avoided
+# on purpose: `fence_is_abort_capable` matches it as a whole word, so a comment SAYING this fence
+# cannot halt would classify it as one that can — rule 12.)
+export _root
+bash <<'FENCE_BASH'
 # Anchor to the manifest naming convention (YYYY-MM-DD-<topic-slug>.manifest.yml) instead of a bare
 # substring glob, then verify the winning candidate's own topic: field equals the derived slug
 # exactly -- anchoring alone still lets one slug bind to a different slug sharing a hyphen-joined
@@ -333,7 +425,19 @@ if [ -n "$_cand" ]; then
   _cand_topic=$(grep '^topic:' "$_cand" | sed 's/topic: *"//' | sed 's/".*//' | sed "s/topic: *//")
   [ "$_cand_topic" = "$_slug" ] && _manifest="$_cand"
 fi
+FENCE_BASH
 ```
+
+**What this block hands on, and why it does not print it (ADR-0133 §D4).** The wrapper runs the body
+in a subprocess, so `_manifest` dies at the terminator; the instruction below reads it as a value the
+orchestrator carries from this block's own run, exactly as it carries `<topic-slug>` into it. §D4's
+usual remedy is a printed token, and it is deliberately **not** used: this lookup is one of three
+verbatim copies (Step 0's reconciliation, here, and Step 5), and the Step 5 copy's no-match case is
+asserted to produce EMPTY output by an existing execution (`scope-guards.test.sh`, section B, case
+B6). A printed `MANIFEST=` line here would either break that assertion or split the three copies
+apart, and their being identical is what `scope-guards.test.sh` cases B1-B3 check. Do not add one
+without moving those assertions first.
+
 Read `current_step` from `$_manifest` (empty means no verified in-progress manifest — fall through to the standard gate below, exactly as the existing 'no manifest' path already does):
 
 - If `current_step = step_4_session_boundary`: the planning phase already ran. Offer to resume:
@@ -387,6 +491,13 @@ attended flow is byte-identical.
 
 <!-- fence-contract: conductor-fork-point -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. `export` forwards this body's caller-bound free variables across the new process
+# boundary — `_fork_from` is one of the values Step 0's fence binds, and that fence is now a
+# subprocess of its own, so the orchestrator carries it in. Terminator at COLUMN 0; an indented one
+# is swallowed into the here-document and destroys this fence's exit code silently.
+export _root _fork_from
+bash <<'FENCE_BASH'
 # Free variables: _root, _fork_from (empty unless --fork-from was passed).
 if [ -z "${_fork_from:-}" ]; then
   echo "FORK-POINT: INACTIVE — no --fork-from; HEAD is used as-is (attended behaviour)."
@@ -402,6 +513,7 @@ else
     echo "FORK-POINT: DID-NOT-RUN — checkout of '$_fork_from' failed."; exit 3; }
   echo "FORK-POINT: ON — '$_fork_from'; this feature's branch forks from here."
 fi
+FENCE_BASH
 ```
 
 `DID-NOT-RUN` (exit 3) and `DIRTY` (exit 2) are both run-level: write `needs-human` and halt. A run
@@ -442,6 +554,14 @@ into the other.)
 
 <!-- fence-contract: conductor-step4-nospec-skip -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. The `ls "$_root"/docs/specs/…` glob below is a measured divergence: zsh's `nomatch`
+# declines to run `ls` at all rather than passing the unmatched pattern through, and its diagnostic
+# escapes the `2>/dev/null` that belongs to the command it never ran. `export` forwards this body's
+# caller-bound free variables. Terminator at COLUMN 0; an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently.
+export _root _feature CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
 # Free variables, bound by the orchestrator: _root (project root), _feature (the PROJECT.md feature
 # line's text, without the "- [ ] " marker). Runs only when _autopilot=true.
 # Extract the issue number from the "(issue #N)" suffix of the feature line.
@@ -484,6 +604,7 @@ bash "$_mrs" "$_root/PROJECT.md" "$_feature" \
   || { echo "SPEC-COPY: DID-NOT-RUN — mark-roadmap-skipped.sh failed on $_root/PROJECT.md"; exit 3; }
 echo "SPEC-COPY: SKIP no generated SPEC for issue #$_issue"
 exit 1
+FENCE_BASH
 ```
 
 Branch on the exit code:
@@ -503,6 +624,14 @@ If `_autopilot=true`:
 
    <!-- fence-contract: conductor-step4-init-guard -->
    ```bash
+   # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+   # the host shell. `export` forwards this body's caller-bound free variables across the new process
+   # boundary. The terminator sits at COLUMN 0 even though this fence is indented inside a numbered
+   # list item: an indented terminator is swallowed into the here-document and destroys this fence's
+   # exit code silently, which here would collapse four distinct routing outcomes into one. It is not
+   # a formatting slip — do not tidy it.
+   export _root _slug
+   bash <<'FENCE_BASH'
    # Free variables: _root (project root), _slug (this feature's topic-slug).
    _mes="$HOME/.claude/skills/concept-to-code/scripts/manifest-entry-state.sh"
    if [ ! -f "$_mes" ]; then
@@ -531,6 +660,7 @@ If `_autopilot=true`:
        echo "  Update it in place; do NOT call manifest-init.sh, it would exit 2."
        exit 0 ;;
    esac
+FENCE_BASH
    ```
    - **`0`** → continue with step 2 below (`CREATE` → call `manifest-init.sh`; `ADOPT` → update the
      existing manifest in place).
@@ -556,6 +686,25 @@ If `_autopilot=false`:
 
 Find the manifest:
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here. `export` forwards `_root`; a plain shell variable does not
+# survive the new process boundary. Terminator at COLUMN 0; an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently.
+# Divergent in MECHANISM, equivalent in OUTCOME today — stated so nobody later reads the wrapper as
+# fixing a symptom that was never observed. On an unmatched glob bash runs `ls` against the literal
+# pattern while zsh's `nomatch` declines to run it at all; either way `_cand` ends empty, the script
+# continues and the exit code is preserved. Measured: `2>/dev/null` does NOT suppress zsh's
+# `no matches found:` diagnostic, because the redirection belongs to the `ls` that never runs, so
+# that message reached this script's stderr unredirected. Wrapped because the divergence class is
+# present, not because a symptom was seen.
+# NO `fence-contract` marker, deliberately (ADR-0133 §D3): this fence joins the wrapper population
+# through the divergence SCANNER, not through a declaration. It cannot halt a run, so `F3` asks it
+# for no marker, and adding one would create an `F4` execution obligation this feature did not
+# budget. The absence is a decision, not an oversight. (The standalone word for halting is avoided
+# on purpose: `fence_is_abort_capable` matches it as a whole word, so a comment SAYING this fence
+# cannot halt would classify it as one that can — rule 12.)
+export _root
+bash <<'FENCE_BASH'
 # Anchor to the manifest naming convention (YYYY-MM-DD-<topic-slug>.manifest.yml) instead of a bare
 # substring glob, then verify the winning candidate's own topic: field equals the derived slug
 # exactly -- anchoring alone still lets one slug bind to a different slug sharing a hyphen-joined
@@ -567,7 +716,18 @@ if [ -n "$_cand" ]; then
   _cand_topic=$(grep '^topic:' "$_cand" | sed 's/topic: *"//' | sed 's/".*//' | sed "s/topic: *//")
   [ "$_cand_topic" = "$_slug" ] && _manifest="$_cand"
 fi
+FENCE_BASH
 ```
+
+**What this block hands on, and why it does not print it (ADR-0133 §D4).** The wrapper runs the body
+in a subprocess, so `_manifest` dies at the terminator. The instruction below reads it as a value the
+orchestrator carries from this block's own run, exactly as it carries `<topic-slug>` into it — before
+the wrapper it arrived only because the block and its reader happened to share a shell. §D4's usual
+remedy is a printed token, and it is deliberately **not** used here: the no-match case is asserted to
+produce EMPTY output by an existing execution (`scope-guards.test.sh`, section B, case B6), so a
+printed `MANIFEST=` line would break a green assertion to satisfy a convention. Do not add one
+without moving that assertion first.
+
 Read `current_step` from `$_manifest` (empty falls into branch C below, exactly as today's 'manifest not found' case already does).
 
 **A — `current_step = completed`:**
@@ -592,6 +752,11 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
   advancing. Record the test outcome for the guard, then run the publish helper (it calls
   `autopilot-guard.sh` itself and aborts on HALT):
   ```bash
+  # Free variables, bound by the orchestrator: _root, _issue, and `_scripts` — the helper directory
+  # Step 0 resolves. `_scripts` was declared nowhere until ADR-0133 §D4 asked which values cross a
+  # block boundary: Step 0's block computes it and, now that every declared fence runs its body in
+  # its own subprocess, cannot hand it over in-shell. Resolve it here if this block runs on its own:
+  # "$CLAUDE_PLUGIN_ROOT/scripts" when that holds publish-feature.sh, else "$HOME/.claude/hooks".
   # build-status: GREEN because the chain reached `completed` only on a green test run.
   printf 'GREEN' > "$_root/.claude/autopilot-state/build-status"
   bash "$_scripts/publish-feature.sh" --slug "<topic-slug>" --issue "$_issue" \
@@ -709,6 +874,13 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
 
   <!-- fence-contract: conductor-branch-c-entry-classify -->
   ```bash
+  # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+  # the host shell. `export` forwards this body's caller-bound free variables across the new process
+  # boundary. The terminator sits at COLUMN 0 even though this fence is indented inside a list item:
+  # an indented terminator is swallowed into the here-document and destroys this fence's exit code
+  # silently, which here would turn a run-level HALT into a contained SKIP. Do not tidy it.
+  export _root _slug _feature _manifest CLAUDE_PLUGIN_ROOT
+  bash <<'FENCE_BASH'
   # Free variables: _root (project root), _slug (this feature's topic-slug), _feature (the
   # PROJECT.md feature line's text), _manifest (the resolved manifest path, MAY BE EMPTY).
   _mes="$HOME/.claude/skills/concept-to-code/scripts/manifest-entry-state.sh"
@@ -759,6 +931,7 @@ Read `current_step` from `$_manifest` (empty falls into branch C below, exactly 
       echo "BRANCH-C: HALT ${_out%%|*} (${_out#*|}) — not a decided end; the outcome cannot be trusted."
       exit 2 ;;
   esac
+FENCE_BASH
   ```
   - **`1`** (`SKIP`) → emit `"project-conductor · SKIP · <reason>"` and **return to Step 2** for the
     next `[ ]`. The reason reaches `features_skipped[]` in the morning report, not `guard_halts[]`.

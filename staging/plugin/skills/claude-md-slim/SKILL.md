@@ -167,6 +167,22 @@ Write the planned trimmed CLAUDE.md and each planned rules file to temp files fo
 
 2. **Content-preservation invariant** (the HARD gate):
    ```bash
+   # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+   # the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+   # `echo` escapes. That difference is the whole reason this fence is wrapped — see the note under
+   # `$DUP_ARGS` below. `export` forwards the caller-bound free variables; a plain shell variable
+   # does not survive the new process boundary. The terminator sits at COLUMN 0 even though this
+   # fence is indented inside a numbered list item: an indented terminator is swallowed into the
+   # here-document and destroys this fence's exit code silently. Do not tidy it.
+   # NO `fence-contract` marker, deliberately (ADR-0133 §D3): this fence enters the wrapper
+   # population through the divergence SCANNER, not through a declaration. It cannot halt a run, so
+   # `F3` does not ask it for a marker, and adding one would create an `F4` execution obligation this
+   # feature did not budget. The absence is a decision, not an oversight. (This note deliberately
+   # avoids the standalone word for halting: `fence_is_abort_capable` matches it as a whole word, so
+   # a comment SAYING this fence cannot halt would classify it as one that can — rule 12, in the
+   # sentence written to explain the missing marker.)
+   export DUP_LINES_TMP SKILL_DIR CLAUDE_MD planned_trimmed_tmp planned_rules_tmp_1 planned_rules_tmp_2
+   bash <<'FENCE_BASH'
    # [--global only, and only when Step 3 flagged at least one DUPLICATE section]
    # Without these two flags the removed lines are in no output file and the gate aborts every
    # such run (issue #57, ADR-0044). They are passed together or not at all — one alone is a
@@ -176,12 +192,23 @@ Write the planned trimmed CLAUDE.md and each planned rules file to temp files fo
      DUP_ARGS="--duplicate-lines $DUP_LINES_TMP --duplicate-source $HOME/.claude/CLAUDE.md"
    fi
 
+   # `$DUP_ARGS` is UNQUOTED on purpose, and the split into four separate arguments is guaranteed
+   # BY THE WRAPPER above (issue #394, ADR-0133): bash word-splits an unquoted expansion, zsh does
+   # not. Measured under both shells on the fixture, wrapped and unwrapped: wrapped, this call
+   # receives 8 arguments under zsh AND under bash; unwrapped under zsh it receives 5, with the
+   # whole flag string arriving as ONE argument. `content-union-check.sh` sees that blob begin with
+   # a dash, rejects it as an unknown option and exits 1 — so on the `--global` path the HARD
+   # content-preservation gate ABORTED every run that found a DUPLICATE section, which is ADR-0044's
+   # own defect reproduced by the shell rather than by a caller. (The failure is the unknown-option
+   # arm, not the `<original>` positional: the blob never reaches a positional.) Quoting `$DUP_ARGS`
+   # is not the fix — it would pass one EMPTY argument on the far more common non-`--global` run.
    bash "$SKILL_DIR/scripts/content-union-check.sh" \
      $DUP_ARGS \
      "$CLAUDE_MD" \
      "$planned_trimmed_tmp" \
      "$planned_rules_tmp_1" \
      "$planned_rules_tmp_2" ...
+FENCE_BASH
    ```
 
    The global file is read, never appended to the union: a line removed as a DUPLICATE is
@@ -270,12 +297,21 @@ Behavior:
 2. Backup the project CLAUDE.md:
    <!-- fence-contract: claude-md-slim-backup -->
    ```bash
+   # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+   # the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+   # `echo` escapes. `export` forwards `CLAUDE_MD`, which the caller binds; a plain shell variable
+   # does not survive the new process boundary. The terminator sits at COLUMN 0 even though this
+   # fence is indented inside a numbered list item: an indented terminator is swallowed into the
+   # here-document and destroys this fence's exit code silently. Do not tidy it.
+   export CLAUDE_MD
+   bash <<'FENCE_BASH'
    BAK="${CLAUDE_MD}.bak-$(date +%Y-%m-%d)"
    if [ -f "$BAK" ]; then
      echo "ERROR: backup file already exists: $BAK — delete it manually first" >&2
      exit 1
    fi
    cp "$CLAUDE_MD" "$BAK"
+FENCE_BASH
    ```
 
 3. For each MERGE target (an existing rules file being extended), create a same-day

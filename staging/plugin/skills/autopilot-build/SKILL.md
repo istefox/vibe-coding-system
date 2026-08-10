@@ -56,6 +56,13 @@ Run all checks sequentially; emit one line per check (`✓ <label>` or `✗ <lab
 <!-- fence-contract: autopilot-build-check-1 -->
 
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. The Bash tool executes a fence under whatever shell the session has — zsh 5.9
+# here — and zsh differs from bash on word splitting, unmatched globs and `echo` escapes, so a
+# fence written for bash is not the program that runs. The wrapper removes the whole class rather
+# than the instances. The terminator sits at COLUMN 0 on purpose: an indented one is swallowed into
+# the here-document and destroys this fence's exit code silently. Do not tidy it.
+bash <<'FENCE_BASH'
 # Extract project_root from the manifest file directly (no yq dependency)
 project_root=$(grep '^project_root:' "<manifest-path>" | sed 's/project_root: *"//' | sed 's/".*//' | sed "s/project_root: *//")
 cwd=$(pwd -P)
@@ -76,6 +83,18 @@ if [ "$in_scope" = false ]; then
   echo "SCOPE ERROR: manifest project_root ($project_root) is not this session's CWD ($cwd) and is not a subdirectory of it. Open a new session inside a directory at or above $project_root and run autopilot-build from there."
   exit 1
 fi
+# ADR-0133 §D4: the wrapper runs this body in a SUBPROCESS, so `project_root` dies at the
+# terminator below. Check 6 reads it, and used to receive it because the two fences happened to
+# share a shell — an implicit inter-block dependency nothing documented. It is a printed value now:
+# the orchestrator reads this line and binds `project_root` for check 6, the way it already carries
+# `<manifest-path>`. A wrapped fence communicates through stdout and its exit code, nothing else.
+echo "SCOPE OK: project_root=$project_root"
+FENCE_BASH
+# Re-raise the wrapper's status. Unwrapped, this body's `exit 1` ended the CALLER's script; wrapped,
+# it ends only the subprocess, so a caller running these checks as one sequential script would carry
+# on past a failed scope guard. Success falls through deliberately, exactly as the unwrapped body
+# did — this restores the original two-way behaviour rather than adding a new one.
+_rc=$?; [ "$_rc" -eq 0 ] || exit "$_rc"
 ```
 
 **Check 1b — Permission posture (issue #320, ADR-0110):**
@@ -91,6 +110,13 @@ start would be a defect, not a difference.
 
 <!-- fence-contract: autopilot-build-check-1b -->
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+# `echo` escapes. `export` forwards this body's caller-bound free variables across the new process
+# boundary — a plain shell variable does not survive it. The terminator sits at COLUMN 0 on purpose:
+# an indented one is swallowed into the here-document and destroys this fence's exit code silently.
+export CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
 _pms=""
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/permission-mode-state.sh" ]; then
   _pms="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/permission-mode-state.sh"
@@ -139,11 +165,17 @@ case "${_pm%%|*}" in
   *)
     echo "✗ permission posture: unrecognised token '${_pm%%|*}'"; exit 1 ;;
 esac
+FENCE_BASH
 ```
 
 **Check 2 — Manifest state:**
 <!-- fence-contract: autopilot-build-check-2 -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. No `export` prologue — this body has no free variables, only the substituted
+# `<manifest-path>` placeholder. Terminator at COLUMN 0; an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently.
+bash <<'FENCE_BASH'
 bash ~/.claude/skills/concept-to-code/scripts/manifest-validate.sh "<manifest-path>" || exit 1
 # `sed 's/^current_step: *//;s/"//g'` is manifest-validate.sh's idiom, used at 17 sites there and
 # by check 1 above. Do NOT go back to extracting the second whitespace-separated field with awk:
@@ -155,6 +187,7 @@ bash ~/.claude/skills/concept-to-code/scripts/manifest-validate.sh "<manifest-pa
 # (ADR-0132), so a comment spelling it would corrupt this fence at render time.
 step=$(grep '^current_step:' "<manifest-path>" | sed 's/^current_step: *//;s/"//g' | head -1)
 [ "$step" = "ready_for_implementation" ] || { echo "✗ state: current_step is $step, not ready_for_implementation. Complete the interactive chain through Gate 3 first."; exit 1; }
+FENCE_BASH
 ```
 
 **Check 3 — Gates 1–3 approved:**
@@ -163,6 +196,11 @@ Read `manifest.hitl_gates`. For gates 1, 2, 3: verify each `status: approved`. I
 
 <!-- fence-contract: autopilot-build-check-3 -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. `export` forwards `manifest`, which the orchestrator binds. Terminator at COLUMN
+# 0; an indented one is swallowed into the here-document and destroys this fence's exit code.
+export manifest
+bash <<'FENCE_BASH'
 for gate_n in 1 2 3; do
   status=$(python3 -c "
 import yaml, sys
@@ -172,11 +210,17 @@ print(g['status'] if g else 'missing')
 " 2>/dev/null || echo "missing")
   [ "$status" = "approved" ] || { echo "✗ gate $gate_n: status=$status. Complete the interactive chain first."; exit 1; }
 done
+FENCE_BASH
 ```
 
 **Check 4 — Artifacts on disk:**
 <!-- fence-contract: autopilot-build-check-4 -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. `export` forwards `manifest`, which the orchestrator binds. Terminator at COLUMN
+# 0; an indented one is swallowed into the here-document and destroys this fence's exit code.
+export manifest
+bash <<'FENCE_BASH'
 spec=$(python3 -c "import yaml; m=yaml.safe_load(open('$manifest')); print(m['artifacts']['spec'] or '')" 2>/dev/null)
 adr=$(python3 -c "import yaml; m=yaml.safe_load(open('$manifest')); print(m['artifacts']['adr'] or '')" 2>/dev/null)
 plan=$(python3 -c "import yaml; m=yaml.safe_load(open('$manifest')); print(m['artifacts']['plan'] or '')" 2>/dev/null)
@@ -184,11 +228,27 @@ for f in "$spec" "$adr" "$plan"; do
   [ -z "$f" ] && { echo "✗ artifacts: one or more artifact paths are null in the manifest."; exit 1; }
   test -f "$f" || { echo "✗ artifacts: not found on disk: $f"; exit 1; }
 done
+# ADR-0133 §D4: the wrapper runs this body in a SUBPROCESS, so `spec`/`adr`/`plan` die at the
+# terminator below. Check 5 reads `plan`, and used to receive it only because the two fences
+# happened to share a shell — an implicit inter-block dependency nothing documented. Printed now:
+# the orchestrator reads these lines and binds `plan` for check 5, the way it already carries
+# `<manifest-path>`. A wrapped fence communicates through stdout and its exit code, nothing else.
+echo "ARTIFACTS OK: spec=$spec"
+echo "ARTIFACTS OK: adr=$adr"
+echo "ARTIFACTS OK: plan=$plan"
+FENCE_BASH
 ```
 
 **Check 5 — Plan has tasks:**
 <!-- fence-contract: autopilot-build-check-5 -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. `export` forwards `plan`, which check 4 above now PRINTS and the orchestrator
+# carries here (§D4) — before the wrapper the two fences shared a shell and the handoff was
+# implicit. Terminator at COLUMN 0; an indented one is swallowed into the here-document and destroys
+# this fence's exit code silently.
+export plan
+bash <<'FENCE_BASH'
 # plan-tasks.sh owns the definition of a plan task (ADR-0069 §D1/§D3, issue #172). Do NOT inline a
 # grep here: the architect is allowed BOTH `### Task 3 — …` headings and `- [ ]` checkbox items,
 # and a checkbox-only count aborts this unattended run on 7 of the 57 plans in the corpus — with a
@@ -200,11 +260,18 @@ tasks=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count "$pl
 # rc 2/3 mean the check DID NOT RUN. Aborting is still correct unattended, but say which it was.
 [ "$rc" -eq 0 ] || { echo "✗ plan: task check did not run (plan-tasks.sh exit $rc)."; exit 1; }
 [ "$tasks" -ge 1 ] || { echo "✗ plan: no recognisable task found. A task is a '## Task N — …' heading (H2-H4) or a '- [ ]' checklist item. The plan may be malformed."; exit 1; }
+FENCE_BASH
 ```
 
 **Check 6 — test-cmd real and trusted:**
 <!-- fence-contract: autopilot-build-check-6 -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. `export` forwards this body's caller-bound free variables — `project_root` is the
+# value check 1 above now PRINTS and the orchestrator carries here (§D4). Terminator at COLUMN 0; an
+# indented one is swallowed into the here-document and destroys this fence's exit code silently.
+export manifest project_root CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
 tcf="$project_root/.claude/test-cmd"
 test -f "$tcf" || { echo "✗ test-cmd: .claude/test-cmd not found."; exit 1; }
 content=$(cat "$tcf")
@@ -247,11 +314,17 @@ hash=$(shasum -a 256 "$tcf" | cut -d' ' -f1)
 root_n=$(cd "$project_root" && pwd -P | tr '[:upper:]' '[:lower:]')
 grep -qxF "${hash}	${root_n}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null \
   || { echo "✗ test-cmd: not TOFU-trusted. Run the interactive chain (concept-to-code resume) to approve the test command for this project."; exit 1; }
+FENCE_BASH
 ```
 
 **Check 7 — hook_verified known:**
 <!-- fence-contract: autopilot-build-check-7 -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. `export` forwards this body's caller-bound free variables. Terminator at COLUMN 0;
+# an indented one is swallowed into the here-document and destroys this fence's exit code silently.
+export manifest CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
 # Field state via the shared helper (issue #195, ADR-0076). Two-tier resolution; if neither
 # resolves this gate fails closed, because an infrastructure gap must never be silently absorbed
 # by a second copy of the logic.
@@ -279,12 +352,22 @@ case "$hv" in
   UNREADABLE|"") echo "✗ hook_verified: the manifest could not be read, or the check did not run (python3/PyYAML). This is not the same as a bad value; fix the file or the interpreter and re-run."; exit 1 ;;
   *)          echo "✗ hook_verified: value is \"${hv#PRESENT|}\" — must be true or false. The manifest is corrupted or was hand-edited; fix or re-init."; exit 1 ;;
 esac
+FENCE_BASH
+# Re-raise the wrapper's status, for the same reason check 1 does: unwrapped, this body's `exit 1`
+# ended the CALLER's script; wrapped, it ends only the subprocess, so a caller running these checks
+# as one sequential script would carry on past a failed gate. Success falls through deliberately.
+_rc=$?; [ "$_rc" -eq 0 ] || exit "$_rc"
 ```
 
 **Check 8 — Git repo at CWD:**
 <!-- fence-contract: autopilot-build-check-8 -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. No `export` prologue — this body has no free variables. Terminator at COLUMN 0; an
+# indented one is swallowed into the here-document and destroys this fence's exit code silently.
+bash <<'FENCE_BASH'
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "✗ git: CWD is not inside a git repository. Worktree isolation will fail."; exit 1; }
+FENCE_BASH
 ```
 
 On all eight checks passing, emit:
