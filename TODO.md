@@ -1,7 +1,7 @@
 <!-- project-tasks: prefix=VCS lastId=14 -->
 # PROJECT TASKS
 
-Updated: 2026-08-08 · Open: 5 (P1: 0) · In progress: 1
+Updated: 2026-08-10 · Open: 4 (P1: 0) · In progress: 0
 
 This ledger holds only what is **not** already a GitHub issue or a `PROJECT.md` roadmap row.
 Duplicating those here would create the second source of truth ADR-0024 forbids. Anything with an
@@ -9,7 +9,6 @@ issue number lives there; this file is for what would otherwise be lost when the
 
 ## Open Issues
 
-- [ ] `VCS-001` **P2** ADR-0126 exists only on a local branch that was never pushed, so a branch prune deletes it — branch-local at `docs/architecture/ADR-0126-293-task-identifier-letter-suffix.md` on `feat/task-num-extracts-digits-only-so-a-lette`, absent from `main` (a `file-missing` STALE record on this entry is the symptom, not a closure) <!-- src:session opened:2026-08-04 -->
 - [ ] `VCS-002` **P2** feature #293 must have its chain re-run from Step 2 — the architect stalled after writing the ADR and before the plan, and the manifest is terminal for today's slug so it cannot be restarted under the same name today <!-- src:session opened:2026-08-04 -->
 - [ ] `VCS-004` **P3** the autopilot run report is gitignored, so a run's spend and per-feature metrics survive only on the machine that produced them — `.claude/autopilot-report.json` (renamed from `nightly-report.json` by ADR-0127; a `file-missing` STALE record under the old name is that rename, not a closure) — now also carried as PROJECT.md Phase 11 Wave 5, where Wave 1's budget recalibration depends on it <!-- src:session opened:2026-08-04 -->
 - [ ] `VCS-011` **P2** other sessions work in this same checkout, and on 2026-08-05 two tracked files (`PROJECT.md`, `.markdownlint-cli2.jsonc`) left the working tree with no attributed cause while `git add -u` swept one into a commit — verify the staged set with `git diff --name-status --staged` after staging, never from an earlier `git status` snapshot <!-- src:session opened:2026-08-05 -->
@@ -17,7 +16,7 @@ issue number lives there; this file is for what would otherwise be lost when the
 
 ## In Progress
 
-- [-] `VCS-014` **P2** the concept-to-code chain for issue #385 is paused at `ready_for_implementation` on `feat/385-skill-args-substituted-in-fences`, which is **local-only** and therefore carries `VCS-001`'s exposure — a branch prune deletes `ADR-0132` (8 decisions), a 9-task plan with 5/5 requirement coverage, and the SPEC. Gate 4 answered ("fresh session, attended"), `main` merged in at `c58a46b`, harness 74/74, tree clean. Resume with `/skill concept-to-code resume docs/manifests/2026-08-08-385-skill-args-substituted-in-fences.manifest.yml` in a **fresh** session. Two human steps are required inside it: `bash staging/sync-to-claude.sh --apply` before Task 9, and `plant-check.sh` backgrounded (> 25 min). The plan predicts a red across six tasks (`SFP4`: 19 → 12 → 10 → 5 → 2 → 1 → 0) — read that table before treating any checkpoint red as a regression <!-- src:session opened:2026-08-08 -->
+_none_
 
 ## Backlog / To Add
 
@@ -37,6 +36,8 @@ _none_
 
 ## Done
 
+- [x] `VCS-001` `ADR-0126-293-task-identifier-letter-suffix.md` (325 lines, `Status: Proposed`) and the aborted chain's manifest are on `main`, recovered from `feat/task-num-extracts-digits-only-so-a-lette` before that branch could be pruned. The exposure was measured, not assumed: a cleanup pass on 2026-08-10 deleted 23 merged branches and this one was the single candidate the verification saved — it held the only copy of a document `TODO.md` already cited. All ten of the ADR's cross-references resolve against `main`, and the manifest validates (`aborted`/`aborted` is terminal, so ADR-0078 exempts its developer-machine `project_root` and CI does not fail on it). Issue #293 stays open and the ADR stays `Proposed`; what is still missing is the plan, which is `VCS-002` (2026-08-10)
+- [x] `VCS-014` The #385 chain ran to completion and merged in PR **#393** at `eb774be`, so the local-only exposure it shared with `VCS-001` is resolved: `ADR-0132`, the 9-task plan and the SPEC are all on `main`. The branch was deleted on 2026-08-10 after verifying by content rather than by ancestry — the Step 7 snapshot collapse orphans the merge history, so `git branch --merged` reports nothing and proves nothing. What the chain then exposed is issue #394, merged in PR **#395** at `e1f00a5`: the same argument-substitution class one layer down, where a fence is executed by the host shell rather than by bash (2026-08-10)
 - [x] `VCS-013` The #365 chain ran to completion and merged in PR **#382** at `58e9486`. The local-only exposure it shared with `VCS-001` is resolved: `SPEC.md`, `ADR-0129` and the 9-task plan are all on `main`, and the branch survives at `origin/feat/365-scope-and-bound-the-autopilot-run` as well. What the shipped bound then proved is separate and lives in `PROJECT.md` Phase 12, not here: the first run under it (`--features 1 --only 294`, PR #383) refused #293 `OUT-OF-SCOPE` and stopped at `EXHAUSTED 1/1` without writing `[~]`, a `skipped-features` entry or `needs-human` (2026-08-08)
 - [x] `VCS-008` The autopilot reposition is no longer mid-chain: ADR-0127 Parts 1-3 (#363, #364) and Part 4 (#365, PR #382) are all merged. The superseded clause stands as recorded — the `token-budget` producer was **not** built and the halt was removed outright (ADR-0129 §D6), because a ceiling checked at publish cannot stop the feature that breached it; `rtf-blocker` keeps its mechanism and its corrected sentence, tracked as issue #374 (2026-08-08)
 - [x] `VCS-006` Filed as issue **#380** and therefore leaves this ledger, which holds only what is not already a GitHub issue. Re-measured before filing and the entry's own numbers were understated: the file is 3,592 lines / 274 KB / ~68,500 tokens and **98%** of it is 90 ADR blocks, against 80 lines of everything else. The cost claim is now measured rather than asserted — ~21.5% of the orchestrator's cache-read volume, ~$1,616, about four times the coder's entire cost. Sub-agents are unaffected: they do not load the project `CLAUDE.md` (ADR-0130 `## Correction`) (2026-08-06)
