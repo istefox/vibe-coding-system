@@ -1217,7 +1217,18 @@ regardless of how the budget is set.
 - [x] Gate 4.0's branch name and publish-feature.sh's expected branch never coincide  (issue #363)  (completed: 2026-08-05)
 - [x] nothing states what feature N+1's branch forks from  (issue #364)  (completed: 2026-08-05)
 - [x] a nightly run cannot be scoped to a wave and the turn budget is ~4x miscalibrated  (issue #365) (completed: 2026-08-07)
-- [ ] SKILL.md bash fences assume bash word-splitting and break under zsh  (issue #366)
+- [x] SKILL.md bash fences assume bash word-splitting and break under zsh  (issue #366) (completed: 2026-08-10, by #394)
+
+**#366 was closed by a PR that does not name it, and that is worth reading before the next one.**
+It was filed on 2026-08-04 from the nightly run, citing `commit` Step 1's `--include` resolve and
+the Test diff block's `for _f in $staged …`. Issue **#394** was filed four days later from the
+bounded-run audit against `autopilot` Phase S — a different entry point onto the same defect — and
+shipped the general fix in PR #395: all 41 population fences hand their body to `bash` through a
+quoted here-document (ADR-0133 §D1). Both shapes #366 names are inside a wrapper today, verified on
+the file rather than inferred from the ADR. **The lesson is that two issues can describe one defect
+from two call sites and neither will reference the other**, so a roadmap row can be satisfied by
+work filed under a different number — and a row left unticked is a feature slot the autopilot will
+spend rediscovering that nothing is wrong.
 
 Measured, and worth carrying into whatever fixes #365: **a full standard chain costs roughly 50
 orchestrator turns**, not the ~15 the RUNBOOK's 200-for-13 example implies. A 110-turn budget
