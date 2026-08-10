@@ -97,13 +97,35 @@ untracked=$(git ls-files --others --exclude-standard)                # NEVER aut
   absent, which is exactly today's behaviour for every caller that does not pass it. Each path
   joins the included set and is dropped from the "Excluded — untracked" list, since it is no
   longer excluded.
+  <!-- fence-contract: commit-step1-include-resolve -->
   ```bash
+  # ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not
+  # under the host shell. `for _inc in $include_paths` needs the word split bash performs on an
+  # unquoted expansion; zsh — the host shell here — does not perform it, so the loop saw one blob
+  # and checked a path nobody named. `export` forwards this body's caller-bound free variable
+  # across the new process boundary. The terminator sits at COLUMN 0 even though this fence is
+  # indented inside a list item: an indented terminator is swallowed into the here-document and
+  # destroys this fence's exit code silently. It is not a formatting slip — do not tidy it.
+  export include_flag
+  bash <<'FENCE_BASH'
   # $include_flag is the raw value after --include, or empty.
   include_paths=$(printf '%s' "${include_flag:-}" | tr ',' '\n' | sed '/^[[:space:]]*$/d')
   _missing=""
   for _inc in $include_paths; do
     [ -e "$_inc" ] || _missing="$_missing $_inc"
   done
+  # ADR-0133 §D4: the wrapper runs this body in a SUBPROCESS, so `include_paths` and `_missing` die
+  # at the terminator below. Step 5's staging fence reads `include_paths`, and the paragraph
+  # immediately below reads `_missing`; both used to receive them only because the blocks happened
+  # to share a shell — an implicit inter-block dependency nothing documented. Printed now: the
+  # orchestrator reads these lines and carries both values, exactly as it carries `<commit-message>`.
+  # One path per INCLUDE line, so a path containing a space stays one value. The INCLUDE lines are
+  # emitted only when there are paths — an absent `--include` produces none, which is the same
+  # silence every caller that does not pass the flag saw before. INCLUDE-MISSING is emitted always,
+  # empty tail and all, so "checked, nothing missing" stays distinguishable from "did not run".
+  if [ -n "$include_paths" ]; then printf 'INCLUDE: %s\n' $include_paths; fi
+  printf 'INCLUDE-MISSING:%s\n' "$_missing"
+FENCE_BASH
   ```
   **`_missing` non-empty → stop and report it, do not commit.** A caller naming a path that is not
   there has a defect upstream of this skill, and committing the rest produces a half-done result
@@ -225,7 +247,20 @@ positive — a stray non-test file shown under the "Test diff" heading, still vi
 That is why the broader predicate wins here even though it is the one ADR-0048 flagged as
 over-matching `.spec.md` files for spec-coverage.sh's different (discovery) purpose.
 
+<!-- fence-contract: commit-h4-test-diff-classify -->
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not
+# under the host shell. This is the fence whose wrong behaviour was OBSERVED live on 2026-08-08
+# and misattributed to an orchestrator scripting error: `for _f in $staged $tracked_modified
+# $untracked` needs the word split bash performs on an unquoted expansion, and zsh — the host
+# shell here — does not perform it, so the loop received ONE blob containing every changed path,
+# the classification ERE matched it whenever any path looked like a test, and every changed file
+# was shown under "Test diff". Failing closed and wrongly, which reads as a defect elsewhere.
+# `export` forwards this body's caller-bound free variables across the new process boundary. The
+# terminator sits at COLUMN 0 on purpose: an indented one is swallowed into the here-document and
+# destroys this fence's exit code silently. Do not tidy either line.
+export staged tracked_modified untracked
+bash <<'FENCE_BASH'
 # The classification ERE below replicates weakening-scan.sh's is_test() exactly (see prose above
 # for why the broader, over-matching predicate — not spec-coverage.sh's narrower one — is the
 # correct choice for a section that SHOWS a diff to a human rather than gating on it).
@@ -274,6 +309,7 @@ if [ -n "$test_diff" ]; then
     test_diff=$(printf '%s\n' "$test_diff" | head -n "$TEST_DIFF_MAX_LINES")
   fi
 fi
+FENCE_BASH
 ```
 
 - **`test_files` empty → the entire "Test diff" section is omitted from Step 4**, not rendered
@@ -344,6 +380,17 @@ empty.
 
 <!-- fence-contract: commit-ensure-feature-branch -->
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+# `echo` escapes — so a fence written for bash is not the program that runs. `export` forwards this
+# body's caller-bound free variables across the new process boundary; a plain shell variable does
+# not survive it. `branch_name` is unaffected by that boundary: every path that changes the branch
+# already ECHOES it, and the rest of this file receives it as the `<branch_name>` placeholder the
+# orchestrator carries. The terminator sits at COLUMN 0 on purpose: an indented one is swallowed
+# into the here-document and destroys this fence's exit code silently — which on this fence would
+# mean a failed branch creation reporting success, and a commit landing on the default branch.
+export branch_flag default_branch subject type
+bash <<'FENCE_BASH'
 current_branch=$(git branch --show-current)
 
 # --branch <name> (issue #363): ensure, do not merely name. Handled before the derived path
@@ -405,6 +452,7 @@ elif [ "$current_branch" = "$default_branch" ] || [ -z "$current_branch" ]; then
 else
   branch_name="$current_branch"   # already on a feature branch — reuse it, no-op
 fi
+FENCE_BASH
 ```
 
 If branch creation fails: **STOP** — never fall through to Step 4/5 while still on
@@ -476,7 +524,17 @@ empty commit — see Invariant guardrails); show only "Stage additional files" a
 
 ### Step 5 — Execute commit (ONLY after "Approve" click)
 
+<!-- fence-contract: commit-step5-include-stage -->
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not
+# under the host shell. `for _inc in $include_paths` needs the word split bash performs on an
+# unquoted expansion; zsh — the host shell here — does not perform it, so a multi-path --include
+# reached `git add --` as one blob and staged nothing. `export` forwards this body's caller-bound
+# free variables across the new process boundary. The terminator sits at COLUMN 0 on purpose: an
+# indented one is swallowed into the here-document and destroys this fence's exit code silently,
+# which on this fence means a failed `git commit` reporting success. Do not tidy either line.
+export staged include_paths
+bash <<'FENCE_BASH'
 # Stage the default scope computed in Step 1 (skip if something was already staged
 # manually, or if "Stage additional files" in Step 4 already staged what was needed):
 if [ -z "$staged" ]; then
@@ -495,6 +553,7 @@ git commit -m "$(cat <<'COMMITMSG'
 <commit-message>
 COMMITMSG
 )"
+FENCE_BASH
 ```
 
 > **`git check-ignore` exit-code contract:** if you run `git check-ignore -v <files>` to verify

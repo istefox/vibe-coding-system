@@ -80,6 +80,14 @@ Behavior:
 
    <!-- fence-contract: c2c-form-a-existing-manifest -->
    ```bash
+   # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+   # the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+   # `echo` escapes. No `export` prologue — this body binds everything it reads, from the two
+   # substituted placeholders. The terminator sits at COLUMN 0 even though this fence is indented
+   # inside a numbered list item: an indented terminator is swallowed into the here-document and
+   # destroys this fence's exit code silently, which here would turn a TERMINAL refusal into a
+   # silent pass. It is not a formatting slip — do not tidy it.
+   bash <<'FENCE_BASH'
    _root="<project-root>"; _slug="<topic-slug>"
    # The path is constructed here because it must be known BEFORE manifest-init.sh runs, which is
    # the one thing that construction is for. `manifest-init.sh` computes the same path the same
@@ -131,6 +139,7 @@ Behavior:
      *)
        echo "ENTRY-ROUTE: DID-NOT-RUN — unrecognised token '${_out%%|*}'"; exit 3 ;;
    esac
+FENCE_BASH
    ```
 
    **Unattended callers.** What a `autopilot` run does with a non-`NONE` answer was decided by
@@ -198,6 +207,14 @@ Behavior:
 
    <!-- fence-contract: c2c-autopilot-routing-preflight -->
    ```bash
+   # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+   # the host shell. `export` forwards this body's caller-bound free variables across the new process
+   # boundary; a plain shell variable does not survive it. The terminator sits at COLUMN 0 even
+   # though this fence is indented inside a numbered list item: an indented terminator is swallowed
+   # into the here-document and destroys this fence's exit code silently, which here would turn an
+   # ABORT into a pass. It is not a formatting slip — do not tidy it.
+   export _root _man
+   bash <<'FENCE_BASH'
    # Free variables, bound by the orchestrator: _root (project root), _man (manifest path).
    _c2c="$HOME/.claude/skills/concept-to-code/scripts"
    _mfs="$_c2c/manifest-field-state.sh"
@@ -249,6 +266,7 @@ Behavior:
    fi
    echo "AUTOPILOT-PREFLIGHT: OK — autopilot, chain_path '$_cpv', SPEC.md present."
    exit 0
+FENCE_BASH
    ```
 
    Branch on the exit code:
@@ -467,6 +485,14 @@ it is a no-op on the genuinely-empty one.
 
 <!-- fence-contract: c2c-step1-spec-archive -->
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+# `echo` escapes. `export` forwards this body's caller-bound free variables across the new process
+# boundary. The terminator sits at COLUMN 0 on purpose: an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently — and this fence's whole contract is
+# its exit code. Do not tidy it.
+export ROOT OUT_SLUG
+bash <<'FENCE_BASH'
 # Free variables, bound by the orchestrator: ROOT (project root), OUT_SLUG (`spec_topic_slug`
 # from the gate0-detect.sh run at Gate 0 — the slug the EXISTING SPEC.md claims, never this
 # chain's slug).
@@ -477,6 +503,7 @@ fi
 _out=$(bash "$_sa" "$ROOT" "${OUT_SLUG:-unknown}"); _rc=$?
 printf '%s\n' "$_out"
 exit "$_rc"
+FENCE_BASH
 ```
 
 Branch on the exit code — this is a **checker**, not a reporter:
@@ -904,6 +931,16 @@ Four assertions, run once, at the very top of Step 5 — before dispatch-mode se
 
 <!-- fence-contract: c2c-step5-preflight-dirty-classify -->
 ```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+# `echo` escapes. `export` forwards this body's caller-bound free variables across the new process
+# boundary; a plain shell variable does not survive it. The nested `DIRTY_EOF` here-document below
+# is unaffected — the outer delimiter is matched only by a line reading exactly FENCE_BASH, so the
+# inner one reaches bash intact. The terminator sits at COLUMN 0 on purpose: an indented one is
+# swallowed into the here-document and destroys this fence's exit code silently, which here would
+# read as a clean tree. Do not tidy it.
+export MANIFEST SPEC ADR PLAN CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
 # Free variables, bound by the orchestrator before this block runs:
 #   MANIFEST        absolute path to the manifest (the value manifest-init.sh printed)
 #   SPEC ADR PLAN   absolute paths from manifest.artifacts.*; ADR/PLAN may be empty on Express
@@ -972,6 +1009,7 @@ if [ -n "$CHAIN" ] && [ -n "$OTHER" ]; then echo "PREFLIGHT_BOTH chain: $CHAIN| 
 elif [ -n "$CHAIN" ]; then echo "PREFLIGHT_CHAIN $CHAIN"; exit 1
 else echo "PREFLIGHT_OTHER $OTHER"; exit 1
 fi
+FENCE_BASH
 ```
 
 **Why the manifest is exempt, and why removing the exemption breaks every run (issue #239).** The
@@ -1059,6 +1097,11 @@ whose chain was paused.
 
 <!-- fence-contract: c2c-step5-baseline-ancestry -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. No `export` prologue — this body binds everything it reads, from the substituted
+# `<baseline>` placeholder. Terminator at COLUMN 0; an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently.
+bash <<'FENCE_BASH'
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "BASELINE_NOREPO"; exit 3; }
 _b="<baseline>"
 [ -n "$_b" ] || { echo "BASELINE_NOREPO"; exit 3; }
@@ -1070,6 +1113,7 @@ else
   echo "BASELINE_ORPHANED $_b"
 fi
 exit 0
+FENCE_BASH
 ```
 
 **This is a report, not a halt**, and the distinction is the decision: the run is not damaged, only
@@ -1171,6 +1215,12 @@ If either path is missing on disk: do NOT dispatch coder. Present to user:
 **Pre-dispatch: plan structure validation (run after existence check):**
 <!-- fence-contract: concept-to-code-step5-plan-structure -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+# `echo` escapes. No `export` prologue — this body has no free variables; the plan path arrives as a
+# substituted placeholder. Terminator at COLUMN 0; an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently.
+bash <<'FENCE_BASH'
 # plan-tasks.sh owns the definition of a plan task (ADR-0069 §D1/§D3, issue #172). Do NOT inline a
 # grep here: the architect is allowed BOTH `### Task 3 — …` headings and `- [ ]` checkbox items
 # (architect.md Output Format); a checkbox-only count rejects 9 of the 62 plans in the corpus
@@ -1186,7 +1236,18 @@ tasks=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count "<ma
 rc=$?
 openers=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count-openers "<manifest.artifacts.plan>")   # plan-tasks-question: arithmetic
 orc=$?
+FENCE_BASH
 ```
+
+**This fence carries no ADR-0133 §D4 print, and that is a stated exception rather than an
+oversight.** Under the wrapper `$tasks`, `$rc`, `$openers` and `$orc` do not survive the terminator,
+so the four paragraphs below — and the batch-dispatch policy further down, which reads `$openers` —
+name values the orchestrator must carry from this block's own run, exactly as it carries
+`<manifest.artifacts.plan>` into it. The §D4 remedy is normally a printed token; here it is not
+available, because this block's stdout is asserted BYTE-EXACTLY by an existing execution
+(`plan-task-count.test.sh`, section PTF, compares the whole of it against `tasks=[N] rc=[N]`), and a
+new line would break a green assertion to satisfy a convention. Read the two counts off this block's
+own invocation; do not add a print here without moving that assertion first.
 
 **Two counts, two questions, and using one for the other is issue #242 (ADR-0100).** `$tasks` is
 the loose predicate and answers *"is there any task at all"* — it is for the `>= 1` guard below and
@@ -1863,15 +1924,57 @@ report-only mode", reused rather than reinvented).
 
 **Invocation and exit-code idiom:**
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+# `echo` escapes. That difference is load-bearing here — see the note on `${_troot:+…}` below.
+# `export` forwards `_scov`, bound by the resolution block above; a plain shell variable does not
+# survive the new process boundary. Terminator at COLUMN 0; an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently.
+# NO `fence-contract` marker, deliberately (ADR-0133 §D3): this fence enters the wrapper population
+# through the divergence SCANNER, not through a declaration. It cannot halt a run, so `F3` does not
+# ask it for a marker, and adding one would create an `F4` execution obligation this feature did not
+# budget. The absence is a decision, not an oversight. (This note deliberately avoids the standalone
+# word for halting: `fence_is_abort_capable` matches it as a whole word, so a comment SAYING this
+# fence cannot halt would classify it as one that can — rule 12, in the sentence written to explain
+# the missing marker.)
+export _scov
+bash <<'FENCE_BASH'
 if [ -n "$_scov" ]; then
   _troot=""
   if [ "<manifest.test_cmd_placeholder>" != "true" ] && [ "<manifest.test_cmd_provisional>" != "true" ]; then
     _troot="<project_root>"
   fi
+  # `${_troot:+--tests-root "$_troot"}` expands to TWO words, and that is guaranteed by the wrapper
+  # above (issue #394, ADR-0133): bash word-splits the expansion, zsh does not. Measured on a live
+  # fixture under both shells: wrapped, this returns the real verdict identically under zsh and bash;
+  # unwrapped under zsh the option arrived as the SINGLE argument `--tests-root <path>`,
+  # `spec-coverage.sh` reported `unknown argument` and exited 2 — and `_rc = 2` is this gate's
+  # fail-open branch, so ADR-0048's merge-blocking requirement-coverage gate was not merely fed an
+  # unreadable token, it was passing every time a tests-root was supplied. Do not "fix" this by
+  # quoting the expansion: the point of the `:+` form is that it expands to NOTHING when `_troot` is
+  # empty, and quoting would pass one empty argument in its place.
   _out=$(bash "$_scov" --spec "<manifest.artifacts.spec>" --plan "<manifest.artifacts.plan>" ${_troot:+--tests-root "$_troot"} 2>&1)
   _rc=$?
+  # ADR-0133 §D4: this body runs in a SUBPROCESS, so `_troot`, `_out` and `_rc` die at the
+  # terminator below — and the self-repair retry block further down reads all three. They are
+  # printed values now: the `SPEC-COVERAGE:` line is authoritative, and the orchestrator carries
+  # `rc` and `troot` forward exactly as it carries `<manifest.artifacts.plan>` into this block.
+  # `_out` is everything printed after that line. Before the wrapper the two blocks received these
+  # values from each other only because they happened to share a shell — an implicit inter-block
+  # dependency nothing documented.
+  printf 'SPEC-COVERAGE: rc=%s troot=%s\n' "$_rc" "$_troot"
+  printf '%s\n' "$_out"
 fi
+FENCE_BASH
 ```
+**What this block hands on (ADR-0133 §D4).** The wrapper runs the body in a subprocess, so `_troot`,
+`_out` and `_rc` do not survive the terminator. The `SPEC-COVERAGE:` line is authoritative: carry
+`rc` and `troot` from it, and read `_out` as everything printed after it. The self-repair block below
+declares the same three plus `_scov` as orchestrator-bound for that reason — before the wrapper they
+reached it only because the two blocks happened to share a shell, an inter-block dependency nothing
+documented. No `SPEC-COVERAGE:` line at all means `_scov` was empty and the gate did not run, which
+is the fail-open case already described below, not a clean result.
+
 `_rc = 0` → every declared ID covered, or the SPEC declares no IDs. `_rc = 1` → at least one ID
 uncovered, `_out` names the ID and the missing half (`plan`, `tests`, or `plan,tests`). `_rc = 3`
 → structural error in the SPEC or plan (`DUPLICATE`/`MALFORMED`/`ORPHAN` in `_out`) — the remedy
@@ -1885,27 +1988,57 @@ repair is deterministic: the two lines say the same thing and only the second is
 reads, so adding the marker changes no content.
 
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+# `echo` escapes — see the `${_troot:+…}` note in the invocation block above, which applies verbatim
+# to the re-run below. Terminator at COLUMN 0; an indented one is swallowed into the here-document
+# and destroys this fence's exit code silently.
+# Free variables, bound by the orchestrator from the invocation block's `SPEC-COVERAGE:` line and
+# from the resolution block above it: `_rc`, `_out`, `_troot`, `_scov` (ADR-0133 §D4). That block
+# runs in its own subprocess, so these do NOT arrive through a shared shell; the orchestrator
+# carries them, exactly as it carries `<manifest.artifacts.spec>`.
+# NO `fence-contract` marker, deliberately (ADR-0133 §D3): scanner-derived population member, and it
+# cannot halt a run, so no `F3` obligation and no `F4` execution obligation is created here. The
+# standalone word for halting is avoided on purpose — `fence_is_abort_capable` matches it as a whole
+# word, so writing it here would classify this fence as one that can halt (rule 12).
+export _rc _out _troot _scov
+bash <<'FENCE_BASH'
 if [ "$_rc" -eq 3 ] && printf '%s\n' "$_out" | grep -q 'declared as plain bullets'; then
   _norm="$(dirname "$_scov")/spec-normalize-ids.sh"
   if [ -f "$_norm" ]; then
     _diff=$(bash "$_norm" --spec "<manifest.artifacts.spec>" --apply); _nrc=$?
+    # §D4: `_diff` dies at the terminator too, so the block emits it under the heading the
+    # paragraph below mandates, rather than leaving the orchestrator to read a variable that no
+    # longer exists. It goes FIRST so the ordering contract stays simple: the repair diff, then the
+    # re-run verdict, and everything after the `SPEC-COVERAGE:` line is `_out`.
+    printf 'Requirement ids: repaired plain-bullet declaration(s) — diff:\n'
+    printf '%s\n' "$_diff"
     if [ "$_nrc" -eq 0 ]; then
       _out=$(bash "$_scov" --spec "<manifest.artifacts.spec>" --plan "<manifest.artifacts.plan>" ${_troot:+--tests-root "$_troot"} 2>&1)
       _rc=$?
+      # The re-run's verdict must leave this subprocess the same way the first one did, or the gate
+      # below reads the PRE-repair `_rc` and stops on an error that has already been fixed.
+      printf 'SPEC-COVERAGE: rc=%s troot=%s\n' "$_rc" "$_troot"
+      printf '%s\n' "$_out"
     fi
   fi
 fi
+FENCE_BASH
 ```
 
 **Apply first, show after — do not gate this.** The edit is mechanical, and ADR-0071's Gate 4.0 has
 already committed the planning artifacts, so `git checkout -- <spec>` reverses it. Stopping a chain
 to ask permission for a checkbox marker is friction with one sensible answer, and on the unattended
-paths it would be a halt with no one to answer. Print the diff `spec-normalize-ids.sh` returned
-under the heading `"Requirement ids: repaired plain-bullet declaration(s) — diff:"`, so the edit is
-visible after the fact rather than invisible.
+paths it would be a halt with no one to answer. The block emits the diff `spec-normalize-ids.sh`
+returned under the heading `"Requirement ids: repaired plain-bullet declaration(s) — diff:"` — it
+prints the heading itself rather than binding a `_diff` variable, because under the ADR-0133 wrapper
+that variable dies at the terminator. Surface both lines to the user, so the edit is visible after
+the fact rather than invisible.
 
-If the re-run still returns 3, stop as before: the cause was something else, or something the repair
-does not cover. **A bold-wrapped id (`- **R-01** — …`) is no longer one of those (ADR-0122, issue
+If this block prints a second `SPEC-COVERAGE:` line, it supersedes the first: it carries the
+**post-repair** `rc`, and `_out` is again everything after it. If it prints none, nothing was
+repaired and the first verdict stands. If the re-run still returns 3, stop as before: the cause was
+something else, or something the repair does not cover. **A bold-wrapped id (`- **R-01** — …`) is no longer one of those (ADR-0122, issue
 #291).** In a checklist item it reads as declared directly, no repair needed. As a plain bullet it
 is a near-miss like any other and is repaired by this same automatic path, with the emphasis
 preserved — `- **R-01** — …` becomes `- [ ] **R-01** — …`, never stripped. Never loop: the repair
@@ -2521,6 +2654,12 @@ them back into the index so `commit` sees the whole feature as one diff:
 
 <!-- fence-contract: c2c-step7-snapshot-collapse -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. No `export` prologue — this body binds everything it reads, from the substituted
+# `<baseline>` placeholder. Terminator at COLUMN 0; an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently, which on a fence that rewrites branch
+# history is the last place a lost exit code is affordable.
+bash <<'FENCE_BASH'
 # Free variable: <baseline> is manifest.recovery_baseline_sha.
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "COLLAPSE_NOREPO"; exit 3; }
 _b="<baseline>"
@@ -2536,6 +2675,7 @@ _foreign=$(git log --format='%H %s' "$_b"..HEAD \
 git reset --soft "$_b" || { echo "COLLAPSE_NOREPO"; exit 3; }
 echo "COLLAPSED $_n $_b"
 exit 0
+FENCE_BASH
 ```
 
 - `COLLAPSED <n> <sha>` → emit `"Step 7: collapsed <n> Step 5 snapshot commit(s) — the feature is
@@ -3318,11 +3458,18 @@ about whether a safety gate fires.
 
 <!-- fence-contract: c2c-gate2b-trust-probe -->
 ```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. No `export` prologue — this body binds everything it reads, from the substituted
+# `<project-root>` placeholder. Terminator at COLUMN 0; an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently. `$HOME` is exported by every shell, so
+# it crosses the boundary unaided.
+bash <<'FENCE_BASH'
 TCF="<project-root>/.claude/test-cmd"
 H=$(shasum -a 256 "$TCF" | cut -d' ' -f1)
 ROOT_N=$(cd "<project-root>" && pwd -P | tr '[:upper:]' '[:lower:]')
 grep -qxF "${H}	${ROOT_N}" "$HOME/.claude/state/stop-gate/trust" 2>/dev/null \
   && echo "TRUSTED" || echo "NOT_TRUSTED"
+FENCE_BASH
 ```
 
 - **`TRUSTED` → do NOT show the gate.** Emit one line — `"Gate 2b: test-cmd already trusted, SHA

@@ -75,12 +75,26 @@
 #      mode — that is UNKNOWN-MODE, a finding, not a skip (ADR-0131 §D4).
 #   3. the `*/tests/*` path exclusion clears the harness's own `ok`/`bad` message strings, which are
 #      CODE, not commentary, and which filter 1 cannot reach.
-#   4. heredoc BODIES in `*.sh` files are skipped (a marker `<<'EOF' … EOF` state machine). Found by
-#      measurement, not named in the ADR: `plan-tasks.sh`'s own `usage()` heredoc prints
-#      "usage: plan-tasks.sh --count <plan-file>" — a line with no leading `#`, naming the script,
-#      immediately followed by a real flag. Without this filter the checker would report its own
-#      target's help text as two permanently-UNBOUND invocations, and PTK2 (ADR-0131) could never
-#      go green. Not applied to `.md` fences — no fence in the current corpus contains a heredoc.
+#   4. heredoc BODIES (a marker `<<'EOF' … EOF` state machine) are skipped as data, in `*.sh` files
+#      AND `.md` fences alike. Found by measurement, not named in the ADR: `plan-tasks.sh`'s own
+#      `usage()` heredoc prints "usage: plan-tasks.sh --count <plan-file>" — a line with no leading
+#      `#`, naming the script, immediately followed by a real flag. Without this filter the checker
+#      would report its own target's help text as two permanently-UNBOUND invocations, and PTK2
+#      (ADR-0131) could never go green.
+#      ONE NAMED EXCEPTION, added by issue #394 / ADR-0133: the literal delimiter `FENCE_BASH` does
+#      NOT open a skip. That marker is the D1 wrapper (`bash <<'FENCE_BASH' … FENCE_BASH`) every
+#      population fence now carries — its body is not caller data fed to some other command, it IS
+#      the fence's own executed bash source, byte-for-byte what a `plan-tasks.sh` call site writes.
+#      Treating it as opaque heredoc data is what silently took all three real invocations (two in
+#      concept-to-code, one in autopilot-build) to zero the day the wrapper landed: every one of them
+#      sits inside a `FENCE_BASH`-wrapped fence, all three PTK2/PTK3/PTK7 red for that one reason.
+#      Descending into it is SAFE and SPECIFIC to this one name: measured pre-#394 (ADR-0131 fact 8),
+#      no `SKILL.md` used the literal `FENCE_BASH` for anything else, and #394's own D1 rule 1 reused
+#      it precisely because nothing else did. Every OTHER delimiter is unaffected and still opens a
+#      skip, including ones now NESTED inside a wrapped fence's own body — `DIRTY_EOF`
+#      (concept-to-code, a dirty-tree classification loop) and `TESTFILES_EOF` (commit, a path list)
+#      are both measured examples in the corpus today, and both must stay data: a `plan-tasks.sh`-
+#      shaped string inside either is a file path or a diff line, never an invocation.
 #
 # Bash 3.2 / BSD-tools clean. Run: bash mode-binding-check.sh <plan-tasks-script> <population-root>
 set -u
@@ -261,7 +275,7 @@ function is_comment_line(   tt) {
   sub(/^[ \t]+/, "", tt)
   return (substr(tt, 1, 1) == "#")
 }
-function detect_heredoc_marker(   p, rest, c, q) {
+function detect_heredoc_marker(   p, rest, c, q, m) {
   p = index($0, "<<")
   if (p == 0) return ""
   rest = substr($0, p + 2)
@@ -273,10 +287,17 @@ function detect_heredoc_marker(   p, rest, c, q) {
     rest = substr(rest, 2)
     q = index(rest, c)
     if (q == 0) return ""
-    return substr(rest, 1, q - 1)
+    m = substr(rest, 1, q - 1)
+  } else if (match(rest, /^[A-Za-z_][A-Za-z0-9_]*/)) {
+    m = substr(rest, RSTART, RLENGTH)
+  } else {
+    return ""
   }
-  if (match(rest, /^[A-Za-z_][A-Za-z0-9_]*/)) return substr(rest, RSTART, RLENGTH)
-  return ""
+  # issue #394 / ADR-0133: FENCE_BASH is the D1 wrapper, not caller data — its body is the fence's
+  # own bash source and must stay in scope for the population scan. See the header's filter-4 note
+  # for why this one name is safe to descend into and every other delimiter is not.
+  if (m == "FENCE_BASH") return ""
+  return m
 }
 function emit_candidate(   pos, rest, tok, qtok, mtok, mpos, mrest) {
   pos = index($0, "plan-tasks.sh")

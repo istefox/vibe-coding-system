@@ -152,13 +152,28 @@ enumerate_fences() {
   ' "$1"
 }
 
+# fence_body <file> <opener-line> — issue #394 / ADR-0133: strips AT MOST the opener's own
+# indentation (`ind`), never more than a given line's OWN leading whitespace (`lw`) —
+# `strip = (lw < ind) ? lw : ind`. The prior unconditional `substr($0, ind + 1)` corrupted a
+# column-0 line inside an indented fence: `autopilot-scope-resolve` is indented 3, and its D1
+# wrapper's column-0 `FENCE_BASH` terminator extracted as `CE_BASH`, which is no longer the
+# heredoc's own terminator — the rest of the fence's body is swallowed into the heredoc and its exit
+# code is destroyed. This fence's own execution stayed GREEN under the bug only because every branch
+# it can take ends in an explicit `exit`, so the here-document-to-EOF form terminates before reaching
+# the corrupted line — a green-by-accident the bug in `required-checks-audit.test.sh`'s
+# `autopilot-check-8` (whose success arm falls through) exposed. `fence-contract-coverage.test.sh`
+# carries the same fix under the same ADR (Task 2); this is a DELIBERATE COPY, not a shared import
+# (ADR-0086: three private `fence_body`s already answer this file's own question independently, and
+# each file must fail independently).
 fence_body() {
   awk -v want="$2" '
     NR == want { match($0, /^[[:space:]]*/); ind = RLENGTH; infence = 1; next }
     infence {
       s = $0; sub(/^[[:space:]]+/, "", s)
       if (s == "```") { exit }
-      print substr($0, ind + 1)
+      match($0, /^[[:space:]]*/); lw = RLENGTH
+      strip = (lw < ind) ? lw : ind
+      print substr($0, strip + 1)
     }
   ' "$1"
 }

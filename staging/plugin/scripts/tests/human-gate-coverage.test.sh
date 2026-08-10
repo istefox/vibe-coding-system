@@ -182,6 +182,47 @@ else
   bad "HIB0: extraction produced an empty block — every HIB assertion below is meaningless"
 fi
 
+# ADR-0133 (issue #394) wrapper-aware bypass. The H4 fence's body now runs inside a
+# `bash <<'FENCE_BASH' … FENCE_BASH` here-document — a SUBPROCESS — so test_files/test_diff/
+# test_diff_truncated/test_diff_total_lines die at the closing terminator and are invisible to
+# a caller that only captures this script's own stdout via `cat "$H4_BLOCK"`. `unwrap_body` is
+# the SAME awk mechanism `fence-contract-coverage.test.sh`'s Task 2 introduced (and the
+# technique its `run_fence_logic` reuses for exactly this purpose, in that file's own words a
+# "test-harness-only bypass of the process boundary"): it returns the here-document's INNER
+# body when the wrapper is present, and the input UNCHANGED otherwise, so this harness keeps
+# working whether or not the fence is wrapped. It does not weaken R-04's "communicate through
+# stdout and exit code only" contract for the ORCHESTRATOR, which never runs past the wrapper
+# either way — only this test's own extraction does, for observability.
+UNWRAP_AWK="$TMP/unwrap.awk"
+cat >"$UNWRAP_AWK" <<'UNWRAPEOF'
+BEGIN { mode = "before"; nb = 0 }
+{
+  if (mode == "before") {
+    if ($0 == "bash <<'FENCE_BASH'") { mode = "wrap"; next }
+    nb++; before[nb] = $0
+    next
+  }
+  if (mode == "wrap") {
+    if ($0 == "FENCE_BASH") { mode = "after"; next }
+    print
+    next
+  }
+  # mode == "after": nothing expected past the terminator; ignored rather than mis-parsed.
+}
+END {
+  if (mode == "before") { for (i = 1; i <= nb; i++) print before[i] }
+}
+UNWRAPEOF
+unwrap_body() { awk -f "$UNWRAP_AWK" "$1"; }
+
+H4_INNER="$TMP/h4-inner.sh"
+unwrap_body "$H4_BLOCK" > "$H4_INNER"
+if [ -s "$H4_INNER" ]; then
+  ok "HIB0b: the H4 block's inner (unwrapped) body is non-empty — the HIB1-HIB4 fixtures below observe real logic, not an empty subprocess"
+else
+  bad "HIB0b: unwrap_body produced an empty inner body from the extracted H4 block — every HIB1-HIB4 assertion below is meaningless"
+fi
+
 mk_fixture() {
   _r="$TMP/repo_$1"; rm -rf "$_r"; mkdir -p "$_r/tests"
   ( cd "$_r" && git init -q \
@@ -203,7 +244,7 @@ run_h4() {
     echo 'staged=$(git diff --name-only --staged)'
     echo 'tracked_modified=$(git diff --name-only HEAD --diff-filter=ACMRD)'
     echo 'untracked=$(git ls-files --others --exclude-standard)'
-    cat "$H4_BLOCK"
+    cat "$H4_INNER"
     echo 'printf "TEST_FILES_START\n%s\nTEST_FILES_END\n" "$test_files"'
     echo 'printf "TEST_DIFF_START\n%s\nTEST_DIFF_END\n" "$test_diff"'
     echo 'printf "TRUNCATED=%s\n" "$test_diff_truncated"'

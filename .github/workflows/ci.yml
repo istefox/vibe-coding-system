@@ -29,5 +29,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
+      # zsh is a BUILD DEPENDENCY of this job, not a convenience (issue #394, ADR-0133 R-06/R-07).
+      # This job globs the SAME harness directory docs-ci.yml names file by file, so every
+      # dependency of that harness is a dependency here too — a fact AIH2 in
+      # accessibility-i18n.test.sh already states ("ci.yml still globs …, no manual registration
+      # needed there") and which was read as "nothing to do here" rather than as a dependency.
+      # fence-contract-coverage.test.sh's WSA/WSB run one wrapped population fence under zsh AND
+      # under bash and compare; with zsh absent both FAIL with an explicit ZSH-ABSENT message and
+      # there is no skip path, by design (ADR-0032's CI-dark class: a check that did not run must
+      # never read as a check that found nothing). Deleting this step turns the job red rather
+      # than quietly dropping the proof. Keep it BEFORE the harness loop.
+      - name: Install zsh (required by the WSA/WSB executed proof)
+        run: |
+          set -e
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+          fi
+          zsh --version
+
       - name: Run tests
         run: for t in staging/plugin/scripts/tests/*.test.sh; do bash "$t" || exit 1; done
