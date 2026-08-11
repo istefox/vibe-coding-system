@@ -3775,3 +3775,58 @@ on three unattended paths, so the first run after this reports differently and t
 the fix, not a regression; the CI job gains a `zsh` install for the executed proof.
 
 Detail: `docs/architecture/ADR-0133-394-fence-execution-shell.md`.
+
+## Decisions from the Phase P roadmap-state chain (ADR-0134)
+
+Closes issue #399. `autopilot` Phase P step 3 decided which features need a generated SPEC by
+reading one thing — whether `docs/specs/<slug>.spec.md` exists — so a completed feature whose SPEC
+was never archived was indistinguishable from a pending one, and a run bounded to a single feature
+still paid prep across the whole map. It now reads the two facts it already had: the row's state in
+`PROJECT.md`, and the `--only` list Phase S parsed.
+
+- **Four of the SPEC's own re-derived figures were wrong, and the count is the interesting one.**
+  Issue #399 said 4 missing SPECs; the SPEC written for this chain said 3; **the truth is 4**, and
+  the disagreement is a live defect: step 3's coverage predicate is the exact
+  `docs/specs/<map-slug>.spec.md`, while `project-conductor/SKILL.md:574` globs
+  `docs/specs/<issue>-*.spec.md` and takes `head -1`. Measuring "missing SPECs" with the glob gives
+  a different number than the step actually uses. Disclosed, not fixed.
+- **The state predicate is ROW-SHAPED and CAPTURES the marker character rather than enumerating it**
+  (§D3). Measured: `PROJECT.md` carries `#### Wave N — … (issue #N)` headings beside its roadmap
+  rows, so a file-wide `grep -F "(issue #N)"` returns two hits for `#365` and `#366` — two of the
+  rows this feature exists to suppress. And capturing rather than restricting to ` xX~` is what
+  keeps the *unrecognised state* branch REACHABLE: an enumerating regex sends `- [?]` to the
+  *orphan* branch instead, and the branch the SPEC names becomes dead code. **A branch a
+  specification names and no input can reach is worse than no branch — it reads as covered.**
+- **The helper is a SELECTOR, a third contract beside this tree's checker and reporter** (§D2):
+  stdout carries rows and nothing else, every note and the summary go to stderr, and exit 3 means
+  the selection DID NOT RUN. It prints no `CLEAN` sentinel and must never grow one. The channel
+  split diverges from the sibling `autopilot-scope-*` fences on purpose — their stdout is read by a
+  human, this one is consumed as data, so a note on stdout would be a phantom row.
+- **The denominator is EVERY map row, before any filtering** (§D5). Resolving state only for rows
+  that survive `--only` and the coverage check would let an unrelated argument shrink the guard:
+  `--only 294` would leave a single row as the entire denominator. A guard that can be reduced to
+  n=1 is not a guard. ADR-0085's rule on a new population.
+- **The helper never aborts on an unresolvable `--only` token** (§D6). Phase 0 check 9 stays the
+  sole authority for that, and it resolves against `PROJECT.md` while the helper resolves against
+  the map — two authorities answering one question from two populations is ADR-0086's defect. Note
+  the phase order is **S → M → P → 0**: `--only` is *parsed* in Phase S and *resolved* in check 9,
+  which runs AFTER Phase P, so a bad token costs one Phase P before the launch stops. Do not write
+  "Phase S aborts it first".
+- **ADR-0129 §D7's exclusion is lifted for this one step, and the distinction is written at the
+  step** (§D7). §D7 keeps Phase S away from `PROJECT.md` because in auto-design the roadmap does not
+  exist yet; step 3 runs after step 2 has generated it, so the reason does not extend. Stated at the
+  site so a later reader does not "fix" the reference back.
+- **This ships an instruction as well as an enforcement, and §D10 says which is which.** The helper
+  and the fence are code; the per-row `Skill(skill="spec-from-issue", …)` invocation stays prose. A
+  green harness does not mean the model issued exactly the printed calls — what changed is that the
+  list is now computed with a stated contract instead of derived from a glob, so the failure shape
+  moves from a silently wrong list to a list on screen a reader can compare against.
+
+Known consequences, recorded rather than fixed: **Phase P is worse than inert until
+`staging/sync-to-claude.sh --apply`** — an unresolved helper halts step 3 with no fallback (§D8),
+because a fallback would restore the unbounded behaviour on the machine least likely to notice; a
+green run on this repository proves the suppressing half only, since all four uncovered rows are
+`[x]` and generation is exercised by fixtures alone; and check 9's own file-wide matcher means
+`--only 365` and `--only 366` abort this repository's launches today, disclosed and unpinned.
+
+Detail: `docs/architecture/ADR-0134-399-phase-p-roadmap-state.md`.
