@@ -1,7 +1,7 @@
-<!-- project-tasks: prefix=VCS lastId=19 -->
+<!-- project-tasks: prefix=VCS lastId=23 -->
 # PROJECT TASKS
 
-Updated: 2026-08-11 · Open: 4 (P1: 0) · In progress: 0
+Updated: 2026-08-11 · Open: 7 (P1: 0) · In progress: 1
 
 This ledger holds only what is **not** already a GitHub issue or a `PROJECT.md` roadmap row.
 Duplicating those here would create the second source of truth ADR-0024 forbids. Anything with an
@@ -13,10 +13,13 @@ issue number lives there; this file is for what would otherwise be lost when the
 - [ ] `VCS-004` **P3** the autopilot run report is gitignored, so a run's spend and per-feature metrics survive only on the machine that produced them — `.claude/autopilot-report.json` (renamed from `nightly-report.json` by ADR-0127; a `file-missing` STALE record under the old name is that rename, not a closure) — now also carried as PROJECT.md Phase 11 Wave 5, where Wave 1's budget recalibration depends on it <!-- src:session opened:2026-08-04 -->
 - [ ] `VCS-011` **P2** other sessions work in this same checkout, and on 2026-08-05 two tracked files (`PROJECT.md`, `.markdownlint-cli2.jsonc`) left the working tree with no attributed cause while `git add -u` swept one into a commit — verify the staged set with `git diff --name-status --staged` after staging, never from an earlier `git status` snapshot <!-- src:session opened:2026-08-05 -->
 - [ ] `VCS-012` **P3** four harnesses print `FAIL <label>` without the colon the registry attributes on — `external-dependency-gate`, `hook-probe`, `hook-verify-workflow`, `prep` — so a plant declared in any of them is unattributable; ADR-0128 §D4 makes that a loud `BADPLANT` instead of a false "the assertion pins nothing", but the four are not converted and a green plant run says nothing about assertions in them — `staging/plugin/scripts/tests/plant-check.sh` <!-- src:session opened:2026-08-06 -->
+- [ ] `VCS-021` **P3** two harnesses carry assertion floors that cannot see their own plant fire — `required-checks-audit.test.sh` runs 32 assertions against a floor of 26, and `human-gate-coverage.test.sh` has no `Z1` floor at all despite gaining `HIB0b`. ADR-0124's class: a floor with slack absorbs its own plant, so removing an assertion leaves it green and the assertion pins nothing — `staging/plugin/scripts/tests/required-checks-audit.test.sh`, `staging/plugin/scripts/tests/human-gate-coverage.test.sh` <!-- src:session opened:2026-08-11 -->
+- [ ] `VCS-022` **P3** the `project-tasks` skill is deployed in `~/.claude/skills/` and is neither vendored in `staging/` nor declared in `sync-to-claude.sh`'s deployed-only registry (5 entries: agent-design, daily-close, daily-open, vibiso-intake, website-auditor). Every `--apply` prints it under `REPORT: deployed skill(s) neither vendored nor declared` and nothing acts on it — ADR-0087 built that registry precisely so "not part of the blueprint" is distinguishable from "forgotten", and this is an instance of forgotten — `staging/sync-to-claude.sh:109` <!-- src:session opened:2026-08-11 -->
+- [ ] `VCS-023` **P3** `project-tasks`'s `scan.sh` matches the literal `BUG` inside prose that says the opposite: both MARKER records from the 2026-08-11 run are false positives — one is a plant declaration's replacement string, the other a comment reading "THE SELF-COLLISION IS EXPECTED, NOT A BUG". Rule 12 inside the scanner that captures findings. Not fixable in-repo while `VCS-022` stands, since the skill has no vendored copy to edit <!-- src:session opened:2026-08-11 -->
 
 ## In Progress
 
-_none_
+- [ ] `VCS-020` **P2** the first bounded `autopilot` run is paused BEFORE the chain, by operator choice at the session boundary. Manifest `docs/manifests/2026-08-11-a-per-file-budget-ceiling-is-parsed-and.manifest.yml` sits at `step_0_init`/`in_progress` with `autopilot: true` and classifies `ADOPTABLE`, `SPEC.md` carries #296's spec and is modified in the working tree, and the guard is disarmed. **Relaunch, do not resume**: `autopilot-disarm.sh --completing` clears the whole transient set (ADR-0112) including `.claude/autopilot-state/scope`, so the bound is gone — `/skill autopilot --features 1 --only 296`. Phase P must be skipped again for the reason in issue #399, and the fork point is `main` because Phase P's outputs are already committed there (#401). Full handoff in `.claude/context.md` <!-- src:session opened:2026-08-11 -->
 
 ## Backlog / To Add
 
@@ -29,7 +32,7 @@ _none_
 ## Project Map
 
 - **Entry point**: not a code project. `docs/vibe-coding-system.md` is the blueprint; `staging/` is the deployable surface synced into `~/.claude` by `staging/sync-to-claude.sh`
-- **Modules**: `staging/plugin/skills/` (30 skills) · `staging/plugin/scripts/` (hooks) · `staging/plugin/agents/` · `staging/plugin/scripts/tests/` (73 harnesses + the plant registry) · `docs/architecture/` (129 ADRs) · `docs/specs/` · `docs/superpowers/plans/` · `docs/manifests/`
+- **Modules**: `staging/plugin/skills/` (30 skills) · `staging/plugin/scripts/` (hooks) · `staging/plugin/agents/` · `staging/plugin/scripts/tests/` (75 harnesses + the plant registry) · `docs/architecture/` (136 ADRs) · `docs/specs/` · `docs/superpowers/plans/` · `docs/manifests/`
 - **Build & test**: no build, no lint, no package manager. test-cmd: `for t in staging/plugin/scripts/tests/*.test.sh; do bash "$t" || exit 1; done`. Mutation testing: `bash staging/plugin/scripts/tests/plant-check.sh`
 - **Key ADRs**: ADR-0022 nightly-autopilot · ADR-0068 worktree isolation contract · ADR-0086 when a derived guard is extracted · ADR-0108 the plant registry · ADR-0114 required-checks audit
 - **Invariants**: merge stays human, always · a check that did not run must be distinguishable from a check that found nothing (exit 3) · a checker branches on its exit code, a reporter always exits 0 and prints `CLEAN` · an assertion nobody planted pins nothing · a needle must belong to the mechanism, not to the prose describing it · measure an issue's own claim before designing
