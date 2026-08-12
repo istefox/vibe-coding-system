@@ -213,7 +213,7 @@ done
   || bad "ZA5: the flat source is gone — the skills/ remap now deploys nothing"
 
 # =====================================================================================
-# DEPLOYED-ONLY REGISTRY (issue #222, ADR-0087). sync-to-claude.sh declares five skills that exist
+# DEPLOYED-ONLY REGISTRY (issue #222, ADR-0087). sync-to-claude.sh declares the skills that exist
 # in ~/.claude/skills/ and deliberately do NOT belong in staging/ (personal routines, a foreign
 # repo symlink, another project's intake front end, book-derived proprietary content). ADR-0077's
 # rule — a waiver travels with the file it excuses — cannot apply here: the excused file is absent

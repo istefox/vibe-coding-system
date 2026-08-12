@@ -96,8 +96,12 @@ fi
 # pairs-completeness.test.sh derives this set from PAIRS and requires each member to appear in the
 # declaration line above — a THIRD anomaly fails there instead of being discovered by an audit.
 #
-# DEPLOYED-ONLY REGISTRY (issue #222, ADR-0087). Five skills exist in ~/.claude/skills/ and are
-# deliberately NOT vendored into staging/ — not forgotten, declared. ADR-0077's rule that a waiver
+# DEPLOYED-ONLY REGISTRY (issue #222, ADR-0087). Some skills exist in ~/.claude/skills/ and are
+# deliberately NOT vendored into staging/ — not forgotten, declared. The count is deliberately not
+# stated here: the registry grows, and a prose count that stops tracking its population has stopped
+# measuring (ADR-0110's PMP2 re-anchoring, ADR-0120's RH2 lesson). DO1 below is the vacuity guard.
+#
+# ADR-0077's rule that a waiver
 # travels with the file it excuses cannot apply here: the excused file is absent from staging/ by
 # construction, so there is nothing for the waiver to travel with. The declaration lives here
 # instead, beside the zone-anomaly block above, in the file that decides what reaches ~/.claude.
@@ -109,6 +113,7 @@ fi
 # deployed-only: agent-design — proprietary book-derived knowledge base; its own frontmatter `license:` field says so.
 # deployed-only: daily-close — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365).
 # deployed-only: daily-open — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365), same class as daily-close.
+# deployed-only: project-tasks — copied from a foreign repository (steve-skills/tasks), same origin as website-auditor below; its own reference/chain-integration.md is an UNAPPLIED paste-in instruction, so the description's claim that concept-to-code and project-conductor invoke it holds for neither chain (c2c section 25 does not name it, and no staged or deployed SKILL.md mentions it).
 # deployed-only: vibiso-intake — front end of a different project's intake contract (vibiso-system ADR-002).
 # deployed-only: website-auditor — symlink into a foreign repository (steve-skills/website_auditor); moves ADR-0024 section 2.1's exclusion out of prose.
 PAIRS="
