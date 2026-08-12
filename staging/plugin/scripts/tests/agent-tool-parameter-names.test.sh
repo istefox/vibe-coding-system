@@ -707,45 +707,120 @@ fi
 # but C1b adds new logic beyond that detector — the KNOWN_FIXED_SITES-vs-ACTUAL_POSITIONAL
 # intersection. That logic needs its own proof, on a SCRATCH COPY of the real corpus file (never
 # the tracked file itself, and never written back into staging/), with the exact historical named
-# form at autopilot/SKILL.md:69 reintroduced as positional at the same line number. The
+# form at the spec-from-issue call site reintroduced as positional at the same line number. The
 # known-sites list below is scoped to the scratch path on purpose — C1b's real list names the
 # tracked path, which the scratch copy does not share, so reusing it here would compare two lists
 # that can never intersect regardless of content and prove nothing. If C1b's comm-based
 # intersection were broken (e.g. wrong field, unsorted input, wrong site string), this is what
 # would catch it.
+#
+# The locator is anchored on the CALL SITE itself (`Skill(skill="spec-from-issue"`), never on
+# `docs/specs/<slug>.spec.md` co-location. It used to require both strings on one physical line —
+# that co-location was incidental to how the file happened to be written, not load-bearing, and
+# issue #399's Task 5 broke it: the SPEC pre-flight prose that names `docs/specs/<slug>.spec.md`
+# moved to its own sentence (now line ~387) while the `Skill(...)` call moved elsewhere and started
+# wrapping across two physical lines (`Skill(skill="spec-from-issue", args="<issue#>` opens one
+# line, `--slug <slug>")` closes the next). Measured: a line carrying both markers went from 1 at
+# commit 41591fb to 0 at HEAD. Anchoring on the call site alone survives a co-location change; do
+# not re-couple the locator to `docs/specs/<slug>.spec.md`. The wrap is handled by scanning forward
+# from the `Skill(` opener with a naive paren-depth count (this fixture's call text carries no
+# other parens) to find the call's own matching close, rather than assuming — as the old
+# line-scoped locator implicitly did — that the whole call sits on one line.
 SCRATCH_C1C="$TMP/scratch-autopilot-SKILL.md"
 cp "$STAGING/plugin/skills/autopilot/SKILL.md" "$SCRATCH_C1C"
-python3 - "$SCRATCH_C1C" <<'PYEOF'
+PLANT_LOG="$TMP/c1c-plant.out"
+PLANT_ERR="$TMP/c1c-plant.err"
+python3 - "$SCRATCH_C1C" <<'PYEOF' >"$PLANT_LOG" 2>"$PLANT_ERR"
 import sys
+
 path = sys.argv[1]
 with open(path) as fh:
-    lines = fh.readlines()
-target = "docs/specs/<slug>.spec.md"
-idx = None
-for i, line in enumerate(lines):
-    if target in line and "Skill(" in line:
-        idx = i
-        break
-assert idx is not None, "could not locate the known site to reintroduce a regression at"
-lines[idx] = lines[idx].replace(
-    'Skill(skill="spec-from-issue", args="<issue#> --slug <slug>")',
-    'Skill(spec-from-issue, "<issue#> --slug <slug>")',
-)
+    text = fh.read()
+
+# Anchor on the call site, not on `docs/specs/<slug>.spec.md` (see the bash comment above this
+# heredoc for why — issue #399's Task 5 separated the two).
+open_marker = 'Skill(skill="spec-from-issue"'
+open_idx = text.find(open_marker)
+if open_idx == -1:
+    sys.stderr.write(
+        "C1C-PLANT-FAIL: could not locate the spec-from-issue Skill(...) call's opening "
+        "('%s') in the scratch copy\n" % open_marker
+    )
+    sys.exit(3)
+
+# Find the call's own matching close, tolerating a wrap across lines: scan forward from 'Skill('
+# tracking naive paren depth (the call's argument text carries no other parens).
+skill_open = text.index("Skill(", open_idx)
+i = skill_open
+depth = 0
+close_idx = None
+while i < len(text):
+    c = text[i]
+    if c == "(":
+        depth += 1
+    elif c == ")":
+        depth -= 1
+        if depth == 0:
+            close_idx = i
+            break
+    i += 1
+
+if close_idx is None:
+    sys.stderr.write(
+        "C1C-PLANT-FAIL: found the call's opening but never found its matching close "
+        "in the scratch copy\n"
+    )
+    sys.exit(3)
+
+call_text = text[skill_open:close_idx + 1]
+
+# Reintroduce the historical positional form (`Skill(concept-to-code, "resume <path>")`'s shape):
+# strip `skill="..."` to a bare identifier and drop the `args=` prefix. Targeted substring
+# replacement rather than one hardcoded before/after literal spanning the whole call — the call's
+# internal wrap/whitespace shape is not what this mutation tests, and a literal-match replace is
+# exactly the kind of coupling that broke the old locator.
+mutated_call = call_text.replace('skill="spec-from-issue"', 'spec-from-issue', 1)
+mutated_call = mutated_call.replace('args="', '"', 1)
+
+if mutated_call == call_text:
+    sys.stderr.write(
+        "C1C-PLANT-FAIL: located the call but the mutation left it unchanged "
+        "(unexpected internal shape)\n"
+    )
+    sys.exit(3)
+
+new_text = text[:skill_open] + mutated_call + text[close_idx + 1:]
 with open(path, "w") as fh:
-    fh.writelines(lines)
+    fh.write(new_text)
+
+line_no = text.count("\n", 0, skill_open) + 1
+sys.stdout.write("PLANTED\t%d\n" % line_no)
 PYEOF
-KNOWN_FIXED_SITES_SCRATCH="$TMP/known-fixed-sites-scratch.txt"
-LINE_NO_C1C=$(grep -n 'Skill(spec-from-issue' "$SCRATCH_C1C" | head -1 | cut -d: -f1)
-printf '%s:%s\n' "$SCRATCH_C1C" "$LINE_NO_C1C" | sort -u > "$KNOWN_FIXED_SITES_SCRATCH"
-C1C_OUT=$(python3 "$SCANNER" skill "$SCRATCH_C1C")
-C1C_ACTUAL="$TMP/c1c-actual-positional.txt"
-printf '%s\n' "$C1C_OUT" | awk -F'\t' '$4=="positional" {print $2":"$3}' | sort -u > "$C1C_ACTUAL"
-C1C_REGRESSED="$TMP/c1c-regressed.txt"
-comm -12 "$KNOWN_FIXED_SITES_SCRATCH" "$C1C_ACTUAL" > "$C1C_REGRESSED"
-if [ -s "$C1C_REGRESSED" ]; then
-  ok "C1c (forward guard, reintroduction proof): reintroducing the historical positional form at autopilot/SKILL.md:69's equivalent line on a SCRATCH COPY is caught by C1b's own regression-intersection logic (not just the generic C2 detector)"
+PLANT_RC=$?
+
+# Defect 2 (was silent): the locator used to run under a bare `assert`, which raises, makes python3
+# exit non-zero, and — with no `set -e` and nothing checking $? — the test carried on scanning an
+# UNMUTATED scratch copy. The scanner then correctly found nothing, and this assertion reported
+# "reintroducing the historical positional form was NOT caught", which is false: nothing was ever
+# reintroduced. "Could not plant the regression" (a fixture failure) and "planted but not caught" (a
+# detector failure) are two different findings and must never share one message — branch on
+# PLANT_RC explicitly instead of letting a python3 traceback silently fall through.
+if [ "$PLANT_RC" -ne 0 ]; then
+  bad "C1c (forward guard, reintroduction proof): could NOT PLANT the regression on the scratch copy (locator/mutation failed, rc=$PLANT_RC) — this is a FIXTURE failure, not a verdict about C1b's detector: $(cat "$PLANT_ERR")"
 else
-  bad "C1c (forward guard, reintroduction proof): reintroducing the historical positional form on a scratch copy was NOT caught — C1b's intersection logic cannot be trusted even though the underlying detector (C2) works"
+  LINE_NO_C1C=$(awk -F'\t' '$1=="PLANTED"{print $2}' "$PLANT_LOG")
+  KNOWN_FIXED_SITES_SCRATCH="$TMP/known-fixed-sites-scratch.txt"
+  printf '%s:%s\n' "$SCRATCH_C1C" "$LINE_NO_C1C" | sort -u > "$KNOWN_FIXED_SITES_SCRATCH"
+  C1C_OUT=$(python3 "$SCANNER" skill "$SCRATCH_C1C")
+  C1C_ACTUAL="$TMP/c1c-actual-positional.txt"
+  printf '%s\n' "$C1C_OUT" | awk -F'\t' '$4=="positional" {print $2":"$3}' | sort -u > "$C1C_ACTUAL"
+  C1C_REGRESSED="$TMP/c1c-regressed.txt"
+  comm -12 "$KNOWN_FIXED_SITES_SCRATCH" "$C1C_ACTUAL" > "$C1C_REGRESSED"
+  if [ -s "$C1C_REGRESSED" ]; then
+    ok "C1c (forward guard, reintroduction proof): reintroducing the historical positional form at the spec-from-issue call site (scratch line $LINE_NO_C1C) is caught by C1b's own regression-intersection logic (not just the generic C2 detector)"
+  else
+    bad "C1c (forward guard, reintroduction proof): the regression WAS PLANTED (scratch line $LINE_NO_C1C) but NOT CAUGHT — C1b's intersection logic cannot be trusted even though the underlying detector (C2) works"
+  fi
 fi
 
 # C2 (forward guard, mandatory positive twin): a fixture positional Skill(foo, "bar") call must
