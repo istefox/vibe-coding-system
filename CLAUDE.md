@@ -3793,7 +3793,7 @@ still paid prep across the whole map. It now reads the two facts it already had:
 - **The state predicate is ROW-SHAPED and CAPTURES the marker character rather than enumerating it**
   (§D3). Measured: `PROJECT.md` carries `#### Wave N — … (issue #N)` headings beside its roadmap
   rows, so a file-wide `grep -F "(issue #N)"` returns two hits for `#365` and `#366` — two of the
-  rows this feature exists to suppress. And capturing rather than restricting to ` xX~` is what
+  rows this feature exists to suppress. And capturing rather than restricting to `[ xX~]` is what
   keeps the *unrecognised state* branch REACHABLE: an enumerating regex sends `- [?]` to the
   *orphan* branch instead, and the branch the SPEC names becomes dead code. **A branch a
   specification names and no input can reach is worse than no branch — it reads as covered.**

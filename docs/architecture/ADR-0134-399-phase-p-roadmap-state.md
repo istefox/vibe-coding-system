@@ -149,11 +149,11 @@ A `PROJECT.md` line counts as this map row's state line only if it matches
 ```
 
 — a checklist row, with the marker character captured as *whatever it is* rather than restricted to
-` xX~`. Two consequences, both deliberate:
+`[ xX~]`. Two consequences, both deliberate:
 
 1. The `#### Wave N — … (issue #N)` headings that produce fact 5's two-hit rows are excluded, so
    `#365` and `#366` classify correctly.
-2. **The "unrecognised state" branch is reachable.** Had the predicate been restricted to ` xX~`, a
+2. **The "unrecognised state" branch is reachable.** Had the predicate been restricted to `[ xX~]`, a
    row marked `- [?]` would simply not match and would take the *orphan* branch instead — and the
    unrecognised branch the SPEC names would be dead code. A branch a specification names and no
    input can reach is worse than no branch: it reads as covered.
@@ -169,7 +169,7 @@ Classification: `x`/`X` and `~` → **not selected**. Space → pending, continu
 | Row `[ ]`, SPEC absent | **selected** | today's behaviour, unchanged |
 | Row `[ ]`, SPEC present | not selected | today's coverage rule, unchanged |
 | Issue number in no row-shaped line | **selected**, reported `ORPHAN` | fail-open: generating for an unplanned feature costs a file; suppressing one that was needed loses it invisibly |
-| Marker character outside ` xX~` | **selected**, reported `UNRECOGNISED-STATE` | same direction, same reason |
+| Marker character outside `[ xX~]` | **selected**, reported `UNRECOGNISED-STATE` | same direction, same reason |
 | Two row-shaped lines, same issue | first wins, reported `DUPLICATE` | silently picking one of two conflicting states is how a wrong answer looks correct |
 | `--only` present, row outside it | not selected | R-02 |
 | `--only` token matching no map row | reported `UNRESOLVED-TOKEN`, **never an abort** | §D6 |
