@@ -1,171 +1,208 @@
-# SPEC — Phase P step 3 generates SPECs for completed features and ignores the run scope
+# Order the manifest `completed` transition before the Step 7 commit
 
-**Topic slug:** 399-bound-phase-p-step-3-to-roadmap-stat
+**Topic slug:** 410-order-the-manifest-completed-transit
 
-Source: GitHub issue #399 (label `chain-blocker`)
+Issue #410. `concept-to-code` Step 7 invokes the `commit` skill and only afterwards transitions the
+manifest to `completed`. The manifest is therefore committed while it is still `step_7_commit` /
+`in_progress`, and the transition that follows leaves an uncommitted change nothing ever commits.
 
 ## Objective
 
-`autopilot` Phase P step 3 decides which features need a generated SPEC by reading one thing —
-whether `docs/specs/<slug>.spec.md` exists — and nothing else. It reads neither the row's state in
-`PROJECT.md` nor the run scope, so a completed feature whose SPEC was never archived is
-indistinguishable from a pending feature that needs one, and a run bounded to a single feature
-still pays prep across the whole map.
+Make the committed manifest terminal, on every path that commits one, by ordering the transition
+ahead of the `commit` invocation — and record the general rule that ordering implies, so the next
+manifest write added below the commit does not reintroduce the class.
 
-Make the two facts it already has access to actually govern the decision: the roadmap state of the
-row, and the `--only` list Phase S has already parsed.
+## Why it matters
 
-## Measured facts (2026-08-11, this repository)
+`manifest-validate.sh` invariant 4 requires `project_root` to be an existing directory unless the
+chain is terminal (ADR-0078, extended to both terminality axes by ADR-0113). `project_root` is an
+absolute machine-specific path. So a committed non-terminal manifest:
 
-Every figure below was re-derived rather than carried over; the issue's own "What to measure"
-section asks for exactly this, and two of its numbers had already moved.
+- validates on the machine that produced it, where the directory exists;
+- fails invariant 4 on every other machine.
 
-- **The map holds 74 rows and 3 of them have no SPEC**, not 4: `#363`, `#364`, `#366`. The issue
-  named `#365` as a fourth; it has since gained `docs/specs/365-*.spec.md`.
-- **All three are `[x]` completed in `PROJECT.md`.** So R-01 alone takes this repository's
-  generation count from 3 to 0. There is no case here where a state check would wrongly suppress a
-  SPEC that is genuinely needed.
-- **All 74 map rows match a `(issue #N)` line in `PROJECT.md`.** The orphan case is empty today, so
-  its handling is a decision about failure direction rather than about present behaviour.
-- **All 27 open `prep`-labelled issues already have a SPEC.** After R-01, Phase P on this
-  repository generates nothing at all; the cost R-02 addresses is visible only on a fresh backlog.
-- **The map is stale by construction, and that is the mechanism.** Phase P step 2 is conditioned on
-  `PROJECT.md` being *absent*. `PROJECT.md` has existed for months, so step 2 always skips, so
-  `docs/specs/_issue-map.tsv` is never regenerated and keeps rows for issues closed long ago.
-  `roadmap-from-issues.sh:57` queries `--state open`, so a regenerated map would not contain them.
-- **`roadmap-from-issues.sh:103` writes every row as `- [ ]`.** On the auto-design path the roadmap
-  is generated in the same phase, moments earlier, so every row is pending and a state check passes
-  all of them. R-03 therefore holds by construction rather than by a special case.
-- **Phase order is S → M → P → 0.** `--only` and `--features` are parsed by Phase S and are
-  available to Phase P; the on-disk `.claude/autopilot-state/scope` file is written by Phase 0
-  check 9, which runs *after* Phase P. Scoping Phase P means consuming Phase S's parsed values, not
-  reading that file.
-- **`prep.test.sh:11` prints `FAIL <label>`**, without the colon `plant-check.sh` attributes on
-  (`^FAIL: <id>`). An assertion placed there could be seen RED by hand but never verified by the
-  plant registry.
+`manifest-project-root-terminal.test.sh` `C1` asserts the whole corpus validates, so this reddens
+CI for any repository that commits its manifests while staying green locally — which is why it went
+unnoticed until `shell-tests` became a required check on `main`.
+
+Observed on PR #409:
+
+```
+FAIL: C1: 2 of 56 still invalid — 2026-08-11-399-bound-phase-p-step-3-to-roadmap-stat.manifest.yml
+                                  2026-08-11-a-per-file-budget-ceiling-is-parsed-and.manifest.yml
+```
+
+The full suite was 76/0 locally at the same commit. Both manifests were then transitioned by hand.
+
+## Measurements taken before design
+
+Stated so a later reader can re-derive rather than trust. All figures 2026-08-12.
+
+| Fact | Value |
+|---|---|
+| Manifests in `docs/manifests/` | 57 (56 tracked; the 57th is this chain's own) |
+| `chain_path` distribution | 36 `standard`, 19 `null` (legacy), **0 `express`, 0 `hybrid`** |
+| Commit-invoking steps in `concept-to-code/SKILL.md` | 3 — Step 7 (Standard), E4 (Express), H5 (Hybrid) |
+| Standard Step 7 transition | `SKILL.md:2796`, **prose only**: *"Transition to `completed`. Write final report."* |
+| Express E4 transition | `SKILL.md:2879-2882`, a command, **after** the commit invocation |
+| Hybrid H5 transition | `SKILL.md:2986`, **prose only**, after the commit invocation |
+| Manifest passed to `commit --include` | Standard Step 7 only (`SKILL.md:2729`) |
+| `manifest-set-artifact.sh` terminal guard | **none** — it writes to a terminal manifest without complaint |
+| `manifest-transition.sh` | validates the manifest before transitioning |
+
+Three consequences of that table shaped the scope:
+
+1. **The Standard path's transition is not a command at all.** It cannot be ordered relative to an
+   invocation because it is prose. This is the PATH-RULE class ADR-0028 and ADR-0117 already fixed
+   elsewhere in this same file, and it is plausibly *why* the ordering drifted: there was no
+   instruction to order.
+2. **E4 and H5 have never run here.** Zero Express or Hybrid manifests exist. Fixing them is a
+   forward guard, not a repair of observed damage.
+3. **On E4 and H5 the manifest is never committed at all** — no Gate 4.0, no `--include`, and
+   `commit` never stages untracked files. The reported ordering defect cannot currently manifest
+   there; a different gap sits in its place. That gap is filed separately, not fixed here.
 
 ## Scope
 
-### In scope
+**In scope**
 
-- A roadmap-state filter for Phase P step 3, as an executable helper plus the fence that consumes
-  it.
-- `--only` bounding Phase P step 3 when the argument is present.
-- A new CI-runnable harness file carrying the assertions, including the RED evidence R-04 requires.
+- The `completed` transition ordering at all three commit-invoking steps (Step 7, E4, H5).
+- Turning the Standard-path and Hybrid-path prose into explicit `manifest-transition.sh`
+  invocations carrying the absolute helper path.
+- The behaviour when `commit` returns without having committed.
+- A stated invariant covering every manifest write in a commit-invoking step.
+- A derived guard, plus its plants.
 
-### Out of scope, and stated so it is a decision rather than an omission
+**Out of scope, and named rather than silently dropped**
 
-- **Refreshing the stale map.** After R-01 its staleness is harmless — the state check catches
-  every closed row — and regenerating it would mean running `roadmap-from-issues.sh`, which
-  rewrites `PROJECT.md` as well. This repository's `PROJECT.md` is a hand-curated 14-phase roadmap.
-- **Fixing `prep.test.sh`'s `FAIL` form.** It is one of four such files and has its own ledger
-  entry; converting one of the four inside this feature is scope creep that leaves the class open
-  anyway.
-- **Two unrelated defects found while opening this chain**, both real, both filed separately rather
-  than bundled: `concept-to-code` Gate 0d's git auto-detect assigns `_git_ok` the two-line string
-  `true\nyes` (because `git rev-parse --is-inside-work-tree` prints `true` on stdout and the
-  snippet appends `yes`), so its documented `_git_ok=yes` comparison can never hold and Outcomes A
-  and B are structurally unreachable; and `spec-archive.sh:49` refuses an `unknown` outgoing slug
-  *before* comparing content, so Step 1's greenfield archive fence halts on any SPEC lacking the
-  `**Topic slug:**` marker — 69 of 75 archived SPECs lack it, and `spec-from-issue` never writes it.
+- The E4/H5 uncommitted-manifest gap → its own issue.
+- Any change to `manifest-transition.sh`'s legal-pair table. No new pair is added; in particular no
+  `completed → step_7_commit` rollback, because ADR-0078's exemption for invariant 4 rests on the
+  terminal states being absorbing.
+- Any change to the shared manifest helpers. Making them refuse a write once terminal would reach
+  every step and `autopilot-build`; its blast radius is far wider than this issue.
+- Gate 4.0's commit of an in-flight manifest, which is correct and must keep working.
+- The 57 existing manifests, which stay byte-unchanged.
 
 ## Stack
 
-Bash 3.2 (macOS-portable), consistent with every other helper in this tree. No new runtime
-dependency. `python3` is already a hard dependency of neighbouring pre-flight checks and may be
-used if a parse genuinely warrants it.
+Markdown (`SKILL.md` instructions) and bash 3.2 (`*.test.sh` harness). No runtime code, no
+dependencies, no build.
 
 ## Architecture
 
-### Where the decision lives
+### The ordering
 
-A skill-private helper under `staging/plugin/skills/autopilot/scripts/`, deployed to
-`~/.claude/skills/autopilot/scripts/` through a `PAIRS` entry. Direct precedent in this same skill:
-`scope-args-parse.sh`, placed there by ADR-0132 for the same reason — logic that must not live in a
-rendered markdown fence.
+Step 7's sequence becomes, in this order:
 
-The helper is a **selector**, not a checker and not a reporter, and its contract says so at its own
-header because the two neighbouring contracts in this tree are different:
+1. **7.0** — collapse the Step 5 snapshots (ADR-0104), unchanged.
+2. **7.0b** — archive this chain's SPEC and repoint `artifacts.spec` (ADR-0106), unchanged.
+3. **new** — transition to `completed`, so the repointed value is inside the transition's own write
+   and the manifest is final.
+4. `commit` invocation with `--include <archived-spec-path>,<manifest-path>`, unchanged.
+5. Post-commit actions — conditional push, PROJECT.md update, cost snapshot, final report.
 
-- exit `0` — the selection ran. Stdout carries zero or more rows to generate, one per line. **An
-  empty list at exit 0 is a normal, common result** and means every row is already covered or
-  already excluded.
-- exit `2` — bad invocation.
-- exit `3` — the selection **did not run**: the map or `PROJECT.md` could not be read, or the
-  denominator guard tripped.
+Step 3 must follow step 2: `manifest-set-artifact.sh` has no terminal guard, so a repoint after the
+transition would succeed silently and land outside the commit — the same defect one write over.
 
-### Why the denominator guard exists
+None of the post-commit actions in step 5 writes the manifest. Verified, not assumed; that is what
+makes the manifest final at commit time rather than merely usually-final.
 
-The match is keyed on the `(issue #N)` marker in `PROJECT.md`. If that marker's form ever changes,
-every row becomes unmatched at once. Under a per-row rule alone that reads as a specific verdict
-about each row rather than as a broken predicate. So: if the map is non-empty and **zero** rows
-match, the helper exits 3. Zero matches is a broken predicate; zero *generations* is a normal
-outcome, and the two must not print the same thing (ADR-0085's rule applied to a new population).
+### The invariant
 
-### Failure direction, per case
+Stated in Step 7 in one line, because the transition is only the instance:
 
-| Case | Behaviour | Reason |
-|---|---|---|
-| Row `[x]` or `[~]` in `PROJECT.md` | not selected | a completed or permanently-skipped feature is never implemented again, so a SPEC generated for it describes work already shipped, into the namespace ADR-0106 uses as the archive |
-| Row `- [ ]` pending | selected if its SPEC is absent | today's behaviour, unchanged |
-| Row's issue number in no `PROJECT.md` line | **selected**, and reported | fail-open. Generating for an unplanned feature costs a file; skipping silently loses a SPEC that was needed, invisibly |
-| `--only` present and row not in it | not selected | R-02 |
-| Map or `PROJECT.md` unreadable | exit 3 | the selection did not run |
-| Zero rows matched, map non-empty | exit 3 | broken predicate, not an empty result |
-| Helper not deployed | **Phase P halts**, printing the sync command | consistent with all four ADR-0132 helpers and with c2c Step 5.0.1 |
+> Every manifest write in this step precedes the `commit` invocation, and the transition to
+> `completed` is the last of them. A manifest write after `commit` is an uncommitted change nothing
+> ever commits.
 
-### `--only` and Phase P
+### Declined-commit behaviour
 
-ADR-0129 §D7 keeps Phase S away from `PROJECT.md` because in auto-design mode the roadmap does not
-exist at Phase S time. **That reason does not extend to Phase P step 3**, which runs after step 2
-has generated the roadmap: `PROJECT.md` exists there on every path. The exclusion is therefore
-lifted for this one step, deliberately and with the distinction written at the step, so a later
-reader does not read §D7 as covering it.
+`commit` carries its own HITL gate. Once the transition moves ahead of it, declining that gate
+leaves a terminal manifest over an uncommitted tree, and terminal states are absorbing — there is
+no legal way back.
 
-`--only` bounds step 3 when present; absent, step 3 considers every pending row exactly as today.
-`--features` does **not** bound it: that argument counts publishes, and using one number for two
-different questions is the defect class issue #242 already cost this repository.
+The chain **stops and reports it**, in those words, naming the manifest path and the fact that the
+tree is uncommitted. It does not attempt a rollback, does not invent a transition pair, and does not
+proceed to the post-commit actions. An edge case reported loudly beats a state machine weakened to
+accommodate it.
 
-### Data model, API, UI flows
+### The guard
 
-Not applicable. This feature adds no persisted schema, no service interface and no user interface.
-`step5-report.json` and the manifest are untouched. The `prep` block of the morning report
-(`features_generated`, `features_skipped_thin`) is unchanged in shape; whether a skipped-because-
-completed row is counted there is an implementation detail for the ADR to settle.
+A derived assertion over `concept-to-code/SKILL.md`, anchored on **the two mechanisms themselves** —
+every `manifest-transition.sh … completed completed` invocation and every `commit` skill
+invocation — never on headings or block delimiters.
+
+That choice is load-bearing and has history behind it. ADR-0083 §D3 measured heading-anchored
+extractors going silently vacuous: `plan-task-count` went 43/0 → 35 passed/2 failed with **six
+assertions simply vanishing**, and `scope-guards` misattributed its failure to the guard it was
+checking. Anchoring on the mechanism removes the failure mode by construction — a rename that breaks
+the guard is the same rename that breaks the thing being guarded.
+
+The population is derived at run time, so a fourth commit-invoking step added later is included
+without editing the guard. A count guard fails loudly if fewer than three pairs resolve, rather than
+passing vacuously.
+
+## Data model
+
+No manifest field is added, changed or removed. No schema version bump. `manifest_schema_version`
+stays `1.3`.
+
+## API
+
+No script gains, loses or changes an argument, an exit code or an output token.
+
+## UI flows
+
+One new operator-visible message, on the declined-commit path only. Every other run is unchanged in
+what it prints.
 
 ## Edge cases
 
-- **A `[~]` row that a human later un-skips** by editing it back to `- [ ]`: the next Phase P
-  selects it normally. Nothing needs to remember that it was once skipped.
-- **A pending row whose SPEC exists**: unchanged, still skipped — that is step 3's original
-  skip-if-present rule and it is not being replaced, only narrowed.
-- **An empty map**: exit 0, empty list, no denominator guard (the guard is conditioned on the map
-  being non-empty). Distinct from an unreadable map, which is exit 3.
-- **`--only` naming a token that resolves to no map row**: Phase S already aborts the launch for an
-  unresolvable token before Phase P runs, so this cannot reach the helper. The helper does not
-  re-derive that resolution.
-- **A `PROJECT.md` row marked with something other than `[ ]`, `[x]`, `[~]`**: treated as
-  unrecognised, not as pending. Report it and select the row — the fail-open direction, matching the
-  orphan case above.
-- **Two `PROJECT.md` rows carrying the same issue number**: match on the first, and report the
-  duplicate. Silently picking one of two conflicting states is how a wrong answer looks correct.
+- **Commit declined or aborted at its own gate** — handled above: stop and report, no rollback.
+- **Gate 4.0's in-flight commit** — must keep working. The rule is about writes inside a
+  *commit-invoking step*, not a ban on ever committing a non-terminal manifest.
+- **`gate_e3_verify → completed` ("Commit later") and the abort branches** — these transition to a
+  terminal state without invoking `commit`, so they have no ordering to get wrong and must not trip
+  the guard.
+- **A resumed or already-committed run where `commit` reports nothing to commit** — that is a pass,
+  not a decline, and must not trigger the stop-and-report path.
+- **`commit --autopilot`** — skips its own gate, so the declined-commit path cannot fire there; the
+  ordering change is otherwise identical.
+- **A fourth commit-invoking step added later** — included in the guard's population by
+  construction, not by someone remembering to add it.
+- **This chain's own Step 7** — the first run of the new ordering, and its own evidence.
 
 ## Success criteria
 
-- [ ] R-01 — a map row whose `PROJECT.md` state is `[x]` or `[~]` does not get a SPEC generated.
-- [ ] R-02 — `--only` bounds Phase P step 3 when present: a row outside the list is not selected.
-      The decision and the reason §D7 does not extend to this step are written at the step itself.
-- [ ] R-03 — the auto-design path, where the roadmap is generated by step 2 in the same phase,
-      keeps its current behaviour exactly: every freshly generated row is `- [ ]` and is selected.
-- [ ] R-04 — an assertion is seen RED against a fixture map containing a completed row with no
-      SPEC, and the plant that produces that RED is declared in the registry and attributes.
-- [ ] R-05 — a map row whose issue number appears in no `PROJECT.md` line is selected anyway and
-      reported, rather than silently dropped.
-- [ ] R-06 — the helper exits 3, not 0-with-an-empty-list, when the map is non-empty and zero rows
-      match `PROJECT.md`; and exits 3 when either input cannot be read.
-- [ ] R-07 — Phase P halts, printing the sync command, when the helper is not deployed; it never
-      falls back to generating every row.
-- [ ] R-08 — the assertions live in a new harness file that prints `FAIL: <label>` with the colon
-      `plant-check.sh` attributes on, and that file is added to `docs-ci.yml`'s named job list.
-- [ ] R-09 — the measured figures in this SPEC are re-derived at implementation time rather than
-      trusted, and any that have moved are corrected in the ADR.
+- [ ] R-01 — The Standard path's Step 7 transition to `completed` is an explicit
+  `manifest-transition.sh` invocation carrying the absolute `~/.claude/skills/concept-to-code/scripts/`
+  prefix, not prose.
+- [ ] R-02 — The Hybrid path's Step H5 transition is likewise an explicit invocation, not prose.
+- [ ] R-03 — At all three commit-invoking steps (Step 7, E4, H5) the `completed` transition precedes
+  the `commit` skill invocation.
+- [ ] R-04 — On the Standard path the transition occurs after Step 7.0b's `artifacts.spec` repoint,
+  so the repointed value is inside the committed manifest.
+- [ ] R-05 — Step 7 states the invariant that every manifest write in the step precedes the `commit`
+  invocation and that the transition is the last of them.
+- [ ] R-06 — When `commit` returns without having committed, the chain stops and reports that the
+  manifest is terminal while the tree is uncommitted; no rollback is attempted, no transition pair is
+  added, and the post-commit actions do not run.
+- [ ] R-07 — `commit` reporting nothing to commit on a resumed or already-committed run is treated as
+  a pass, distinct from a decline.
+- [ ] R-08 — Gate 4.0's commit of an in-flight manifest is unchanged and still works.
+- [ ] R-09 — A derived guard asserts, for every commit-invoking step in `concept-to-code/SKILL.md`,
+  that the `completed` transition precedes that step's `commit` invocation.
+- [ ] R-10 — The guard is anchored on the transition and commit invocations themselves, not on
+  headings or block delimiters, and derives its population from the file at run time.
+- [ ] R-11 — The guard carries a count guard that fails loudly when fewer than three pairs resolve,
+  so a derivation that stops matching cannot pass vacuously.
+- [ ] R-12 — Terminal transitions that do not invoke `commit` (Gate E3 "Commit later", the abort
+  paths) do not trip the guard.
+- [ ] R-13 — `manifest-transition.sh`'s legal-pair table is unchanged; the total stays 45.
+- [ ] R-14 — All 57 existing manifests are byte-unchanged.
+- [ ] R-15 — Every new assertion carries a declared plant in `plant-check.sh`'s registry, and each
+  plant is verified to actually fire.
+- [ ] R-16 — The full harness is green, and the new guard is seen RED against the pre-fix ordering.
+- [ ] R-17 — The E4/H5 uncommitted-manifest gap is filed as its own issue and referenced from the
+  ADR, rather than fixed here or left unrecorded.

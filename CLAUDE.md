@@ -3830,3 +3830,58 @@ green run on this repository proves the suppressing half only, since all four un
 `--only 365` and `--only 366` abort this repository's launches today, disclosed and unpinned.
 
 Detail: `docs/architecture/ADR-0134-399-phase-p-roadmap-state.md`.
+
+## Decisions from the terminal-transition ordering chain (ADR-0135)
+
+Closes issue #410 — **and #357, which is the same defect filed eight days earlier and already a
+roadmap row** (`PROJECT.md:1094`). That duplication is the first finding: a defect recorded with a
+remedy and no mechanism gets re-filed, and the older issue carried the sharper measurement (5 of 57
+manifests use a lowercase-`d` `/Users/stefer/developer/…`, which macOS resolves case-insensitively
+and Linux CI does not).
+
+`concept-to-code` Step 7 invoked `commit` and only afterwards transitioned the manifest to
+`completed`, so the committed manifest was still `step_7_commit`/`in_progress` and the transition
+that followed left an uncommitted change nothing ever commits. Under invariant 4 (ADR-0078,
+ADR-0113) that manifest validates on the machine that produced it and fails everywhere else — green
+locally, red on CI, which is why it survived until `shell-tests` became a required check.
+
+- **The transition moves ahead of the `commit` invocation at all three commit-invoking steps**, and
+  Step 7's new 7.0c must follow 7.0b's `artifacts.spec` repoint: `manifest-set-artifact.sh` has no
+  terminal guard, so a repoint after the transition succeeds silently and lands outside the commit —
+  the same defect one write over, in the step whose whole subject is that defect.
+- **The invariant is phrased over WRITES, not over the numbered sub-steps** — *every manifest write
+  in this step precedes the `commit` invocation, and this transition is the last of them*. A
+  restatement of the step list ages the moment a sub-step is inserted, and inserting one is exactly
+  how this returns. Verified rather than assumed: none of the post-commit actions writes the
+  manifest.
+- **The Standard and Hybrid transitions were PROSE, not commands** (`SKILL.md:2796`, `:2986`) — the
+  PATH-RULE class ADR-0028 and ADR-0117 already fixed elsewhere in this file, and plausibly *why*
+  the ordering drifted: there was no instruction to order. Only Express E4 had a real invocation,
+  and it sat after the commit.
+- **A declined commit now stops and reports.** Terminal states are absorbing, so there is no legal
+  way back and no rollback pair is added — ADR-0078's invariant-4 exemption rests on that property.
+  The check reads the **manifest**, never the skill: `commit` emits no machine-readable outcome, so
+  one post-hoc fence asking *is the manifest terminal, tracked and clean* collapses the declined and
+  nothing-to-commit cases without special-casing either.
+- **The guard pairs by NEAREST PRECEDING MANIFEST WRITE, and the three obvious rules were each
+  disqualified by measurement.** Proximity, adjacency in a two-kind stream, and regions bounded by
+  successive commit invocations all **pass the pre-fix text** — because the anchors already alternate
+  `T,C,T,C,T,C`. Introducing a third, broader anchor kind (any of the 61 lines naming a
+  `manifest-*.sh` helper) is what restores discrimination, and it turns the guard into a direct
+  statement of the invariant rather than a proxy for it. **When a guard must pair two file-wide
+  anchors, check whether the anchor stream already alternates before choosing a rule.**
+- **Anchored on the two mechanisms, never on headings** (ADR-0083 §D3: heading-anchored extractors
+  went silently vacuous twice, one losing six assertions outright). A rename that breaks this guard
+  is the same rename that breaks the thing it guards.
+- **The Step 7 outcome fence is Standard-path only, and E4/H5 say so at the site.** On those paths
+  the manifest is never committed at all, so applying it there would halt every Express and Hybrid
+  run for a gap that is out of scope.
+
+Known consequences, recorded rather than fixed: **on Express and Hybrid the manifest is committed by
+nothing, in any state** — filed as its own issue, since closing it is a design question with three
+answers and bundling it here would make a bounded change unbounded; the legal-pair table, the shared
+manifest helpers, Gate 4.0's in-flight commit and all 57 existing manifests are untouched; and the
+corpus is green on invariant 4 today partly **by accident**, since the one tracked non-`completed`
+manifest is exempt only through ADR-0113's second terminality axis, shipped nine days earlier.
+
+Detail: `docs/architecture/ADR-0135-410-completed-transition-before-commit.md`.
