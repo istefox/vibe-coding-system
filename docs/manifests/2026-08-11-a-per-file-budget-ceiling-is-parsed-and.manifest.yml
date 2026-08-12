@@ -6,9 +6,9 @@ mode: "brownfield"
 anonymize: false
 chain_path: null
 created_at: "2026-08-11T09:04:41+00:00"
-last_updated_at: "2026-08-11T09:04:41+00:00"
-current_step: "step_0_init"
-status: "in_progress"
+last_updated_at: "2026-08-12T11:31:18+00:00"
+current_step: "aborted"
+status: "aborted"
 
 # Gate 0 routing result (ADR-0017)
 gate0:
