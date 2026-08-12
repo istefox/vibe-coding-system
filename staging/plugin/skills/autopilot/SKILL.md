@@ -382,10 +382,115 @@ Steps (each is skip-if-present):
 2. **Roadmap** — if `PROJECT.md` is absent, run
    `~/.claude/hooks/roadmap-from-issues.sh --root "$PWD" --label "<issues_label>"` to build
    `PROJECT.md` (one feature per issue) and `docs/specs/_issue-map.tsv`.
-3. **Per-feature SPEC** — for each row in `docs/specs/_issue-map.tsv` whose
-   `docs/specs/<slug>.spec.md` is absent, invoke `Skill(skill="spec-from-issue", args="<issue#> --slug <slug>")`.
-   A thin or vague issue is SKIPPED (marked `[~]` in PROJECT.md with a `needs-human` note), never
-   fabricated.
+3. **Per-feature SPEC — bound by the row's state and the resolved scope, not by coverage alone
+   (issue #399, ADR-0134).** For each row in `docs/specs/_issue-map.tsv` this step now reads three
+   facts: whether `docs/specs/<slug>.spec.md` already exists (today's coverage rule, unchanged),
+   the row's own state in `PROJECT.md` (`[x]`/`[~]`/`[ ]`/anything else), and Phase S's resolved
+   `--only` (empty when the run is unscoped). A completed (`[x]`) or permanently-skipped (`[~]`)
+   row is never selected, even when no SPEC exists for it on disk — coverage alone cannot tell a
+   completed feature whose SPEC was never archived under the map's own slug apart from a pending
+   one, and the fresh SPEC it would otherwise generate describes shipped work, written into the
+   same `docs/specs/` namespace ADR-0106 uses as the archive.
+
+   **ADR-0129 §D7's exclusion does not extend to this step, and this is where that is decided.**
+   §D7 keeps Phase S away from `PROJECT.md` because in auto-design mode the roadmap does not exist
+   yet at Phase S time. This step runs after step 2 has already generated the roadmap, so
+   `PROJECT.md` exists here on every path — the reason does not carry forward, and it is written
+   here so a later reader does not read §D7 as covering this step too and "fix" the reference back
+   (ADR-0134 §D7, R-02).
+
+   **`--features` does not bound this step.** That argument counts publishes (ADR-0129 §D4); using
+   one number to also cap design work is the same defect class issue #242 already cost this
+   repository once (ADR-0134 §D6).
+
+   A row suppressed because it is completed or out of scope is counted in **neither**
+   `features_generated` nor `features_skipped_thin` below — the latter means a thin issue was
+   refused by `spec-issue-gate.sh`, and overloading it would report a finished feature as thin.
+   Both counts, and `covered`/`orphan`/`unrecognised`/`duplicate`, are on the helper's own
+   `PREP-SELECT:` summary line, on stderr (ADR-0134 §D11).
+
+   The selection itself lives in a helper, not in this fence: a three-column TSV parse wants awk
+   field references, and an awk field reference is exactly a positional-parameter token in a
+   rendered document (ADR-0132) — this markdown body is substituted with this skill's own
+   invocation arguments before a model ever executes it. A file is never rendered. This fence
+   resolves the helper, branches on its exit code, and prints what it selected.
+
+   <!-- fence-contract: autopilot-prep-row-select -->
+   ```bash
+   # ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not
+   # under the host shell (zsh 5.9 here). `export` forwards this body's caller-bound free variables
+   # across the new process boundary -- a plain shell variable does not survive it. The terminator
+   # sits at COLUMN 0 ON PURPOSE, even though this fence is indented inside a numbered list item
+   # exactly like check 8/9 above it: an indented terminator is swallowed into the here-document
+   # and destroys this fence's exit code silently. Do not tidy either line.
+   export _root _scope_only CLAUDE_PLUGIN_ROOT
+   bash <<'FENCE_BASH'
+   # Free variables: _root ($PWD) and _scope_only (Phase S's resolved SCOPE-PARSE `only=` value,
+   # empty when the run is unscoped). No numbered positional parameter and no awk field reference
+   # appears anywhere below -- the TSV parse lives in prep-row-select.sh instead, for the reason
+   # stated above the fence (ADR-0132, ADR-0134 §D1). Guarded by
+   # skill-fence-positional-tokens.test.sh.
+   if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+      && [ -f "$CLAUDE_PLUGIN_ROOT/skills/autopilot/scripts/prep-row-select.sh" ]; then
+     _prs="$CLAUDE_PLUGIN_ROOT/skills/autopilot/scripts/prep-row-select.sh"
+   elif [ -f "$HOME/.claude/skills/autopilot/scripts/prep-row-select.sh" ]; then
+     _prs="$HOME/.claude/skills/autopilot/scripts/prep-row-select.sh"
+   else
+     echo "✗ step 3: prep-row-select.sh not deployed -- Phase P HALTS here and NEVER falls back"
+     echo "  to generating every uncovered row: a fallback would restore exactly the unbounded"
+     echo "  behaviour this step exists to remove, on the machine least likely to notice."
+     echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+     exit 3   # DID-NOT-RUN: never fall back to generating every uncovered row
+   fi
+
+   # Branch on emptiness rather than always passing --only "$_scope_only": prep-row-select.sh's
+   # own arg parser treats an empty --only VALUE as a missing one and exits 2, so an unconditional
+   # pass would turn an unscoped run into a bad invocation. Mirrors autopilot-scope-resolve's own
+   # branch, for its stated reason: the two readings of "empty" are the difference between an
+   # unscoped run and a run that does nothing.
+   if [ -n "$_scope_only" ]; then
+     _prs_out=$(bash "$_prs" --root "$_root" --only "$_scope_only")
+   else
+     _prs_out=$(bash "$_prs" --root "$_root")
+   fi
+   _prc=$?
+
+   # Exit-code mapping: helper 0 -> continue, helper 2 -> fence exit 2, anything else -> fence
+   # exit 3. Phase S's fence uses exit 3 for its own did-not-run state and Phase M's uses exit 1
+   # for the same state; this fence's own resolution-failure branch above ALSO uses exit 3. The
+   # three are NOT reconciled and must not be (ADR-0132 §D4): each fence carries its own exit
+   # vocabulary, asserted by its own tests, and a "consistency" pass that renumbers any of them
+   # changes a contract.
+   case "$_prc" in
+     0)
+       if [ -n "$_prs_out" ]; then
+         printf '%s\n' "$_prs_out" | sed 's/^/PREP-SELECT-ROW: /'
+       else
+         echo "PREP-SELECT: zero rows selected -- every map row is covered, completed, or out of scope (a normal result)."
+       fi
+       ;;
+     2)
+       echo "✗ step 3: prep-row-select.sh reported a bad invocation (rc=2)"
+       exit 2
+       ;;
+     *)
+       echo "✗ step 3: prep-row-select.sh did not run (rc=$_prc) -- the selection did not run, not"
+       echo "  'ran and found nothing'; do not treat this as an empty result."
+       exit 3
+       ;;
+   esac
+FENCE_BASH
+   ```
+
+   **For each `PREP-SELECT-ROW:` line above, invoke `Skill(skill="spec-from-issue", args="<issue#>
+   --slug <slug>")`.** A thin or vague issue is SKIPPED (marked `[~]` in PROJECT.md with a
+   `needs-human` note), never fabricated — unchanged behaviour.
+
+   **This loop is an instruction, not an enforcement (ADR-0134 §D10).** Nothing stops a model from
+   issuing a `Skill()` call for a row the fence did not print, or from skipping one it did print.
+   What changed is that the list is now computed by code with a stated contract instead of derived
+   ad hoc from a glob — the failure shape moves from a silently wrong list to a list on screen that
+   a reader can compare against what was actually generated.
 
 4. **Prep branch — commit Phase P's outputs and make them the fork point (issue #364, ADR-0127
    §D4).** Everything above is written into the WORKING TREE, so without this step those files exist
