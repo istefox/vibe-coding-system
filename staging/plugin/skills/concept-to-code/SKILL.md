@@ -2715,6 +2715,22 @@ bash ~/.claude/skills/concept-to-code/scripts/spec-archive.sh "<project-root>" "
 - `NOSPEC`, `COLLISION`, or exit 3 → **leave the pointer as it is** and say which. A pointer at a
   slot is today's behaviour, not a regression; a pointer at an archive that was never written is.
 
+**Step 7.0c — transition to `completed` (issue #410, ADR-0135).** Runs after 7.0b, not before:
+`manifest-set-artifact.sh` has no terminal guard, so a repoint issued after the transition would
+succeed silently and land outside the commit — the same defect one write over, in a step whose whole
+subject is this defect.
+
+**Every manifest write in this step precedes the `commit` invocation, and this transition is the
+last of them.** A manifest write after `commit` is an uncommitted change nothing ever commits.
+
+```bash
+# Standard path: terminal before the commit invocation below (issue #410, ADR-0135).
+bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh "<manifest-path>" completed completed
+```
+
+A non-zero exit means the manifest is not terminal: report and stop — do not invoke `commit`.
+Step 7.1 (below) is the backstop for a commit outcome, not the primary guard for this.
+
 **Both new paths must be passed to `commit` explicitly.** The collapse above leaves everything
 staged, and `commit`'s Step 1 then takes the staged set only — so the freshly-written archive
 (untracked) and the freshly-repointed manifest (tracked, modified after staging) would both be
@@ -2731,7 +2747,51 @@ Arguments: --include <archived-spec-path>,<manifest-path>
 
 The skill manages the HITL gate (AskUserQuestion), Conventional Commits message generation, and the PR option internally. The orchestrator does nothing after invocation: the skill closes the cycle on its own.
 
-**Post-commit push (conditional on `manifest.initial_commit_push = "push" AND manifest.autopilot != true`):**
+**Step 7.1 — classify what `commit` did (issue #410, ADR-0135 §D3).**
+
+The verdict is read off the manifest on disk, never off the skill's own report: `commit` emits no
+machine-readable outcome, and an agent's self-report is not a gate (ADR-0047 §A3). "Nothing to
+commit" and "declined" are told apart the same way — not by asking what happened, but by whether
+the manifest is committed.
+
+<!-- fence-contract: c2c-step7-commit-outcome -->
+```bash
+# ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
+# the host shell. No `export` prologue — this body reads only the substituted `<manifest-path>`
+# placeholder, no caller-bound variable crosses the process boundary. Terminator at COLUMN 0; an
+# indented one is swallowed into the here-document and destroys this fence's exit code silently,
+# and this fence's whole contract is its exit code (ADR-0135 §D3).
+bash <<'FENCE_BASH'
+_m="<manifest-path>"
+[ -f "$_m" ] || { echo "COMMIT_OUTCOME_NORUN noManifest"; exit 3; }
+_d=$(dirname "$_m")
+git -C "$_d" rev-parse --git-dir >/dev/null 2>&1 || { echo "COMMIT_OUTCOME_NORUN noRepo"; exit 3; }
+_cs=$(grep '^current_step:' "$_m" | head -1 | sed -e 's/^current_step:[[:space:]]*//' -e 's/^"//' -e 's/"[[:space:]]*$//')
+_st=$(grep '^status:' "$_m" | head -1 | sed -e 's/^status:[[:space:]]*//' -e 's/^"//' -e 's/"[[:space:]]*$//')
+if [ "$_cs" != "completed" ]; then echo "COMMIT_NONTERMINAL current_step"; exit 1; fi
+if [ "$_st" != "completed" ]; then echo "COMMIT_NONTERMINAL status"; exit 1; fi
+_gs=$(git -C "$_d" status --porcelain -- "$(basename "$_m")")
+if [ -z "$_gs" ]; then echo "COMMIT_OK"; exit 0; fi
+case "$_gs" in
+  '??'*) echo "COMMIT_UNCOMMITTED untracked"; exit 1 ;;
+  *)     echo "COMMIT_UNCOMMITTED modified";  exit 1 ;;
+esac
+FENCE_BASH
+```
+
+- `COMMIT_OK` → proceed to the post-commit actions below. This is also the verdict on a resumed or
+  already-committed run — `manifest-transition.sh` is a same-to-same no-op, `commit` reports
+  nothing to commit, and the manifest is already committed and terminal, so this is a **pass, not a
+  decline**.
+- `COMMIT_UNCOMMITTED untracked|modified` or `COMMIT_NONTERMINAL current_step|status` → stop and
+  report: name `<manifest-path>`, say the tree is uncommitted (or, for `COMMIT_NONTERMINAL`, that
+  7.0c did not take effect), and say **no rollback is attempted and no transition is added, because
+  `completed` is absorbing** (ADR-0078) — terminal states have no legal way back. The post-commit
+  push, the PROJECT.md update and the cost snapshot do **not** run.
+- exit 3, `COMMIT_OUTCOME_NORUN <reason>` → report **did not run**, naming the reason — not a pass,
+  and the post-commit actions do not run either.
+
+**Post-commit push (conditional on Step 7.1 reporting `COMMIT_OK` AND `manifest.initial_commit_push = "push"` AND `manifest.autopilot != true`):**
 
 This block is skipped unconditionally when `autopilot = true` — `concept-to-code`'s own autopilot
 mode never pushes unattended (ADR-0020 D2). No separately-orchestrated automated publish flow is
@@ -2739,7 +2799,7 @@ threaded through here: any such flow runs entirely outside this block, through
 `project-conductor`'s `publish-feature.sh`, strictly after this chain hands back a local commit
 (ADR-0022 D5/D6) — this file stays agnostic to that outer orchestration by design.
 
-After the commit skill completes successfully, if `manifest.initial_commit_push = "push" AND manifest.autopilot != true`:
+After Step 7.1 reports `COMMIT_OK`, if `manifest.initial_commit_push = "push" AND manifest.autopilot != true`:
 
 1. Resolve remote URL from `manifest.git_remote_url`. If null, prompt user:
    ```
@@ -2768,7 +2828,7 @@ After the commit skill completes successfully, if `manifest.initial_commit_push 
 
 **Post-commit PROJECT.md update (conditional on `$_project_context` non-empty):**
 
-If PROJECT.md was loaded at Gate 0 AND the commit skill completed successfully (not aborted):
+If PROJECT.md was loaded at Gate 0 AND Step 7.1 reports `COMMIT_OK`:
 
 **[Autopilot default: auto-update PROJECT.md (no AskUserQuestion). Emit: "PROJECT.md: autopilot — feature marked [x] ✓". Apply sed substitution and proceed.]**
 
@@ -2785,7 +2845,7 @@ options:
 If "Yes": find the line in PROJECT.md matching `<topic-full-title>` (fuzzy: normalize to lowercase, ignore leading `- [ ] `) and replace `- [ ]` with `- [x]`, appending `(completed: <YYYY-MM-DD>)`. Use bash to perform the substitution (NOT Edit tool). Emit: `"PROJECT.md updated ✓"`
 If "Skip": silent.
 
-After commit skill completes (whether commit was made or aborted by user):
+After Step 7.1 reports `COMMIT_OK`:
 
 **Cost snapshot — chain end:** compute and print the spend for this chain run.
 ```bash
@@ -2793,7 +2853,8 @@ python3 ~/.claude/scripts/usage-snapshot.py --diff "chain-<topic-slug>" --log-to
 ```
 Emit the diff output inline in the final report. If the snapshot file is missing (e.g. chain was resumed mid-run), skip silently.
 
-Transition to `completed`. Write final report.
+The manifest is already terminal — 7.0c transitioned it to `completed` before the commit invocation
+above. Do not transition again here. Write final report.
 
 ---
 
@@ -2876,10 +2937,15 @@ working tree.") — an abandonment, not a completion.
 
 #### Step E4 — Commit
 
-Invoke `commit` skill (Skill tool, not Agent). After the commit skill returns:
 ```bash
+# Express path: terminal before the commit invocation below (issue #410, ADR-0135).
 bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest-path> completed completed
 ```
+Invoke `commit` skill (Skill tool, not Agent).
+
+Step 7.1's commit-outcome check does not apply on this path: Express passes no `--include` and the
+manifest is never committed at all, so applying that check would halt every Express run. See issue
+#422.
 
 ---
 
@@ -2983,7 +3049,15 @@ Invoke `review-triage-fix` skill (Skill tool). After it completes, transition `s
 
 #### Step H5 — Commit
 
-Invoke `commit` skill (Skill tool). Transition `step_h5_commit → completed`.
+```bash
+# Hybrid path: terminal before the commit invocation below (issue #410, ADR-0135).
+bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest-path> completed completed
+```
+Invoke `commit` skill (Skill tool).
+
+Step 7.1's commit-outcome check does not apply on this path: Hybrid passes no `--include` and the
+manifest is never committed at all, so applying that check would halt every Hybrid run. See issue
+#422.
 
 ---
 
@@ -3696,7 +3770,7 @@ ADR, the plan and the manifest, and the chain always starts wherever the user wa
 run failed the pre-flight, and the remediation it printed (`git stash push -u`) would have stashed
 the coder's own inputs. This step is the producer.
 
-Invoke the `commit` skill — never hand-rolled `git` here. Its Step 3.6 creates the feature branch
+Invoke the `commit` skill — never hand-rolled `git` here. Its Step 3.6 creates the feature branch <!-- commit-order-exempt: Gate 4.0 commits an in-flight manifest by design (ADR-0071 producer role); this rule concerns manifest writes inside a commit-invoking step, not a ban on ever committing a non-terminal manifest. -->
 and structurally refuses to commit to the default branch, its Step 4 is the HITL gate, and Step 7
 of this chain already uses it, so there is exactly one commit path in the system:
 
