@@ -699,9 +699,14 @@ The orchestrator handles the append without dispatching `claude-md-generator`. R
 
 Steps:
 1. Read the ADR path from `manifest.artifacts.adr` and the ADR content to extract key architectural decisions.
-2. Compose the new section in the same format as the existing `## Decisions from the <x> chain (ADR-NNN)` blocks:
+2. **The narrative block does NOT go in CLAUDE.md (issue #380, ADR-0136).** CLAUDE.md is loaded in
+   full into every orchestrator turn and re-injected after every `/compact`; a full narrative block
+   per feature made this repository's own file ~75,000 tokens per turn, 21.5% of the orchestrator's
+   cache-read volume. Measured re-growth is ~58 lines per feature, so a condensed file doubles in
+   four features. **This step is what stops that.** Compose the block and append it to the
+   narrative archive instead:
    ```markdown
-   ## Decisions from the <topic-full-title> chain (<ADR-NNN>)
+   ## Decisions from the <topic-full-title> chain (<ADR-NNNN>)
 
    <skill-or-feature description, one sentence>: `<invocation or path>`.
 
@@ -712,10 +717,28 @@ Steps:
 
    Detail: `<relative path to ADR file>`.
    ```
-3. Write `<project-root>/CLAUDE.md.proposed`: copy of CLAUDE.md with the new section appended.
-4. **Line-count guard (Feature 5):** run `wc -l < CLAUDE.md.proposed`. If the count exceeds 180, prepend to the Gate 3 question:
-   `"⚠ CLAUDE.md.proposed is <N> lines (blueprint target <200). Consider running /skill claude-md-slim on this file after implementation to extract path-scoped rules.\n\n"`
-5. Transition to `gate_3_project_memory_review`. Display only the added lines (`diff CLAUDE.md CLAUDE.md.proposed`) as text, then present Gate 3 (see §5 Gate 3 block).
+   Append it to `<project-root>/docs/chain-decisions.md` if that file exists. If it does not, this
+   project has not adopted the split: append the block to CLAUDE.md exactly as before and skip
+   step 3. The archive's presence is the switch, so no project is broken by this change.
+3. **CLAUDE.md gets one line, always, and a second line only sometimes.** Compose both into
+   `<project-root>/CLAUDE.md.proposed`:
+   - **Index line — always.** One entry appended under `## Chain decision index`, in the existing
+     form: `- **<ADR-NNNN>** — <the single thing it decided, one clause> → \`<path to the ADR>\``.
+     The index and the archive must stay the same size: one block appended, one index line
+     appended.
+   - **Rules line — only when the ADR establishes a recurring invariant that is not already in
+     `## Rules`.** Read the existing list first. Most features establish no new rule and add no
+     line; that is the normal case and adding a near-duplicate is the failure this step exists to
+     prevent. When one is genuinely new, state the rule, a one-clause reason, and the ADR — the
+     reason is not optional, because a rule without its counterexample is a slogan.
+4. **Ceiling guard.** Run `wc -l < CLAUDE.md.proposed`. If the count exceeds 400, prepend to the
+   Gate 3 question:
+   `"⚠ CLAUDE.md.proposed is <N> lines (ceiling 400, ADR-0136). Something other than an index line is being appended, or the Rules list has accumulated near-duplicates. Check before approving.\n\n"`
+   The previous form of this guard warned above 180 and recommended `claude-md-slim`. It fired on
+   every run for months because the file was 3,895 lines, and its remedy was measured at 3.0% yield
+   on exactly this file and rejected by #380. A warning that always fires and points at a dead
+   remedy is noise an operator learns to click past.
+5. Transition to `gate_3_project_memory_review`. Display the added lines (`diff CLAUDE.md CLAUDE.md.proposed`, plus the block appended to the archive) as text, then present Gate 3 (see §5 Gate 3 block).
 
 ---
 
@@ -3692,12 +3715,12 @@ Before showing the gate: run the diff/show content in text output, then use `Ask
 - If `CLAUDE.md` does NOT exist: show full content (max 100 lines) as text, then gate.
 - If `CLAUDE.md` exists: run `diff CLAUDE.md CLAUDE.md.proposed`, show only added lines as text, then gate.
 
-**Line-count guard (Feature 5, Branch A only):** count lines in `CLAUDE.md.proposed`:
-```bash
-_lines=$(wc -l < "<project-root>/CLAUDE.md.proposed")
-```
-If `$_lines > 180`, prepend to the question string:
-`"⚠ CLAUDE.md.proposed is $_lines lines (blueprint target <200). Consider running /skill claude-md-slim on this file after implementation to extract path-scoped rules.\n\n"`
+**Ceiling guard (Branch A only):** defined once at Step 3 Branch A step 4, not restated here.
+Compute `wc -l < "<project-root>/CLAUDE.md.proposed"` and prepend the warning string given there
+when the count exceeds the ceiling. Two copies of one threshold is two answers to one question
+waiting to disagree (ADR-0086's criterion) — and they already had, which is how issue #380 found
+this one: the Step 3 copy had been corrected and this one still carried the retired 180-line form
+and its dead `claude-md-slim` remedy.
 
 ```
 question: "Gate 3 — Project memory review (Human approval required)\n\nProposed: <project-root>/CLAUDE.md.proposed\n(diff / content shown above)\nManifest: <manifest-path>\n\nOnly you can decide whether this project memory is correct before it is applied."

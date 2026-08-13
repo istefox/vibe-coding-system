@@ -381,25 +381,38 @@ else
 fi
 
 # =====================================================================================
-# SFP11 (R-04): CLAUDE.md carries the record — a '## Decisions from the …' section naming
-# ADR-0132, the four new scripts, and this guard file. NO PLANT DECLARED: plant-check.sh's
-# sandbox copies only staging/ and docs/ (the ../docs/ hatch reaches docs/ only), so a repo-root
-# CLAUDE.md target is unreachable by construction — ADR-0122's RG1 class. THIS ASSERTION ALWAYS
-# FAILS INSIDE A PLANT SANDBOX. KNOWN NON-CHASEABLE FAILURE — if plant-check.sh ever reports
-# SFP11 as not firing, that is this boundary, not a new defect; do not spend time hunting it
-# there. SFP11 is RED until the coder writes the CLAUDE.md section (Task 8) — expected, not a
-# regression.
-if [ -f "$CLAUDE_MD" ] \
-  && grep -qE '^## Decisions from the .*\(ADR-0132\)' "$CLAUDE_MD" \
-  && grep -qF 'ADR-0132-385-skill-args-in-fences.md' "$CLAUDE_MD" \
-  && grep -qF 'scope-args-parse.sh' "$CLAUDE_MD" \
-  && grep -qF 'conductor-args.sh' "$CLAUDE_MD" \
-  && grep -qF 'mark-roadmap-skipped.sh' "$CLAUDE_MD" \
-  && grep -qF 'repo-rel-path.sh' "$CLAUDE_MD" \
-  && grep -qF 'skill-fence-positional-tokens.test.sh' "$CLAUDE_MD"; then
-  ok "SFP11 (R-04): CLAUDE.md carries a '## Decisions from the …' section naming ADR-0132, the four new scripts, and this guard"
+# SFP11 (R-04): the project's decision record carries a '## Decisions from the …' section naming
+# ADR-0132, the four new scripts, and this guard file.
+#
+# THE TARGET MOVED (issue #380, ADR-0136). The narrative blocks lived in CLAUDE.md until that
+# feature moved all 95 of them, verbatim, to docs/chain-decisions.md — CLAUDE.md is loaded in full
+# into every orchestrator turn and the blocks were 98% of it. The assertion's INTENT is unchanged:
+# the record exists and names these things. Only the file it lives in changed, so this is a
+# repoint, not a relaxation — the same content, matched with the same needles.
+#
+# It reads BOTH files and requires the record in EITHER, because a project that has not adopted the
+# split still appends to CLAUDE.md (ADR-0136 §D6: the archive's existence is the switch). Without
+# that, this guard would fail on every such project for a reason that is not a defect.
+#
+# NO PLANT DECLARED: the archive is reachable through ADR-0116's ../docs/ hatch, but CLAUDE.md at
+# the repo root is not, and an OR over the two cannot be driven red by mutating only one arm.
+# ADR-0122's RG1 class. If plant-check.sh ever reports SFP11 as not firing, that is this boundary,
+# not a new defect; do not spend time hunting it there.
+SFP11_SRC=""
+for _c in "$REPO/docs/chain-decisions.md" "$CLAUDE_MD"; do
+  [ -f "$_c" ] || continue
+  grep -qE '^## Decisions from the .*\(ADR-0132\)' "$_c" && { SFP11_SRC="$_c"; break; }
+done
+if [ -n "$SFP11_SRC" ] \
+  && grep -qF 'ADR-0132-385-skill-args-in-fences.md' "$SFP11_SRC" \
+  && grep -qF 'scope-args-parse.sh' "$SFP11_SRC" \
+  && grep -qF 'conductor-args.sh' "$SFP11_SRC" \
+  && grep -qF 'mark-roadmap-skipped.sh' "$SFP11_SRC" \
+  && grep -qF 'repo-rel-path.sh' "$SFP11_SRC" \
+  && grep -qF 'skill-fence-positional-tokens.test.sh' "$SFP11_SRC"; then
+  ok "SFP11 (R-04): $(basename "$SFP11_SRC") carries a '## Decisions from the …' section naming ADR-0132, the four new scripts, and this guard"
 else
-  bad "SFP11 (R-04): CLAUDE.md has no '## Decisions from the …' section naming ADR-0132 with the four new scripts and this guard"
+  bad "SFP11 (R-04): neither docs/chain-decisions.md nor CLAUDE.md has a '## Decisions from the …' section naming ADR-0132 with the four new scripts and this guard"
 fi
 
 # =====================================================================================
