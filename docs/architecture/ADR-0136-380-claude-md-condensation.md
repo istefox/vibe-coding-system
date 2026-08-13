@@ -243,6 +243,36 @@ one question with two answers and had already diverged.
   construction — the limit ADR-0122 recorded for `.github/workflows/` and ADR-0118 for
   `.gitignore`. Eight of thirteen assertions here are therefore unmutated.
 
+### D8 — An unplantable assertion took the plantable ones down with it
+
+Recorded forward, after `e129261`. The first full `plant-check.sh` run against this harness
+reported **all four declared plants as NOT FIRED**. They were not weak needles. The harness opened
+with `[ -f "$CMD" ] || { echo "FAIL: CLAUDE.md not found"; exit 1; }`, and inside the sandbox —
+`cp -R` of `staging/` and `docs/`, no repo root, by construction — that condition is *always* true.
+The file aborted before printing a single line, no `FAIL: CMC08` was ever emitted, and
+`plant-check`'s verdict (`grep -q "^FAIL: $aid"`) read the silence exactly as it should: pinning
+nothing.
+
+Three things this establishes, none of which the ADR said before:
+
+1. **Unplantable is not the same as harmless.** The Negative bullet above disclosed the eight as
+   unmutated and treated that as the end of it. Their *guard* was what killed the other four. A
+   disclosure of the form "these carry no plant" should be followed by "and here is why they cannot
+   affect the ones that do".
+2. **Verifying a plant by hand does not verify it.** Each of the four was checked while writing the
+   harness and each fired — against a copy that still had the repo root, which is precisely the
+   environment the sandbox is not. Only the registry runs the real environment, and the gate was
+   presented before it finished, with the four hand-checks offered in its place.
+3. **An abort is not a failure state.** Exit 1 with no assertion output is a did-not-run, and
+   `plant-check` can only distinguish it from a pass by the absence of a line. The harness now
+   prints `SKIP:` per unreachable assertion — a third state, counted into `CMCZ1`'s floor so the
+   eight cannot vanish instead of being skipped — and discriminates the sandbox by the absence of
+   `.git`, never by the absence of `CLAUDE.md`, which would make a genuinely deleted `CLAUDE.md`
+   skip the eight assertions that exist to guard it.
+
+The fix is confined to `claude-md-condensation.test.sh`; the real run is unchanged at 13/13, and
+all four plants now fire.
+
 ### Neutral
 
 - The union check is run at implementation time and is not re-runnable from the harness: the

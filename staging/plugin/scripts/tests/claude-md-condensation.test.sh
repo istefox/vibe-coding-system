@@ -41,6 +41,11 @@
 # ADR-0122 recorded for .github/workflows/ and ADR-0118 for .gitignore. Do not chase it here;
 # widening the registry's sandbox is its own issue.
 #
+# AND THAT IS NOT THE SAME AS BEING HARMLESS. Being unplantable made those eight the reason the four
+# plants below did not fire: the file used to ABORT when CLAUDE.md was absent, which in the sandbox
+# is always, so no assertion of any kind ran. They are SKIPPED there now — see the guard below the
+# variable block. An unplantable assertion must still not take the plantable ones down with it.
+#
 # plant: CMC08 | ../docs/chain-decisions.md | It is a historical record and is not corrected in place | It is a historical record and may be corrected in place
 # plant: CMC09 | plugin/skills/concept-to-code/SKILL.md | Append it to `<project-root>/docs/chain-decisions.md` if that file exists | Append it to CLAUDE.md if that file exists
 # plant: CMC10 | plugin/skills/concept-to-code/SKILL.md | Rules line — only when the ADR establishes a recurring invariant that is not already in | Rules line — always, appended unconditionally alongside the index line and not already in
@@ -54,9 +59,10 @@ SKILL="plugin/skills/concept-to-code/SKILL.md"
 CMD="$REPO/CLAUDE.md"
 ARC="$REPO/docs/chain-decisions.md"
 
-PASS=0; FAIL=0
-ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
-bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
+PASS=0; FAIL=0; SKIP=0
+ok()   { echo "PASS: $1"; PASS=$((PASS+1)); }
+bad()  { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
+skip() { echo "SKIP: $1"; SKIP=$((SKIP+1)); }
 
 # Prose needles match a FLATTENED, UNDECORATED, CASE-INSENSITIVE copy: a clause is the same clause
 # whether it wraps across lines, is backticked, is bolded, or opens a sentence (ADR-0073, ADR-0076,
@@ -65,12 +71,40 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 flat() { tr '\n' ' ' < "$1" | tr -d '`*_' | tr 'A-Z' 'a-z' | sed 's/  */ /g'; }
 has_flat() { printf '%s' "$2" | grep -qF "$(printf '%s' "$3" | tr -d '`*_' | tr 'A-Z' 'a-z' | sed 's/  */ /g')"; }
 
-[ -f "$CMD" ] || { echo "FAIL: CLAUDE.md not found at $CMD"; exit 1; }
 [ -f "$SKILL" ] || { echo "FAIL: $SKILL not found"; exit 1; }
+
+# THE ABORT THAT ATE FOUR PLANTS. This file used to exit 1 here when CLAUDE.md was absent. Inside
+# plant-check.sh's sandbox it is ALWAYS absent — the sandbox is `cp -R` of staging/ and docs/ only,
+# with no repo root — so the harness died before printing a single line, no `FAIL: CMC08` was ever
+# emitted, and plant-check's verdict (`grep -q "^FAIL: $aid"`) correctly read all four plants as
+# NOT FIRED. The plants pinned nothing, and the abort is why. Found by the registry on its first
+# real run against this file; the per-plant check done while writing it had used a copy that still
+# had the repo root, which is exactly the environment the sandbox is not.
+#
+# So the CLAUDE.md-dependent assertions are now SKIPPED rather than aborting the file, and skipping
+# is a THIRD state printed as `SKIP:` — never counted as a pass (rule 4: a check that could not run
+# must not read as a check that found nothing). CMCZ1 below counts skips into its floor, so the
+# eight cannot quietly disappear instead of being skipped.
+#
+# The sandbox is discriminated by the ABSENCE OF .git, not by the absence of CLAUDE.md. Keying on
+# CLAUDE.md itself would make a genuinely deleted CLAUDE.md in a real checkout skip the eight
+# assertions that exist to guard it — the fail-open this whole file is about.
+CMD_PRESENT=0
+if [ -f "$CMD" ]; then
+  CMD_PRESENT=1
+elif [ -d "$REPO/.git" ]; then
+  echo "FAIL: CLAUDE.md not found at $CMD, and this IS a real checkout (.git present)"
+  exit 1
+fi
+cmd_skip() { skip "$1 — CLAUDE.md unreachable ($REPO has no .git: plant-check sandbox boundary, ADR-0136)"; }
 
 # --- A. the condensed file's shape ---------------------------------------------------------
 
 CEILING=400
+if [ "$CMD_PRESENT" -eq 0 ]; then
+  cmd_skip "CMC01"; cmd_skip "CMC07"; cmd_skip "CMC03"; cmd_skip "CMC02"
+  cmd_skip "CMC12"; cmd_skip "CMC06"; cmd_skip "CMC04"; cmd_skip "CMC05"
+else
 CMD_LINES=$(wc -l < "$CMD" | tr -d ' ')
 if [ "$CMD_LINES" -le "$CEILING" ]; then
   ok "CMC01 CLAUDE.md is $CMD_LINES lines (ceiling $CEILING)"
@@ -157,7 +191,14 @@ if [ -f "$ARC" ]; then
   else
     bad "CMC05 index has $IDX_N entries, the archive has $ARC_N blocks — the producer appends one of each, so a difference means one of the two writes was skipped"
   fi
+else
+  bad "CMC05 $ARC does not exist — the narrative has nowhere to go"
+fi
+fi   # end of the CMD_PRESENT guard opened in section A
 
+# CMC08 reads ONLY the archive, which the sandbox does copy (ADR-0116's ../docs/ hatch), so it sits
+# OUTSIDE the CLAUDE.md guard above — that placement is what makes its plant reachable at all.
+if [ -f "$ARC" ]; then
   # The archive is a historical record. A stale count inside a block is a correct snapshot of its
   # day (ADR-0034, ADR-0075, ADR-0078); saying so is what stops a future reader "fixing" 95 blocks.
   ARC_FLAT=$(flat "$ARC")
@@ -167,7 +208,6 @@ if [ -f "$ARC" ]; then
     bad "CMC08 the archive does not state that it is not corrected in place — without it, its stale counts read as defects to be fixed rather than as snapshots"
   fi
 else
-  bad "CMC05 $ARC does not exist — the narrative has nowhere to go"
   bad "CMC08 $ARC does not exist"
 fi
 
@@ -205,12 +245,17 @@ fi
 # --- Z. floor ---------------------------------------------------------------------------------
 # A floor, not an exact count, so a new assertion does not require a bump — but it must track the
 # population, because a floor carrying slack absorbs its own plant (ADR-0124, and RH2's lesson).
-_total=$((PASS + FAIL))
+#
+# SKIP is counted in. Without it the sandbox run would report a floor of 4 and either fail for the
+# wrong reason or need a slack the plants would then absorb (ADR-0124). Counting skips keeps ONE
+# floor honest in both environments: an assertion that vanished is not replaced by a skip, because
+# a skip is printed by name.
+_total=$((PASS + FAIL + SKIP))
 if [ "$_total" -ge 12 ]; then
-  ok "CMCZ1 assertion-count floor ($_total >= 12)"
+  ok "CMCZ1 assertion-count floor ($_total >= 12; $SKIP skipped)"
 else
   bad "CMCZ1 assertion count fell to $_total (floor 12) — assertions vanished from this file"
 fi
 
-echo "PASS=$PASS FAIL=$FAIL"
+echo "PASS=$PASS FAIL=$FAIL SKIP=$SKIP"
 [ "$FAIL" -eq 0 ]
