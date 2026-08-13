@@ -1127,7 +1127,15 @@ block_from_h2_heading() {
   ' "$1" 2>/dev/null
 }
 
-CLAUDE_ADR0068_SECTION=$(block_from_h2_heading "$CLAUDEMD" '^## Decisions from the worktree isolation contract chain')
+# THE TARGET MOVED (issue #380, ADR-0136). All 95 narrative blocks were moved verbatim from
+# CLAUDE.md to docs/chain-decisions.md, because CLAUDE.md is loaded in full into every orchestrator
+# turn and the blocks were 98% of it. J6's intent — the one place a stale summary would be read is
+# not stale — is unchanged; only its address is. Both files are searched, and the first that has
+# the section wins, because a project that has not adopted the split still appends to CLAUDE.md
+# (ADR-0136 §D6). The needles are byte-identical to before: a repoint, not a relaxation.
+CLAUDE_ADR0068_SECTION=$(block_from_h2_heading "$REPO/docs/chain-decisions.md" '^## Decisions from the worktree isolation contract chain')
+[ -n "$CLAUDE_ADR0068_SECTION" ] || \
+  CLAUDE_ADR0068_SECTION=$(block_from_h2_heading "$CLAUDEMD" '^## Decisions from the worktree isolation contract chain')
 
 if printf '%s\n' "$CLAUDE_ADR0068_SECTION" | grep -qF 'worktree.baseRef' \
    && ! printf '%s\n' "$CLAUDE_ADR0068_SECTION" | grep -qF 'worktree-create.sh'; then
