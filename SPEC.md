@@ -1,208 +1,245 @@
-# Order the manifest `completed` transition before the Step 7 commit
+# SPEC — Bound the stop-gate trigger to the changed paths
 
-**Topic slug:** 410-order-the-manifest-completed-transit
+**Topic slug:** 404-stop-gate-trigger-granularity
 
-Issue #410. `concept-to-code` Step 7 invokes the `commit` skill and only afterwards transitions the
-manifest to `completed`. The manifest is therefore committed while it is still `step_7_commit` /
-`in_progress`, and the transition that follows leaves an uncommitted change nothing ever commits.
+**Issue:** #404
+**Date:** 2026-08-13
+**Chain:** concept-to-code, standard path
 
 ## Objective
 
-Make the committed manifest terminal, on every path that commits one, by ordering the transition
-ahead of the `commit` invocation — and record the general rule that ordering implies, so the next
-manifest write added below the commit does not reintroduce the class.
+`stop-gate.sh` runs a project's entire test command at the `Stop` event whenever anything was
+written during the session. `mark-dirty.sh`, the `PostToolUse` hook that arms it, records *that* a
+write happened and discards *what* was written — so editing a markdown file arms a shell test
+suite.
 
-## Why it matters
+This feature gives the gate a path predicate the project owns, and settles the second axis the
+issue names: a ceiling that no run of this suite can fit inside, and a timeout that re-charges its
+full cost every turn without anything counting it.
 
-`manifest-validate.sh` invariant 4 requires `project_root` to be an existing directory unless the
-chain is terminal (ADR-0078, extended to both terminality axes by ADR-0113). `project_root` is an
-absolute machine-specific path. So a committed non-terminal manifest:
+## What was measured before designing, and what it changed
 
-- validates on the machine that produced it, where the directory exists;
-- fails invariant 4 on every other machine.
+Three premises were checked against the running system. Two did not survive.
 
-`manifest-project-root-terminal.test.sh` `C1` asserts the whole corpus validates, so this reddens
-CI for any repository that commits its manifests while staying green locally — which is why it went
-unnoticed until `shell-tests` became a required check on `main`.
+**1. The gate is not currently wired, so the symptom cannot reproduce.** The deployed
+`~/.claude/settings.json` registers exactly one `Stop` hook, `chat-done-notify.sh`. There is no
+`settings.local.json`, no project-level settings file, and no plugin registering `stop-gate.sh`.
+The repository's own versioned copy, `staging/user/settings.json`, *does* register it on `Stop`.
+The two have drifted, which is issue #309's subject.
 
-Observed on PR #409:
+`mark-dirty.sh` is registered in both, so it keeps running: `~/.claude/state/stop-gate/` holds
+**71 `.dirty` markers**, the oldest dated 2026-06-20 and the newest written today. None has ever
+been removed, because markers are removed only on a green run and no run has occurred. A producer
+whose consumer is unwired is the shape rule 17 names.
 
-```
-FAIL: C1: 2 of 56 still invalid — 2026-08-11-399-bound-phase-p-step-3-to-roadmap-stat.manifest.yml
-                                  2026-08-11-a-per-file-budget-ceiling-is-parsed-and.manifest.yml
-```
+**Decision (Q1): this feature designs for the wired state.** Re-wiring belongs to #309, and the
+producer/consumer drift is filed as its own finding attached to it rather than absorbed silently
+here. R-02's "byte-identical to today" therefore means *the hook file's own behaviour with a marker
+present*, never *this machine's current registration*. The feature is inert until settings.json is
+synced, and that is stated rather than discovered.
 
-The full suite was 76/0 locally at the same commit. Both manifests were then transitioned by hand.
+**2. The suite takes 2m43s here, not 15m37s.** Timed on this machine: 78 test files, exit 0, all
+green, 163 seconds wall-clock. The issue quotes 15m37s from a GitHub runner; CI measured 22m20s
+today on PR #425. The ceiling is 120s, so the issue's conclusion holds — a green run is unreachable
+— but the margin is 43 seconds, not fourteen minutes, which makes a raised ceiling a real option
+rather than a theoretical one.
 
-## Measurements taken before design
+**3. "An ADR and a manifest changed, no shell" is not a case where the suite is irrelevant.** The
+issue cites commits #396/#397 touching `PROJECT.md`, `TODO.md`, an ADR and a manifest as wasted
+firings. This suite asserts over exactly those files: CMC01–CMC12 read the real `CLAUDE.md`, the
+invariant tests read real manifests, the rules check reads real ADR files under
+`docs/architecture/`. Arming on those commits was correct. The predicate's yield on this repository
+is therefore low, and pretending otherwise would disarm the gate precisely where it works.
 
-Stated so a later reader can re-derive rather than trust. All figures 2026-08-12.
-
-| Fact | Value |
-|---|---|
-| Manifests in `docs/manifests/` | 57 (56 tracked; the 57th is this chain's own) |
-| `chain_path` distribution | 36 `standard`, 19 `null` (legacy), **0 `express`, 0 `hybrid`** |
-| Commit-invoking steps in `concept-to-code/SKILL.md` | 3 — Step 7 (Standard), E4 (Express), H5 (Hybrid) |
-| Standard Step 7 transition | `SKILL.md:2796`, **prose only**: *"Transition to `completed`. Write final report."* |
-| Express E4 transition | `SKILL.md:2879-2882`, a command, **after** the commit invocation |
-| Hybrid H5 transition | `SKILL.md:2986`, **prose only**, after the commit invocation |
-| Manifest passed to `commit --include` | Standard Step 7 only (`SKILL.md:2729`) |
-| `manifest-set-artifact.sh` terminal guard | **none** — it writes to a terminal manifest without complaint |
-| `manifest-transition.sh` | validates the manifest before transitioning |
-
-Three consequences of that table shaped the scope:
-
-1. **The Standard path's transition is not a command at all.** It cannot be ordered relative to an
-   invocation because it is prose. This is the PATH-RULE class ADR-0028 and ADR-0117 already fixed
-   elsewhere in this same file, and it is plausibly *why* the ordering drifted: there was no
-   instruction to order.
-2. **E4 and H5 have never run here.** Zero Express or Hybrid manifests exist. Fixing them is a
-   forward guard, not a repair of observed damage.
-3. **On E4 and H5 the manifest is never committed at all** — no Gate 4.0, no `--include`, and
-   `commit` never stages untracked files. The reported ordering defect cannot currently manifest
-   there; a different gap sits in its place. That gap is filed separately, not fixed here.
+A naive count of path literals in the test files puts `docs/manifests` at 146 mentions,
+`PROJECT.md` at 107 and `CLAUDE.md` at 74, but that count includes strings written into temporary
+fixtures and so over-states real-repository reads. The precise set is derived by mutation in the
+plan, not asserted here.
 
 ## Scope
 
 **In scope**
 
-- The `completed` transition ordering at all three commit-invoking steps (Step 7, E4, H5).
-- Turning the Standard-path and Hybrid-path prose into explicit `manifest-transition.sh`
-  invocations carrying the absolute helper path.
-- The behaviour when `commit` returns without having committed.
-- A stated invariant covering every manifest write in a commit-invoking step.
-- A derived guard, plus its plants.
+- `mark-dirty.sh`: record each written path instead of discarding it.
+- `stop-gate.sh`: read an optional per-project exclusion list and fire only when at least one
+  recorded path is not excluded; read an optional per-project ceiling; count timeouts.
+- The staging mirrors of both hooks, which are the versioned copies.
+- A minimal `.claude/test-ignore` for this repository, plus the harness assertion that keeps it
+  honest.
+- An ADR recording the ceiling decision, which the issue's R-07 requires whether or not it is acted
+  on.
 
-**Out of scope, and named rather than silently dropped**
+**Out of scope**
 
-- The E4/H5 uncommitted-manifest gap → its own issue.
-- Any change to `manifest-transition.sh`'s legal-pair table. No new pair is added; in particular no
-  `completed → step_7_commit` rollback, because ADR-0078's exemption for invariant 4 rests on the
-  terminal states being absorbing.
-- Any change to the shared manifest helpers. Making them refuse a write once terminal would reach
-  every step and `autopilot-build`; its blast radius is far wider than this issue.
-- Gate 4.0's commit of an in-flight manifest, which is correct and must keep working.
-- The 57 existing manifests, which stay byte-unchanged.
+- Re-registering `stop-gate.sh` in the deployed `settings.json`. That is #309's mechanism, and
+  wiring one hook by hand here is the practice #309 exists to end.
+- Making the test command faster. A different question, with a TOFU cost this feature does not pay.
+- Any change to the two blocking paths (no test-cmd found; test-cmd present but untrusted).
 
 ## Stack
 
-Markdown (`SKILL.md` instructions) and bash 3.2 (`*.test.sh` harness). No runtime code, no
-dependencies, no build.
+Bash 3.2-clean shell hooks, `jq` for payload parsing, the existing
+`staging/plugin/scripts/tests/*.test.sh` harness, plants declared in the plant registry per
+ADR-0108.
 
 ## Architecture
 
-### The ordering
+### Where the predicate is evaluated (Q3)
 
-Step 7's sequence becomes, in this order:
+`mark-dirty.sh` records; `stop-gate.sh` decides. All policy stays in one script, and the gate can
+name which path armed it — diagnostics the empty marker cannot give. The alternative, deciding at
+write time, would give `mark-dirty.sh` its own root-discovery walk and put policy in two places.
 
-1. **7.0** — collapse the Step 5 snapshots (ADR-0104), unchanged.
-2. **7.0b** — archive this chain's SPEC and repoint `artifacts.spec` (ADR-0106), unchanged.
-3. **new** — transition to `completed`, so the repointed value is inside the transition's own write
-   and the manifest is final.
-4. `commit` invocation with `--include <archived-spec-path>,<manifest-path>`, unchanged.
-5. Post-commit actions — conditional push, PROJECT.md update, cost snapshot, final report.
+`mark-dirty.sh` reads `tool_input.file_path` — the same field `post-write-check.sh` already reads on
+the same event — and appends it to the session marker, deduplicated, so a long session cannot grow
+the file without bound. It never discards a path and never decides anything.
 
-Step 3 must follow step 2: `manifest-set-artifact.sh` has no terminal guard, so a repoint after the
-transition would succeed silently and land outside the commit — the same defect one write over.
+`stop-gate.sh` performs the root walk it already performs, looks for the exclusion list at that same
+root, and fires only when at least one recorded path fails to match. The list excludes rather than
+includes, because an include list fails open: a new source directory nobody listed would silently
+stop triggering anything.
 
-None of the post-commit actions in step 5 writes the manifest. Verified, not assumed; that is what
-makes the manifest final at commit time rather than merely usually-final.
+### Pattern semantics (Q4, Q5)
 
-### The invariant
+Shell globs, one per line, `#` comments and blank lines skipped, matched with bash's own `case`
+against the path taken relative to the discovered root. A trailing slash matches a directory prefix.
+No external tool, and the semantics are stated in the file's own header rather than inferred.
 
-Stated in Step 7 in one line, because the transition is only the instance:
+`gitignore` semantics via `git check-ignore` were rejected: that would also consult `.gitignore` and
+`.git/info/exclude`, so "not tracked by git" would silently become "needs no tests" — two different
+questions answered by one file.
 
-> Every manifest write in this step precedes the `commit` invocation, and the transition to
-> `completed` is the last of them. A manifest write after `commit` is an uncommitted change nothing
-> ever commits.
+A recorded path outside the discovered root has no repo-relative form. It **arms** the gate, because
+that is today's behaviour and this feature removes firings, so its inert state must be the strict
+one. A pattern beginning with `/` or `~` matches the absolute path, which is what lets an operator
+exclude `~/.claude/*` — the most frequent write in a session on this repository, and one this
+project's suite does not cover in either direction.
 
-### Declined-commit behaviour
+### The ceiling axis (Q2)
 
-`commit` carries its own HITL gate. Once the transition moves ahead of it, declining that gate
-leaves a terminal manifest over an uncommitted tree, and terminal states are absorbing — there is
-no legal way back.
+Two independent defects sit behind the issue's R-07, and only one of them is the ceiling.
 
-The chain **stops and reports it**, in those words, naming the manifest path and the fact that the
-tree is uncommitted. It does not attempt a rollback, does not invent a transition pair, and does not
-proceed to the post-commit actions. An edge case reported loudly beats a state machine weakened to
-accommodate it.
+**The ceiling.** A file beside `.claude/test-cmd` carries a per-project value; absent means 120s
+exactly, so every other project on the machine is unaffected. The value is bounded by a stated
+maximum, and a malformed value falls back to the default rather than to whatever `case` happens to
+accept. It is not part of the TOFU hash: a ceiling is a bound, not a command, and it can only ever
+extend how long an already-approved command runs — which the maximum is there to bound.
 
-### The guard
+**The unbounded half, which survives any ceiling.** On timeout `stop-gate.sh` exits fail-open and
+removes the output file but leaves the marker armed, and the anti-loop counter is incremented only
+inside `emit_block`, which a timeout never reaches. So a timing-out suite re-charges its full
+ceiling on every subsequent Stop, forever, uncounted. A timeout now increments the same counter a
+block does; after `STOP_GATE_MAX_REENTRY` consecutive timeouts the marker is disarmed and a stderr
+line names why. Without this, raising the ceiling only moves the defect to a rarer trigger.
 
-A derived assertion over `concept-to-code/SKILL.md`, anchored on **the two mechanisms themselves** —
-every `manifest-transition.sh … completed completed` invocation and every `commit` skill
-invocation — never on headings or block delimiters.
+### Keeping the exemption honest (Q6, Q7)
 
-That choice is load-bearing and has history behind it. ADR-0083 §D3 measured heading-anchored
-extractors going silently vacuous: `plan-task-count` went 43/0 → 35 passed/2 failed with **six
-assertions simply vanishing**, and `scope-guards` misattributed its failure to the guard it was
-checking. Anchoring on the mechanism removes the failure mode by construction — a rename that breaks
-the guard is the same rename that breaks the thing being guarded.
+An exclusion pattern that matches nothing still reads as a working exemption. A harness assertion
+checks that every pattern in this repository's own list matches at least one path that exists today,
+count-guarded so an empty list cannot pass vacuously, and planted so the assertion is seen RED
+against a declared defect.
 
-The population is derived at run time, so a fourth commit-invoking step added later is included
-without editing the guard. A count guard fails loudly if fewer than three pairs resolve, rather than
-passing vacuously.
+The check lives in the harness, not in the hook: a hook-time version would tax every Stop, and
+"matched nothing this session" is not the same claim as "matches nothing" — a pattern legitimately
+matches nothing in a session that never touched the directory it covers.
+
+This repository's list ships with only the patterns proven safe — session logs and editor backups,
+both gitignored and read by no assertion — so the harness check has a real subject from day one. The
+full safe set is derived by a plan task the only way that proves anything: mutate a candidate path,
+re-run the suite, keep the candidate only if no assertion moves.
 
 ## Data model
 
-No manifest field is added, changed or removed. No schema version bump. `manifest_schema_version`
-stays `1.3`.
+**Session marker** — `<state-dir>/<session-id>.dirty`. Today an empty file whose existence is the
+whole signal. It becomes a newline-separated list of written paths, deduplicated, absolute as
+received. Its existence keeps its current meaning, so a reader that only tests for the file is
+unaffected.
 
-## API
+**Exclusion list** — `.claude/test-ignore` at the project root, discovered by the same walk that
+finds `.claude/test-cmd`. Optional. Absent means today's behaviour exactly.
 
-No script gains, loses or changes an argument, an exit code or an output token.
+**Ceiling** — an optional per-project file beside `.claude/test-cmd`, holding one integer.
+
+**Re-entry counter** — `<state-dir>/<session-id>.count`, already present, now incremented by
+timeouts as well as blocks.
+
+## API and control flow
+
+No network API. The contract is the hook payload and the exit convention, both unchanged:
+`stop-gate.sh` still exits 0 always, still emits `{"decision":"block","reason":...}` to block, and
+still fails open on every internal error.
+
+Ordering at a `Stop` event, after the changes:
+
+1. Marker absent → exit 0. Unchanged.
+2. Root walk for `.claude/test-cmd`. Not found → block. Unchanged.
+3. Test command is `NONE`, empty or unreadable → exit 0. Unchanged.
+4. TOFU trust check → untrusted blocks. Unchanged.
+5. **New:** read the exclusion list at the same root. Every recorded path excluded → exit 0 without
+   running anything, leaving the marker in place.
+6. **New:** read the ceiling; run the command under it.
+7. Green → clear the marker and the paths with it. Unchanged in effect.
+8. **New:** timeout → increment the counter; disarm and report once the cap is reached.
+9. Red → block with the failing output, as today.
 
 ## UI flows
 
-One new operator-visible message, on the declined-commit path only. Every other run is unchanged in
-what it prints.
+None. Both hooks are non-interactive. The only human-visible surfaces are the stderr line naming a
+disarm, and the block reason already delivered to the model.
 
 ## Edge cases
 
-- **Commit declined or aborted at its own gate** — handled above: stop and report, no rollback.
-- **Gate 4.0's in-flight commit** — must keep working. The rule is about writes inside a
-  *commit-invoking step*, not a ban on ever committing a non-terminal manifest.
-- **`gate_e3_verify → completed` ("Commit later") and the abort branches** — these transition to a
-  terminal state without invoking `commit`, so they have no ordering to get wrong and must not trip
-  the guard.
-- **A resumed or already-committed run where `commit` reports nothing to commit** — that is a pass,
-  not a decline, and must not trigger the stop-and-report path.
-- **`commit --autopilot`** — skips its own gate, so the declined-commit path cannot fire there; the
-  ordering change is otherwise identical.
-- **A fourth commit-invoking step added later** — included in the guard's population by
-  construction, not by someone remembering to add it.
-- **This chain's own Step 7** — the first run of the new ordering, and its own evidence.
+- **The list exists but is empty, or holds only comments.** Every path is unmatched, so the gate
+  arms exactly as with no list. Not an error.
+- **A path recorded before the list was created.** The list is read at Stop, so it applies to
+  everything recorded that session. Deliberate: the operator's latest intent wins.
+- **A write outside the discovered root.** Arms, unless an absolute pattern excludes it (R-08).
+- **The marker exists but holds no paths** — written by the current version of `mark-dirty.sh`, or
+  by a session that started before this change. Treated as unknown, so it arms. Falling back to
+  strict is what keeps a mixed-version state safe.
+- **A path containing a newline.** Cannot be represented in a newline-separated record; such a path
+  is recorded in a form that cannot match any pattern, so it arms.
+- **The suite times out on a machine slower than this one.** The counter bounds the cost, and the
+  disarm says so on stderr rather than failing silently.
+- **A ceiling value that is not a positive integer, or above the maximum.** Falls back to the
+  default, and says so.
+- **Two projects nested inside one another.** The walk stops at the first `.claude/test-cmd`, and
+  the exclusion list is read from that same root — the two never diverge, because one walk finds
+  both.
 
 ## Success criteria
 
-- [ ] R-01 — The Standard path's Step 7 transition to `completed` is an explicit
-  `manifest-transition.sh` invocation carrying the absolute `~/.claude/skills/concept-to-code/scripts/`
-  prefix, not prose.
-- [ ] R-02 — The Hybrid path's Step H5 transition is likewise an explicit invocation, not prose.
-- [ ] R-03 — At all three commit-invoking steps (Step 7, E4, H5) the `completed` transition precedes
-  the `commit` skill invocation.
-- [ ] R-04 — On the Standard path the transition occurs after Step 7.0b's `artifacts.spec` repoint,
-  so the repointed value is inside the committed manifest.
-- [ ] R-05 — Step 7 states the invariant that every manifest write in the step precedes the `commit`
-  invocation and that the transition is the last of them.
-- [ ] R-06 — When `commit` returns without having committed, the chain stops and reports that the
-  manifest is terminal while the tree is uncommitted; no rollback is attempted, no transition pair is
-  added, and the post-commit actions do not run.
-- [ ] R-07 — `commit` reporting nothing to commit on a resumed or already-committed run is treated as
-  a pass, distinct from a decline.
-- [ ] R-08 — Gate 4.0's commit of an in-flight manifest is unchanged and still works.
-- [ ] R-09 — A derived guard asserts, for every commit-invoking step in `concept-to-code/SKILL.md`,
-  that the `completed` transition precedes that step's `commit` invocation.
-- [ ] R-10 — The guard is anchored on the transition and commit invocations themselves, not on
-  headings or block delimiters, and derives its population from the file at run time.
-- [ ] R-11 — The guard carries a count guard that fails loudly when fewer than three pairs resolve,
-  so a derivation that stops matching cannot pass vacuously.
-- [ ] R-12 — Terminal transitions that do not invoke `commit` (Gate E3 "Commit later", the abort
-  paths) do not trip the guard.
-- [ ] R-13 — `manifest-transition.sh`'s legal-pair table is unchanged; the total stays 45.
-- [ ] R-14 — All 57 existing manifests are byte-unchanged.
-- [ ] R-15 — Every new assertion carries a declared plant in `plant-check.sh`'s registry, and each
-  plant is verified to actually fire.
-- [ ] R-16 — The full harness is green, and the new guard is seen RED against the pre-fix ordering.
-- [ ] R-17 — The E4/H5 uncommitted-manifest gap is filed as its own issue and referenced from the
-  ADR, rather than fixed here or left unrecorded.
+- [ ] R-01 — a session whose every recorded path matches the exclusion list does not run the test
+      command at the `Stop` event.
+- [ ] R-02 — with no exclusion list present, the hook's behaviour is byte-identical to today's, in
+      this repository and in any other project on the machine; "today" means the hook file's own
+      behaviour with a marker present, not this machine's current registration.
+- [ ] R-03 — a recorded path matching no pattern still arms the gate; the list excludes, never
+      includes.
+- [ ] R-04 — the two blocking paths are untouched: no `.claude/test-cmd` found, and `test-cmd`
+      present but not TOFU-approved, both still block.
+- [ ] R-05 — the paths record is cleared on a green run exactly as the marker is today, and is not
+      cleared by a turn the predicate skipped.
+- [ ] R-06 — `mark-dirty.sh` records every written path, deduplicated, and discards none; a marker
+      carrying no paths arms the gate.
+- [ ] R-07 — patterns are shell globs, one per line, with `#` comments and blank lines skipped,
+      matched against the path relative to the discovered root; a trailing slash matches a directory
+      prefix.
+- [ ] R-08 — a pattern beginning with `/` or `~` matches the absolute path, and a recorded path
+      outside the discovered root arms the gate unless such a pattern excludes it.
+- [ ] R-09 — an optional per-project ceiling file overrides the 120s default; absent means 120s
+      exactly; a value that is malformed or above the stated maximum falls back to the default and
+      reports that it did.
+- [ ] R-10 — a timeout increments the same counter a block increments, and after
+      `STOP_GATE_MAX_REENTRY` consecutive timeouts the marker is disarmed with a stderr line naming
+      the reason.
+- [ ] R-11 — this repository ships an exclusion list containing only patterns proven to be read by
+      no assertion, and a plan task derives the remaining safe set by mutating a candidate and
+      re-running the suite.
+- [ ] R-12 — a harness assertion checks that every pattern in this repository's exclusion list
+      matches at least one path that exists today, count-guarded so an empty list cannot pass
+      vacuously.
+- [ ] R-13 — every new assertion is seen RED against a declared plant, in both directions: an
+      excluded path and a non-excluded one.
+- [ ] R-14 — the ceiling decision is recorded in an ADR, and the producer/consumer drift between the
+      deployed and staged `settings.json` is filed against #309 rather than fixed in this feature.
