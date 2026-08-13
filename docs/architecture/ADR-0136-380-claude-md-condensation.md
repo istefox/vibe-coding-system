@@ -292,3 +292,41 @@ all four plants now fire.
   prescriptive: it publishes no token threshold and none is inferred here.
 - `staging/plugin/skills/claude-md-slim/scripts/content-union-check.sh` — reused unchanged.
 - `staging/plugin/scripts/tests/claude-md-condensation.test.sh` — the harness.
+
+## Correction 2026-08-13 — the owed session-level measurement, and what it does not settle
+
+§D5 left one item open: *"Not yet measured … the confirmation is one `/context` in the next
+session."* It has been run. Conditions: a fresh orchestrator session on `main` at `f1548e2` (the
+merge of PR #424), `/context` as the first action, before any file was read.
+
+| category | tokens |
+|---|---:|
+| system prompt | 5.4k |
+| system tools | 15.5k |
+| custom agents (14) | 2.6k |
+| skills (34) | 5.2k |
+| memory files (3) | 17.3k — global 2.6k, **project `CLAUDE.md` 11.2k**, AutoMem 3.5k |
+| MCP tools (128) | 0 — deferred, loaded on demand |
+| **total** | **48.2k**, of which 2.3k is messages |
+
+**The direction holds and the size of the win was over-stated.** The commit message and the handoff
+both said *"~75k → ~7k tokens"*. The file's own line item measures **11.2k**, 60% above that
+estimate. The estimate was byte-proportional, and the condensed file is identifier-dense — 27,937
+bytes / 11.2k tokens is **2.5 bytes per token**, against roughly 4 for the narrative prose that
+left. Ninety-five `docs/architecture/ADR-*.md` paths and a rules section thick with backticked
+symbols do not tokenize like sentences. A byte ratio is not a token ratio, and #380's own DoD
+exists because estimates on this file had already been wrong six times.
+
+**The share claim is confirmed:** `CLAUDE.md` was ~89% of the orchestrator's initial context and is
+now **24%** of it (11.2k of the 45.9k assembled at session start). It is no longer the dominant
+term; system tools are.
+
+**What this measurement does NOT settle, flagged rather than resolved.** ADR-0130's decomposition —
+median initial context 74,196 tokens, *of which `CLAUDE.md` ~89%* — cannot describe any single
+session. Subtracting a 66k file leaves ~8k for every other category, and every other category
+measures **28.7k** here. The likeliest reading is that the median spans months of transcripts during
+which the file was still growing at ~58 lines per feature, while the 89% share was computed from its
+final 3,895-line size; the two numbers then belong to different moments and were multiplied as if
+they belonged to one. Confirming that needs the same transcript telemetry ADR-0130 used, which is
+not re-derived here. Until it is, treat **11.2k measured** as the fact and the 74,196 median as a
+figure whose decomposition is open — not as the baseline this change is scored against.
