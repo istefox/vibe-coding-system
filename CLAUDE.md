@@ -3877,8 +3877,16 @@ locally, red on CI, which is why it survived until `shell-tests` became a requir
   the manifest is never committed at all, so applying it there would halt every Express and Hybrid
   run for a gap that is out of scope.
 
+- **The one consumer that changes is `commit` Step 5.5, and #357 had asked exactly this.** Its
+  `.claude/context.md` *"Open decisions"* line looks for a manifest at `status: in_progress`; after
+  7.0c there is none, so it writes `none` rather than naming `step_7_commit`, and *"In progress"*
+  derives from `completed`. Correct after the fact, skipped entirely in autopilot mode, and a real
+  behaviour change. The other consumer, `commit` Step 2 item 3, reads topic and ADR path only.
+  Measured, not assumed — which is the answer to #357's open question *"check whether any consumer
+  reads `current_step` during Step 7"*.
+
 Known consequences, recorded rather than fixed: **on Express and Hybrid the manifest is committed by
-nothing, in any state** — filed as its own issue, since closing it is a design question with three
+nothing, in any state** — filed as **#422**, since closing it is a design question with three
 answers and bundling it here would make a bounded change unbounded; the legal-pair table, the shared
 manifest helpers, Gate 4.0's in-flight commit and all 57 existing manifests are untouched; and the
 corpus is green on invariant 4 today partly **by accident**, since the one tracked non-`completed`

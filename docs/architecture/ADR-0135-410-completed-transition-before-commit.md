@@ -174,7 +174,7 @@ question is answered without ever resolving a path.
 Its verdict is derived from the manifest's committedness, and on E4/H5 the manifest is **never**
 committed (§Context, consequence 3). Applying it there would stop every Express and Hybrid run, for
 a gap that is out of scope. Both steps therefore carry the ordering fix and one line saying the
-Step 7 outcome check does not apply to them, naming the follow-up issue. That is honest; silently
+Step 7 outcome check does not apply to them, naming the follow-up issue (#422). That is honest; silently
 omitting it would read as an oversight the next time someone compares the three steps.
 
 ### D5 — The guard is anchored on the two mechanisms and pairs by *nearest preceding manifest write*
@@ -266,7 +266,7 @@ damaged nothing — zero Express and zero Hybrid manifests exist — and closing
 with at least three answers (give those steps a `--include`, give them a Gate-4.0-equivalent
 producer, or declare the single-session paths as deliberately not committing the manifest). Bundling
 a design question into an ordering fix is how a bounded change becomes an unbounded one. It is filed
-as its own issue and referenced from §D4's note in the file itself, so a reader meeting the
+as **#422** and referenced from §D4's note in the file itself, so a reader meeting the
 asymmetry finds the reason at the site rather than in an ADR they may not open.
 
 ### D8 — Nothing else moves
@@ -395,9 +395,12 @@ correlated-failure argument ADR-0086 §D3 makes for keeping hermetic guards sepa
 
 ### Neutral
 
-- Instance 14 of the derived-guard pattern, kept as a copy rather than extracted (ADR-0086). Its own
-  population, its own question, its own count-guard thresholds.
-- The declared-fence-contract count goes 32 → 33 and the wrapper population 32 → 33. Both floors
+- Instance **15** of the derived-guard pattern, kept as a copy rather than extracted (ADR-0086). Its
+  own population, its own question, its own count-guard thresholds. The plan drafted this as 14;
+  ADR-0132 §Neutral already holds 14, and the numbering has collided three times before (7, 10, 11,
+  12 are each claimed twice). Re-derived from the files at authoring time, per ADR-0117's rule —
+  never from a brief. `commit-transition-order.test.sh`'s header records the derivation.
+- The declared-fence-contract count goes 36 → 37 and the wrapper population 36 → 37. Both floors
   (`F10` at 15, `WS0` at 32) still hold; neither is bumped, because both guard the *derivation*
   breaking rather than a member vanishing, which is `F4`/`WS1`'s job.
 - The two new bare transition fences carry no ADR-0133 wrapper and need none: they contain no
