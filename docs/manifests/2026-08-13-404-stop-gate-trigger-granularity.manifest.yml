@@ -6,9 +6,9 @@ mode: "greenfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-08-13T14:58:11+00:00"
-last_updated_at: "2026-08-13T18:46:32+00:00"
-current_step: "step_4_session_boundary"
-status: "in_progress"
+last_updated_at: "2026-08-14T11:32:20+00:00"
+current_step: "completed"
+status: "completed"
 
 # Gate 0 routing result (ADR-0017)
 gate0:
@@ -28,11 +28,11 @@ coder_model: "opus"
 autopilot: false
 
 # Dynamic Workflows Step 5 tracking (ADR-0016) — default false; smoke test flips it true per environment
-hook_verified: false
-step5_mode: null
+hook_verified: true
+step5_mode: "agent_batch"
 
 # Recovery-readiness pre-flight (ADR-0050) — HEAD sha recorded once at Step 5 entry
-recovery_baseline_sha: null
+recovery_baseline_sha: "45f013490e0a45935a66f8679014e126fd3a7b44"
 
 # Worktree isolation contract (ADR-0068 §D1, §D11). worktree_baseref_verified is boolean,
 # set true by Step 5.0.4 via manifest-set-flag.sh once worktree.baseRef == "head" is
@@ -42,7 +42,7 @@ recovery_baseline_sha: null
 # it goes via bash sed on the additive field, the step5_review_mode precedent above. Flip
 # with, per merged stage ({stage, agent_type, branch, base_sha, merge_result}):
 # sed -i '' 's/^worktree_merges: \[\]$/worktree_merges: [{stage: ..., agent_type: ..., branch: ..., base_sha: ..., merge_result: ...}]/' <manifest>
-worktree_baseref_verified: false
+worktree_baseref_verified: true
 worktree_merges: []
 
 # Proportional audit depth (ADR-0055) — risk and task_type axes. Absent/null means STRICT
@@ -87,7 +87,7 @@ step6_mode: null
 
 # Artifacts (absolute paths, populated as steps complete)
 artifacts:
-  spec: "/Users/stefer/Developer/vibe-coding-system/SPEC.md"
+  spec: "/Users/stefer/Developer/vibe-coding-system/docs/specs/404-stop-gate-trigger-granularity.spec.md"
   brainstorm: null
   ux_blueprint: null
   adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0137-404-stop-gate-trigger-granularity.md"
@@ -119,15 +119,15 @@ hitl_gates:
     notes: "Confirmed - I will /clear and resume"
   - gate: 5
     label: "review_cycle_decision"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-08-14T11:30:07+00:00"
+    notes: "skip review — plant registry 351/351, weakening CLEAN, per-batch controller verification"
 
 # Session boundary tracking
 session_boundary:
   pre_step_4_session_id: null
   fresh_session_started_at: null
-  resumed_at: null
+  resumed_at: "2026-08-13T18:58:28Z"
 
 # Failure tracking (populated only on status=failed)
 failure:

@@ -290,6 +290,9 @@ of the other.
 
 **This feature is inert until `settings.json` is synced.** Said here rather than discovered later.
 
+Filed 2026-08-14 as `#426` against #309; that issue carries the measurement, including a
+third divergence found while filing it, and it is not restated here.
+
 ### D10 — What does not move
 
 The TOFU contract and `.claude/test-cmd` itself (the trust pin is a content hash; changing that file
@@ -428,6 +431,69 @@ a 2026 hook-hardening sweep.
   claimed number.
 - Recorded so the absence is not later read as coverage: nothing here makes the suite faster, nothing
   re-registers a hook, and no path in this repository beyond the day-one list has been proven safe.
+
+---
+
+## Correction 2026-08-14 — `TODO.md` was proven safe, and the shipped list is eight patterns
+
+The Consequences above say, of the day-one list, that **"`TODO.md` is not on the list and could not
+be proven safe"**, and the Neutral note repeats it as **"no path in this repository beyond the
+day-one list has been proven safe"**. The plan's mutation-derivation task ran on 2026-08-14 and
+settled it in the other direction. Both clauses were correct when written — the measurement they were
+waiting on had not been made — and both are now wrong.
+
+**What was measured, and how.** The only method that proves anything here: replace a candidate's
+content with garbage, re-run the full suite, and keep the candidate only if **no assertion moves**.
+Baseline unmutated: 2789 PASS, 0 FAIL, 3 SKIP, 162 seconds. With `TODO.md`'s content replaced, the
+sorted PASS/FAIL/SKIP ledger was **byte-identical to that baseline**. Two further candidates came
+back the same way: `docs/books/` — mutating the *tracked* `INTEGRATION-REPORT-agentic-spec.md`, which
+is the strict direction, the rest of that directory being gitignored — and the ignored `.claude/`
+runtime artefacts, batched with one representative each. That is **six candidates** measured, of
+which five proved safe; because the batched `.claude/` candidate resolves to three separate patterns
+(`agent-memory-local/`, `autopilot-state/`, `.triage-fix-last*.json`), the list this repository ships
+is **eight** patterns, not the three named in D6. Candidates and patterns are not the same count and
+are not interchangeable here: the measurement is per candidate, the shipped list is per pattern.
+
+**What the measurement did not touch, so this section is not read as settling it.**
+`docs/manifests/*.manifest.yml` was mutated across all 58 subjects and produced 46 FAIL and 11
+aborted files: that **confirms** this ADR's third measurement empirically rather than correcting it —
+the invariant, entry-state and gate-trail tests do read the real manifests. `~/.claude/*` was **not
+measured at all**, so alternative 9 stands exactly as written.
+
+**One further Consequence is now wrong, in the favourable direction.** It says the subject check
+**"SKIPs in CI for every pattern the day-one list ships, so in CI it is a check with no subject."**
+`TODO.md` and `docs/books/INTEGRATION-REPORT-agentic-spec.md` are both tracked and are matched by no
+`.gitignore` rule — verified with `git ls-files` and `git check-ignore` on 2026-08-14 — so two of the
+eight patterns have a real subject in a fresh checkout and six take the SKIP branch. Stated as
+what the index shows and **not** as an observed harness result: `SGP16`/`SGP17` gate on
+`[ -d "$REPO/.git" ]`, and both the mutation run and this verification were made from a git worktree,
+where `.git` is a gitdir-pointer file and those two assertions SKIP.
+
+**Where the evidence lives.** The full candidate/verdict/evidence table, the perimeter it was
+measured over (the 79 files matched by `staging/plugin/scripts/tests/*.test.sh`) and the
+restore-and-verify discipline applied between runs are in the header comment block of
+`.claude/test-ignore`, beside the patterns they justify. D6's three-line list, D7's "which is three
+today" and the Consequences clauses quoted above are correct snapshots of the day they were written
+and are left **unedited** (the ADR-0034 precedent); this section is the amendment of record.
+
+**What was left open, and where it went.** Three items surfaced during implementation and were
+deliberately not acted on, filed together as `#427`: the `[ -d "$REPO/.git" ]` gate in §D8 reads a
+git *worktree* as "no git" (a worktree's `.git` is a pointer file), so `SGP16`/`SGP17` are inert in
+every worktree-isolated dispatch and evaluate only in a plain checkout and in CI; the
+`STOP_GATE_TEST_TIMEOUT=0` input is accepted against §D4's parenthetical and is covered by no
+assertion in either direction; and the widening recorded above puts **tracked** content on the list,
+a broader posture than §D6 describes, resting on a criterion that is inherently about today's suite.
+None is a defect in what this ADR ships, and `#427` carries the detail rather than this section.
+
+**One thing the harness caught that no gate did, worth recording because it is the reusable lesson.**
+`spec-coverage.sh` reported R-06 **covered** while nothing anywhere executed `mark-dirty.sh`: it
+checks that a requirement id is cited by a plan task and mentioned in a test file, never that the
+mechanism is exercised. The gap was found by a declared plant failing to fire — the assertion it
+named wrote the marker directly through the fixture rig and so could not observe its own subject
+(CLAUDE.md rule 2, and rule 12's "a needle must belong to the mechanism it asserts about"). Six
+assertions driving the real hook were added, and the mis-attributed plant was re-declared against one
+of them with its needle unchanged. **A green coverage gate is not evidence that a requirement is
+tested.**
 
 ---
 
