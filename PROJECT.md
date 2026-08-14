@@ -1197,7 +1197,7 @@ wave order.
 ##### Wave 3 — HIGH: detector precision, and the decisions
 
 - [ ] the weakening scan is blind to an in-place assertion edit  (issue #311)
-- [ ] spec-coverage measures citation not implementation  (issue #312)
+- [x] spec-coverage measures citation not implementation  (issue #312)  (completed: 2026-08-14)
 - [ ] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)
 - [ ] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)
 - [ ] The Step 5 checkpoint has no mechanism to tell an expected red from a real one  (issue #273)
