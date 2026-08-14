@@ -3874,3 +3874,48 @@ arming on them was correct and the predicate's yield here is low by measurement.
   rather than letting a green harness imply otherwise.
 
 Detail: `docs/architecture/ADR-0137-404-stop-gate-trigger-granularity.md`.
+
+## Decisions from the spec-coverage scope chain (ADR-0138)
+
+The requirement-coverage gate's test axis was believed weak. Measured 2026-08-14 over 78 SPECs, 71
+plans and 92 discovered test files, it was **100% vacuous**: `grep_boundary_test()` scans the whole
+discovered population while the `R-NN` namespace restarts at `R-01` for every feature, so all 27
+tokens `R-01`…`R-20` exist somewhere in the harness and all 199 declared ids passed. #312's `R-01`
+was covered because `R-01` appears in #399's test file.
+
+Key architectural decisions:
+
+- **The issue's remedy is a provable no-op, and the measurement is what showed it.** Requiring the
+  mention to sit on a non-comment line flips 0 of 199 ids; the strictest form flips exactly one, and
+  that one is a false negative. The comment header is where this harness cites requirement ids —
+  53% of in-scope-covered ids are comment-only and #404 is 45 of 45 — so the proposed rule would have
+  failed the best-tested features first.
+- **Tighten by SCOPE, not by assertion shape.** A discovered test file is in scope when its basename
+  appears as a whole token in the `--plan` file. 24 of 117 ids flip, against 0 for the issue's remedy.
+  The scope filters `$TESTFILES` rather than re-deriving the discovery predicate, so the `.md`
+  exclusion stays closed by construction and there is one answer to "what is a test file", not two.
+- **`UNSCOPED` is a new stdout token on the existing exit-1 channel, not a fifth exit code.**
+  `UNCOVERED` stays byte-identical, so the blocking channel carries zero regression. The tokens are
+  separate because the remedies differ — write a test, versus cite the id in the test this feature
+  wrote — and the SKILL.md `_rc = 1` prose must name it, or the token has a producer and no consumer.
+- **A denominator guard on the scope itself.** Zero matches can be correct; zero candidates is a
+  broken derivation and from outside the two are identical. A non-empty `$TESTFILES` with an empty
+  scope reports `SCOPE-EMPTY`, falls back to the unscoped population for that invocation, and does not
+  render every id red.
+- **`no-test:` is a declared exemption with a 20-character reason floor and a reverse check.** Four
+  requirements in the corpus are not test-assertable at all ("the ADR records X", "the issue is
+  filed"); blocking on them is the false-negative class R-03 forbids. An id carrying the marker whose
+  token *is* found in scope is `STALE-WAIVER`, exit 3 — and it is not auto-repaired, because deleting
+  an author's prose is not the same act as adding a checkbox marker.
+- **R-03 is proven by a frozen 117-row per-item baseline, not argued.** A `>= N` floor absorbs its own
+  plant; the floors here are vacuity guards on the derivation and the site says so. Divergence is RED
+  in both directions — a live verdict with no baseline row, and a baseline row with no live verdict.
+- **No archived SPEC is edited.** Retro-fitting the marker into four completed SPECs would correct a
+  historical record in place. `no-test:` governs SPECs written from now on; the baseline is a record
+  *about* the corpus already written, and what it protects is the derivation.
+- **A measurement artefact worth keeping.** Pairing spec-to-plan through manifests gave 49 pairs, but
+  36 of those manifests predate ADR-0106 and still point `artifacts.spec` at the mutable root
+  `SPEC.md` slot — which held the in-flight feature's own SPEC. Those 36 were 108 copies of R-01/R-02/
+  R-03 measured against unrelated plans. Pair by issue-number prefix, never through a manifest.
+
+Detail: `docs/architecture/ADR-0138-312-spec-coverage-scope-not-assertion-shape.md`.

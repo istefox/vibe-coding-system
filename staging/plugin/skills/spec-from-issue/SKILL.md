@@ -158,6 +158,13 @@ Emit: `spec-from-issue #<n> · OK · docs/specs/<slug>.spec.md`.
 - **IDs are assigned to criteria the issue already states; an ID is never a reason to invent a criterion.**
   Number the criteria the issue names — do not pad the checklist with additional items just to
   give every ID a home (ADR-0048).
+- **A documentation, process or deployment obligation carries `(no-test: <reason>)`.** A criterion
+  that records an ADR, files an issue, or runs a harness — nothing a test can assert — gets
+  `(no-test: <reason>)` appended to its item text, reason at least 20 characters after the colon
+  (ADR-0138). This is an instruction to you as the generator, not an enforcement: nothing here
+  forces you to write it, and no check in this skill confirms you did. What changes downstream is
+  the failure shape at Step 5 — an unmarked documentation requirement produces a halt naming the
+  remedy, not a silent false pass.
 - **Read-only on GitHub.** It uses `gh issue view` only. It never edits the issue, pushes, or opens
   a PR.
 - **One SPEC per feature.** Output is `docs/specs/<slug>.spec.md`. The just-in-time copy to

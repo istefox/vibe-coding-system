@@ -30,3 +30,11 @@ The `- [ ]` marker is what `spec-coverage.sh` reads. `- R-01 — …` declares n
 that reaches Step 5 in the plain-bullet form is repaired automatically by `spec-normalize-ids.sh`
 (ADR-0072), but the repair exists for SPECs written before this template — not as licence to skip
 it.
+
+A criterion that is a documentation, process or deployment obligation — "the ADR records X", "the
+issue is filed", "the harness is run" — rather than something a test can assert, carries
+`(no-test: <reason>)` appended to its item text, reason at least 20 characters after the colon
+(ADR-0138). This is an instruction to you as the generator, not an enforcement: nothing forces you
+to write it, and no check in this skill confirms you did. What changes downstream is the failure
+shape at Step 5 — an unmarked documentation requirement produces a halt naming the remedy, not a
+silent false pass.

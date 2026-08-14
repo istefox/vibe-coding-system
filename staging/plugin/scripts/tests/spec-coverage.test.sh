@@ -543,7 +543,7 @@ for f in "$REPO"/docs/specs/*.spec.md; do
   fi
 done
 if [ "$re3_count" -ge 30 ]; then
-  ok "RE4: the RE3 corpus loop asserted $re3_count id-less SPECs (>= 30, $re3_skipped excluded by property) — not a vacuous pass"
+  ok "RE4: the RE3 corpus loop asserted $re3_count id-less SPECs (>= 30, $re3_skipped excluded by property) — not a vacuous pass. The >= 30 floor is deliberately a vacuity guard on this corpus sweep, not an exact count — the id-less corpus grows with every feature (CLAUDE.md rule 10's stated exception: a floor is permitted only when the site says so)."
 else
   bad "RE4: the RE3 corpus loop asserted only $re3_count files (< 30, $re3_skipped excluded) — either the glob matches almost nothing, or the exclusion predicate is swallowing the corpus"
 fi
@@ -1030,6 +1030,342 @@ if [ "$RM12_TOTAL" -ge 50 ] && [ "$RM12_MALFORMED" -eq 0 ]; then
   ok "RM12 (R-03): corpus outcome — $RM12_TOTAL SPECs swept, no SPEC reports MALFORMED under the widened checker"
 else
   bad "RM12: corpus outcome failed — swept=$RM12_TOTAL (need >=50), MALFORMED-reporting SPEC(s)=$RM12_MALFORMED (need 0)"
+fi
+
+# ==================================================================================================
+# RS. Issue #312 / ADR-0138 D1-D3 — the test axis is scoped to the test files the PLAN names, not
+# the whole discovered population, plus D2's SCOPE-EMPTY denominator guard.
+#
+# STATE ON ARRIVAL (Batch A of the #312 plan, pre-fix): RS1 and RS6 are RED — the scope filter and
+# the SCOPE-EMPTY guard do not exist yet, so today's global scan reports COVERED for both and stderr
+# never says SCOPE-EMPTY. RS2, RS3, RS4 and RS5 are GREEN ALREADY: each names a scenario whose
+# verdict is unaffected by scoping (the id IS in the file the plan names, or is absent everywhere,
+# or the .md exclusion already holds upstream of any scope filter) — they are the positive controls
+# / already-true invariants that must stay true both before AND after Task 3 lands, not fresh red
+# assertions. Every fixture below was executed against the unmodified checker before this comment
+# was written (CLAUDE.md rule 2 — inspect what a check actually produces, never assume it).
+# ==================================================================================================
+# plant: RS1 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if grep -qE "(^|[^A-Za-z0-9_])${_esc}([^A-Za-z0-9_]|\$)" "$PLAN" 2>/dev/null; then | if :; then
+cat >"$TMP/rs1.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rs1-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh.
+EOF
+mkdir -p "$TMP/rs1-tests"
+cat >"$TMP/rs1-tests/alpha.test.sh" <<'EOF'
+# no id here
+EOF
+cat >"$TMP/rs1-tests/beta.test.sh" <<'EOF'
+# covers R-01
+EOF
+run_scov --spec "$TMP/rs1.spec.md" --plan "$TMP/rs1-plan.md" --tests-root "$TMP/rs1-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RS1 (D1/D3): R-01 is mentioned only in beta.test.sh, which the plan never names — UNSCOPED	R-01	1, exit 1. Today (pre-fix, verified) this exact fixture is COVERED, exit 0 — the whole defect in one fixture."
+else
+  bad "RS1: expected exit 1 + UNSCOPED R-01 1 (an out-of-scope mention) — got rc=$RC out=[$OUT]"
+fi
+
+mkdir -p "$TMP/rs2-tests"
+cat >"$TMP/rs2-tests/alpha.test.sh" <<'EOF'
+# covers R-01
+EOF
+cat >"$TMP/rs2-tests/beta.test.sh" <<'EOF'
+# no id here
+EOF
+run_scov --spec "$TMP/rs1.spec.md" --plan "$TMP/rs1-plan.md" --tests-root "$TMP/rs2-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$" \
+   && ! printf '%s\n' "$OUT" | grep -q 'UNSCOPED'; then
+  ok "RS2 (positive twin of RS1, CLAUDE.md rule 8): the same tree with R-01 moved into alpha.test.sh, the file the plan names -> COVERED, exit 0, no UNSCOPED line. Without this twin, RS1 is satisfiable by a checker that fails everything."
+else
+  bad "RS2: expected COVERED R-01 / exit 0 / no UNSCOPED line — got rc=$RC out=[$OUT]"
+fi
+
+mkdir -p "$TMP/rs3-tests"
+cat >"$TMP/rs3-tests/alpha.test.sh" <<'EOF'
+# nothing relevant
+EOF
+run_scov --spec "$TMP/rs1.spec.md" --plan "$TMP/rs1-plan.md" --tests-root "$TMP/rs3-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNCOVERED${TAB}R-01${TAB}tests\$" \
+   && ! printf '%s\n' "$OUT" | grep -q 'UNSCOPED'; then
+  ok "RS3: R-01 is absent from EVERY file in the tree -> UNCOVERED	R-01	tests, exit 1, never UNSCOPED — the two tokens carry different remedies and must stay distinguishable"
+else
+  bad "RS3: expected UNCOVERED R-01 tests, not UNSCOPED — got rc=$RC out=[$OUT]"
+fi
+
+cat >"$TMP/rs4-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in staging/plugin/scripts/tests/alpha.test.sh, not just the bare name.
+EOF
+mkdir -p "$TMP/rs4-tests"
+cat >"$TMP/rs4-tests/alpha.test.sh" <<'EOF'
+# covers R-01
+EOF
+run_scov --spec "$TMP/rs1.spec.md" --plan "$TMP/rs4-plan.md" --tests-root "$TMP/rs4-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
+  ok "RS4: the plan names the test file by FULL PATH (staging/plugin/scripts/tests/alpha.test.sh), not the bare basename — still in scope; the corpus uses both forms and the match is on basename"
+else
+  bad "RS4: expected COVERED R-01 via a full-path basename mention — got rc=$RC out=[$OUT]"
+fi
+
+mkdir -p "$TMP/rs5-tests/docs/specs"
+cat >"$TMP/rs5-tests/docs/specs/x.spec.md" <<'EOF'
+Mentions R-01 in prose.
+EOF
+cat >"$TMP/rs5-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Background: docs/specs/x.spec.md (also known as x.spec.md).
+EOF
+run_scov --spec "$TMP/rs1.spec.md" --plan "$TMP/rs5-plan.md" --tests-root "$TMP/rs5-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNCOVERED${TAB}R-01${TAB}tests\$"; then
+  ok "RS5: the .md exclusion stays closed even when the plan names the .md file's own basename, bare AND full path — a SPEC cannot cover itself, because \$TESTFILES is already post-exclusion and no .md can enter scope through the new filter (asserted on the absence of self-coverage, not on the presence of a filter)"
+else
+  bad "RS5: expected UNCOVERED R-01 tests despite the plan naming the .md file — got rc=$RC out=[$OUT]"
+fi
+
+# plant: RS6 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if [ ! -s "$TESTFILES_SCOPED" ]; then | if false; then
+cat >"$TMP/rs6-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+No test file is named anywhere in this plan's prose.
+EOF
+mkdir -p "$TMP/rs6-tests"
+cat >"$TMP/rs6-tests/alpha.test.sh" <<'EOF'
+# covers R-01
+EOF
+run_scov --spec "$TMP/rs1.spec.md" --plan "$TMP/rs6-plan.md" --tests-root "$TMP/rs6-tests"
+rs6_no_unscoped=1
+printf '%s\n' "$OUT" | grep -q 'UNSCOPED' && rs6_no_unscoped=0
+if [ "$RC" -eq 0 ] && printf '%s\n' "$ERR" | grep -q 'SCOPE-EMPTY' \
+   && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$" && [ "$rs6_no_unscoped" -eq 1 ]; then
+  ok "RS6 (the denominator guard, CLAUDE.md rule 7 / D2): a plan naming no discovered test file at all, against a non-empty discovered population (1 file) — stderr names SCOPE-EMPTY, stdout falls back to the unscoped verdict (COVERED R-01), exit 0, and there is no wall of UNSCOPED lines. Zero candidates is a broken derivation, not a clean zero."
+else
+  bad "RS6: expected stderr SCOPE-EMPTY + stdout COVERED R-01 (fallback) + zero UNSCOPED lines + exit 0 — got rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
+# ==================================================================================================
+# RS7-RS10. Issue #312 / ADR-0138 D5 — R-03 proven by a frozen per-item baseline over the corpus,
+# plus the derivation's own denominator guards (RS9) and the silent-path forward guard (RS10).
+#
+# The (spec, plan) population is derived by issue-number prefix: first try a plan filename naming
+# the number, then fall back to the slug-only plan filename the corpus also uses for several Phase
+# 11 issues (e.g. 2026-08-02-rtf-s-gitignore-glob-and-this-repo-s-own.md for issue #287 carries no
+# "287" token in its filename at all — matching ONLY on <N>-*.md would silently under-derive).
+#
+# The current chain's OWN pair is excluded — this feature's SPEC (docs/specs/312-...spec.md) paired
+# with THIS EXACT PLAN FILE, still being executed batch by batch. Same reasoning as RE3's exclusion
+# of $REPO/SPEC.md: an in-flight chain is not a completed corpus member (D5: "their chains are
+# complete and the checker will never run on them again"). Re-derive rather than trust this comment
+# (CLAUDE.md rule 13) — measured 2026-08-14: including the in-flight pair gives 16 pairs / 120 ids;
+# excluding it gives the ADR's own measured 15 pairs / 117 ids, confirmed empirically.
+# ==================================================================================================
+# plant: RS7 | plugin/scripts/tests/spec-coverage-scope-baseline.tsv | 176-worktree-isolation-contract.spec.md R-01 COVERED | 176-worktree-isolation-contract.spec.md	R-01	UNSCOPED	testable	planted mismatch — proves RS7 compares each row exactly, not merely a count
+BASELINE="$SCRIPTS/tests/spec-coverage-scope-baseline.tsv"
+RS_SELF_PLAN="$REPO/docs/superpowers/plans/2026-08-14-spec-coverage-measures-citation-not-impl.md"
+
+RS_PAIRS="$TMP/rs-pairs.tsv"; : >"$RS_PAIRS"
+for _spec in "$REPO"/docs/specs/*.spec.md; do
+  [ -f "$_spec" ] || continue
+  _bn=$(basename "$_spec")
+  spec_declares_ids "$_spec" || continue
+  _rest=${_bn#*-}
+  _slug=${_rest%.spec.md}
+  _n=${_bn%%-*}
+  case "$_n" in ''|*[!0-9]*) _n="" ;; esac
+  _plan=""
+  if [ -n "$_n" ]; then
+    _plan=$(ls "$REPO"/docs/superpowers/plans/????-??-??-"${_n}"-*.md 2>/dev/null | head -1)
+  fi
+  if [ -z "$_plan" ]; then
+    _plan=$(ls "$REPO"/docs/superpowers/plans/????-??-??-"${_slug}".md 2>/dev/null | head -1)
+  fi
+  [ -n "$_plan" ] && [ -f "$_plan" ] || continue
+  [ "$_plan" = "$RS_SELF_PLAN" ] && continue
+  printf '%s\t%s\t%s\n' "$_bn" "$_spec" "$_plan" >>"$RS_PAIRS"
+done
+
+# For every resolved pair, compute today's live verdict for every declared id (COVERED / UNCOVERED /
+# UNSCOPED), read straight off the checker's own stdout — one source of truth for what "covered"
+# means, the ADR-0069/ADR-0072 rule applied here too, never a second interpretation of the tokens.
+RS_LIVE="$TMP/rs-live.tsv"; : >"$RS_LIVE"
+while IFS="$TAB" read -r _bn _spec _plan; do
+  [ -n "$_bn" ] || continue
+  _list=$(bash "$SCOV" --spec "$_spec" --plan "$_plan" --list 2>/dev/null)
+  [ -n "$_list" ] || continue
+  _run=$(bash "$SCOV" --spec "$_spec" --plan "$_plan" --tests-root "$REPO" 2>/dev/null)
+  printf '%s\n' "$_list" | while IFS="$TAB" read -r _id _txt; do
+    [ -n "$_id" ] || continue
+    _verdict="UNCOVERED"
+    printf '%s\n' "$_run" | grep -q "^COVERED${TAB}${_id}\$" && _verdict="COVERED"
+    printf '%s\n' "$_run" | grep -q "^UNSCOPED${TAB}${_id}${TAB}" && _verdict="UNSCOPED"
+    printf '%s\t%s\t%s\n' "$_bn" "$_id" "$_verdict" >>"$RS_LIVE"
+  done
+done <"$RS_PAIRS"
+
+RS_PAIR_N=$(wc -l <"$RS_PAIRS" 2>/dev/null | tr -d ' '); RS_PAIR_N=${RS_PAIR_N:-0}
+RS_ID_N=$(wc -l <"$RS_LIVE" 2>/dev/null | tr -d ' '); RS_ID_N=${RS_ID_N:-0}
+
+if [ -f "$BASELINE" ]; then
+  RS7_DIFF=0
+  while IFS="$TAB" read -r _bn _id _verdict; do
+    [ -n "$_bn" ] || continue
+    _base=$(awk -F"$TAB" -v s="$_bn" -v i="$_id" '$1==s && $2==i {print $3; exit}' "$BASELINE")
+    [ "$_base" = "$_verdict" ] || RS7_DIFF=$((RS7_DIFF + 1))
+  done <"$RS_LIVE"
+  if [ "$RS7_DIFF" -eq 0 ] && [ "$RS_ID_N" -gt 0 ]; then
+    ok "RS7 (R-03, an EXACT per-item comparison — the frozen baseline, never a floor, ADR-0124 / CLAUDE.md rule 10): all $RS_ID_N live (spec, id) verdicts match spec-coverage-scope-baseline.tsv exactly"
+  else
+    bad "RS7: $RS7_DIFF of $RS_ID_N live (spec, id) verdict(s) diverge from the frozen baseline — R-03's corpus proof failed on a specific row"
+  fi
+else
+  bad "RS7: $BASELINE does not exist yet (Task 6) — R-03's corpus proof has nothing to compare the $RS_ID_N live verdicts against"
+fi
+
+RS8A_ORPHAN=0
+if [ -f "$BASELINE" ]; then
+  while IFS="$TAB" read -r _bn _id _verdict; do
+    [ -n "$_bn" ] || continue
+    grep -q "^${_bn}${TAB}${_id}${TAB}" "$BASELINE" 2>/dev/null || RS8A_ORPHAN=$((RS8A_ORPHAN + 1))
+  done <"$RS_LIVE"
+  if [ "$RS8A_ORPHAN" -eq 0 ]; then
+    ok "RS8a (CLAUDE.md rule 8, direction 1 of 2): every live (spec, id) verdict has a baseline row — no orphan on the LIVE side"
+  else
+    bad "RS8a: $RS8A_ORPHAN live (spec, id) verdict(s) have NO baseline row — the baseline is short some rows"
+  fi
+else
+  bad "RS8a: $BASELINE does not exist yet (Task 6) — the live-side direction of the reverse check has no baseline to read against ($RS_ID_N live verdicts unmatched)"
+fi
+
+if [ -f "$BASELINE" ]; then
+  RS8B_ORPHAN=0
+  while IFS="$TAB" read -r _bn _id _v _class _reason; do
+    [ -n "$_bn" ] || continue
+    case "$_bn" in \#*) continue ;; esac
+    grep -q "^${_bn}${TAB}${_id}${TAB}" "$RS_LIVE" 2>/dev/null || RS8B_ORPHAN=$((RS8B_ORPHAN + 1))
+  done <"$BASELINE"
+  if [ "$RS8B_ORPHAN" -eq 0 ]; then
+    ok "RS8b (CLAUDE.md rule 8, direction 2 of 2): every baseline row has a live (spec, id) counterpart — no orphan on the BASELINE side"
+  else
+    bad "RS8b: $RS8B_ORPHAN baseline row(s) have NO live counterpart — a check validating a list's entries is blind to what the list omits, run backwards too"
+  fi
+else
+  bad "RS8b: $BASELINE does not exist yet (Task 6) — the baseline-side direction of the reverse check has nothing to read"
+fi
+
+if [ "$RS_PAIR_N" -ge 15 ]; then
+  ok "RS9a (denominator guard on the DERIVATION, CLAUDE.md rule 7 — a vacuity guard only, NOT R-03's proof; RS7's exact per-item comparison is where a plant bites, rule 10 / ADR-0124): the pairing resolved $RS_PAIR_N (spec, plan) pairs (>= 15). Measured 2026-08-14: 15."
+else
+  bad "RS9a: the pairing resolved only $RS_PAIR_N (spec, plan) pairs (< 15) — the DERIVATION is broken, not just short of coverage"
+fi
+if [ "$RS_ID_N" -ge 100 ]; then
+  ok "RS9b (denominator guard on the derivation, same vacuity caveat as RS9a): $RS_ID_N paired ids resolved (>= 100). Measured 2026-08-14: 117."
+else
+  bad "RS9b: only $RS_ID_N paired ids resolved (< 100) — the derivation is broken, not just short of coverage"
+fi
+
+cat >"$TMP/rs10.spec.md" <<'EOF'
+## Success criteria
+- [ ] Some criterion with no id at all.
+EOF
+: >"$TMP/rs10-plan.md"
+mkdir -p "$TMP/rs10-tests"
+cat >"$TMP/rs10-tests/whatever.test.sh" <<'EOF'
+# nothing relevant, and even mentions SCOPE-EMPTY and UNSCOPED as literal words to prove neither leaks
+EOF
+run_scov --spec "$TMP/rs10.spec.md" --plan "$TMP/rs10-plan.md" --tests-root "$TMP/rs10-tests"
+rs10_rc_ok=0; rs10_out_ok=0; rs10_err_ok=0
+[ "$RC" -eq 0 ] && rs10_rc_ok=1
+[ -z "$OUT" ] && rs10_out_ok=1
+[ -z "$ERR" ] && rs10_err_ok=1
+if [ "$rs10_rc_ok" -eq 1 ] && [ "$rs10_out_ok" -eq 1 ] && [ "$rs10_err_ok" -eq 1 ]; then
+  ok "RS10 (forward guard): a zero-id SPEC invoked WITH --tests-root still takes the silent path — exit 0, empty stdout, empty stderr, all three asserted separately — the scope filter and SCOPE-EMPTY are unreachable behind DECL_N==0 by construction"
+else
+  bad "RS10: expected the silent path even with --tests-root present — got rc_ok=$rs10_rc_ok out_ok=$rs10_out_ok err_ok=$rs10_err_ok (rc=$RC out=[$OUT] err=[$ERR])"
+fi
+
+# ==================================================================================================
+# RX. Issue #312 / ADR-0138 D4 — the `no-test:` exemption (test axis ONLY, never the plan axis),
+# its 20-character reason floor, and the stale-waiver reverse check (CLAUDE.md rule 9). Written here
+# in Task 1's file BEFORE Task 5 implements the mechanism (the plan's own words) — every one of
+# RX1-RX6 is expected RED until Task 5 lands in Batch C. Verified empirically below.
+# ==================================================================================================
+# plant: RX1 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if (match(low, /\(no-test:/)) { | if (match(low, /\(no-test-disabled-by-plant:/)) {
+cat >"$TMP/rx1.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — a documentation obligation. (no-test: a documentation obligation, nothing executable to assert)
+EOF
+cat >"$TMP/rx1-plan.md" <<'EOF'
+### Task 1 — record it (R-01)
+EOF
+mkdir -p "$TMP/rx1-tests"
+cat >"$TMP/rx1-tests/whatever.test.sh" <<'EOF'
+# no ids mentioned
+EOF
+run_scov --spec "$TMP/rx1.spec.md" --plan "$TMP/rx1-plan.md" --tests-root "$TMP/rx1-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
+  ok "RX1 (D4): a (no-test: ...) marker exempts R-01 from the test axis ENTIRELY — COVERED, exit 0, even though zero discovered test files mention it"
+else
+  bad "RX1: expected exit 0 + COVERED R-01 for a no-test-exempt id with plan coverage and zero test mentions — got rc=$RC out=[$OUT]"
+fi
+
+: >"$TMP/rx2-plan.md"
+run_scov --spec "$TMP/rx1.spec.md" --plan "$TMP/rx2-plan.md" --tests-root "$TMP/rx1-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNCOVERED${TAB}R-01${TAB}plan\$"; then
+  ok "RX2: the no-test: exemption NEVER touches the plan axis — with no plan citation, R-01 is still UNCOVERED, third field exactly plan (never plan,tests), exit 1"
+else
+  bad "RX2: expected UNCOVERED R-01 plan / exit 1 even with the no-test: marker present — got rc=$RC out=[$OUT]"
+fi
+
+cat >"$TMP/rx3.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — a documentation obligation. **(NO-TEST: a documentation obligation, nothing to assert)**
+EOF
+run_scov --spec "$TMP/rx3.spec.md" --plan "$TMP/rx1-plan.md" --tests-root "$TMP/rx1-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
+  ok "RX3 (CLAUDE.md rule 3): a BOLD, UPPERCASE (NO-TEST: ...) marker is recognised identically to the plain lowercase form — matched on a flattened, undecorated, case-insensitive copy"
+else
+  bad "RX3: expected exit 0 + COVERED R-01 for a bold/uppercase no-test: marker — got rc=$RC out=[$OUT]"
+fi
+
+# plant: RX4 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | notest_ok = (length(reason) >= 20) | notest_ok = 1
+cat >"$TMP/rx4.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — too short. (no-test: short)
+EOF
+run_scov --spec "$TMP/rx4.spec.md" --plan "$TMP/rx1-plan.md"
+if [ "$RC" -eq 3 ] && printf '%s\n' "$OUT" | grep -q "^MALFORMED${TAB}R-01\$"; then
+  ok "RX4: a no-test: reason under the 20-character floor ('short', 5 chars) is MALFORMED, exit 3"
+else
+  bad "RX4: expected exit 3 + MALFORMED R-01 for a 5-char no-test: reason — got rc=$RC out=[$OUT]"
+fi
+
+# plant: RX5 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if [ -n "$TROOT" ] && grep_boundary_test "$id"; then | if [ -n "$TROOT" ] && false && grep_boundary_test "$id"; then
+cat >"$TMP/rx5.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — allegedly not testable. (no-test: a documentation obligation, nothing executable to assert)
+EOF
+cat >"$TMP/rx5-plan.md" <<'EOF'
+### Task 1 — record it (R-01)
+Test coverage lives in stale.test.sh.
+EOF
+mkdir -p "$TMP/rx5-tests"
+cat >"$TMP/rx5-tests/stale.test.sh" <<'EOF'
+# covers R-01
+EOF
+run_scov --spec "$TMP/rx5.spec.md" --plan "$TMP/rx5-plan.md" --tests-root "$TMP/rx5-tests"
+if [ "$RC" -eq 3 ] && printf '%s\n' "$OUT" | grep -q "^STALE-WAIVER${TAB}R-01\$" \
+   && printf '%s\n' "$ERR" | grep -qi 'delete'; then
+  ok "RX5 (CLAUDE.md rule 9, the reverse check): a no-test: id whose token IS found in the scoped test set is a stale waiver — STALE-WAIVER R-01, exit 3, stderr names the remedy (delete the clause); NOT auto-repaired (ADR-0072's self-repair does not extend here)"
+else
+  bad "RX5: expected exit 3 + STALE-WAIVER R-01 + stderr naming 'delete' when the exempted id IS covered by an in-scope test — got rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
+run_scov --spec "$TMP/rs1.spec.md" --plan "$TMP/rs1-plan.md" --tests-root "$TMP/rs1-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RX6 (negative twin of RX1-RX5, CLAUDE.md rule 8): the RS1 fixture, carrying NO (no-test: ...) marker at all, still reads UNSCOPED as normal — the no-test: code path does not swallow the ordinary scope verdict when no marker is present"
+else
+  bad "RX6: expected the plain UNSCOPED R-01 1 verdict from the marker-less RS1 fixture — got rc=$RC out=[$OUT]"
 fi
 
 echo "----"

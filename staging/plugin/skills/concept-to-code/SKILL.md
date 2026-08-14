@@ -1711,6 +1711,7 @@ Schema (JSON):
   "requirement_coverage": {
     "ids_declared": 6,
     "uncovered": [ { "id": "R-02", "missing": "plan" } ],
+    "unscoped": [ { "id": "R-05", "scope_size": 3 } ],
     "status": "pass | fail | no-ids | unavailable"
   },
   "tests_written_by": [
@@ -1797,9 +1798,14 @@ is also what every manifest written before ADR-0039 means by omitting the field.
   `grep -q '^WEAKENED'` on a `SUSPECT` line, and never the reverse). Absent means none and is
   **not** malformed. It is advisory only: presented at Gate 5 with its per-detector breakdown so
   a human sees it, never acted on automatically (ADR-0051 §D3).
-- `requirement_coverage.uncovered` non-empty → **failure signal**, same handling as
-  `tasks_failed`; `requirement_coverage` absent means the gate did not write one and is
-  **not malformed** — the malformed check stays `step5_mode` + `tasks_completed`, unchanged.
+- `requirement_coverage.uncovered` or `requirement_coverage.unscoped` non-empty → **failure
+  signal**, same handling as `tasks_failed` — both ride the same `_rc = 1` exit as
+  `spec-coverage.sh`'s stdout contract (ADR-0138 §D3): a plan/test citation gap and an
+  out-of-scope test mention are two distinct remedies on one blocking channel, never two channels.
+  `unscoped` is additive (ADR-0076): its absence means the gate did not write one, never "none
+  found" — the same rule `uncovered` already follows. `requirement_coverage` absent as a whole
+  means the gate did not write one and is **not malformed** — the malformed check stays
+  `step5_mode` + `tasks_completed`, unchanged.
 - `tests_written_by` is **never** a failure signal (ADR-0049 §D5). It is self-reported by the
   agents whose separation it describes — the same class of claim ADR-0047 §A3 and ADR-0048 §A7
   already refuse to trust for their own arrays, and this array carries no better authority.
@@ -1999,10 +2005,16 @@ documented. No `SPEC-COVERAGE:` line at all means `_scov` was empty and the gate
 is the fail-open case already described below, not a clean result.
 
 `_rc = 0` → every declared ID covered, or the SPEC declares no IDs. `_rc = 1` → at least one ID
-uncovered, `_out` names the ID and the missing half (`plan`, `tests`, or `plan,tests`). `_rc = 3`
-→ structural error in the SPEC or plan (`DUPLICATE`/`MALFORMED`/`ORPHAN` in `_out`) — the remedy
-is fixing the artifact, not writing a task. `_rc = 2`, or `_scov` empty → treat as unavailable,
-fail-open (see Policy).
+uncovered or unscoped, `_out` names the ID and the missing half (`plan`, `tests`, or `plan,tests`)
+— that is `UNCOVERED<TAB>id<TAB>missing` — or `UNSCOPED<TAB>id<TAB><scope-size>`: the id is
+mentioned somewhere in the discovered test population but not in a file the plan names, a
+**distinct remedy from `UNCOVERED`'s "write a test"**: cite the id in the test file this feature
+actually wrote, rather than write a new one (ADR-0138 §D3). `_rc = 3` → structural error in the
+SPEC or plan (`DUPLICATE`/`MALFORMED`/`ORPHAN` in `_out`, remedy: fix the artifact, not write a
+task) or `STALE-WAIVER<TAB>id` — a `(no-test: …)` exemption whose id IS found in the scoped test
+set; the remedy is deleting the `(no-test: …)` clause from the SPEC, and this one is **not**
+auto-repaired, unlike the plain-bullet near-miss below (ADR-0138 §D4). `_rc = 2`, or `_scov`
+empty → treat as unavailable, fail-open (see Policy).
 
 **Self-repair on the one structural error that has a mechanical fix (ADR-0072 §D3, issue #171).**
 Before treating `_rc = 3` as a stop, check whether the cause is the plain-bullet form — requirement
@@ -3990,7 +4002,8 @@ its own.
 
 **Advisory roll-up (ADR-0052 §D5 — read this before touching the block below).** `step5-report.json`
 carries **this specific roll-up's six** advisory-schema arrays: `weakening_findings`,
-`requirement_coverage` (its `uncovered` list), `checkpoint_reviews`, `tests_written_by`,
+`requirement_coverage` (its `uncovered` and `unscoped` lists — `unscoped` is a second list inside
+this same member, added by ADR-0138, not a seventh array of its own), `checkpoint_reviews`, `tests_written_by`,
 `suspect_findings` and `budget_findings` — a seventh, `accessibility_i18n_findings`, exists in the
 same schema but is not one of these six; see below for why. Three of the six arrived in three
 consecutive features, each individually justified by "blocking would be too noisy, so we surface
@@ -4016,6 +4029,16 @@ that gets skimmed. So this block's volume tracks signal, not schema size:
   transition before this point (ADR-0047, ADR-0048). They are still evaluated for the
   all-six-empty roll-up line above, for the rare case a user pushed through an acknowledged failure
   signal manually.
+- **`requirement_coverage.unscoped` does NOT inherit that "near-always empty" claim, by decision,
+  not by adjacency (ADR-0138 §D3/§D5).** It rides the same blocking `_rc = 1` exit as `uncovered`,
+  so the same "user pushed through" exception applies structurally — but the only measurement this
+  repository has, the frozen corpus baseline (`spec-coverage-scope-baseline.tsv`), finds 24 of 117
+  ids UNSCOPED under this scope filter across this repo's own pre-existing plans, none of which
+  were written to cite their test files' basenames because the convention did not exist yet before
+  this feature. Until plans are routinely written against it, `unscoped` is expected to render
+  non-trivially at Gate 5, not near-always-empty like its siblings — it renders exactly like
+  `uncovered` does when non-empty, folded into the same `requirement_coverage` line above, never a
+  seventh array.
 
 These never gated the transition to this point; this is the human checkpoint where they are
 actually read.
