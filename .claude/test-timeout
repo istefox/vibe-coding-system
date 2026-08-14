@@ -1,0 +1,30 @@
+300
+# Only the FIRST line is read (stop-gate.sh: `head -n 1 | tr -d '[:space:]'`), so everything
+# below this point is inert commentary and cannot change the value above. Do not add a comment
+# on line 1.
+#
+# WHY 300 AND NOT THE 120s DEFAULT
+#
+# Measured 2026-08-14 on this machine, unloaded: the full test-cmd
+# (`for t in staging/plugin/scripts/tests/*.test.sh; do bash "$t" || exit 1; done`)
+# runs 79 harnesses in 159s, all green. The default ceiling of 120s is therefore 39s SHORT of
+# the suite's own runtime — the gate could never finish, so every arming turn spent 120s and
+# ended in a timeout, verifying nothing. 300 gives roughly 2x headroom over the measured value.
+#
+# Slowest four, same measurement, for whoever re-tunes this after adding harnesses:
+#   worktree-isolation-contract  30.4s
+#   spec-coverage                 9.0s
+#   fence-contract-coverage       9.0s
+#   stop-gate-path-predicate      8.0s
+# The remaining 75 are each under 8s and the tail is flat — there is no outlier to split out
+# into a separate fast lane.
+#
+# This is a snapshot of its moment, not a standing fact: adding harnesses moves it. Re-derive
+# from the files rather than trusting this block (CLAUDE.md rule 13).
+#
+# NOT the same number as CI. The `shell-tests` job runs this suite AND `plant-check.sh`, and the
+# whole job took ~25 min on 2026-08-14 — that duration is plant-check's, not the suite's, and
+# attributing it to the suite is what made this gate look unrecoverable.
+#
+# Ceiling: stop-gate.sh caps any value at TMO_MAX=900 and falls back to 120 with a stated reason
+# on a non-positive-integer value. See ADR-0137 §D4.
