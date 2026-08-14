@@ -20,6 +20,13 @@
     "MD056": true
   },
   "globs": ["**/*.md"],
+  // Honour .gitignore so a local run sees the same population CI does. Without it the local
+  // run linted 304 files and reported 26 issues in 12 files, ALL of them gitignored working
+  // artifacts under .remember/ that no CI checkout contains — a 0:26 signal-to-noise ratio,
+  // which is why the lint was not run before opening a PR. With it: 251 files, and 251 is
+  // exactly the tracked *.md count (398) minus the four subtrees ignored below, so no tracked
+  // file is skipped. CI behaviour is unchanged; the gitignored files are absent there anyway.
+  "gitignore": true,
   // staging/plugin/skills and staging/plugin/agents: mirrored verbatim from ~/.claude
   // (ADR-0024, ADR-0025) — content fidelity to the deployed copy takes precedence over
   // lint compliance for these subtrees.
