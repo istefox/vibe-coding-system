@@ -3835,3 +3835,42 @@ corpus is green on invariant 4 today partly **by accident**, since the one track
 manifest is exempt only through ADR-0113's second terminality axis, shipped nine days earlier.
 
 Detail: `docs/architecture/ADR-0135-410-completed-transition-before-commit.md`.
+
+## Decisions from the stop-gate trigger granularity chain (ADR-0137)
+
+Closes issue #404. `mark-dirty.sh` armed the gate on every `Edit`/`Write` and threw the path away,
+so editing a markdown file armed a shell test suite; `stop-gate.sh` then ran the whole suite under a
+120 s ceiling.
+
+**Three premises were measured and two did not survive, which is the second time in one day.**
+`stop-gate.sh` is **not registered** in the deployed `~/.claude/settings.json` — one `Stop` hook,
+`chat-done-notify.sh` — while `staging/user/settings.json` registers it and nothing else. Neither
+file is a superset of the other, so #309's drift runs in both directions. `mark-dirty.sh` is
+registered in both and keeps writing: 71 `.dirty` markers had accumulated since 20 June, none ever
+removed, because they are removed only on a green run and no run had occurred. The suite measures
+**2m43s here**, not the 15m37s the issue quotes from a GitHub runner, so a raised ceiling is a real
+option rather than a theoretical one. And the commits the issue cites as wasted firings —
+`PROJECT.md`, `TODO.md`, an ADR, a manifest — touch files this suite genuinely asserts over, so
+arming on them was correct and the predicate's yield here is low by measurement.
+
+- **Two defects sit behind one issue, and the ceiling is only one of them.** On timeout the hook
+  exits fail-open, removes the output file and leaves the marker armed, and the anti-loop counter is
+  incremented only inside `emit_block`, which a timeout never reaches — so a timing-out suite
+  re-charges its full ceiling every turn, forever, uncounted. A ceiling shipped without the counter
+  moves the defect to a rarer trigger instead of fixing it.
+- **The harness proposes, the hook decides.** The subject check needs the hook's exact glob
+  semantics, and extraction is declined with a stated reason: a sourced helper would give a globally
+  registered guardrail hook a runtime dependency whose absence after a partial sync fails open. A
+  cheap prefilter proposes one candidate per pattern and the real hook confirms it against a
+  fixture; over-proposal is rejected by the confirmation, under-proposal reports no subject.
+- **A check whose subjects are gitignored has three outcomes, not two.** Match is PASS; no match with
+  a not-gitignored representative is FAIL; no match while ignored is SKIP with a reason — because a
+  fresh CI checkout holds none of the day-one subjects, and collapsing SKIP into either neighbour
+  makes the check CI-dark or CI-red.
+- **The exclusion list is a waiver, so it carries a reverse check.** Every pattern must have a
+  subject, count-guarded so an empty list cannot pass vacuously.
+- **The producer/consumer drift is filed against #309, not fixed here.** Wiring one hook by hand is
+  the practice #309 exists to end, so this feature is inert until that sync lands, and says so
+  rather than letting a green harness imply otherwise.
+
+Detail: `docs/architecture/ADR-0137-404-stop-gate-trigger-granularity.md`.

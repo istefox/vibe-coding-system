@@ -255,3 +255,4 @@ heading naming the same ADR. Open the ADR itself for the full decision record.
 - **ADR-0133** — a bash fence is executed by the HOST shell; wrap the body in a quoted heredoc run under `bash` → `docs/architecture/ADR-0133-394-fence-execution-shell.md`
 - **ADR-0134** — Phase P step 3 reads roadmap state and the `--only` list, not just whether a SPEC file exists → `docs/architecture/ADR-0134-399-phase-p-roadmap-state.md`
 - **ADR-0135** — the terminal transition moves ahead of the `commit` invocation; the invariant is phrased over WRITES → `docs/architecture/ADR-0135-410-completed-transition-before-commit.md`
+- **ADR-0137** — the stop-gate trigger is bounded by a project-owned path list, and a timeout is counted like a block → `docs/architecture/ADR-0137-404-stop-gate-trigger-granularity.md`

@@ -1,0 +1,85 @@
+# .claude/test-ignore — the paths whose modification does not warrant this project's test suite.
+# Read by stop-gate.sh at the same root the walk already found .claude/test-cmd at. Optional:
+# absent means every recorded write arms the gate, which is the behaviour that predates this file.
+# The mechanism, the grammar and this repository's day-one list are decided in ADR-0137 (§D2, §D6);
+# read it before widening this file.
+#
+# Grammar and matching semantics, exactly as stop-gate.sh implements them:
+#   - One shell glob per line, matched with bash's own `case`, so `*` also spans `/`.
+#   - Blank lines, and lines whose first non-blank character is `#`, are skipped; a leading run of
+#     blanks is no part of a pattern. There is no trailing-comment stripping — a `#` anywhere else
+#     on the line is part of the pattern, because a path may legitimately contain one.
+#   - A pattern beginning with `~` is expanded against $HOME first, which lands it in the rule
+#     below it.
+#   - A pattern ending in `/` means directory prefix: `docs/books/` matches `docs/books/*`.
+#   - A pattern beginning with `/` (after that `~` expansion) is matched against the ABSOLUTE
+#     recorded path. Every other pattern is matched against the path taken RELATIVE to this root.
+#     An absolute or `~`-rooted pattern is the only way to exclude a write landing outside it.
+#   - The list EXCLUDES, never includes: the suite is skipped only when EVERY path recorded this
+#     session is excluded, so one unlisted path still arms the gate.
+#
+# Every pattern here must have a real subject. A pattern that matches nothing reads as a working
+# exemption while covering nothing (CLAUDE.md rule 9), and assertion SGP17 in
+# staging/plugin/scripts/tests/stop-gate-path-predicate.test.sh is what keeps that honest. Add a
+# pattern only after mutating one of its subjects has been shown to move no assertion in the suite:
+# a grep for path literals over the test files over-states real reads, because it counts strings
+# written into temporary fixtures.
+#
+# ── The mutation-derivation record (plan Task 8, R-11), measured 2026-08-14 ─────────────────────
+# THE METHOD, and it is the only one that proves anything: replace a candidate path's content with
+# garbage, re-run the FULL suite, and keep the candidate only if NO assertion moves. Every mutation
+# below was restored and the restore verified against `git status --porcelain` before the next run
+# started; a mutation left in place makes every later run measure the wrong thing, silently.
+# THE PERIMETER is the 79 files matched by `staging/plugin/scripts/tests/*.test.sh`, the suite this
+# repository's test command runs. `staging/plugin/skills/deep-refactor/tests/` sits outside both
+# that glob and this measurement. "Moved nothing" means the sorted PASS/FAIL/SKIP ledger of the
+# whole suite, with temporary-directory names normalised, did not change by one character.
+# BASELINE, unmutated: 2789 PASS, 0 FAIL, 3 SKIP, 0 aborted files, 162s. The three SKIPs are the
+# case-insensitive-filesystem one plus SGP16/SGP17, which SKIP when the measurement is run from a
+# git worktree, because there `.git` is a gitdir-pointer file and not a directory.
+#
+#   candidate                       verdict  evidence
+#   docs/manifests/*.manifest.yml   UNSAFE   all 58 subjects mutated: 2719 PASS, 46 FAIL, 11
+#                                            aborted files, 151 ledger lines moved. NOT added —
+#                                            the invariant, entry-state and gate-trail tests read
+#                                            the real manifests, exactly as the SPEC's third
+#                                            measurement said they do.
+#   TODO.md                         safe     ledger byte-identical to baseline; corroborated in
+#                                            the unsafe direction by zero mentions of the name
+#                                            across the 85 scripts under tests/.
+#   docs/books/                     safe     the TRACKED INTEGRATION-REPORT-agentic-spec.md was
+#                                            the subject mutated, which is the strict direction —
+#                                            the rest of the directory is gitignored reference
+#                                            material. Ledger byte-identical.
+#   .claude/ runtime artefacts      safe     one representative of each created and filled with
+#                                            garbage: agent-memory-local/coder/MEMORY.md,
+#                                            autopilot-state/build-status, autopilot-state/
+#                                            skipped-features, .triage-fix-last.json. Batched into
+#                                            one run; ledger byte-identical, so no bisect was owed.
+#                                            autopilot-state/active was deliberately not the
+#                                            representative: creating it can arm a live guard in
+#                                            the measuring session.
+#
+# NOT measured, and therefore NOT added: `~/.claude/*` (ADR-0137 alternative 9 — its subjects live
+# outside the checkout, so no corpus derived from the checkout can give SGP17 a verifiable
+# subject), and `PROJECT.md` and `CLAUDE.md`, which real assertions in this suite read.
+#
+# ONE PREDICTION WAS FALSIFIED, and it is recorded rather than quietly reconciled: ADR-0137's
+# Consequences say TODO.md "could not be proven safe". That was written before this measurement,
+# which the plan scheduled precisely to settle it. The evidence is in the table above; the ADR line
+# needs a forward correction (CLAUDE.md rule 14), never an in-place edit and never a silent reading.
+#
+# Day-one list: session logs and editor backups, both gitignored here and read by no assertion.
+
+.remember/logs/
+*.bak
+*.bak-*
+
+# Proven safe 2026-08-14 by the mutation run recorded above; no assertion moved.
+TODO.md
+# Proven safe 2026-08-14; the tracked integration report was the subject mutated.
+docs/books/
+# Proven safe 2026-08-14, batched: one representative of each of the three artefacts was mutated.
+.claude/agent-memory-local/
+.claude/autopilot-state/
+.claude/.triage-fix-last*.json
