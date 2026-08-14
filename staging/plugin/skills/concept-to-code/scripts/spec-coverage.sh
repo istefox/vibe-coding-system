@@ -6,8 +6,16 @@
 # and signals through stdout. Do not copy one block's branching into the other.
 #   exit 0  every declared ID covered, OR the SPEC declares no IDs (backward compatibility)
 #   exit 1  at least one declared ID uncovered           stdout: UNCOVERED<TAB>R-NN<TAB>plan|tests|plan,tests
+#                                                                 OR UNSCOPED<TAB>R-NN<TAB><scope-size> — the
+#                                                                 id is mentioned somewhere in the discovered
+#                                                                 test population but not in a file the --plan
+#                                                                 names (ADR-0138 §D1/§D3, issue #312); a
+#                                                                 different remedy, the SAME exit, no new code
 #   exit 2  invalid invocation, unreadable file           stdout: nothing
 #   exit 3  structural error in the SPEC or the plan       stdout: DUPLICATE / MALFORMED / ORPHAN lines
+#                                                                 OR STALE-WAIVER<TAB>R-NN — a (no-test: …)
+#                                                                 exemption whose id IS found in the scoped
+#                                                                 test set (ADR-0138 §D4, issue #312, Task 5)
 #
 # THE ADR-NNNN BOUNDARY (ADR-0048 §D2), THE LOAD-BEARING DETAIL.
 # `R-[0-9][0-9]` alone matches 30+ of the 34 SPECs in this repository, every hit coming from the
@@ -36,6 +44,16 @@
 # emits IDs under an unrecognized heading: MALFORMED, exit 3 — never widened to "any R-NN anywhere"
 # (that fires on prose, including this file's own header).
 #
+# D4 — `(no-test: <reason>)` (ADR-0138 §D4, issue #312, Task 5). A checklist item's own text may
+# carry this exemption, matched on the SAME flattened text strip_emphasis()/strip_sep() already
+# produce for the IDS_FILE column below (D1's parser) — no second parser, no third stripper
+# (CLAUDE.md rule 6: a second answer to "what does this item say" is a defect, not a feature). It
+# removes the id from the TEST axis only, both the scoped and unscoped halves; the PLAN axis still
+# applies. Reason floor: >= 20 characters after the colon, else MALFORMED, exit 3. The reverse
+# check (CLAUDE.md rule 9): an exempted id whose token IS found in the SCOPED test set anyway is a
+# STALE-WAIVER, exit 3 — NOT auto-repaired, because deleting an author's prose clause is a
+# different class of edit than ADR-0072's checkbox-marker repair.
+#
 # Bash 3.2 clean: no assoc arrays, no mapfile, no process substitution, no <<<.
 set -u
 
@@ -55,7 +73,8 @@ usage() {
   cat >&2 <<'EOF'
 usage: spec-coverage.sh --spec <file> --plan <file> [--tests-root <dir>] [--list]
 
-stdout (machine channel): COVERED / UNCOVERED / DUPLICATE / MALFORMED / ORPHAN, TAB-separated.
+stdout (machine channel): COVERED / UNCOVERED / UNSCOPED / DUPLICATE / MALFORMED / ORPHAN / STALE-WAIVER,
+TAB-separated. UNSCOPED and STALE-WAIVER: see the contract header at the top of this file.
 stderr: one summary line per run, EXCEPT when the SPEC declares zero requirement IDs — that path
 is silent on both streams (ADR-0048 §D7/§D8).
 Exit: 0 covered (or no IDs) | 1 uncovered | 2 bad invocation | 3 structural error.
@@ -98,6 +117,7 @@ IDS="$TMPD/ids.tsv";           : >"$IDS"
 MALFORMED_IN="$TMPD/malformed_in.txt"; : >"$MALFORMED_IN"
 OUTSIDE="$TMPD/outside.txt";   : >"$OUTSIDE"
 NEARMISS="$TMPD/nearmiss.txt"; : >"$NEARMISS"
+NOTEST="$TMPD/notest.txt";     : >"$NOTEST"
 
 # --- SPEC parser: declaration extraction, malformed-in-section, out-of-section well-formed IDs ---
 cat >"$TMPD/spec_parse.awk" <<'AWKEOF'
@@ -167,7 +187,32 @@ BEGIN { collecting = 0 }
           rest = substr(txt, RLENGTH + 1)
           rest = strip_emphasis(rest)
           rest = strip_sep(rest)
-          printf "%s\t%s\n", tok, rest >> IDS_FILE
+          # D4 (ADR-0138 §D4, issue #312, Task 5): search REST — the SAME text just produced for
+          # the IDS_FILE column two lines up — for a `(no-test: <reason>)` clause. tolower() only
+          # supplies the case-fold CLAUDE.md rule 3 requires; a bold/backtick wrap around the WHOLE
+          # clause (RX3) needs no further stripping to be FOUND, because the marker is located by a
+          # substring search on "(no-test:" that skips over any decoration run on either side of
+          # it, and the reason is bounded by the next ")", which sits INSIDE any trailing
+          # decoration too.
+          is_notest = 0; notest_ok = 1
+          low = tolower(rest)
+          if (match(low, /\(no-test:/)) {
+            is_notest = 1
+            after = substr(rest, RSTART + RLENGTH)
+            reason = after
+            if (match(after, /\)/)) reason = substr(after, 1, RSTART - 1)
+            reason = strip_sep(reason)
+            notest_ok = (length(reason) >= 20)
+          }
+          if (is_notest && !notest_ok) {
+            # Reason floor unmet (RX4) — MALFORMED, exit 3, the SAME channel as every other
+            # structural defect below. The id is NOT written to IDS_FILE: like every other
+            # malformed declaration in this file, a defective one never reaches the coverage loop.
+            printf "%s\n", tok >> MALFORMED_FILE
+          } else {
+            if (is_notest) printf "%s\n", tok >> NOTEST_FILE
+            printf "%s\t%s\n", tok, rest >> IDS_FILE
+          }
         } else {
           printf "%s\n", tok >> MALFORMED_FILE
         }
@@ -180,7 +225,7 @@ BEGIN { collecting = 0 }
 AWKEOF
 
 awk -v IDS_FILE="$IDS" -v MALFORMED_FILE="$MALFORMED_IN" -v OUTSIDE_FILE="$OUTSIDE" \
-    -v NEARMISS_FILE="$NEARMISS" \
+    -v NEARMISS_FILE="$NEARMISS" -v NOTEST_FILE="$NOTEST" \
     -f "$PREDICATE" -f "$SPEC_PREDICATE" -f "$TMPD/spec_parse.awk" "$SPEC"
 
 # --- structural error accumulation ---
@@ -338,14 +383,68 @@ if [ -n "$TROOT" ]; then
   DISCOVERED_N=$(count_re . "$TESTFILES")
 fi
 
+# --- scope filter (ADR-0138 §D1-§D3, issue #312): the test axis is narrowed to the test files the
+# PLAN itself names, not the whole discovered population above.
+#
+# THE DEVIATION FROM SPEC OBJECTIVE 2, DISCLOSED HERE (CLAUDE.md rule 12 — a later assertion about
+# this filter must anchor on the TESTFILES_SCOPED code below, never on this prose alone, which a
+# needle would also match). The corpus measurement (ADR-0138 Findings 1-3) found that requiring an
+# R-NN mention to sit on an assertion line rather than a comment line is a no-op on the pre-existing
+# repo-wide scan (0 of 199 declared ids flip) and a regression once scoped: of the 93 ids genuinely
+# covered by their own feature's tests, 49 (53%) have every mention on a comment line, and issue
+# #404's 45 in-scope mentions are ALL comments (45 of 45) — the comment header is this harness's
+# idiomatic requirement-to-assertion map. No comment-versus-assertion distinction is implemented
+# here, by decision. What tightens the gate instead is SCOPE: a discovered test file counts only
+# when its own basename is a whole token somewhere in $PLAN.
+#
+# ONE definition of "what is a test file" (CLAUDE.md rule 6, ADR-0086): this FILTERS $TESTFILES, it
+# never re-derives the discovery predicate above. The .md exclusion stays closed for free — $TESTFILES
+# is already post-exclusion, so no .md can enter scope through this filter (RS5).
+TESTFILES_SCOPED="$TMPD/testfiles_scoped.txt"; : >"$TESTFILES_SCOPED"
+if [ -n "$TROOT" ] && [ -s "$TESTFILES" ]; then
+  while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    _bn="${_f##*/}"
+    # Whole-token basename match, both sides anchored the SAME way the R-NN token regex is
+    # (grep_boundary_test() below): (^|[^A-Za-z0-9_]) … ([^A-Za-z0-9_]|$). A basename contains "."
+    # and "-", so a bare `grep -F` on it also matches a longer basename that merely CONTAINS it as a
+    # substring (RS1's beta.test.sh would then wrongly scope-in on an unrelated alpha.test.sh
+    # mention) — the basename is regex-escaped and searched with the anchor pair instead.
+    _esc=$(printf '%s' "$_bn" | sed 's/[][\.^$*+?(){}|]/\\&/g')
+    if grep -qE "(^|[^A-Za-z0-9_])${_esc}([^A-Za-z0-9_]|\$)" "$PLAN" 2>/dev/null; then
+      printf '%s\n' "$_f" >>"$TESTFILES_SCOPED"
+    fi
+  done <"$TESTFILES"
+  # D2 — the denominator guard (CLAUDE.md rule 7, ADR-0085). Zero MATCHES can be a correct scope
+  # (RS3: the id is absent everywhere); zero CANDIDATES out of a non-empty discovered population is
+  # a broken derivation, and from outside the two look identical. Fail open and visible, matching
+  # the gate's existing exit-2 philosophy (CLAUDE.md rule 4) — never a silent wall of UNSCOPED lines.
+  if [ ! -s "$TESTFILES_SCOPED" ]; then
+    printf '%s: SCOPE-EMPTY — the plan names no discovered test file at all (tests-root=%s, %d file(s) discovered); falling back to the unscoped test population for this invocation\n' \
+      "$SELF" "$TROOT" "$DISCOVERED_N" >&2
+    cat "$TESTFILES" >"$TESTFILES_SCOPED"
+  fi
+fi
+SCOPE_N=$(count_re . "$TESTFILES_SCOPED")
+
 grep_boundary_test() {
+  _id="$1"
+  [ -s "$TESTFILES_SCOPED" ] || return 1
+  tr '\n' '\0' <"$TESTFILES_SCOPED" | xargs -0 grep -qE "(^|[^A-Za-z0-9_])${_id}([^0-9]|\$)" 2>/dev/null
+}
+
+# The unscoped counterpart — reads the FULL discovered population ($TESTFILES), unfiltered. Used
+# only to tell UNCOVERED (mentioned nowhere in the discovered population) apart from UNSCOPED
+# (mentioned, but not in a file the plan names) — ADR-0138 §D3's two-row table.
+grep_boundary_test_all() {
   _id="$1"
   [ -s "$TESTFILES" ] || return 1
   tr '\n' '\0' <"$TESTFILES" | xargs -0 grep -qE "(^|[^A-Za-z0-9_])${_id}([^0-9]|\$)" 2>/dev/null
 }
 
 OUT="$TMPD/out.txt"; : >"$OUT"
-COV_N=0; UNCOV_N=0
+STALEWAIVER="$TMPD/stalewaiver.txt"; : >"$STALEWAIVER"
+COV_N=0; UNCOV_N=0; UNSCOPED_N=0
 while IFS="$TAB" read -r id _text; do
   [ -n "$id" ] || continue
   miss=""
@@ -354,9 +453,31 @@ while IFS="$TAB" read -r id _text; do
   else
     miss="plan"
   fi
-  if [ -n "$TROOT" ]; then
+  # D4 (ADR-0138 §D4, issue #312, Task 5) — a `(no-test: ...)` exemption removes this id from the
+  # TEST axis entirely, both halves (RX1). It NEVER touches `miss` above — the PLAN axis still
+  # applies (RX2), which is why this branch COMPOSES rather than `continue`s the way UNSCOPED does
+  # below: an exempted id that is ALSO plan-missing must still surface
+  # `UNCOVERED<TAB>R-NN<TAB>plan`, never read as covered by omission.
+  if grep -qxF "$id" "$NOTEST" 2>/dev/null; then
+    if [ -n "$TROOT" ] && grep_boundary_test "$id"; then
+      # The reverse check (CLAUDE.md rule 9, ADR-0081/0084, RX5) — an exemption whose id IS found
+      # in the SCOPED test set protects nothing; it is a stale waiver, not a documentation
+      # requirement. Structural, exit 3, and deliberately NOT auto-repaired (ADR-0072's
+      # self-repair is licensed only because adding a checkbox marker changes no content —
+      # deleting an author's prose clause is a different class of edit).
+      printf 'STALE-WAIVER\t%s\n' "$id" >>"$STALEWAIVER"
+      continue
+    fi
+  elif [ -n "$TROOT" ]; then
     if grep_boundary_test "$id"; then
       :
+    elif grep_boundary_test_all "$id"; then
+      # D3: mentioned somewhere in the discovered population, but not in scope. A distinct token on
+      # the SAME exit-1 channel (no new exit code) — the remedy differs from UNCOVERED's ("write a
+      # test") because a test already exists; it just isn't cited from the file this feature wrote.
+      printf 'UNSCOPED\t%s\t%s\n' "$id" "$SCOPE_N" >>"$OUT"
+      UNSCOPED_N=$((UNSCOPED_N + 1))
+      continue
     else
       if [ -n "$miss" ]; then miss="$miss,tests"; else miss="tests"; fi
     fi
@@ -370,19 +491,29 @@ while IFS="$TAB" read -r id _text; do
   fi
 done <"$IDS"
 
+# A stale waiver is a structural defect discovered only once test data exists, but it is reported
+# like every other one (STRUCT above): its own lines only, exit 3, no COVERED/UNCOVERED/UNSCOPED
+# bleed-through from the same run — the exit-3 stdout vocabulary stays exactly what the contract
+# header names (ADR-0138 §D4).
+if [ -s "$STALEWAIVER" ]; then
+  cat "$STALEWAIVER"
+  printf '%s: STALE-WAIVER — a (no-test: ...) exemption is stale: the id IS mentioned in a test file the plan scopes in, so the exemption no longer protects anything. Remedy: delete the (no-test: ...) clause from the SPEC (ADR-0138 §D4) — this is NOT auto-repaired.\n' "$SELF" >&2
+  exit 3
+fi
+
 cat "$OUT"
 
 TROOT_DESC="not-checked"
 [ -n "$TROOT" ] && TROOT_DESC="$TROOT"
 if [ -n "$TROOT" ]; then
-  printf '%s: %d id(s) declared, %d covered, %d uncovered, tests-root=%s, %d test file(s) discovered\n' \
-    "$SELF" "$DECL_N" "$COV_N" "$UNCOV_N" "$TROOT_DESC" "$DISCOVERED_N" >&2
+  printf '%s: %d id(s) declared, %d covered, %d uncovered, %d unscoped, tests-root=%s, %d test file(s) discovered, %d in scope\n' \
+    "$SELF" "$DECL_N" "$COV_N" "$UNCOV_N" "$UNSCOPED_N" "$TROOT_DESC" "$DISCOVERED_N" "$SCOPE_N" >&2
 else
   printf '%s: %d id(s) declared, %d covered, %d uncovered, tests-root=%s\n' \
     "$SELF" "$DECL_N" "$COV_N" "$UNCOV_N" "$TROOT_DESC" >&2
 fi
 
-if [ "$UNCOV_N" -gt 0 ]; then
+if [ "$UNCOV_N" -gt 0 ] || [ "$UNSCOPED_N" -gt 0 ]; then
   exit 1
 fi
 exit 0

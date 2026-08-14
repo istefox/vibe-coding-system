@@ -1,0 +1,174 @@
+# spec-coverage-scope-baseline.tsv — the frozen R-03 proof (ADR-0138 §D5, issue #312, Task 6).
+#
+# WHAT THIS IS. One row per (SPEC, declared id) pair in the completed (spec, plan) corpus, each
+# carrying the SCOPED verdict spec-coverage.sh produces today: COVERED or UNSCOPED. This is a
+# per-item FROZEN baseline, not a floor — CLAUDE.md rule 10 / ADR-0124: a >= N assertion over a
+# population with slack still passes when its own plant removes one member; an exact per-row
+# comparison is what a plant actually bites.
+#
+# HOW IT IS PRODUCED, EXACTLY (do not hand-edit a row without re-running this). The population is
+# derived by issue-number prefix: for each docs/specs/<N>-*.spec.md that declares at least one
+# R-NN id (spec_declares_ids()), find docs/superpowers/plans/<date>-<N>-*.md, falling back to
+# docs/superpowers/plans/<date>-<slug>.md when the plan filename carries no bare issue number (the
+# corpus has both forms). NEVER paired through a manifest — most manifests' artifacts.spec still
+# points at the mutable root SPEC.md slot, which silently reduces to N copies of whichever feature
+# is in flight. The chain currently producing THIS file is itself excluded from the population: an
+# in-flight chain is not a completed corpus member. For every resolved (spec, plan) pair, every
+# declared id's verdict is read straight off `spec-coverage.sh --spec <spec> --plan <plan>
+# --tests-root <repo-root>`'s own stdout — COVERED / UNSCOPED / UNCOVERED — never re-interpreted.
+# The exact derivation lives in staging/plugin/scripts/tests/spec-coverage.test.sh, section RS7-RS8
+# (RS_PAIRS / RS_LIVE) — that shell IS the regeneration procedure; this file's rows must equal its
+# output byte-for-byte or RS7/RS8a/RS8b fail on the specific diverging row.
+#
+# WHEN TO REGENERATE. Whenever a concept-to-code chain completes and its SPEC+plan pair becomes the
+# 16th (or Nth) member of the corpus above, RS8b goes RED on that new pair's rows (a live verdict
+# with no baseline counterpart). Re-run the RS7/RS8 derivation block against the current repo state,
+# diff the result against this file, and append/update rows for the new pair only — never rewrite a
+# row for a SPEC whose chain was already complete and frozen here (CLAUDE.md rule 14: a historical
+# record is corrected forward, not in place). A row can also change if a later feature adds or
+# renames a test file that shifts an existing pair's scope; that is a real drift signal and RS7
+# reporting it red is the mechanism working, not a false alarm to silence by re-freezing blindly.
+#
+# MEASURED 2026-08-14 (re-derive, do not trust this comment per CLAUDE.md rule 13): 15 (spec, plan)
+# pairs, 117 declared ids, 93 COVERED, 24 UNSCOPED (20 classed testable, 4 classed
+# not-test-assertable). RS9a/RS9b assert only a >= 15 / >= 100 vacuity floor on the DERIVATION
+# (rule 10) — this file's 117 exact rows, compared row-by-row in RS7/RS8, are where R-03 is actually
+# proven.
+#
+# NO ARCHIVED SPEC IS EDITED FOR THIS FILE (CLAUDE.md rule 14, ADR-0138 §D5). Retro-fitting
+# `(no-test: ...)` into the 4 completed SPECs behind the not-test-assertable rows below would
+# correct a historical record in place. This file is a new record ABOUT that corpus, written
+# forward; `no-test:` (ADR-0138 §D4) governs SPECs written from now on, this baseline governs the
+# ones already written and closed.
+#
+# COLUMN FORMAT.
+#   COVERED row:   <spec-basename><TAB><R-NN><TAB>COVERED
+#   UNSCOPED row:  <spec-basename><TAB><R-NN><TAB>UNSCOPED<TAB><class><TAB><reason>
+# <class> is one of:
+#   testable            — genuine drift: the gate was silently passing this id via a foreign or
+#                          unlisted test-file mention before scoping landed.
+#   not-test-assertable — a documentation, process, or external-process obligation with nothing
+#                          executable to assert; the residual false-negative class ADR-0138 §D4
+#                          exists to exempt going forward via (no-test: ...).
+#
+# A line beginning with "#" in column 1 is a comment; spec-coverage.test.sh's RS8b skips it
+# explicitly (`case "$_bn" in \#*) continue ;; esac`) and neither RS7 nor RS8a reads this file's
+# lines directly (they iterate the LIVE side and probe the baseline only for a specific (bn, id)
+# pair), so a comment line cannot be mistaken for a stray (bn, id) row on either check.
+176-worktree-isolation-contract.spec.md	R-01	COVERED
+176-worktree-isolation-contract.spec.md	R-02	COVERED
+176-worktree-isolation-contract.spec.md	R-03	COVERED
+176-worktree-isolation-contract.spec.md	R-04	COVERED
+176-worktree-isolation-contract.spec.md	R-05	COVERED
+176-worktree-isolation-contract.spec.md	R-06	COVERED
+176-worktree-isolation-contract.spec.md	R-07	COVERED
+176-worktree-isolation-contract.spec.md	R-08	COVERED
+176-worktree-isolation-contract.spec.md	R-09	COVERED
+176-worktree-isolation-contract.spec.md	R-10	COVERED
+176-worktree-isolation-contract.spec.md	R-11	COVERED
+176-worktree-isolation-contract.spec.md	R-12	COVERED
+176-worktree-isolation-contract.spec.md	R-13	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+176-worktree-isolation-contract.spec.md	R-14	COVERED
+176-worktree-isolation-contract.spec.md	R-15	COVERED
+176-worktree-isolation-contract.spec.md	R-16	COVERED
+176-worktree-isolation-contract.spec.md	R-17	COVERED
+176-worktree-isolation-contract.spec.md	R-18	COVERED
+176-worktree-isolation-contract.spec.md	R-19	COVERED
+222-vendor-deployed-only-skills.spec.md	R-01	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+222-vendor-deployed-only-skills.spec.md	R-02	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+222-vendor-deployed-only-skills.spec.md	R-03	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+222-vendor-deployed-only-skills.spec.md	R-04	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+222-vendor-deployed-only-skills.spec.md	R-05	COVERED
+222-vendor-deployed-only-skills.spec.md	R-06	COVERED
+222-vendor-deployed-only-skills.spec.md	R-07	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+222-vendor-deployed-only-skills.spec.md	R-08	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+222-vendor-deployed-only-skills.spec.md	R-09	COVERED
+222-vendor-deployed-only-skills.spec.md	R-10	UNSCOPED	not-test-assertable	a process step: staging/sync-to-claude.sh --apply is run and the subsequent dry run reports zero drift, nothing executable in a test file to assert
+286-the-sixth-bare-manifest-set-flag-sh-ment.spec.md	R-01	COVERED
+286-the-sixth-bare-manifest-set-flag-sh-ment.spec.md	R-02	COVERED
+286-the-sixth-bare-manifest-set-flag-sh-ment.spec.md	R-03	COVERED
+287-rtf-s-gitignore-glob-and-this-repo-s-own.spec.md	R-01	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+287-rtf-s-gitignore-glob-and-this-repo-s-own.spec.md	R-02	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+289-the-transition-pair-count-is-stated-in-t.spec.md	R-01	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+289-the-transition-pair-count-is-stated-in-t.spec.md	R-02	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+289-the-transition-pair-count-is-stated-in-t.spec.md	R-03	COVERED
+290-one-real-plan-shape-is-recognised-by-no.spec.md	R-01	COVERED
+290-one-real-plan-shape-is-recognised-by-no.spec.md	R-02	COVERED
+291-a-bold-wrapped-requirement-id-is-invisib.spec.md	R-01	COVERED
+291-a-bold-wrapped-requirement-id-is-invisib.spec.md	R-02	COVERED
+291-a-bold-wrapped-requirement-id-is-invisib.spec.md	R-03	COVERED
+292-the-value-domain-guard-covers-step5-mode.spec.md	R-01	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+292-the-value-domain-guard-covers-step5-mode.spec.md	R-02	COVERED
+292-the-value-domain-guard-covers-step5-mode.spec.md	R-03	COVERED
+294-plan-tasks-sh-has-two-modes-with-opposit.spec.md	R-01	COVERED
+294-plan-tasks-sh-has-two-modes-with-opposit.spec.md	R-02	COVERED
+294-plan-tasks-sh-has-two-modes-with-opposit.spec.md	R-03	COVERED
+365-scope-and-bound-the-autopilot-run.spec.md	R-01	COVERED
+365-scope-and-bound-the-autopilot-run.spec.md	R-02	COVERED
+365-scope-and-bound-the-autopilot-run.spec.md	R-03	COVERED
+365-scope-and-bound-the-autopilot-run.spec.md	R-04	COVERED
+365-scope-and-bound-the-autopilot-run.spec.md	R-05	COVERED
+365-scope-and-bound-the-autopilot-run.spec.md	R-06	COVERED
+365-scope-and-bound-the-autopilot-run.spec.md	R-07	COVERED
+365-scope-and-bound-the-autopilot-run.spec.md	R-08	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+365-scope-and-bound-the-autopilot-run.spec.md	R-09	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+365-scope-and-bound-the-autopilot-run.spec.md	R-10	COVERED
+365-scope-and-bound-the-autopilot-run.spec.md	R-11	COVERED
+385-skill-args-substituted-in-fences.spec.md	R-01	COVERED
+385-skill-args-substituted-in-fences.spec.md	R-02	COVERED
+385-skill-args-substituted-in-fences.spec.md	R-03	COVERED
+385-skill-args-substituted-in-fences.spec.md	R-04	COVERED
+385-skill-args-substituted-in-fences.spec.md	R-05	COVERED
+394-skill-fences-rely-on-word-splitting.spec.md	R-01	COVERED
+394-skill-fences-rely-on-word-splitting.spec.md	R-02	COVERED
+394-skill-fences-rely-on-word-splitting.spec.md	R-03	COVERED
+394-skill-fences-rely-on-word-splitting.spec.md	R-04	COVERED
+394-skill-fences-rely-on-word-splitting.spec.md	R-05	COVERED
+394-skill-fences-rely-on-word-splitting.spec.md	R-06	COVERED
+394-skill-fences-rely-on-word-splitting.spec.md	R-07	COVERED
+394-skill-fences-rely-on-word-splitting.spec.md	R-08	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+394-skill-fences-rely-on-word-splitting.spec.md	R-09	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+394-skill-fences-rely-on-word-splitting.spec.md	R-10	COVERED
+394-skill-fences-rely-on-word-splitting.spec.md	R-11	UNSCOPED	not-test-assertable	a documentation obligation: the ADR records that the defect predates issue #385 and that the --features bound was never applied on this machine
+394-skill-fences-rely-on-word-splitting.spec.md	R-12	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+394-skill-fences-rely-on-word-splitting.spec.md	R-13	COVERED
+399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-01	COVERED
+399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-02	COVERED
+399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-03	COVERED
+399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-04	COVERED
+399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-05	COVERED
+399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-06	COVERED
+399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-07	COVERED
+399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-08	COVERED
+399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-09	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-01	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-02	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-03	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-04	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+404-stop-gate-trigger-granularity.spec.md	R-05	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-06	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-07	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-08	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-09	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-10	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-11	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-12	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-13	COVERED
+404-stop-gate-trigger-granularity.spec.md	R-14	UNSCOPED	not-test-assertable	a documentation obligation: the ceiling decision and the settings.json producer/consumer drift are recorded in an ADR, not implemented here
+410-order-the-manifest-completed-transit.spec.md	R-01	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-02	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-03	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-04	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-05	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-06	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-07	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-08	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+410-order-the-manifest-completed-transit.spec.md	R-09	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-10	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-11	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-12	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-13	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-14	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+410-order-the-manifest-completed-transit.spec.md	R-15	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-16	COVERED
+410-order-the-manifest-completed-transit.spec.md	R-17	UNSCOPED	not-test-assertable	an external-process obligation: the E4/H5 uncommitted-manifest gap is filed as its own issue and referenced from the ADR, not fixed in this feature
