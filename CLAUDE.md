@@ -81,7 +81,7 @@ and in the `.claude/` directories of target projects — not here.
 
 ## Rules
 
-Seventeen invariants this repository learned by getting them wrong, each with the one-clause reason
+Eighteen invariants this repository learned by getting them wrong, each with the one-clause reason
 that makes it more than a slogan and the ADR that established it. **They are stated here once.**
 Until issue #380 they were restated across 95 narrative blocks — over two hundred times — which is
 what made this file ~75,000 tokens in every orchestrator turn.
@@ -153,6 +153,11 @@ promoted. What *is* verified is that no line was lost: see ADR-0136.
     meet.** A state that nothing produces, a helper that nothing calls, a remedy naming a command
     that does not exist — all three shipped here, all three passed review. → ADR-0071, ADR-0095,
     ADR-0099.
+18. **A scan is satisfied by the whole population it searches, not by the part it meant.** An
+    identifier whose namespace restarts per feature, matched against a repo-wide file set, is
+    satisfied by a stranger's file: measured, every one of 199 declared requirement ids passed on a
+    foreign match. Rule 7 guards a denominator that collapsed to zero; this is the same failure with
+    the denominator too large, and it reads as coverage just as convincingly. → ADR-0138.
 
 ## Chain decision index
 
@@ -256,3 +261,4 @@ heading naming the same ADR. Open the ADR itself for the full decision record.
 - **ADR-0134** — Phase P step 3 reads roadmap state and the `--only` list, not just whether a SPEC file exists → `docs/architecture/ADR-0134-399-phase-p-roadmap-state.md`
 - **ADR-0135** — the terminal transition moves ahead of the `commit` invocation; the invariant is phrased over WRITES → `docs/architecture/ADR-0135-410-completed-transition-before-commit.md`
 - **ADR-0137** — the stop-gate trigger is bounded by a project-owned path list, and a timeout is counted like a block → `docs/architecture/ADR-0137-404-stop-gate-trigger-granularity.md`
+- **ADR-0138** — the requirement-coverage test axis is tightened by SCOPE, because the measured defect was a repo-wide scan, not a comment → `docs/architecture/ADR-0138-312-spec-coverage-scope-not-assertion-shape.md`
