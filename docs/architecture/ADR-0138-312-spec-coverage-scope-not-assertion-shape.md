@@ -85,10 +85,10 @@ not a catch.
 Scoped to each feature's own test files, of the 93 ids whose citation lands in the feature's own
 tests, **49 (53%) have every one of their mentions on a comment line.**
 
-The extreme case is the most recently shipped feature. `stop-gate-path-predicate.test.sh` (issue
-#404, merged 2026-08-13, 25 passing assertions) contains 45 `R-NN` mention lines. **All 45 are
-comments.** Zero are assertion lines. The harness convention here is a comment header that says which
-requirement a block of assertions answers, followed by the assertions:
+The extreme case is the most recently shipped feature. `stop-gate-path-predicate.test.sh`
+(issue #404, merged 2026-08-13, 25 passing assertions) contains 45 `R-NN` mention lines.
+**All 45 are comments.** Zero are assertion lines. The harness convention here is a comment header
+that says which requirement a block of assertions answers, followed by the assertions:
 
 ```
 # TASK 4 CHECKPOINT (R-09, R-10) — SGP10-SGP14 ADDED, WRITTEN AGAINST THE SAME PRE-FIX
@@ -293,8 +293,8 @@ three-input CLI.
 ### A5 — Scope by feature slug: a test file whose basename contains the SPEC's slug
 
 **Rejected on fit.** The corpus does not name test files after feature slugs. Issue #404's slug is
-`404-stop-gate-trigger-granularity`; its test file is `stop-gate-path-predicate.test.sh`. Issue
-#287's slug is `rtf-s-gitignore-glob-and-this-repo-s-own`; its test file is
+`404-stop-gate-trigger-granularity`; its test file is `stop-gate-path-predicate.test.sh`.
+Issue #287's slug is `rtf-s-gitignore-glob-and-this-repo-s-own`; its test file is
 `triage-state-gitignore.test.sh`. A slug-similarity threshold that matched these would match most of
 the harness, and one that did not would empty the scope for most features.
 
