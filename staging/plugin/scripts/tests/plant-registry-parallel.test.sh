@@ -40,7 +40,7 @@
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
 # plant: PP0 | plugin/scripts/tests/plant-registry-parallel.test.sh | for _h in alpha beta gamma delta | for _h in alpha
 # plant: PP1 | plugin/scripts/tests/plant-check.sh | SBX="$WORK/sbx$IDX" | SBX="$WORK/sbx"
-# plant: PP2 | plugin/scripts/tests/plant-check.sh | grep -q "^FAIL: $aid"; then | grep -q "^"; then
+# plant: PP2 | plugin/scripts/tests/plant-check.sh | grep -q "^FAIL: $aid" <<PLANT_HARNESS_OUTPUT | grep -q "^" <<PLANT_HARNESS_OUTPUT
 # plant: PP3 | plugin/scripts/tests/plant-check.sh | for _i in $(seq 1 "$DECL_N"); do | for _i in $(seq "$DECL_N" -1 1); do
 # plant: PP4 | plugin/scripts/tests/plant-check.sh | rm -rf "$SBX"    # freed at verdict time, not at exit (issue #350) | : # sandbox deliberately kept
 # plant: PP5 | plugin/scripts/tests/plant-check.sh | case "$JOBS" in ''|*[!0-9]*) JOBS=1 ;; esac | case "$JOBS" in ''|*[!0-9]*) : ;; esac

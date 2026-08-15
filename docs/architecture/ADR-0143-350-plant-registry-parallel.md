@@ -150,6 +150,25 @@ it is what this repository keeps writing ADRs about.
 
 This evidence cannot be a test. It costs half an hour.
 
+**On the runner, where it is actually paid — and the first reading of it was wrong.** The first CI
+run of the parallel registry came in at **19m18s** against the **20m07s** recorded for the
+sequential step, which looks like nothing. It is nothing: the same sequential step had measured
+20m07s, 23m32s and 25m51s on three separate occasions, so one number on each side of a six-minute
+spread is not a difference. Comparing across runs could not answer the question and was abandoned.
+
+Both arms were then run **in the same job, on the same machine, from the same commit**, with the
+sequential arm going SECOND so it inherits a warm page cache — biasing the comparison against the
+change, so that whatever survives is a lower bound:
+
+| arm | wall clock |
+|---|---|
+| default workers (the runner has **2 cores**, printed rather than assumed) | **1182s — 19m42s** |
+| `PLANT_JOBS=1`, with the warm cache | **1723s — 28m43s** |
+
+**1.46× on two cores, as a floor**, and about nine minutes off every merge. The local 3.87× does not
+transfer and was never going to: at 381 plants the phase copies 8.4 GB, and a two-core runner is
+contending for the resource that was already the bottleneck.
+
 **Inside the registry — `plant-registry-parallel.test.sh`.** A fixture: a miniature staging tree
 with four harnesses, twelve plants, and the real `plant-check.sh` pointed at it three times. Its
 harnesses sleep for descending intervals so completion order is not declaration order, and one of
@@ -175,8 +194,12 @@ the four harnesses to RUN.
   about 3.9, not a change of shape. When `spec-coverage.test.sh` doubles again, this comes back.
 - **#355 is untouched.** The fired predicate is still a prefix match, and the vacuity guard still
   inherits its looseness — deliberately, so both halves agree.
-- **The ceiling on CI is unknown until CI says so.** The runner's core count is printed by the
-  workflow rather than assumed, and the before/after pair from the PR's own run is recorded below.
+- **Two cores is the ceiling on CI, and it is now a measured number rather than an assumption.**
+  1.46× is what two cores buy. The lever that would buy more on GitHub is not more workers inside
+  one job — it is **sharding the registry across several jobs**, because jobs run on separate
+  machines. That was rejected above at a cost of "~3 minutes", a figure computed on the assumption
+  that the workers would do the rest; on two cores they do not, and the rejection should be re-read
+  with this number beside it rather than treated as settled.
 
 ## Alternatives considered
 
@@ -214,8 +237,17 @@ produce. A plant removed is evidence removed.
   fixture's workers actually overlapping to produce divergence. The fixture's sleeps make that
   overlap certain rather than likely, but it is a probabilistic plant in a file full of
   deterministic ones, and it is disclosed here rather than discovered later.
-- The four-worker run is the one to reach for when reproducing locally: 9.69 min, and it leaves the
+- The four-worker run is the one to reach for when reproducing locally: 9m41s, and it leaves the
   machine usable.
+- **A `printf … | grep -q` shipped a race, and it was invisible on the machine it was written on.**
+  `grep -q` exits at the first match and closes the pipe while `printf` is still writing; bash 5 on
+  the runner prints `write error: Broken pipe`, bash 3.2 on macOS swallows it. One stray line whose
+  presence depended on timing was enough to make the one-worker and many-worker outputs differ —
+  with every verdict identical and `PASS=385 FAIL=0` on both sides. It was caught only because the
+  runner comparison was written to fail on ANY difference rather than on a changed verdict, and the
+  harness output now reaches `grep` through a here-document. The general form is the same lesson as
+  D2's `TMPDIR`: this repository is written on bash 3.2 and runs on bash 5, and a check that cannot
+  see a difference on one of them is not a check on both.
 
 ## References
 

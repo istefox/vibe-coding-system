@@ -224,7 +224,16 @@ PY
   fi
 
   OUT=$(bash "$SBX/staging/plugin/scripts/tests/$tfile" 2>&1)
-  if printf '%s\n' "$OUT" | grep -q "^FAIL: $aid"; then
+  # The harness output reaches grep through a HERE-DOCUMENT and not a pipe. `printf … | grep -q`
+  # races: grep exits at the first match and closes the pipe while printf is still writing, and the
+  # loser prints `write error: Broken pipe`. Measured on the runner 2026-08-15 — bash 5 reports it,
+  # bash 3.2 on macOS swallows it, so it is invisible where this file is written and visible where
+  # it runs. One stray line whose presence depends on timing is enough to make the one-worker /
+  # many-worker diff differ, and that diff is the only evidence that concurrency changed nothing.
+  if grep -q "^FAIL: $aid" <<PLANT_HARNESS_OUTPUT
+$OUT
+PLANT_HARNESS_OUTPUT
+  then
     emit FIRED "  plant $tfile [$aid] fired"
   else
     emit NOFIRE "    $tfile [$aid] — the assertion still passed with the mechanism removed"
