@@ -76,7 +76,12 @@ jobs:
 
       # The plant registry runs LAST and separately: it is not a *.test.sh, and it re-runs other
       # harnesses against mutated copies of the tree. A failure here means an assertion somewhere
-      # pins nothing, which is a different signal from a harness going red. ~12s for 15 plants.
+      # pins nothing, which is a different signal from a harness going red.
+      #
+      # COST: 23m32s for 362 plants, measured on this runner in run 31879782795 (2026-08-15). The
+      # note this replaces said "~12s for 15 plants" and had been true at 15. It is by far the
+      # longest step in the workflow and it grows linearly with the registry — issue #350. Re-derive
+      # the pair from a run rather than trusting this line; that it went stale once is the point.
       - name: Run the plant registry
         run: bash staging/plugin/scripts/tests/plant-check.sh
 
