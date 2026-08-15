@@ -598,6 +598,7 @@ Path resolution is the orchestrator's responsibility — never the subagent's (D
 
 **Cost note (Max 20x profile):** for **routine / low-risk** ADRs, dispatch architect with override `model: sonnet` (the `model` parameter of the Agent tool); reserve **Opus** (default frontmatter) for **complex / novel / high-risk** designs. Opus resolves via `ANTHROPIC_DEFAULT_OPUS_MODEL` to `claude-opus-4-8[1m]` (fast mode: 2x standard cost, 2.5x speed). Consistent with the `opusplan` philosophy: Opus where reasoning matters, Sonnet for routine execution.
 
+<!-- dispatch-site: step2-architect class=inline exempt: the architect's report is parsed for named field markers whose absence already hard-aborts, so an early read fails loud rather than green -->
 **Dispatch architect:**
 ```
 [IF $_project_context is non-empty — add this block, otherwise omit entirely:]
@@ -888,8 +889,59 @@ cap: 2 attempts — if the slice does not converge in two attempts, stop and rep
 rather than trying a third approach. State explicitly in your report: (1) whether it builds/runs,
 (2) whether its own test passes, (3) how many attempts it took, (4) whether you deviated from the
 plan's stated approach and why, (5) your own recommended verdict (green/amber/red) — this
-recommendation is recorded but is NOT authoritative. Do not commit." })
+recommendation is recorded but is NOT authoritative. Do not commit.
+As your LAST action, before returning anything, write the completion fact into your OWN worktree:
+mkdir -p .claude/dispatch && printf 'tasks=1 files=<M>\n' > .claude/dispatch/tracer-bullet.done
+with a literal count for M. The controller measures nothing until that file exists." })
 ```
+
+<!-- dispatch-site: tracer-bullet-coder class=isolated -->
+**Measure nothing until the coder has finished.** Every fact below is read off the filesystem, and
+since CC 2.1.232 the `Agent` call above returns before the coder has written anything (issue #435,
+ADR-0139). Measured early, `git diff` is smaller than the truth and the budget check returns
+`CLEAN` — a false green that no assertion downstream can see, because each assertion measures the
+right thing at the wrong moment. Resolve the completion fact first:
+
+<!-- fence-contract: tracer-bullet-completion-gate -->
+```bash
+# ADR-0133 §D1: quoted heredoc, body runs under bash, `export` carries the caller's values in,
+# terminator at COLUMN 0. `project_root` is bound by Step 0; no worktree variable exists at this
+# site, so the worktree is found by globbing for the marker's own id — one tracer dispatch per
+# chain makes that unambiguous.
+export project_root CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
+set -u
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/dispatch-state.sh" ]; then
+  _ds="$CLAUDE_PLUGIN_ROOT/scripts/dispatch-state.sh"
+elif [ -f "$HOME/.claude/hooks/dispatch-state.sh" ]; then
+  _ds="$HOME/.claude/hooks/dispatch-state.sh"
+else
+  echo "HALT: dispatch-state.sh not found — the check DID NOT RUN. Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 2
+fi
+[ -n "${project_root:-}" ] || { echo "HALT: project_root is unset"; exit 2; }
+_wt=""
+for _c in "$project_root"/.claude/worktrees/agent-*; do
+  [ -d "$_c" ] || continue
+  [ -e "$_c/.claude/dispatch/tracer-bullet.done" ] && { _wt="$_c"; break; }
+done
+# No worktree carrying the marker is not the same as a worktree carrying a bad one. Ask the helper
+# about the project root itself so an inline (non-isolated) build still gets a real token.
+[ -n "$_wt" ] || _wt="$project_root"
+ST=$(bash "$_ds" "$_wt" tracer-bullet 2>&1); RC=$?
+[ "$RC" -eq 3 ] && { echo "HALT: dispatch-state DID NOT RUN — $ST"; exit 2; }
+[ "$RC" -eq 2 ] && { echo "HALT: dispatch-state bad invocation — $ST"; exit 2; }
+case "${ST%%|*}" in
+  DONE) echo "tracer bullet complete: ${ST#*|} — measure now" ;;
+  *)    echo "HALT: tracer bullet is ${ST%%|*} — compute NO verdict; leave tracer_bullet_verdict null"; exit 2 ;;
+esac
+FENCE_BASH
+```
+
+On any `HALT`: leave `tracer_bullet_verdict` at `null` and stop. **Do not invent a fourth verdict
+value** — the domain is `green|amber|red` and `h16-direction-check.sh`'s amber|red match matches on it; `null` is
+already the pre-verdict state and is the honest one for "the probe did not finish". An unfinished
+probe is not evidence about the slice, so it must not produce a verdict in either direction.
 
 **The verdict is computed, not asked (§D3 — the assertion that matters most in this file).** Treat
 the coder's report as CONTEXT ONLY. Compute `tracer_bullet_verdict` from these mechanical facts,
@@ -2347,6 +2399,7 @@ stderr.
    breaker is deliberately NOT relaxed in the meantime; it reads `step5-report.json` once after
    dispatch, so a red that greens inside Step 5 never reaches it.
 
+   <!-- dispatch-site: step5-checkpoint-reviewer class=inline exempt: the reviewer grant carries no Write tool so no completion fact is producible, and its findings are carried forward as advice that halts nothing -->
    **[IF `manifest.step5_review_mode = checkpoint` (ADR-0039 D5-D9) — otherwise skip:]**
    At this same checkpoint, dispatch the `reviewer` agent scoped to the diff of the batch that
    just closed. It reviews only and fixes nothing: this is where the Workflow path would run its
@@ -2375,6 +2428,7 @@ verification after dispatch is mandatory in all cases.
 
 **Coder model override:** if `manifest.coder_model = "opus"` (or legacy `"fable"`), pass `model: "opus"` to every `Agent(subagent_type="coder", ...)` call in this dispatch. If `sonnet` or null, omit the `model` parameter (global coder.md applies).
 
+<!-- dispatch-site: step5-batch-tester class=isolated exempt: its completion is already gated by the merge-back block that must run before the coder forks, so an early advance conflicts rather than passes -->
 **Tester batch dispatch template** (dispatched BEFORE this batch's coder — ADR-0049 §D1; pin
 `subagent_type: "tester"` and `model: "sonnet"` explicitly on this `Agent` call, ADR-0049 §D6; no
 `effort` pin — the Agent tool has no such parameter, ADR-0068 §D7, issue #180):
@@ -2445,14 +2499,72 @@ Anonymize mode: ON (ADR-0011).
 - No decorative emoji unless requested. Concise and technical docs.
 
 Return a report with: tasks completed (list), files modified, test results, harness deltas.
-End the report with exactly this line (no trailing text): `PATTERN: DONE tasks=<N> files=<M>`
-where N = number of tasks completed and M = number of files modified.
+
+As your LAST action, before returning anything, write the completion fact into your OWN worktree:
+
+    mkdir -p .claude/dispatch && printf 'tasks=%s files=%s\n' <N> <M> > .claude/dispatch/step5-batch-<B>.done
+
+where N = tasks completed, M = files modified, B = this batch's number. Write it with literal
+numbers, not shell variables. This file is what the controller reads; a report that ends without it
+is treated as an unfinished dispatch no matter what the report says.
+
+Also end the report with `PATTERN: DONE tasks=<N> files=<M>` — that line is for a human reading the
+transcript and nothing branches on it.
 ```
 
-After each batch, before running controller-side verification:
-- Check the agent report text for `PATTERN: DONE` on its own line.
-- If absent: the dispatch was likely truncated (socket close / context overflow). Do NOT continue to the next batch or transition. Present to the user: "Coder dispatch may have been truncated — PATTERN: DONE not found in report. Verify `git diff` manually before proceeding." Wait for user acknowledgment.
-- If present: proceed with controller-side verification as normal.
+<!-- dispatch-site: step5-batch-coder class=isolated -->
+After each batch, before running controller-side verification, read the batch's completion fact.
+**Do not look for `PATTERN: DONE` in the agent's report.** Since CC 2.1.232 a non-teammate `Agent`
+dispatch returns immediately with metadata only and the report arrives later as a notification, so
+the tool result never carries that line and a healthy dispatch reads as truncated (issue #435,
+ADR-0139). The coder writes the fact inside its own worktree and `$WT` — already bound by the
+merge-back block above — is the root that holds it:
+
+<!-- fence-contract: step5-batch-completion-gate -->
+```bash
+# ADR-0133 §D1 (issue #394): the body below runs under BASH, not the host shell, and the heredoc is
+# QUOTED — so nothing in it expands here. `export` is what carries the caller-bound values in, the
+# same device check 6 of autopilot-build uses. WT is the worktree path the merge-back block above
+# already bound; B is this batch's number. Terminator at COLUMN 0: an indented one is swallowed and
+# destroys this fence's exit code silently.
+export WT B CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
+set -u
+# Two-tier helper resolution, deliberately identical to autopilot-build checks 6 and 7 rather than
+# extracted: a fence that borrowed a path bound in another fence would stop being independently
+# executable, which is the property ADR-0083 F4/F7 rest on.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/dispatch-state.sh" ]; then
+  _ds="$CLAUDE_PLUGIN_ROOT/scripts/dispatch-state.sh"
+elif [ -f "$HOME/.claude/hooks/dispatch-state.sh" ]; then
+  _ds="$HOME/.claude/hooks/dispatch-state.sh"
+else
+  echo "HALT: dispatch-state.sh not found — the check DID NOT RUN. Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 2
+fi
+[ -n "${WT:-}" ] || { echo "HALT: WT is unset — the merge-back block above must bind it"; exit 2; }
+[ -n "${B:-}" ]  || { echo "HALT: B is unset — bind this batch's number"; exit 2; }
+ST=$(bash "$_ds" "$WT" "step5-batch-$B" 2>&1); RC=$?
+[ "$RC" -eq 3 ] && { echo "HALT: dispatch-state DID NOT RUN for batch $B — $ST"; exit 2; }
+[ "$RC" -eq 2 ] && { echo "HALT: dispatch-state bad invocation for batch $B — $ST"; exit 2; }
+case "${ST%%|*}" in
+  DONE)    echo "batch $B complete: ${ST#*|}" ;;
+  PENDING) echo "HALT: batch $B dispatched and not finished — do NOT advance or transition"; exit 2 ;;
+  NONE)    echo "HALT: batch $B has no completion fact — the coder never wrote one"; exit 2 ;;
+  PARTIAL) echo "HALT: batch $B completion fact is half-written — verify by hand"; exit 2 ;;
+  UNREADABLE) echo "HALT: batch $B completion fact is unreadable — verify by hand"; exit 2 ;;
+  *)       echo "HALT: unrecognised token ${ST%%|*} for batch $B"; exit 2 ;;
+esac
+FENCE_BASH
+```
+
+On any `HALT` line: do NOT continue to the next batch or transition. Present the line to the user
+and wait for acknowledgment. On the `complete` line: proceed with controller-side verification as
+normal.
+
+**Which half is enforcement (rule 16).** The helper's answer is a fact about the filesystem and the
+fence exits non-zero on every non-`DONE` token — that half is mechanical. That the orchestrator then
+stops rather than pressing on is an instruction, exactly as it was before. What changed is that the
+check no longer consults a channel that cannot carry the answer.
 
 After all batches complete and controller-side verification passes, transition to
 `step_6_review`. Present Gate 5.
@@ -4182,6 +4294,8 @@ options:
 ```
 
 "Run (errors + types)": emit "Gate 5.06: specialized review active ✓ — dispatching reviewer agents...". Dispatch **in parallel** using the Agent tool:
+
+<!-- dispatch-site: gate506-reviewers class=inline exempt: the reviewer agent has no Write tool in its grant so it cannot produce a completion fact, and a missed report here changes no gate decision -->
 ```
 Agent({ subagent_type: "reviewer",
         prompt: "SCOPE: silent-failure-hunter — error handling audit.\nReview the following files for: empty or swallowed catch blocks, ignored return values or Result types, optional chaining masking failures, unhandled Promise rejections, broad exception catches that hide root causes, and error objects logged without actionable context.\nReport only — do not edit any file. Output findings grouped by severity: CRITICAL / IMPORTANT / SUGGESTIONS.\nFiles: <modified-file-list-from-manifest>" })
@@ -4189,7 +4303,15 @@ Agent({ subagent_type: "reviewer",
 Agent({ subagent_type: "reviewer",
         prompt: "SCOPE: type-design-analyzer — structural type quality audit.\nReview the following files for: stringly-typed IDs or enums (String where a newtype/wrapper should be used), missing discriminated unions (raw string/int where a sealed type fits), anemic models (pure DTOs with no invariants or behavior), nullable fields that should never be null, weak encapsulation exposing internal state, and protocol/interface misuse.\nReport only — do not edit any file. Output findings grouped by severity: CRITICAL / IMPORTANT / SUGGESTIONS.\nFiles: <modified-file-list-from-manifest>" })
 ```
-Wait for both agents. Merge the two finding lists, deduplicate by file+location, then present the aggregated result as a single severity table (CRITICAL / IMPORTANT / SUGGESTIONS). Emit "Gate 5.06: specialized review complete ✓". **Proceed immediately to Gate 5.1 — no additional HITL.**
+Wait for both agents — **and since CC 2.1.232 that is an instruction, not a guarantee** (issue #435,
+ADR-0139). Both dispatches return immediately with metadata and their reports arrive as separate
+notifications, so this sentence is now load-bearing where it used to be free. It stays an
+instruction because the `reviewer` agent's grant carries no `Write` tool
+(`staging/plugin/agents/reviewer.md`), so it structurally cannot write a completion fact the way the
+Step 5 coder does. What bounds the damage is that this gate produces a report and decides nothing:
+merging early loses a finding from a table, it never advances a state or greens a check.
+
+Merge the two finding lists, deduplicate by file+location, then present the aggregated result as a single severity table (CRITICAL / IMPORTANT / SUGGESTIONS). Emit "Gate 5.06: specialized review complete ✓". **Proceed immediately to Gate 5.1 — no additional HITL.**
 
 "Skip (proceed to Gate 5.1)": emit "Gate 5.06: skipped ✓ — proceeding to Gate 5.1...". Proceed to Gate 5.1.
 

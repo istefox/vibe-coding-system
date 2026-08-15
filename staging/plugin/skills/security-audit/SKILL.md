@@ -62,6 +62,12 @@ run — semgrep unavailable" and continue. Tooling absence never blocks the rema
 
 ### Step 2 — Separate-AI review
 
+<!-- dispatch-site: security-audit-reviewer class=inline exempt: the reviewer grant carries no Write tool, and this skill is report-only by ADR-0056 D4 so no finding of its own can gate anything -->
+**Read the report before writing Step 3.** This dispatch returns before the agent has run
+(issue #435): since CC 2.1.232 the `Agent` call yields metadata and the report arrives as a
+notification. Nothing here previously said to wait, which was survivable only because the next
+section is a human checklist.
+
 Dispatch a `reviewer` agent with a **security-only** brief:
 
 > "Review the current diff (or, if there is no diff, the full source tree) for security

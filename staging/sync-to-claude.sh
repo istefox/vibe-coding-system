@@ -177,6 +177,7 @@ plugin/scripts/session-context-inject.sh|hooks/session-context-inject.sh
 plugin/scripts/ensure-state-dir.sh|hooks/ensure-state-dir.sh
 plugin/scripts/mark-dirty.sh|hooks/mark-dirty.sh
 plugin/scripts/post-write-check.sh|hooks/post-write-check.sh
+plugin/scripts/dispatch-state.sh|hooks/dispatch-state.sh
 plugin/scripts/secret-scan.sh|hooks/secret-scan.sh
 plugin/scripts/dependency-scan.sh|hooks/dependency-scan.sh
 plugin/scripts/external-dependency-check.sh|hooks/external-dependency-check.sh
@@ -311,7 +312,7 @@ if [ "$APPLY" -eq 1 ]; then
     "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
     "$DEST/hooks/agent-command-scope.sh" "$DEST/hooks/vendor-checks.sh" \
     "$DEST/hooks/autopilot-disarm.sh" "$DEST/hooks/autopilot-migrate.sh" \
-    "$DEST/hooks/required-checks-audit.sh" 2>/dev/null || true
+    "$DEST/hooks/required-checks-audit.sh" "$DEST/hooks/dispatch-state.sh" 2>/dev/null || true
 fi
 
 # DEPLOYED SKILL REPORT (issue #222, ADR-0087, R-06). Every directory (or symlink resolving to a
