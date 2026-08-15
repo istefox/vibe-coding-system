@@ -173,6 +173,9 @@ plugin/scripts/agent-command-scope.sh|hooks/agent-command-scope.sh
 plugin/scripts/test-write-scope.sh|hooks/test-write-scope.sh
 plugin/scripts/db-backup-guardrail.sh|hooks/db-backup-guardrail.sh
 plugin/scripts/approve-test-cmd.sh|hooks/approve-test-cmd.sh
+plugin/scripts/approve-acceptance-cmd.sh|hooks/approve-acceptance-cmd.sh
+plugin/scripts/acceptance-run.sh|hooks/acceptance-run.sh
+plugin/scripts/acceptance-adapter-swift.sh|hooks/acceptance-adapter-swift.sh
 plugin/scripts/session-context-inject.sh|hooks/session-context-inject.sh
 plugin/scripts/ensure-state-dir.sh|hooks/ensure-state-dir.sh
 plugin/scripts/mark-dirty.sh|hooks/mark-dirty.sh
