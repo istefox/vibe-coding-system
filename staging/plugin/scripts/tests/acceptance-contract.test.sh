@@ -34,6 +34,7 @@
 # plant: A27 | plugin/scripts/acceptance-run.sh | [ "$CMD" = "NONE" ] && halt "opted-out | [ "$CMD" = "__never__" ] && halt "opted-out
 # plant: A29 | plugin/scripts/acceptance-run.sh | if ! { [ -f "$TRUST" ] && grep -F -x -q -- "$LINE" "$TRUST" 2>/dev/null; }; then | if false; then
 # plant: A34 | plugin/scripts/acceptance-run.sh | --schema-version 0.1.0 \ | \
+# plant: A36 | plugin/scripts/acceptance-adapter-swift.sh | [ -r "$JSON_FILE" ] || { | [ -f "$JSON_FILE" ] || {
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -72,18 +73,14 @@ if [ "$HAVE_JQ" -eq 0 ]; then
 else
   ok "A0: jq present, adapter assertions can execute"
 
-  OUT=$(run_adapter --json-file /dev/stdin <<EOF
-$(bundle "$(node 'testR01_a()' 'Passed'),$(node 'testR02_b()' 'Failed'),$(node 'testR03_c()' 'Skipped')")
-EOF
-)
+  bundle "$(node 'testR01_a()' 'Passed'),$(node 'testR02_b()' 'Failed'),$(node 'testR03_c()' 'Skipped')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json")
   [ "$(verdict "$OUT" R-01)" = "PASS" ] && ok "A1: Passed maps to PASS" || bad "A1: Passed did not map to PASS — got [$(verdict "$OUT" R-01)]"
   [ "$(verdict "$OUT" R-02)" = "FAIL" ] && ok "A2: Failed maps to FAIL" || bad "A2: Failed did not map to FAIL"
   [ "$(verdict "$OUT" R-03)" = "SKIP" ] && ok "A3: Skipped maps to SKIP, not to PASS" || bad "A3: Skipped did not map to SKIP — got [$(verdict "$OUT" R-03)]"
 
-  OUT=$(run_adapter --json-file /dev/stdin <<EOF
-$(bundle "$(node 'testR04_a()' 'Expected Failure'),$(node 'testR05_b()' 'unknown'),$(node 'testR06_c()' '-')")
-EOF
-)
+  bundle "$(node 'testR04_a()' 'Expected Failure'),$(node 'testR05_b()' 'unknown'),$(node 'testR06_c()' '-')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json")
   [ "$(verdict "$OUT" R-04)" = "FAIL" ] && ok "A4: Expected Failure maps to FAIL — an acceptance criterion expected to fail is not met" || bad "A4: Expected Failure did not map to FAIL"
   [ "$(verdict "$OUT" R-05)" = "FAIL" ] && ok "A5: unknown maps to FAIL, never to PASS" || bad "A5: unknown did not map to FAIL"
   [ "$(verdict "$OUT" R-06)" = "FAIL" ] && ok "A6: an ABSENT result maps to FAIL (the schema does not require the key)" || bad "A6: absent result did not map to FAIL"
@@ -93,10 +90,8 @@ EOF
   # convention and reject the stranger, and a rule that gets one right by dropping the other is the
   # failure this pair exists to catch.
   # ==============================================================================================
-  OUT=$(run_adapter --json-file /dev/stdin <<EOF
-$(bundle "$(node 'testR01_greetReturnsHello()' 'Passed'),$(node 'testERROR6_boundaryProbe()' 'Passed'),$(node 'testUnboundHelper()' 'Passed')")
-EOF
-)
+  bundle "$(node 'testR01_greetReturnsHello()' 'Passed'),$(node 'testERROR6_boundaryProbe()' 'Passed'),$(node 'testUnboundHelper()' 'Passed')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json")
   [ "$(verdict "$OUT" R-01)" = "PASS" ] && ok "A7: testR01_...() binds R-01 — the id may follow the mandatory test prefix" || bad "A7: the real XCTest naming convention did not bind"
   # A8 asserts an ABSENCE, so it must first establish that there was an output to be absent FROM.
   # Its own plant taught this: a mutated pattern made jq error out, the adapter halted, every
@@ -113,25 +108,19 @@ EOF
   esac
   [ "$(field "$OUT" unbound)" = "2" ] && ok "A9: unbound counts CASES that carry no id (2 of 3)" || bad "A9: unbound=$(field "$OUT" unbound), expected 2"
 
-  OUT=$(run_adapter --json-file /dev/stdin <<EOF
-$(bundle "$(node 'R-06: the user can archive a note' 'Passed'),$(node 'R-7 short form' 'Passed'),$(node 'testR07_dup()' 'Failed')")
-EOF
-)
+  bundle "$(node 'R-06: the user can archive a note' 'Passed'),$(node 'R-7 short form' 'Passed'),$(node 'testR07_dup()' 'Failed')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json")
   [ "$(verdict "$OUT" R-06)" = "PASS" ] && ok "A10: a Swift Testing display name binds at the string start" || bad "A10: Swift Testing display name did not bind"
   [ "$(verdict "$OUT" R-07)" = "FAIL" ] && ok "A11: R-7 and R-07 normalise to ONE criterion, and FAIL wins over PASS" || bad "A11: R-7/R-07 did not normalise together, or FAIL did not win — got [$(verdict "$OUT" R-07)]"
 
-  OUT=$(run_adapter --json-file /dev/stdin <<EOF
-$(bundle "$(node 'testR08_and_R09_both()' 'Passed')")
-EOF
-)
+  bundle "$(node 'testR08_and_R09_both()' 'Passed')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json")
   { [ "$(verdict "$OUT" R-08)" = "PASS" ] && [ "$(verdict "$OUT" R-09)" = "PASS" ]; } \
     && ok "A12: one case bound to two ids produces two criteria" || bad "A12: a multi-id case did not produce both criteria"
   [ "$(field "$OUT" unbound)" = "0" ] && ok "A13: a case bound twice is counted ONCE in the case population, not twice" || bad "A13: unbound=$(field "$OUT" unbound) — the binding population leaked into the case count"
 
-  OUT=$(run_adapter --json-file /dev/stdin <<EOF
-$(bundle "$(node 'testR10_a()' 'Skipped'),$(node 'testR10_b()' 'Passed'),$(node 'testR11_a()' 'Skipped'),$(node 'testR11_b()' 'Failed')")
-EOF
-)
+  bundle "$(node 'testR10_a()' 'Skipped'),$(node 'testR10_b()' 'Passed'),$(node 'testR11_a()' 'Skipped'),$(node 'testR11_b()' 'Failed')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json")
   [ "$(verdict "$OUT" R-10)" = "SKIP" ] && ok "A14: SKIP wins over PASS when a criterion has both" || bad "A14: SKIP did not win over PASS"
   [ "$(verdict "$OUT" R-11)" = "FAIL" ] && ok "A15b: FAIL wins over SKIP" || bad "A15b: FAIL did not win over SKIP"
 
@@ -139,20 +128,16 @@ EOF
   # Denominators (rule 7). Zero is never a clean result, and the TWO ways of reaching zero have
   # DIFFERENT repairs, so they must be distinguishable from the outside.
   # ==============================================================================================
-  OUT=$(run_adapter --json-file /dev/stdin <<EOF
-{"testPlanConfigurations":[],"devices":[],"testNodes":[]}
-EOF
-)
+  printf '%s\n' '{"testPlanConfigurations":[],"devices":[],"testNodes":[]}' > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json")
   case "$OUT" in
     *'ACCEPTANCE-HALT no-cases-at-all'*) ok "A16: zero Test Case nodes halts as no-cases-at-all" ;;
     *) bad "A16: an empty bundle did not halt as no-cases-at-all — got [$OUT]" ;;
   esac
   case "$OUT" in *'ACCEPTANCE-RESULT'*) bad "A17: a halt still emitted an ACCEPTANCE-RESULT line, so a caller reading only RESULT sees a clean run" ;; *) ok "A17: no ACCEPTANCE-RESULT is emitted alongside a halt" ;; esac
 
-  OUT2=$(run_adapter --json-file /dev/stdin <<EOF
-$(bundle "$(node 'testUnboundHelper()' 'Passed'),$(node 'testAlsoUnbound()' 'Passed')")
-EOF
-)
+  bundle "$(node 'testUnboundHelper()' 'Passed'),$(node 'testAlsoUnbound()' 'Passed')" > "$T/fx.json"
+  OUT2=$(run_adapter --json-file "$T/fx.json")
   case "$OUT2" in
     *'ACCEPTANCE-HALT no-bound-cases'*) ok "A15: cases that ran with no id halts as no-bound-cases" ;;
     *) bad "A15: an unbound-only bundle did not halt as no-bound-cases — got [$OUT2]" ;;
@@ -166,10 +151,8 @@ EOF
   # The reverse direction (rule 8): what the executed set OMITS.
   # ==============================================================================================
   printf '%s\n' '# Acceptance' '- R-01 a' '- R-02 b' '- R-40 never written' '- R-41 also never' > "$T/ACC.md"
-  OUT=$(run_adapter --json-file /dev/stdin --declared "$T/ACC.md" <<EOF
-$(bundle "$(node 'testR01_a()' 'Passed'),$(node 'testR02_b()' 'Failed')")
-EOF
-)
+  bundle "$(node 'testR01_a()' 'Passed'),$(node 'testR02_b()' 'Failed')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json" --declared "$T/ACC.md")
   { [ "$(verdict "$OUT" R-40)" = "MISSING" ] && [ "$(verdict "$OUT" R-41)" = "MISSING" ]; } \
     && ok "A20: a declared criterion that never executed is reported MISSING" || bad "A20: a declared-but-unexecuted criterion was not reported MISSING"
   [ "$(field "$OUT" missing)" = "2" ] && [ "$(field "$OUT" declared)" = "4" ] \
@@ -177,31 +160,23 @@ EOF
   [ "$(field "$OUT" total)" = "2" ] \
     && ok "A24: MISSING stays OUT of total — total counts criteria that were executed, and one count must answer one question" || bad "A24: total=$(field "$OUT" total) absorbed the MISSING criteria"
 
-  OUT=$(run_adapter --json-file /dev/stdin <<EOF
-$(bundle "$(node 'testR01_a()' 'Passed')")
-EOF
-)
+  bundle "$(node 'testR01_a()' 'Passed')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json")
   { [ "$(field "$OUT" declared)" = "-" ] && [ "$(field "$OUT" missing)" = "-" ]; } \
     && ok "A23: with no declaration the reverse check reports '-', so 'it did not run' is VISIBLE rather than absent" || bad "A23: a missing reverse check reported a number instead of '-'"
 
   printf 'no identifiers in this file at all\n' > "$T/EMPTY.md"
-  OUT=$(run_adapter --json-file /dev/stdin --declared "$T/EMPTY.md" <<EOF
-$(bundle "$(node 'testR01_a()' 'Passed')")
-EOF
-)
+  bundle "$(node 'testR01_a()' 'Passed')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json" --declared "$T/EMPTY.md")
   case "$OUT" in *'ACCEPTANCE-HALT declared-empty'*) ok "A22: a declaration yielding zero ids halts — a cross-check with no subject reads as clean (rule 9)" ;; *) bad "A22: an empty declaration did not halt — got [$OUT]" ;; esac
 
-  OUT=$(run_adapter --json-file /dev/stdin --declared "$T/does-not-exist.md" <<EOF
-$(bundle "$(node 'testR01_a()' 'Passed')")
-EOF
-)
+  bundle "$(node 'testR01_a()' 'Passed')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json" --declared "$T/does-not-exist.md")
   case "$OUT" in *'ACCEPTANCE-HALT declared-file-unreadable'*) ok "A26b: an unreadable declaration halts rather than silently skipping the reverse check" ;; *) bad "A26b: an unreadable declaration did not halt" ;; esac
 
   # A25 — the arithmetic identity holds on a mixed population. Its plant breaks the self-check.
-  OUT=$(run_adapter --json-file /dev/stdin <<EOF
-$(bundle "$(node 'testR01_a()' 'Passed'),$(node 'testR02_b()' 'Failed'),$(node 'testR03_c()' 'Skipped'),$(node 'testR04_d()' 'Passed')")
-EOF
-)
+  bundle "$(node 'testR01_a()' 'Passed'),$(node 'testR02_b()' 'Failed'),$(node 'testR03_c()' 'Skipped'),$(node 'testR04_d()' 'Passed')" > "$T/fx.json"
+  OUT=$(run_adapter --json-file "$T/fx.json")
   _p=$(field "$OUT" pass); _f=$(field "$OUT" fail); _s=$(field "$OUT" skip); _t=$(field "$OUT" total)
   { [ -n "$_t" ] && [ $((_p + _f + _s)) -eq "$_t" ] && [ "$_t" -eq 4 ]; } \
     && ok "A25: pass+fail+skip == total, self-checked, so a dropped verdict cannot report a clean total" || bad "A25: identity broken — pass=$_p fail=$_f skip=$_s total=$_t"
@@ -218,6 +193,21 @@ case "$OUT" in *'ACCEPTANCE-HALT jq-absent'*) ok "A28: jq absent halts explicitl
 
 bash "$ADAPTER" --nonsense >/dev/null 2>&1
 [ $? -eq 2 ] && ok "A29b: a bad invocation exits 2 — distinct from a halt, which exits 0" || bad "A29b: a bad invocation did not exit 2"
+
+# A36 — --json-file must accept anything READABLE, not only a regular file. Pipes, FIFOs, process
+# substitution and /dev/stdin are all readable and all legitimate. This was measured, not imagined:
+# the first version tested `-f`, which is true for a heredoc on macOS (bash materialises it as a
+# temp file) and false on Linux (bash 5 gives it a pipe). The harness was green here and red on CI,
+# with 25 assertions producing empty output. Driven through process substitution, which is a pipe
+# on both platforms.
+if [ "$HAVE_JQ" -eq 1 ]; then
+  OUT=$(bash "$ADAPTER" --json-file <(bundle "$(node 'testR01_a()' 'Passed')") 2>/dev/null)
+  [ "$(verdict "$OUT" R-01)" = "PASS" ] \
+    && ok "A36: --json-file reads a non-regular input (a pipe) — readability is the predicate, not file type" \
+    || bad "A36: a readable pipe was rejected — [$OUT]"
+else
+  bad "A36: jq absent, so the non-regular-input assertion DID NOT RUN"
+fi
 
 # ================================================================================================
 # The runner. Resolution, opt-out and trust. No Xcode is needed for any of these: every one of them

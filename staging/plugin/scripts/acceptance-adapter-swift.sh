@@ -87,7 +87,13 @@ TMP=$(mktemp -d) || { printf '%s: mktemp failed\n' "$SELF" >&2; exit 2; }
 trap 'rm -rf "$TMP"' EXIT
 
 if [ -n "$JSON_FILE" ]; then
-  [ -f "$JSON_FILE" ] && [ -r "$JSON_FILE" ] || {
+  # READABLE, not "regular file". `-f` excludes pipes, FIFOs, process substitution and /dev/stdin,
+  # all of which are perfectly readable and all of which a caller may legitimately pass. The first
+  # version tested -f and worked on macOS, where bash materialises a heredoc as a temp file, while
+  # failing on Linux, where bash 5 gives it a pipe — green locally, red on CI. That is the SECOND
+  # wrong-permission-bit check in this feature (the adapter resolver in acceptance-run.sh tested -x
+  # for a file it invokes as `bash <path>`), so the class is named here rather than fixed quietly.
+  [ -r "$JSON_FILE" ] || {
     printf '%s: --json-file not readable: %s\n' "$SELF" "$JSON_FILE" >&2; exit 2; }
   cat "$JSON_FILE" > "$TMP/in.json"
 else

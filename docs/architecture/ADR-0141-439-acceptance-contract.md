@@ -163,11 +163,21 @@ enforcement belongs with the `ACCEPTANCE.md` that Wave 2 produces.
   reads as true — and `A35` matched the prose in the adapter's header explaining the very regex it
   was checking (rule 12, inside the file that documents rule 12's lesson). Neither would have been
   found by review, and both are recorded at their site.
-- **An end-to-end run found a defect fixtures could not.** The adapter resolver tested `-x`, while
-  invoking it as `bash <path>` needs only `-r`; `staging/` is inconsistent about the execute bit
-  (`stop-gate.sh` is 755, `dispatch-state.sh` is 644), so the probe resolved nothing in a source
-  checkout and would have worked after deployment. Testing for the wrong permission bit is a check
-  that agrees with itself.
+- **The wrong file predicate shipped twice, and neither instance was caught by review.** The
+  adapter resolver tested `-x` for a file it invokes as `bash <path>`, where only `-r` matters, and
+  `staging/` is inconsistent about the execute bit (`stop-gate.sh` 755, `dispatch-state.sh` 644):
+  the probe resolved nothing in a source checkout and would have worked after deployment. Then
+  `--json-file` tested `-f`, which excludes pipes — true for a heredoc on macOS, where bash
+  materialises one as a temp file, and **false on Linux**, where bash 5 gives it a pipe. The
+  harness was green locally and red on CI with 25 assertions producing empty output.
+
+  The class is *asking about the wrong property of a file*, and both instances share a signature:
+  the check agreed with itself on the machine it was written on. `A36` now drives `--json-file`
+  through process substitution so the pipe case is executed rather than assumed.
+- **A single-platform green is not a green.** Every local run here is macOS; the CI runner is
+  Linux. The heredoc defect was invisible to 81 green harnesses and one real end-to-end run, and
+  visible immediately to the first CI execution. Worth remembering the next time a local suite is
+  offered as sufficient evidence.
 - The CI harness list grows to 81. Nothing here runs per turn, so the stop-gate's measured 159s is
   unchanged; the cost lands only when the lane calls it.
 - This wave is **attended**. It introduces a new TOFU surface, and arming it unattended is not in
