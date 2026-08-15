@@ -1530,3 +1530,35 @@ stage. A run that breaks one of them breaks itself mid-flight, and its own green
 evidence. #388 could run unattended on its own, but ADR-0093 calibrated those keywords against a
 measured corpus and the change must be verified in the failing direction, which is the thing an
 unreviewed run is least able to do (see #374).
+
+### Phase 13 — the build lane the chain never had (issue #439, plan of 2026-08-15)
+
+Subject: building an app through `concept-to-code` arrives with missing functionality and bugs,
+while the same work driven by `/goal` lands close to the request. Three measured causes, none about
+model quality. The chain **discards the conversation by design** — principle 11.1.3 and the `/clear`
+in the §11.5 diagram put five lossy compressions between the operator and the `coder`, which reads
+the plan and never the operator. **Nothing verifies the product**: zero XCUITest/`simctl` hits
+repo-wide, Playwright only in prose, and the single "does it build/run" (Step 4.5's tracer bullet)
+is off by default and covers one thin slice. And **the prior art was abandoned** — ADR-0010 is still
+`Proposed`, its `artifacts.e2e` never landed, and `clean-public-repo/SKILL.md:21,433` names the
+skill as if it shipped.
+
+The lane sits **beside** the chain, not inside it: single-session by a declared deviation scoped to
+itself, so the existing chain keeps principle 11.1.3 intact. Its deliverable is an acceptance suite
+a machine runs, so each `R-NN` is an executed case rather than a citation — the ADR-0138 lesson
+applied at product scale.
+
+- [ ] the acceptance contract, its Swift adapter and harness — `ACCEPTANCE-RESULT` / `ACCEPTANCE-CASE` / `ACCEPTANCE-HALT`, TOFU-gated like `.claude/test-cmd`  (issue #439)
+- [ ] the `brief-to-app` interview — brief carried verbatim, `design-brainstorm` and `macos-ux` composed rather than reinvented, ending by printing the `/goal` contract  (issue #439)
+- [ ] the ADR, the scoped blueprint deviation, the PAIRS/CI wiring, and the dangling `web-e2e-test` reference resolved  (issue #439)
+
+**Wave 1 is the only autopilot candidate of the three**, and only after #435 is resolved. It adds
+standalone files (`acceptance-run.sh`, `approve-acceptance-cmd.sh`) and touches no path the runner
+executes mid-flight, which is the Phase 12 test. Waves 2 and 3 edit `concept-to-code`'s neighbours,
+the blueprint and the PAIRS registry — a run that breaks those breaks itself, and its own green
+stops being evidence.
+
+**Ordering is not negotiable here.** Wave 1 first because it is the only part that exists nowhere,
+and because it is independently useful: pointed at the current chain's output it measures the very
+defect that motivated the lane, which is the measurement Wave 2 should be designed on rather than
+assumed from (rule 13).
