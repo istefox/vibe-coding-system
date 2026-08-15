@@ -1548,7 +1548,7 @@ itself, so the existing chain keeps principle 11.1.3 intact. Its deliverable is 
 a machine runs, so each `R-NN` is an executed case rather than a citation — the ADR-0138 lesson
 applied at product scale.
 
-- [ ] the acceptance contract, its Swift adapter and harness — `ACCEPTANCE-RESULT` / `ACCEPTANCE-CASE` / `ACCEPTANCE-HALT`, TOFU-gated like `.claude/test-cmd`  (issue #439)
+- [x] the acceptance contract, its Swift adapter and harness — `ACCEPTANCE-RESULT` / `ACCEPTANCE-CASE` / `ACCEPTANCE-HALT`, TOFU-gated like `.claude/test-cmd`  (issue #439, PR #443, ADR-0141)
 - [ ] the `brief-to-app` interview — brief carried verbatim, `design-brainstorm` and `macos-ux` composed rather than reinvented, ending by printing the `/goal` contract  (issue #439)
 - [ ] the ADR, the scoped blueprint deviation, the PAIRS/CI wiring, and the dangling `web-e2e-test` reference resolved  (issue #439)
 
@@ -1557,6 +1557,12 @@ standalone files (`acceptance-run.sh`, `approve-acceptance-cmd.sh`) and touches 
 executes mid-flight, which is the Phase 12 test. Waves 2 and 3 edit `concept-to-code`'s neighbours,
 the blueprint and the PAIRS registry — a run that breaks those breaks itself, and its own green
 stops being evidence.
+
+*Overtaken 2026-08-15: Wave 1 shipped attended, and the run is the reason the note stays. Four
+defects surfaced, none of them by review — two vacuous assertions found by their own plants, a
+wrong permission bit found by the first end-to-end run, and a `-f` on a pipe found only by the
+Linux CI after a green macOS suite. An unattended run would have committed the last one twice
+before anything noticed.*
 
 **Ordering is not negotiable here.** Wave 1 first because it is the only part that exists nowhere,
 and because it is independently useful: pointed at the current chain's output it measures the very
