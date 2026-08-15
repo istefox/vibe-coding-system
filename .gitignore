@@ -17,6 +17,7 @@
 .claude/agent-memory-local/
 .claude/worktrees/
 .claude/autopilot-state/
+.claude/dispatch/
 *.bak
 *.bak-*
 

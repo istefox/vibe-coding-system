@@ -241,6 +241,7 @@ Conditions for Branch A:
 
 **Branch B — Sequential Agent-tool fallback (only when `hook_verified: false` explicitly set):**
 
+<!-- dispatch-site: deep-refactor-reviewers class=inline exempt: the reviewer grant carries no Write tool so no completion fact is producible, and this is the report-only audit half which fixes nothing -->
 Dispatch the 4 reviewer agents sequentially using the `Agent` tool at `model: opus`. Only active
 when the project manifest explicitly contains `hook_verified: false` (manual override to force
 sequential mode). Document in the Gate 1 summary that sequential mode was used.
@@ -376,6 +377,7 @@ For each dimension D in [dead-code, perf, structure]:
   For each finding F in the sorted list:
 
   Determine the agent type from `F.fix_type`:
+  <!-- dispatch-site: deep-refactor-fix-agents class=isolated exempt: each fix dispatch is followed by a git-diff no-op detection, so an unfinished agent is recorded as skipped rather than as fixed -->
   - `coder` → dispatch `coder` agent at `model: opus`
   - `refactorer` → dispatch `refactorer` agent at `model: opus`
   - `debugger` → dispatch `debugger` agent at `model: opus`
