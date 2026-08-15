@@ -87,10 +87,42 @@ jobs:
       # and the core count printed below is what decides what it costs now. Re-derive both from a
       # run rather than trusting this comment — the note this replaces said "~12s for 15 plants" and
       # had been true at 15, which is the whole reason the instruction is here.
+      # TEMPORARY, issue #350: an A/B on the runner itself, to be reverted before merge.
+      #
+      # The first CI run of the parallel registry came in at 19m18s against 20m07s sequential — and
+      # the same sequential step has measured 20m07s, 23m32s and 25m51s on three occasions, so a
+      # single number on each side is not a difference, it is a number inside a cloud. The two arms
+      # therefore run in the SAME job, on the SAME machine, from the same commit.
+      #
+      # DEFAULT FIRST, SEQUENTIAL SECOND, deliberately: the second arm inherits a warm page cache,
+      # which biases the comparison AGAINST the change being measured. Whatever advantage survives
+      # that ordering is a lower bound.
+      #
+      # It also buys something the local evidence could not: the byte-identity of the two outputs
+      # has only ever been checked on macOS. This checks it on the runner.
       - name: Run the plant registry
         run: |
+          set +e
           echo "runner cores: $(nproc)"
-          bash staging/plugin/scripts/tests/plant-check.sh
+          _s=$(date +%s)
+          bash staging/plugin/scripts/tests/plant-check.sh >/tmp/plant-default.log 2>&1
+          _rc_default=$?
+          _e=$(date +%s); echo "AB default-workers: $((_e-_s))s rc=$_rc_default"
+          _s=$(date +%s)
+          PLANT_JOBS=1 bash staging/plugin/scripts/tests/plant-check.sh >/tmp/plant-one.log 2>&1
+          _rc_one=$?
+          _e=$(date +%s); echo "AB one-worker: $((_e-_s))s rc=$_rc_one"
+          if diff -q /tmp/plant-one.log /tmp/plant-default.log >/dev/null; then
+            echo "AB outputs identical on this runner ($(grep -c . /tmp/plant-default.log) lines)"
+            _same=0
+          else
+            echo "AB OUTPUTS DIFFER — concurrency changed a verdict on Linux:"
+            diff /tmp/plant-one.log /tmp/plant-default.log | head -40
+            _same=1
+          fi
+          tail -12 /tmp/plant-default.log
+          set -e
+          [ "$_rc_default" -eq 0 ] && [ "$_rc_one" -eq 0 ] && [ "$_same" -eq 0 ]
 
   links:
     name: links
