@@ -59,6 +59,33 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
+# build_sandbox <dir> — ONE construction, used by both the baseline pass and every mutation run.
+#
+# ADR-0086's criterion applies exactly: the baseline and the mutation runs must answer the same
+# question about the same environment, so two copies that could drift apart would be a defect. A
+# baseline measured in a differently-populated sandbox would recreate issue #433 one level up —
+# an assertion red in one sandbox and green in the other, with the runner unable to tell which.
+#
+# The four repo-root inputs below are the fix for #433's cause. Measured 2026-08-15: with only
+# `staging/` and `docs/`, 26 harnesses fail and 58 (file, assertion-id) pairs are RED before any
+# mutation, because every assertion whose subject is `docs-ci.yml`, `.gitignore`, `PROJECT.md` or
+# `CLAUDE.md` cannot evaluate. Supplying them takes that to 2, and no new failure appeared.
+#
+# `.git` is deliberately NOT supplied. The remaining two reds need a real repository
+# (`git ls-files`, `git check-ignore`), and at least one harness detects the absence of a checkout
+# in order to SKIP an assertion it cannot evaluate — copying a `.git` in would change what
+# isolation means here. Those two are covered by the baseline instead of by the environment.
+build_sandbox() {
+  _sb="$1"
+  mkdir -p "$_sb"
+  cp -R "$STAGING" "$_sb/staging" 2>/dev/null
+  cp -R "$REPO/docs" "$_sb/docs" 2>/dev/null
+  cp -R "$REPO/.github" "$_sb/.github" 2>/dev/null
+  cp "$REPO/.gitignore" "$_sb/.gitignore" 2>/dev/null
+  cp "$REPO/CLAUDE.md" "$_sb/CLAUDE.md" 2>/dev/null
+  cp "$REPO/PROJECT.md" "$_sb/PROJECT.md" 2>/dev/null
+}
+
 # --- collect declarations -----------------------------------------------------------------------
 DECLS="$WORK/decls"; : >"$DECLS"
 for t in "$TESTS"/*.test.sh; do
@@ -78,8 +105,55 @@ else
   bad "PC0 only $DECL_N plant declaration(s) found — expected >= 10; the collector is broken, not clean"
 fi
 
+# --- baseline: which assertions are ALREADY red before any mutation (issue #433) ------------------
+#
+# Without this, the fired-predicate below answers "does `FAIL: <aid>` appear after the mutation",
+# never "did the mutation turn it red". An assertion the sandbox itself cannot satisfy is credited
+# as a fired plant and counted in PC1, which is CLAUDE.md rule 2's exact failure mode reached
+# through the verification environment rather than through the assertion.
+#
+# ONE sandbox and one run per DECLARING harness — 39 today against the 362 mutation runs below,
+# about 11% — DERIVED from the run counts, not measured as a delta; no like-for-like
+# before/after exists because every timed run already carried the baseline. Issue #350's cost
+# complaint is the 362, not the 39.
+BASE_SBX="$WORK/baseline"
+build_sandbox "$BASE_SBX"
+BASE_DIR="$WORK/base"; mkdir -p "$BASE_DIR"
+BASE_MISSING=""; BASE_N=0
+for tfile in $(cut -f1 "$DECLS" 2>/dev/null | sort -u); do
+  _h="$BASE_SBX/staging/plugin/scripts/tests/$tfile"
+  if [ ! -f "$_h" ]; then
+    BASE_MISSING="$BASE_MISSING $tfile(absent)"
+    continue
+  fi
+  _out=$(bash "$_h" 2>&1); _rc=$?
+  _red=$(printf '%s\n' "$_out" | grep '^FAIL: ' 2>/dev/null || true)
+  # An empty baseline from a harness that DID NOT RUN would make PC5 pass for every plant in it,
+  # so emptiness must be corroborated before it is trusted (rule 7 — guard the denominator).
+  #
+  # The corroboration is the EXIT STATUS, not a success token. The failure idiom is uniform and
+  # enforced — a declaring harness is refused above unless it emits the `FAIL: <id>` prefix — but
+  # the success idiom is not: measured 2026-08-15 across all 39 declaring harnesses, 38 print
+  # `PASS: <id>` and phase1.test.sh prints `ok   <label>`, 37 assertions, entirely green. A
+  # predicate enumerating success tokens would have called that live harness dead, and would stay
+  # blind to the next harness that invents a third form (rule 8 — a list is blind to what it omits).
+  #
+  # So: reds present, the baseline speaks for itself. No reds and exit 0 with output, the harness
+  # ran and had nothing to report. Anything else — a nonzero exit with no attributable FAIL line, or
+  # silence — is a reading this file refuses to call clean.
+  if [ -n "$_red" ]; then
+    printf '%s\n' "$_red" >"$BASE_DIR/$tfile"
+  elif [ "$_rc" -eq 0 ] && [ -n "$_out" ]; then
+    : >"$BASE_DIR/$tfile"
+  else
+    BASE_MISSING="$BASE_MISSING $tfile(rc=$_rc,unattributable)"
+    continue
+  fi
+  BASE_N=$((BASE_N + 1))
+done
+
 # --- run each plant -----------------------------------------------------------------------------
-NOFIRE=""; BADPLANT=""
+NOFIRE=""; BADPLANT=""; VACUOUS=""
 # RUN_N counts DECLARATIONS — it names the sandbox directory, so it must advance even for one that
 # is rejected. RAN_N counts plants that actually executed. Reporting the first as the second is how
 # "1 run" gets printed for a run in which nothing ran, which is the shape this file exists to catch.
@@ -96,6 +170,22 @@ while IFS="$(printf '\t')" read -r tfile payload; do
   if [ -z "$aid" ] || [ -z "$tgt" ] || [ -z "$ndl" ]; then
     BADPLANT="$BADPLANT
     $tfile: malformed declaration (need 4 fields separated by ' | ')"
+    continue
+  fi
+
+  # VACUOUS is NOT folded into BADPLANT, and the difference is the repair. BADPLANT means the
+  # registry COULD NOT RUN this plant — malformed fields, unattributable harness, unresolvable
+  # target, a needle matching zero or many sites. VACUOUS means the plant would run and its firing
+  # would prove NOTHING, because the assertion is already red without it. Two states, two repairs,
+  # so two tokens (issue #433).
+  #
+  # The comparison uses the SAME predicate as the fired check below, deliberately, so the two halves
+  # agree. That predicate is a PREFIX match (issue #355, still open), so this guard inherits the
+  # looseness and may over-refuse a plant whose id is a prefix of an already-red one. Over-refusal
+  # fails loud, which is the safe direction; under-refusal is the defect being fixed.
+  if [ -f "$BASE_DIR/$tfile" ] && grep -q "^FAIL: $aid" "$BASE_DIR/$tfile"; then
+    VACUOUS="$VACUOUS
+    $tfile [$aid] — already RED in the unmutated sandbox; firing here would prove nothing"
     continue
   fi
 
@@ -119,9 +209,7 @@ while IFS="$(printf '\t')" read -r tfile payload; do
   fi
 
   SBX="$WORK/sbx$RUN_N"
-  mkdir -p "$SBX"
-  cp -R "$STAGING" "$SBX/staging" 2>/dev/null
-  cp -R "$REPO/docs" "$SBX/docs" 2>/dev/null
+  build_sandbox "$SBX"
 
   # PATH RESOLUTION. Staging-relative by default. `../docs/...` reaches the docs copy the sandbox
   # already makes two lines above — which existed only so tests could READ it, while no plant could
@@ -234,6 +322,27 @@ if [ -z "$INDENTED" ]; then
   ok "PC4 no plant declaration is indented (all collectable at column 1)"
 else
   bad "PC4 indented plant declaration(s) — silently skipped by the collector:$INDENTED"
+fi
+
+# PC5 — no plant is declared on an assertion that is already RED before any mutation (issue #433).
+#
+# THIS PASSES ON THE DAY IT SHIPS, and that is not evidence of a repair. No declared plant is
+# vacuous today: intersecting the 58 pre-mutation reds with the 362 declared ids yields four hits
+# and all four are id-only collisions across DIFFERENT files, which the runner cannot confuse
+# because it executes only the declaring harness. What repaired something is the sandbox now
+# carrying the four repo-root inputs (58 reds down to 2). PC5 is the guard for the next declaration.
+if [ -z "$VACUOUS" ]; then
+  ok "PC5 no plant is declared on an assertion already RED in the unmutated sandbox"
+else
+  bad "PC5 vacuous plant(s) — the assertion is red before any mutation, so firing proves nothing:$VACUOUS"
+fi
+
+# PC5b — the baseline itself RAN. An empty baseline for a harness that did not run would make PC5
+# pass for every plant declared in it, which is this file's own failure mode turned on its guard.
+if [ -z "$BASE_MISSING" ]; then
+  ok "PC5b the baseline ran for all $BASE_N declaring harness(es)"
+else
+  bad "PC5b the baseline DID NOT RUN for:$BASE_MISSING — PC5 says nothing about plants in those files"
 fi
 
 _total=$((PASS + FAIL))
