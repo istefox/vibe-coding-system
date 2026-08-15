@@ -109,6 +109,21 @@ jq -e . "$TMP/in.json" >/dev/null 2>&1 || halt "json-unparseable — not the out
 # could fail. Passed into jq with --arg rather than pasted, so there is one string and one plant.
 IDRE='(^|[^A-Za-z0-9]|test)R-?([0-9]{1,3})(?![0-9])'
 
+# THE DECLARED SIDE IS A DIFFERENT DOMAIN AND GETS A DIFFERENT PATTERN (issue #439 Wave 2).
+# --declared reads a MARKDOWN declaration file, which is spec-coverage.sh's domain, not a Swift
+# method name. IDRE above is necessarily loose because a Swift identifier cannot contain a hyphen;
+# applying that looseness to prose reads ids the rest of the system does not recognise. Measured
+# 2026-08-15 across the 48 files in this repo carrying an R-NN checklist, the two diverge on exactly
+# one string — `ISSUE-R-013`, in ADR-0048, which is the counterexample that ADR itself names.
+#
+# So the declared side takes spec-coverage.sh's BOUNDARY: `_` excluded on the left, hyphen required,
+# exactly two digits. What it does NOT copy is that file's right anchor `([^0-9]|$)`, which CONSUMES
+# the following character — correct for the `grep -q` membership tests it is used for there, and
+# wrong here, where a global extraction would swallow the separator and miss the next id in
+# `R-01 R-02`. A lookahead is the same rule without the consumption, and the harness pins the
+# behaviour on both files' counterexamples rather than pinning the two strings to be equal.
+DECLRE='(^|[^A-Za-z0-9_])(R-[0-9][0-9])(?![0-9])'
+
 # --- extract every Test Case node, then its bound ids -------------------------------------------
 # One jq pass emits `<id>\t<TOKEN>` per (case, id) binding, and a second counts the case nodes.
 # They are separate because the counts must be taken over the CASE population, not the BINDING
@@ -165,13 +180,14 @@ sort -u "$TMP/bindings.tsv" | awk -F'\t' '
 DECL_N="-"; MISSING_N="-"
 if [ -n "$DECLARED" ]; then
   [ -f "$DECLARED" ] && [ -r "$DECLARED" ] || halt "declared-file-unreadable — $DECLARED"
-  # Same regex and the SAME normalisation as the binding above. If these two ever diverge the
-  # reverse check silently matches nothing and reports a clean `missing=0` (rule 6: two copies
-  # answering ONE question). Any edit here must be mirrored above, and the harness pins that.
-  jq -Rr --arg re "$IDRE" '
-    def norm: (tonumber) as $n | if $n < 10 then "0\($n)" else "\($n)" end;
-    [ match($re; "g") | .captures[1].string | norm ]
-    | .[] | "R-\(.)"
+  # DECLRE, not IDRE — see the definition above. The two are deliberately different because the
+  # documents are: a markdown declaration versus a Swift method name. What must not differ is this
+  # side and the rest of the system's idea of a declared id, and the harness pins that behaviourally
+  # against ADR-0048's own counterexamples. DECLRE already yields `R-NN`, so no normalisation runs
+  # here: a two-digit form has nothing to normalise, and re-padding it would be a second rule.
+  jq -Rr --arg re "$DECLRE" '
+    [ match($re; "g") | .captures[1].string ]
+    | .[]
   ' "$DECLARED" 2>/dev/null | sort -u > "$TMP/declared.txt"
   DECL_N=$(grep -c . "$TMP/declared.txt" 2>/dev/null || true)
   case "${DECL_N:-}" in ''|*[!0-9]*) DECL_N=0 ;; esac
