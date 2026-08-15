@@ -1,6 +1,6 @@
 #!/bin/bash
 # plant-check.sh — offline, hermetic, no network, no $HOME dependency.
-# Issue #284 / ADR-0108.
+# Issue #284 / ADR-0108. Parallel mutation phase: issue #350 / ADR-0143.
 # Bash 3.2 clean. Run: bash plant-check.sh
 #
 # THE RULE — an assertion is not evidence until a defect has been planted and it has gone RED. This
@@ -43,23 +43,38 @@
 # designed (ADR-0099 `P4`/`P5`, ADR-0104 `P2`). A plant nobody validated is worth as much as an
 # assertion nobody planted.
 #
-# Each plant runs against an isolated `cp -R` of `staging/` and `docs/` — measured at 0.21s — so
+# Each plant runs against an isolated `cp -R` of `staging/` and `docs/` — measured at 0.50s — so
 # nothing here can touch the real tree. Tests resolve their root from `$(dirname "$0")`, so a copied
 # tree redirects with no change to any test.
+#
+# COST AND CONCURRENCY (issue #350, ADR-0143). Every plant costs one full run of the file it lives
+# in, so the registry's total is dominated by the TARGET FILE'S RUNTIME and not by the plant count:
+# measured 2026-08-15, `autopilot-run-scope` carries 58 plants and costs less than
+# `worktree-isolation-contract`'s 11. Two files are 45% of the total. Trimming plants off the slow
+# ones is the remedy the issue rules out, because a plant removed is evidence removed.
+#
+# What the measurement DID leave open is that every mutation run is already isolated — its own
+# sandbox, its own process — and was nonetheless executed one at a time, at 89% of a single core on
+# an 18-core machine, with more time spent in the kernel copying trees than in the tests themselves.
+# So the phase is run by $JOBS workers. Isolation is what makes that legitimate; nothing about the
+# verdicts changes, and the acceptance test for the change was exactly that: the full output, diffed
+# against the sequential run, byte for byte identical across 391 lines.
+#
+# The aggregation below therefore reports in DECLARATION order, never completion order. An output
+# that reshuffles per run cannot be diffed against anything, and the diff is the only evidence that
+# parallelising a validator did not change what it validates.
 set -u
 
 TESTS=$(cd "$(dirname "$0")" && pwd)
 STAGING=$(cd "$TESTS/../../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
+SELF="$TESTS/$(basename "$0")"
 
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
-WORK=$(mktemp -d)
-trap 'rm -rf "$WORK"' EXIT
-
-# build_sandbox <dir> — ONE construction, used by both the baseline pass and every mutation run.
+# build_sandbox <dir> — ONE construction, used by the baseline pass and every mutation run.
 #
 # ADR-0086's criterion applies exactly: the baseline and the mutation runs must answer the same
 # question about the same environment, so two copies that could drift apart would be a defect. A
@@ -86,81 +101,27 @@ build_sandbox() {
   cp "$REPO/PROJECT.md" "$_sb/PROJECT.md" 2>/dev/null
 }
 
-# --- collect declarations -----------------------------------------------------------------------
-DECLS="$WORK/decls"; : >"$DECLS"
-for t in "$TESTS"/*.test.sh; do
-  [ -f "$t" ] || continue
-  grep -n '^# plant:' "$t" 2>/dev/null | while IFS= read -r line; do
-    printf '%s\t%s\n' "$(basename "$t")" "${line#*:# plant:}"
-  done >>"$DECLS"
-done
-DECL_N=$(grep -c . "$DECLS" 2>/dev/null || true)
-DECL_N=${DECL_N:-0}
-
-# PC0 — count guard on the DENOMINATOR (ADR-0085). A glob that stops resolving discovers no plants,
-# reports nothing, and reads exactly like a corpus where every plant fired.
-if [ "$DECL_N" -ge 10 ]; then
-  ok "PC0 plant declarations discovered ($DECL_N)"
-else
-  bad "PC0 only $DECL_N plant declaration(s) found — expected >= 10; the collector is broken, not clean"
-fi
-
-# --- baseline: which assertions are ALREADY red before any mutation (issue #433) ------------------
+# ==================================================================================================
+# WORKER MODE — one declaration, start to verdict. Re-entered as `plant-check.sh --worker N DIR`.
 #
-# Without this, the fired-predicate below answers "does `FAIL: <aid>` appear after the mutation",
-# never "did the mutation turn it red". An assertion the sandbox itself cannot satisfy is credited
-# as a fired plant and counted in PC1, which is CLAUDE.md rule 2's exact failure mode reached
-# through the verification environment rather than through the assertion.
+# This is the mutation loop's body and there is no second copy of it: the sequential path IS this
+# path with one worker. ADR-0086's criterion again — a parallel implementation kept beside a
+# sequential one is two copies answering the same question, and the day they disagree the runner
+# cannot say which verdict is the registry's.
 #
-# ONE sandbox and one run per DECLARING harness — 39 today against the 362 mutation runs below,
-# about 11% — DERIVED from the run counts, not measured as a delta; no like-for-like
-# before/after exists because every timed run already carried the baseline. Issue #350's cost
-# complaint is the 362, not the 39.
-BASE_SBX="$WORK/baseline"
-build_sandbox "$BASE_SBX"
-BASE_DIR="$WORK/base"; mkdir -p "$BASE_DIR"
-BASE_MISSING=""; BASE_N=0
-for tfile in $(cut -f1 "$DECLS" 2>/dev/null | sort -u); do
-  _h="$BASE_SBX/staging/plugin/scripts/tests/$tfile"
-  if [ ! -f "$_h" ]; then
-    BASE_MISSING="$BASE_MISSING $tfile(absent)"
-    continue
-  fi
-  _out=$(bash "$_h" 2>&1); _rc=$?
-  _red=$(printf '%s\n' "$_out" | grep '^FAIL: ' 2>/dev/null || true)
-  # An empty baseline from a harness that DID NOT RUN would make PC5 pass for every plant in it,
-  # so emptiness must be corroborated before it is trusted (rule 7 — guard the denominator).
-  #
-  # The corroboration is the EXIT STATUS, not a success token. The failure idiom is uniform and
-  # enforced — a declaring harness is refused above unless it emits the `FAIL: <id>` prefix — but
-  # the success idiom is not: measured 2026-08-15 across all 39 declaring harnesses, 38 print
-  # `PASS: <id>` and phase1.test.sh prints `ok   <label>`, 37 assertions, entirely green. A
-  # predicate enumerating success tokens would have called that live harness dead, and would stay
-  # blind to the next harness that invents a third form (rule 8 — a list is blind to what it omits).
-  #
-  # So: reds present, the baseline speaks for itself. No reds and exit 0 with output, the harness
-  # ran and had nothing to report. Anything else — a nonzero exit with no attributable FAIL line, or
-  # silence — is a reading this file refuses to call clean.
-  if [ -n "$_red" ]; then
-    printf '%s\n' "$_red" >"$BASE_DIR/$tfile"
-  elif [ "$_rc" -eq 0 ] && [ -n "$_out" ]; then
-    : >"$BASE_DIR/$tfile"
-  else
-    BASE_MISSING="$BASE_MISSING $tfile(rc=$_rc,unattributable)"
-    continue
-  fi
-  BASE_N=$((BASE_N + 1))
-done
+# The verdict leaves as two files rather than one delimited line. A message here can contain any
+# character a plant declaration can contain, and a delimiter that a payload can also contain is how
+# a parser starts reporting a state nobody produced.
+# ==================================================================================================
+if [ "${1:-}" = "--worker" ]; then
+  IDX="${2:?worker index}"; WORK="${3:?worker workdir}"
+  RES="$WORK/res/$IDX"
+  emit() { printf '%s\n' "$1" >"$RES.kind"; printf '%s\n' "$2" >"$RES.msg"; }
 
-# --- run each plant -----------------------------------------------------------------------------
-NOFIRE=""; BADPLANT=""; VACUOUS=""
-# RUN_N counts DECLARATIONS — it names the sandbox directory, so it must advance even for one that
-# is rejected. RAN_N counts plants that actually executed. Reporting the first as the second is how
-# "1 run" gets printed for a run in which nothing ran, which is the shape this file exists to catch.
-RUN_N=0; RAN_N=0
-while IFS="$(printf '\t')" read -r tfile payload; do
-  [ -n "${tfile:-}" ] || continue
-  RUN_N=$((RUN_N + 1))
+  line=$(sed -n "${IDX}p" "$WORK/decls")
+  tfile=$(printf '%s' "$line" | cut -f1)
+  payload=$(printf '%s' "$line" | cut -f2-)
+  [ -n "${tfile:-}" ] || exit 0
 
   aid=$(printf '%s' "$payload"   | awk -F' \\| ' '{print $1}' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
   tgt=$(printf '%s' "$payload"   | awk -F' \\| ' '{print $2}' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
@@ -168,9 +129,8 @@ while IFS="$(printf '\t')" read -r tfile payload; do
   rep=$(printf '%s' "$payload"   | awk -F' \\| ' '{print $4}')
 
   if [ -z "$aid" ] || [ -z "$tgt" ] || [ -z "$ndl" ]; then
-    BADPLANT="$BADPLANT
-    $tfile: malformed declaration (need 4 fields separated by ' | ')"
-    continue
+    emit BADPLANT "    $tfile: malformed declaration (need 4 fields separated by ' | ')"
+    exit 0
   fi
 
   # VACUOUS is NOT folded into BADPLANT, and the difference is the repair. BADPLANT means the
@@ -183,10 +143,9 @@ while IFS="$(printf '\t')" read -r tfile payload; do
   # agree. That predicate is a PREFIX match (issue #355, still open), so this guard inherits the
   # looseness and may over-refuse a plant whose id is a prefix of an already-red one. Over-refusal
   # fails loud, which is the safe direction; under-refusal is the defect being fixed.
-  if [ -f "$BASE_DIR/$tfile" ] && grep -q "^FAIL: $aid" "$BASE_DIR/$tfile"; then
-    VACUOUS="$VACUOUS
-    $tfile [$aid] — already RED in the unmutated sandbox; firing here would prove nothing"
-    continue
+  if [ -f "$WORK/base/$tfile" ] && grep -q "^FAIL: $aid" "$WORK/base/$tfile"; then
+    emit VACUOUS "    $tfile [$aid] — already RED in the unmutated sandbox; firing here would prove nothing"
+    exit 0
   fi
 
   # Attribution depends on the declaring harness emitting `FAIL: <id>`, and five harnesses emit
@@ -203,12 +162,11 @@ while IFS="$(printf '\t')" read -r tfile payload; do
   # machinery it exists to declare unusable. The needle is the EMITTER, not the string, so a
   # comment mentioning the prefix cannot excuse a harness that does not print it.
   if ! grep -qE "(printf|echo)[^#]*FAIL: " "$TESTS/$tfile"; then
-    BADPLANT="$BADPLANT
-    $tfile [$aid]: harness does not emit the 'FAIL: <id>' prefix — a plant here is unattributable"
-    continue
+    emit BADPLANT "    $tfile [$aid]: harness does not emit the 'FAIL: <id>' prefix — a plant here is unattributable"
+    exit 0
   fi
 
-  SBX="$WORK/sbx$RUN_N"
+  SBX="$WORK/sbx$IDX"
   build_sandbox "$SBX"
 
   # PATH RESOLUTION. Staging-relative by default. `../docs/...` reaches the docs copy the sandbox
@@ -220,20 +178,18 @@ while IFS="$(printf '\t')" read -r tfile payload; do
   case "$tgt" in
     ../docs/*)
       case "${tgt#../docs/}" in
-        *..*) BADPLANT="$BADPLANT
-    $tfile [$aid]: refused — '..' inside a ../docs/ target: $tgt"; continue ;;
+        *..*) emit BADPLANT "    $tfile [$aid]: refused — '..' inside a ../docs/ target: $tgt"
+              rm -rf "$SBX"; exit 0 ;;
       esac
       TARGET="$SBX/docs/${tgt#../docs/}" ;;
     *..*)
-      BADPLANT="$BADPLANT
-    $tfile [$aid]: refused — '..' is allowed only as the literal ../docs/ prefix: $tgt"
-      continue ;;
+      emit BADPLANT "    $tfile [$aid]: refused — '..' is allowed only as the literal ../docs/ prefix: $tgt"
+      rm -rf "$SBX"; exit 0 ;;
     *) TARGET="$SBX/staging/$tgt" ;;
   esac
   if [ ! -f "$TARGET" ]; then
-    BADPLANT="$BADPLANT
-    $tfile [$aid]: target not found under staging/ (or ../docs/) — $tgt"
-    continue
+    emit BADPLANT "    $tfile [$aid]: target not found under staging/ (or ../docs/) — $tgt"
+    rm -rf "$SBX"; exit 0
   fi
 
   # Substitute. The needle's words are joined on \s+ so a wrapped clause is still matched, and the
@@ -263,20 +219,173 @@ if len(hits) == 1:
 PY
 )
   if [ "$MRES" != "1" ]; then
-    BADPLANT="$BADPLANT
-    $tfile [$aid]: needle matched $MRES times in $tgt (must be exactly 1)"
-    continue
+    emit BADPLANT "    $tfile [$aid]: needle matched $MRES times in $tgt (must be exactly 1)"
+    rm -rf "$SBX"; exit 0
   fi
 
-  RAN_N=$((RAN_N + 1))
   OUT=$(bash "$SBX/staging/plugin/scripts/tests/$tfile" 2>&1)
   if printf '%s\n' "$OUT" | grep -q "^FAIL: $aid"; then
-    ok "  plant $tfile [$aid] fired"
+    emit FIRED "  plant $tfile [$aid] fired"
   else
-    NOFIRE="$NOFIRE
-    $tfile [$aid] — the assertion still passed with the mechanism removed"
+    emit NOFIRE "    $tfile [$aid] — the assertion still passed with the mechanism removed"
   fi
-done <"$DECLS"
+
+  # Holding every sandbox until the orchestrator's trap fires cost ~8.4 GB of peak disk at 381
+  # plants — 22 MB apiece that nothing ever reads back.
+  rm -rf "$SBX"    # freed at verdict time, not at exit (issue #350)
+  exit 0
+fi
+
+# ==================================================================================================
+# BASELINE BUILDER — one declaring harness, in its own sandbox. Re-entered as `--baseline NAME DIR`.
+# ==================================================================================================
+if [ "${1:-}" = "--baseline" ]; then
+  tfile="${2:?harness name}"; WORK="${3:?workdir}"
+  # A sandbox PER harness, where the sequential file shared one. Sharing was safe while the runs
+  # were serial; run concurrently, a harness that writes anywhere inside the tree it was given
+  # would be corrupting another harness's baseline, and the symptom would be a vacuous-plant
+  # verdict nobody could reproduce. 41 copies cost ~20s of `cp` spread across the workers, which
+  # is the cheapest guarantee on offer.
+  SBX="$WORK/base-sbx-$tfile"
+  build_sandbox "$SBX"
+  _h="$SBX/staging/plugin/scripts/tests/$tfile"
+  if [ ! -f "$_h" ]; then
+    printf 'absent\n' >"$WORK/basemiss/$tfile"; rm -rf "$SBX"; exit 0
+  fi
+  _out=$(bash "$_h" 2>&1); _rc=$?
+  _red=$(printf '%s\n' "$_out" | grep '^FAIL: ' 2>/dev/null || true)
+  # An empty baseline from a harness that DID NOT RUN would make PC5 pass for every plant in it,
+  # so emptiness must be corroborated before it is trusted (rule 7 — guard the denominator).
+  #
+  # The corroboration is the EXIT STATUS, not a success token. The failure idiom is uniform and
+  # enforced — a declaring harness is refused above unless it emits the `FAIL: <id>` prefix — but
+  # the success idiom is not: measured 2026-08-15 across all 39 declaring harnesses, 38 print
+  # `PASS: <id>` and phase1.test.sh prints `ok   <label>`, 37 assertions, entirely green. A
+  # predicate enumerating success tokens would have called that live harness dead, and would stay
+  # blind to the next harness that invents a third form (rule 8 — a list is blind to what it omits).
+  #
+  # So: reds present, the baseline speaks for itself. No reds and exit 0 with output, the harness
+  # ran and had nothing to report. Anything else — a nonzero exit with no attributable FAIL line, or
+  # silence — is a reading this file refuses to call clean.
+  if [ -n "$_red" ]; then
+    printf '%s\n' "$_red" >"$WORK/base/$tfile"
+  elif [ "$_rc" -eq 0 ] && [ -n "$_out" ]; then
+    : >"$WORK/base/$tfile"
+  else
+    printf 'rc=%s,unattributable\n' "$_rc" >"$WORK/basemiss/$tfile"
+  fi
+  rm -rf "$SBX"
+  exit 0
+fi
+
+# ==================================================================================================
+# ORCHESTRATOR
+# ==================================================================================================
+# WORK ROOT — where the sandboxes are built. `mktemp -d` on its own cannot be pointed anywhere on
+# this platform: BSD mktemp IGNORES `TMPDIR` (verified 2026-08-15 on macOS 26; GNU coreutils honours
+# it, so a check written against TMPDIR passes on the Linux runner and is inert on the machine the
+# author is sitting at). `PLANT_WORKROOT` is the portable way to say it — for an operator who wants
+# the copies on a particular volume, and for `plant-registry-parallel.test.sh`, which has to WATCH
+# the sandboxes appear and disappear and cannot do that in a directory it did not choose.
+if [ -n "${PLANT_WORKROOT:-}" ] && [ -d "${PLANT_WORKROOT:-}" ]; then
+  WORK=$(mktemp -d "$PLANT_WORKROOT/plant.XXXXXX")
+else
+  WORK=$(mktemp -d)
+fi
+trap 'rm -rf "$WORK"' EXIT
+
+# JOBS — how many mutation runs are in flight at once.
+#
+# Resolution order: `PLANT_JOBS`, then the machine's own count, then 1. Every failure resolves
+# DOWNWARDS to 1, which is the behaviour this file had before it was parallel: an unreadable core
+# count must not become an unbounded fan-out on a runner nobody has measured.
+#
+# The ceiling is 8 because 8 is what was MEASURED (2026-08-15, 18-core machine, 381 plants). Above
+# it the copies contend for I/O and no number exists, so the file does not invent one; a runner with
+# more cores and a reason can say `PLANT_JOBS=16` and record what it got.
+_detect_jobs() {
+  _j=$(nproc 2>/dev/null) || _j=""
+  [ -n "$_j" ] || _j=$(sysctl -n hw.ncpu 2>/dev/null) || _j=""
+  [ -n "$_j" ] || _j=$(getconf _NPROCESSORS_ONLN 2>/dev/null) || _j=""
+  printf '%s' "$_j"
+}
+JOBS="${PLANT_JOBS:-$(_detect_jobs)}"
+case "$JOBS" in ''|*[!0-9]*) JOBS=1 ;; esac
+[ "$JOBS" -ge 1 ] || JOBS=1
+if [ -z "${PLANT_JOBS:-}" ] && [ "$JOBS" -gt 8 ]; then JOBS=8; fi
+
+# --- collect declarations -----------------------------------------------------------------------
+DECLS="$WORK/decls"; : >"$DECLS"
+for t in "$TESTS"/*.test.sh; do
+  [ -f "$t" ] || continue
+  grep -n '^# plant:' "$t" 2>/dev/null | while IFS= read -r line; do
+    printf '%s\t%s\n' "$(basename "$t")" "${line#*:# plant:}"
+  done >>"$DECLS"
+done
+DECL_N=$(grep -c . "$DECLS" 2>/dev/null || true)
+DECL_N=${DECL_N:-0}
+
+# PC0 — count guard on the DENOMINATOR (ADR-0085). A glob that stops resolving discovers no plants,
+# reports nothing, and reads exactly like a corpus where every plant fired.
+if [ "$DECL_N" -ge 10 ]; then
+  ok "PC0 plant declarations discovered ($DECL_N)"
+else
+  bad "PC0 only $DECL_N plant declaration(s) found — expected >= 10; the collector is broken, not clean"
+fi
+
+# --- baseline: which assertions are ALREADY red before any mutation (issue #433) ------------------
+#
+# Without this, the fired-predicate below answers "does `FAIL: <aid>` appear after the mutation",
+# never "did the mutation turn it red". An assertion the sandbox itself cannot satisfy is credited
+# as a fired plant and counted in PC1, which is CLAUDE.md rule 2's exact failure mode reached
+# through the verification environment rather than through the assertion.
+#
+# ONE run per DECLARING harness — 41 today against the 381 mutation runs below, about 11%. Issue
+# #350's cost complaint is the 381, not the 41.
+mkdir -p "$WORK/base" "$WORK/basemiss" "$WORK/res"
+cut -f1 "$DECLS" 2>/dev/null | sort -u \
+  | xargs -P "$JOBS" -I{} bash "$SELF" --baseline {} "$WORK"
+
+BASE_N=$(ls "$WORK/base" 2>/dev/null | grep -c . || true); BASE_N=${BASE_N:-0}
+BASE_MISSING=""
+for f in "$WORK/basemiss"/*; do
+  [ -e "$f" ] || continue
+  BASE_MISSING="$BASE_MISSING $(basename "$f")($(cat "$f"))"
+done
+
+# --- run each plant -------------------------------------------------------------------------------
+seq 1 "$DECL_N" | xargs -P "$JOBS" -I{} bash "$SELF" --worker {} "$WORK"
+
+# --- aggregate, IN DECLARATION ORDER ---------------------------------------------------------------
+# RUN_N counts DECLARATIONS — every one is accounted for here, including the ones a worker refused.
+# RAN_N counts plants that actually executed. Reporting the first as the second is how "1 run" gets
+# printed for a run in which nothing ran, which is the shape this file exists to catch.
+NOFIRE=""; BADPLANT=""; VACUOUS=""
+RUN_N=0; RAN_N=0
+for _i in $(seq 1 "$DECL_N"); do
+  RUN_N=$((RUN_N + 1))
+  if [ -f "$WORK/res/$_i.kind" ]; then
+    _kind=$(cat "$WORK/res/$_i.kind")
+    _msg=$(cat "$WORK/res/$_i.msg" 2>/dev/null)
+    case "$_kind" in
+      FIRED)    RAN_N=$((RAN_N + 1)); ok "$_msg" ;;
+      NOFIRE)   RAN_N=$((RAN_N + 1)); NOFIRE="$NOFIRE
+$_msg" ;;
+      BADPLANT) BADPLANT="$BADPLANT
+$_msg" ;;
+      VACUOUS)  VACUOUS="$VACUOUS
+$_msg" ;;
+      *)        BADPLANT="$BADPLANT
+    declaration $_i returned the unknown verdict '$_kind' — the registry cannot classify its own output" ;;
+    esac
+  else
+    # Rule 4, applied to this file's own workers: a declaration with no verdict DID NOT RUN, and
+    # that is not the same reading as a plant that ran and found nothing. Silence here would be
+    # counted as a clean registry by every consumer downstream.
+    BADPLANT="$BADPLANT
+    declaration $_i produced no verdict — the worker did not run"
+  fi
+done
 
 # PC1 — every plant fired. A plant that does not fire names an assertion pinning nothing, which is
 # the whole reason this file exists.

@@ -262,3 +262,4 @@ heading naming the same ADR. Open the ADR itself for the full decision record.
 - **ADR-0135** — the terminal transition moves ahead of the `commit` invocation; the invariant is phrased over WRITES → `docs/architecture/ADR-0135-410-completed-transition-before-commit.md`
 - **ADR-0137** — the stop-gate trigger is bounded by a project-owned path list, and a timeout is counted like a block → `docs/architecture/ADR-0137-404-stop-gate-trigger-granularity.md`
 - **ADR-0138** — the requirement-coverage test axis is tightened by SCOPE, because the measured defect was a repo-wide scan, not a comment → `docs/architecture/ADR-0138-312-spec-coverage-scope-not-assertion-shape.md`
+- **ADR-0143** — the plant registry had already paid for isolation and was spending it one core at a time; the verdicts are pinned by a byte-identical diff → `docs/architecture/ADR-0143-350-plant-registry-parallel.md`

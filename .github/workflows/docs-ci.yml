@@ -68,7 +68,7 @@ jobs:
       - name: Run offline shell harnesses
         run: |
           set -e
-          for t in phase1 prep hook-probe hook-verify-workflow pairs-completeness clean-public-repo-history-safety concept-to-code-bsd-autopilot-gates concept-to-code-manifest-helpers-guards scope-guards refactor-snapshot-deep-refactor claude-md-slim-content-union-whole-line hook-hardening skill-text-corrections agent-tool-scoping post-write-check step5-checkpoint-review step6-effort-pin workflow-dispatch-pins sync-manual-steps write-scope-enforce agent-write-scope agent-command-scope secret-dep-gate weakening-wiring spec-coverage test-write-scope recovery-preflight reward-hack-detectors diff-budget-scope interface-immutability project-ci-checks proportional-audit-depth sast-security-audit tracer-bullet-probe precompact-occupancy untrusted-input external-dependency-gate human-gate-coverage litter-discipline canonical-mechanism agent-metrics licence-provenance accessibility-i18n worktree-isolation-contract agent-tool-parameter-names plan-task-count pattern-enforce-transcript-source macos-detect manifest-field-state transcript-scan-rule manifest-project-root-terminal cross-reference-form fence-contract-coverage skill-coverage-perimeter triage-state-gitignore transition-producer spec-archive gate4-implementation-axes gate0-recommendation hitl-gate-audit-trail batch-dispatch-openers batch-boundary-precedence gate2b-trust-probe recovery-baseline-rebase step7-snapshot-collapse gate5-state-removal spec-pointer-archive manifest-entry-state permission-mode-state conductor-entry-failure-split autopilot-guard-disarm required-checks-audit transition-pair-count autopilot-run-scope skill-fence-positional-tokens prep-row-select commit-transition-order claude-md-condensation stop-gate-path-predicate dispatch-completion acceptance-contract; do
+          for t in phase1 prep hook-probe hook-verify-workflow pairs-completeness clean-public-repo-history-safety concept-to-code-bsd-autopilot-gates concept-to-code-manifest-helpers-guards scope-guards refactor-snapshot-deep-refactor claude-md-slim-content-union-whole-line hook-hardening skill-text-corrections agent-tool-scoping post-write-check step5-checkpoint-review step6-effort-pin workflow-dispatch-pins sync-manual-steps write-scope-enforce agent-write-scope agent-command-scope secret-dep-gate weakening-wiring spec-coverage test-write-scope recovery-preflight reward-hack-detectors diff-budget-scope interface-immutability project-ci-checks proportional-audit-depth sast-security-audit tracer-bullet-probe precompact-occupancy untrusted-input external-dependency-gate human-gate-coverage litter-discipline canonical-mechanism agent-metrics licence-provenance accessibility-i18n worktree-isolation-contract agent-tool-parameter-names plan-task-count pattern-enforce-transcript-source macos-detect manifest-field-state transcript-scan-rule manifest-project-root-terminal cross-reference-form fence-contract-coverage skill-coverage-perimeter triage-state-gitignore transition-producer spec-archive gate4-implementation-axes gate0-recommendation hitl-gate-audit-trail batch-dispatch-openers batch-boundary-precedence gate2b-trust-probe recovery-baseline-rebase step7-snapshot-collapse gate5-state-removal spec-pointer-archive manifest-entry-state permission-mode-state conductor-entry-failure-split autopilot-guard-disarm required-checks-audit transition-pair-count autopilot-run-scope skill-fence-positional-tokens prep-row-select commit-transition-order claude-md-condensation stop-gate-path-predicate dispatch-completion acceptance-contract plant-registry-parallel; do
             printf '::group::%s\n' "$t"
             bash "staging/plugin/scripts/tests/$t.test.sh"
             printf '::endgroup::\n'
@@ -78,12 +78,19 @@ jobs:
       # harnesses against mutated copies of the tree. A failure here means an assertion somewhere
       # pins nothing, which is a different signal from a harness going red.
       #
-      # COST: 23m32s for 362 plants, measured on this runner in run 31879782795 (2026-08-15). The
-      # note this replaces said "~12s for 15 plants" and had been true at 15. It is by far the
-      # longest step in the workflow and it grows linearly with the registry — issue #350. Re-derive
-      # the pair from a run rather than trusting this line; that it went stale once is the point.
+      # COST: 20m07s for 381 plants, measured on this runner in run 31892356085 (2026-08-15) — the
+      # last SEQUENTIAL run, kept as the before-number. The registry now dispatches its mutation
+      # phase to one worker per core, capped at 8 (issue #350, ADR-0143): on the same tree locally
+      # that is 8m20s at eight workers against ~29m at one, with all 391 output lines identical.
+      #
+      # Two numbers, and neither replaces the other: the pair above is what this step cost before,
+      # and the core count printed below is what decides what it costs now. Re-derive both from a
+      # run rather than trusting this comment — the note this replaces said "~12s for 15 plants" and
+      # had been true at 15, which is the whole reason the instruction is here.
       - name: Run the plant registry
-        run: bash staging/plugin/scripts/tests/plant-check.sh
+        run: |
+          echo "runner cores: $(nproc)"
+          bash staging/plugin/scripts/tests/plant-check.sh
 
   links:
     name: links
