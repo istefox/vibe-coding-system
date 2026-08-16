@@ -3972,3 +3972,108 @@ Key architectural decisions:
   what to re-read.
 
 Detail: `docs/architecture/ADR-0143-350-plant-registry-parallel.md`.
+
+## Decisions from the #313/#314 triage (ADR-0144)
+
+Two issues whose titles describe a change that measurement then refused. `literal-assertion-added`
+was re-measured by enabling it and scanning **every** non-merge commit reachable from `main` — 383,
+no sampling: 8 findings across 5 commits, **0 of them the behaviour it exists to catch**. Four are
+comments narrating an assertion, two are `printf` calls writing JSON fixtures, two are the
+detector's own fixture. `spec-coverage.sh`'s unrecognised-heading gap was measured by instrumenting
+the checker and running it over all 78 SPECs: the outside-every-recognised-section population is
+**empty in both branches**, the `DECL_N == 0` one and the mixed one nobody had counted.
+
+Key architectural decisions:
+
+- **A disabled detector is retired, not left disabled.** It shipped off at 25% precision under
+  ADR-0051 §D5 and stayed there because nobody remembers to delete a feature nobody can rely on.
+  The AWKGUARD interval probe went with it: it guarded only that rule, and a probe with no subject
+  is the shape rule 9 warns about.
+- **The retirement is bounded and says by what.** This corpus is documentation and Bash; the
+  detector was written for `assert <expr> == <literal>` in application code, which this repository
+  barely has. The decision is about THIS repository, and presenting the number as a general verdict
+  would overreach.
+- **Five assertions kept passing after their subject was deleted, which is why they had to go.**
+  `HA4a`, `HC5`, `HG3`, `HG4`, `HG5` each asserted an ABSENCE that had become trivially true. An
+  assertion satisfied by the deletion of its own subject reads as coverage and pins nothing.
+  `RET1`/`RET2` replace them with a reverse guard over the EXECUTION surface — comment lines
+  stripped first, so the header stays free to name what was retired without turning its own guard
+  red (rule 12).
+- **"No instances" is not a close.** #313's population is zero because two generator templates feed
+  75 of 78 SPECs, and one template edit would end that silently. `RH1` derives the recognised set by
+  RUNNING the predicate the checker runs — both files, in the checker's own load order — rather than
+  restating the heading list, which would pass while the rule drifted away from it.
+- **Widening was rejected for having no instance.** The recognised heading set is untouched, and so
+  is ADR-0072 §D5's asymmetry: nothing measured argues against it, and the measurement says the
+  branch is never reached.
+- **The plants corrected the assertions again.** `RET1`'s first form re-added `LIT_ENABLED` and the
+  assertion stayed green — the token list did not include the variable, so the needle did not reach
+  the mechanism it named. Second time in three days, after ADR-0143's `PP0`.
+- **A `set -u` failure inside a pipeline subshell fires the inherited `EXIT` trap.** One surviving
+  reference to a removed variable killed the `printf` subshell, whose inherited
+  `trap 'rm -rf "$TMP"' EXIT` deleted the shared fixture directory mid-run; fourteen later
+  assertions then failed for reasons that looked unrelated. `bash -n` passes on that file.
+
+Detail: `docs/architecture/ADR-0144-313-314-triage-outcomes.md`.
+
+## Decisions from the anchored-fired-predicate chain (ADR-0145)
+
+The registry decided a plant had fired with `grep -q "^FAIL: $aid"` — a prefix with no right anchor,
+so a plant declared for `SP5` was credited when `SP5b` failed instead. #355 said anchoring was easy
+but re-verifying the corpus afterwards was "the work, and it needs its own cycle". Measured first:
+**33 of 387 plants are exposed to such a collision and 0 are mis-credited**, because every one of the
+33 mutations turns the NAMED assertion red. The re-verification the issue deferred is that table, and
+it came back clean.
+
+Key architectural decisions:
+
+- **Measure the exposure and the defect separately.** "How many plants COULD be mis-credited" and
+  "how many ARE" are different questions with a factor of 33 between them, and only the second
+  decides whether the fix is a cycle or an afternoon. The second was answered by re-running each
+  exposed mutation and recording the full red set instead of a boolean.
+- **The emitted id set is derived by RUNNING each harness**, not by reading its source: what matters
+  is what the harness prints, because that is what the grep sees. `phase1.test.sh` prints
+  `ok   <label>` and emits no `PASS:` line at all, so its 6 plants were covered from the call sites
+  instead — weaker evidence, disclosed rather than skipped.
+- **The id is escaped before it reaches the regex.** Assertion ids are not all alphanumeric
+  (`CE-secret-scan.sh`), and an unescaped `.` would restore a looser match than the one being
+  removed — the issue's own defect surviving its own fix.
+- **One function, two call sites.** ADR-0140 built the vacuity guard to inherit the looseness on
+  purpose so the two halves would agree; they now share a source rather than a convention.
+- **The fixture manufactures what the corpus cannot show.** With 0 mis-credited plants in 387, an
+  assertion pinned on the real corpus would have passed before the change too. `PP6` builds the case:
+  a plant named `E1` whose mutation only `E1b` reads.
+- **The fixture's own harnesses had to be anchored first** — they grep `MARK-<id>`, and `MARK-E1`
+  matches `MARK-E1b`, so the fixture would have reproduced inside itself the defect it exists to
+  demonstrate.
+
+Detail: `docs/architecture/ADR-0145-355-anchored-fired-predicate.md`.
+
+## Decisions from the undefined-helper-scope chain (ADR-0146)
+
+ADR-0081 found the instance sideways: `pairs-completeness.test.sh` had no `ok()`/`bad()`, a draft
+called them anyway, and six assertions printed "command not found" while the suite reported
+`PASS=244 FAIL=0` and exited 0. Nothing here runs under `set -e`. Measured across all 82 harnesses
+before building anything: **zero** such calls today.
+
+Key architectural decisions:
+
+- **Getting to that zero took three attempts, and the wrong ones are the lesson.** 47 findings, none
+  real — the scan matched the English word "no" inside message strings, and `no` IS a helper here.
+  Then 3, none real — two `case` labels and an assignment, all in command position. Then 0, once the
+  scan tracked quote state ACROSS LINES (the messages wrap), masked heredoc bodies, and excluded
+  `name=` and `name)`.
+- **A detector reporting zero is a claim about the detector.** One `verdict` call was planted into a
+  copy of the corpus: the scan found exactly it, and `bash` confirmed the live behaviour — printed
+  on stderr, execution continues, exit unaffected. `HS2` keeps that demonstration in CI, because
+  `HS1` would be green with a broken scanner.
+- **A derived scan, not 82 copies of a runtime hook.** `command_not_found_handle` in every harness is
+  the same shared-helper problem ADR-0086 already refused, with more surface.
+- **The vocabulary is derived, never listed:** a helper is a function defined by two or more
+  harnesses. A hand-written list would be blind to the file that invents a new helper name (rule 8).
+- **R-02 was refused in the form it was written.** A per-file assertion-count floor is the instrument
+  ADR-0124 retired: a floor absorbs its own plant, so 49 new floors would be 49 lines that mostly
+  cannot fail — the false-green shape the issue exists to remove, added in bulk in its name. The
+  successor is #449, with the measurement and the four things to derive first.
+
+Detail: `docs/architecture/ADR-0146-310-undefined-helper-scope.md`.

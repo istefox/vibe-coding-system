@@ -208,8 +208,8 @@ Reading the result — the scripts report, this step decides:
   findings` block and stop nothing here — `review-triage-fix`'s own circuit breaker B is the actual
   enforcement point; this call is a heads-up at commit time, not a second gate.
 - **`SUSPECT` lines (ADR-0051, issue #105) are advisory ALWAYS, including under `--autopilot`.**
-  They are the reward-hacking heuristics (`literal-assertion-added` — ships disabled by default,
-  `zero-assertion-test`, `deleted-public-symbol`, `swallowed-error`) emitted by the same
+  They are the reward-hacking heuristics (`zero-assertion-test`, `deleted-public-symbol`,
+  `swallowed-error` — `literal-assertion-added` was retired on measurement, #314 / ADR-0144) emitted by the same
   `weakening-scan.sh` call, extracted with `printf '%s\n' "$weakening_findings" | grep '^SUSPECT'`
   — never `[ -n ... ]`, same trap as `WEAKENED`. Render them in the Step 4 `Pre-commit findings`
   block (attended) or print them alongside the other reporters (autopilot, since Step 4 is

@@ -1188,18 +1188,18 @@ wave order.
 - [ ] hooks.json is outside PAIRS completeness by a deferred decision  (issue #307)
 - [ ] thirteen skill-private test runners exercise the deployed copy and are dark to CI  (issue #308)
 - [ ] settings.json is never synced and five guardrail hooks are wired by hand  (issue #309)
-- [ ] an undefined assertion helper is indistinguishable from a passing assertion  (issue #310)
+- [x] an undefined assertion helper is indistinguishable from a passing assertion  (issue #310)  (completed: 2026-08-16 — population measured 0 of 82, guarded; R-02 refused and split to #449, ADR-0146)
 - [ ] a manifest terminal by status is exempt from invariant 4 and the state machine still lets it transition  (issue #335)
 - [ ] set-branch-protection.sh unions one context while the audit derives three  (issue #336)
-- [ ] plant-check.sh decides a plant fired with a PREFIX match: 26 of 166 plants pin nothing  (issue #355)
+- [x] plant-check.sh decides a plant fired with a PREFIX match  (issue #355)  (completed: 2026-08-16 — measured 33 of 387 exposed, 0 mis-credited; anchored, ADR-0145)
 - [x] plant-check.sh cost scales as (plants x target-file runtime), not as their sum  (issue #350)  (completed: 2026-08-15)
 
 ##### Wave 3 — HIGH: detector precision, and the decisions
 
 - [ ] the weakening scan is blind to an in-place assertion edit  (issue #311)
 - [x] spec-coverage measures citation not implementation  (issue #312)  (completed: 2026-08-14)
-- [ ] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)
-- [ ] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)
+- [x] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)  (completed: 2026-08-16 — measured to zero instances, closed with a reverse guard, ADR-0144)
+- [x] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)  (completed: 2026-08-16 — retired on 0 true positives in 383 commits, ADR-0144)
 - [ ] The Step 5 checkpoint has no mechanism to tell an expected red from a real one  (issue #273)
 - [ ] seventeen ADRs carry the same instruction-not-an-enforcement paragraph and the class is undecided  (issue #315)
 
