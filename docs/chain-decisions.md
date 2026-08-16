@@ -3919,3 +3919,56 @@ Key architectural decisions:
   R-03 measured against unrelated plans. Pair by issue-number prefix, never through a manifest.
 
 Detail: `docs/architecture/ADR-0138-312-spec-coverage-scope-not-assertion-shape.md`.
+
+## Decisions from the plant-registry cost chain (ADR-0143)
+
+The registry was filed as a cost problem at 166 plants. Measured 2026-08-15 at `0622930` it is
+**381 declarations across 41 files**, and the cost is paid where nobody had looked: the CI step took
+**20m07s** on a PR and **25m51s** on `main`, **89% of the `shell-tests` job** — which is a required
+check, so every merge waits for it. A full run spends `755s user, 1148s system` at **89% of one core
+on an eighteen-core machine**: more time copying trees than running tests, and no concurrency at all.
+
+Key architectural decisions:
+
+- **The design had already paid for concurrency and was not spending it.** Every mutation run has its
+  own sandbox and its own process; 78 of 81 harnesses use `mktemp`. The three fixed `/tmp` paths in
+  declaring harnesses were checked one by one and are string values written into manifests and
+  synthetic JSON, never files created or read. Parallelism is therefore not a new guarantee, it is
+  the use of one already bought.
+- **All three levers the issue proposed were rejected on measurement, and the fourth was not in it.**
+  Filtering a harness to one assertion is a per-file property — `worktree-isolation-contract` would
+  slice cleanly, `spec-coverage`'s sections mutate a SPEC in place across `RM03`…`RM07` — provable 41
+  times and not once, against ADR-0086. Sandbox reuse is 190s, **9%**, not the dominant term the issue
+  suspected. A separate CI job costs a new required context (ADR-0114, #336 open) to save ~3 min that
+  the workers make irrelevant.
+- **The dominant term is the target file's runtime, and now it is a number.** `autopilot-run-scope`
+  carries 58 plants and costs less than `worktree-isolation-contract`'s 11. Two files are 45% of the
+  total, eleven are 87% — more concentrated than the issue supposed, in the two files it had already
+  named.
+- **One code path, not two.** The worker is `plant-check.sh` re-entering itself with `--worker`,
+  carrying the sequential loop body unchanged; the sequential path is that path with one worker.
+  ADR-0086's criterion exactly: two copies answering the same question disagree eventually, and then
+  nobody can say which verdict is the registry's.
+- **Aggregation in declaration order is a decision, not a detail.** An output that reshuffles per run
+  cannot be diffed against anything — and the diff is the only evidence that parallelising a
+  validator did not change what it validates.
+- **Every failure in the worker-count resolution lands on 1.** An unreadable core count must not
+  become an unbounded fan-out on a runner nobody has measured. The ceiling is 8 because 8 is what was
+  measured; an explicit `PLANT_JOBS` is uncapped, because someone setting it is someone about to
+  record what they got.
+- **A change to the validator needs evidence from outside it and inside it.** Outside: the full
+  381-plant run at 1, 4 and 8 workers — 29.34 min, 9.69 min, 7.59 min — with **391 output lines
+  identical byte for byte** across all three and against the pre-change file. That evidence costs
+  half an hour and cannot be a test. Inside: a fixture harness with four harnesses and twelve plants,
+  whose sleeps make completion order differ from declaration order and one of whose plants **cannot
+  fire** — because an equivalence check between two runs that both found nothing is satisfied by a
+  registry that does nothing.
+- **A literal `# plant:` at column 1 in a fixture-building harness is collected as that harness's own
+  declaration.** The collector greps `^# plant:` across `*.test.sh` and cannot know the line was meant
+  for a fixture. The fixture's declarations are written as `@PLANT@` and substituted; the trap is
+  recorded because the next author will meet it.
+- **This buys a constant factor, not a change of shape.** Each plant still runs the whole declaring
+  file. When `spec-coverage.test.sh` doubles again, the problem returns, and the separate-job lever is
+  what to re-read.
+
+Detail: `docs/architecture/ADR-0143-350-plant-registry-parallel.md`.
