@@ -31,6 +31,7 @@
 - Python dependencies: `pip install -r requirements.txt`, pinned versions.
 - Node for tooling: use `npm` (not yarn/pnpm).
 - Swift/SwiftUI: Swift 6, modern patterns (Observable+Bindable iOS 17+, SwiftData, async/await). Build: Xcode and `xcodebuild` from terminal.
+- Apple Developer account: `istefoxdev@gmail.com`. Use this Apple ID for signing, notarisation (`xcrun notarytool --apple-id`), certificates and App Store Connect — never the GitHub email.
 
 ## Session scope
 - IMPORTANT: never operate on files or directories outside the session's primary working directory. Each Claude Code session is scoped to one project; do not read, write, or dispatch agents to a different project root.
