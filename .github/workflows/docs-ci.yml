@@ -78,51 +78,29 @@ jobs:
       # harnesses against mutated copies of the tree. A failure here means an assertion somewhere
       # pins nothing, which is a different signal from a harness going red.
       #
-      # COST: 20m07s for 381 plants, measured on this runner in run 31892356085 (2026-08-15) — the
-      # last SEQUENTIAL run, kept as the before-number. The registry now dispatches its mutation
-      # phase to one worker per core, capped at 8 (issue #350, ADR-0143): on the same tree locally
-      # that is 8m20s at eight workers against ~29m at one, with all 391 output lines identical.
+      # COST, and HOW IT WAS MEASURED, because the second part is what makes the first usable
+      # (issue #350, ADR-0143). The registry dispatches its mutation phase to one worker per core,
+      # capped at 8.
       #
-      # Two numbers, and neither replaces the other: the pair above is what this step cost before,
-      # and the core count printed below is what decides what it costs now. Re-derive both from a
-      # run rather than trusting this comment — the note this replaces said "~12s for 15 plants" and
-      # had been true at 15, which is the whole reason the instruction is here.
-      # TEMPORARY, issue #350: an A/B on the runner itself, to be reverted before merge.
+      # Both arms run in ONE job, on ONE machine, from ONE commit, sequential arm SECOND so it
+      # inherits a warm page cache and the comparison is biased AGAINST the change:
       #
-      # The first CI run of the parallel registry came in at 19m18s against 20m07s sequential — and
-      # the same sequential step has measured 20m07s, 23m32s and 25m51s on three occasions, so a
-      # single number on each side is not a difference, it is a number inside a cloud. The two arms
-      # therefore run in the SAME job, on the SAME machine, from the same commit.
+      #     2026-08-15  2 cores  377 plants  default 1182s  one worker 1723s  1.46x  run 31908681787
+      #     2026-08-15  2 cores  377 plants  default 1131s  one worker 1562s  1.38x  run 31912805468
       #
-      # DEFAULT FIRST, SEQUENTIAL SECOND, deliberately: the second arm inherits a warm page cache,
-      # which biases the comparison AGAINST the change being measured. Whatever advantage survives
-      # that ordering is a lower bound.
+      # Both pairs byte-identical, 386 lines. Do not compare one run against another the way the
+      # first attempt did: the SEQUENTIAL step alone measured 20m07s, 23m32s and 25m51s on three
+      # occasions, a spread wider than the effect, and 19m18s against 20m07s read as "no change"
+      # when the controlled pair says seven to nine minutes.
       #
-      # It also buys something the local evidence could not: the byte-identity of the two outputs
-      # has only ever been checked on macOS. This checks it on the runner.
+      # Re-derive with the same device rather than trusting these lines. The note they replace said
+      # "~12s for 15 plants" and had been true at 15, which is why the instruction is here at all.
+      # The core count is printed rather than assumed: at 8.4 GB of copying, two cores is the
+      # ceiling, and it is the number that decides what this step costs.
       - name: Run the plant registry
         run: |
-          set +e
           echo "runner cores: $(nproc)"
-          _s=$(date +%s)
-          bash staging/plugin/scripts/tests/plant-check.sh >/tmp/plant-default.log 2>&1
-          _rc_default=$?
-          _e=$(date +%s); echo "AB default-workers: $((_e-_s))s rc=$_rc_default"
-          _s=$(date +%s)
-          PLANT_JOBS=1 bash staging/plugin/scripts/tests/plant-check.sh >/tmp/plant-one.log 2>&1
-          _rc_one=$?
-          _e=$(date +%s); echo "AB one-worker: $((_e-_s))s rc=$_rc_one"
-          if diff -q /tmp/plant-one.log /tmp/plant-default.log >/dev/null; then
-            echo "AB outputs identical on this runner ($(grep -c . /tmp/plant-default.log) lines)"
-            _same=0
-          else
-            echo "AB OUTPUTS DIFFER — concurrency changed a verdict on Linux:"
-            diff /tmp/plant-one.log /tmp/plant-default.log | head -40
-            _same=1
-          fi
-          tail -12 /tmp/plant-default.log
-          set -e
-          [ "$_rc_default" -eq 0 ] && [ "$_rc_one" -eq 0 ] && [ "$_same" -eq 0 ]
+          bash staging/plugin/scripts/tests/plant-check.sh
 
   links:
     name: links

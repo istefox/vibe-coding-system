@@ -160,14 +160,18 @@ Both arms were then run **in the same job, on the same machine, from the same co
 sequential arm going SECOND so it inherits a warm page cache — biasing the comparison against the
 change, so that whatever survives is a lower bound:
 
-| arm | wall clock |
-|---|---|
-| default workers (the runner has **2 cores**, printed rather than assumed) | **1182s — 19m42s** |
-| `PLANT_JOBS=1`, with the warm cache | **1723s — 28m43s** |
+| run | default workers | `PLANT_JOBS=1`, with the warm cache | ratio |
+|---|---|---|---|
+| 31908681787 | **1182s — 19m42s** | 1723s — 28m43s | 1.46× |
+| 31912805468 | **1131s — 18m51s** | 1562s — 26m02s | 1.38× |
 
-**1.46× on two cores, as a floor**, and about nine minutes off every merge. The local 3.87× does not
-transfer and was never going to: at 381 plants the phase copies 8.4 GB, and a two-core runner is
-contending for the resource that was already the bottleneck.
+The runner has **2 cores**, printed by the workflow rather than assumed. **So 1.4× is the floor, and
+seven to nine minutes come off every merge.** The local 3.87× does not transfer and was never going
+to: at 377 plants the phase copies 8.4 GB, and two cores contend for the resource that was already
+the bottleneck.
+
+The second pair also carries what the local evidence could not reach: **both arms byte-identical on
+Linux, 386 lines**. Until that ran, the equivalence claim rested entirely on bash 3.2 and macOS.
 
 **Inside the registry — `plant-registry-parallel.test.sh`.** A fixture: a miniature staging tree
 with four harnesses, twelve plants, and the real `plant-check.sh` pointed at it three times. Its
