@@ -32,7 +32,24 @@
 # the file that now holds the mechanism, with `$1`/`return 0` updated to the script's real `$TARGET`
 # positional parameter and `exit 0` — the same verbatim-with-real-positional-parameters change
 # repo-rel-path.sh's own header describes.
-# plant: RJ13 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | printf '%s%s' "$(git -C "$_d" rev-parse --show-prefix 2>/dev/null)" "$(basename "$TARGET")" | _p=$(cd "$_d" && pwd -P)/$(basename "$TARGET"); case "$_p" in "$_top"/*) printf '%s' "${_p#$_top/}" ;; *) printf '%s' "$TARGET" ;; esac
+# RJ13 ITSELF GETS NO PLANT, and the reason is the FILESYSTEM, not the assertion — the RRP3
+# precedent below, applied to its twin. RJ13 is behavioural and its precondition (a root reachable
+# under a different case) can only be BUILT on a case-insensitive filesystem. On the CI runner it
+# cannot, so RJ13 takes its self-naming NOT EXERCISED branch and passes regardless of what the
+# mechanism does: no mutation can make it fail there, so a plant on it is unfirable by construction.
+#
+# It DID carry one, and it reported as fired, and that was an artefact: `plant-check.sh` matched
+# `^FAIL: <id>` as a PREFIX, so RJ13's plant was credited to RJ13b going red under the same
+# mutation. The comment at RRP3 predicted, in these words, that landing #355 would make it start
+# failing PC1 — and on 2026-08-16 the Linux runner did exactly that, while macOS stayed green
+# because APFS is case-insensitive and RJ13 really is exercised there.
+#
+# NOTHING IS LOST, because the mutation is the valuable half and it is kept: the #344 string-prefix
+# strip is now declared as RJ13b's SECOND plant. RJ13b is exercised on every platform and goes red
+# under it — measured 2026-08-16, that mutation turns RJ13, RJ13b and RRP3 red on macOS and RJ13b
+# alone on a case-sensitive filesystem. Two plants naming one assertion is deliberate: they are two
+# different mutations of one mechanism, and each runs in its own sandbox.
+# plant: RJ13b | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | printf '%s%s' "$(git -C "$_d" rev-parse --show-prefix 2>/dev/null)" "$(basename "$TARGET")" | _p=$(cd "$_d" && pwd -P)/$(basename "$TARGET"); case "$_p" in "$_top"/*) printf '%s' "${_p#$_top/}" ;; *) printf '%s' "$TARGET" ;; esac
 # plant: RJ13b | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | rev-parse --show-prefix | rev-parse --show-cdup
 # plant: RJ14 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | { [ -n "$_t2" ] && [ "$_t2" -ef "$_top" ]; } || { printf '%s' "$TARGET"; exit 0; } | :
 #
@@ -56,11 +73,13 @@
 # Nothing is lost: the file's own note above says RRP2 and RRP3 share the SAME mutation site, and
 # RRP2's plant fires on both platforms. RRP3 itself still runs, and is still genuinely exercised
 # on a case-insensitive filesystem.
-# Its twin RJ13 is the same shape and DOES carry a plant that reports as fired — do not read that
-# as evidence the two disagree. plant-check.sh matches ^FAIL: <id> as a PREFIX (issue #355, open),
-# so RJ13's plant is credited to RJ13b going red under the same mutation. RJ13b is exercised on
-# every platform; RRP3 has no such sibling, which is why it is the honest one of the pair. If #355
-# lands, expect RJ13's plant to start failing PC1 for exactly the reason written here.
+# Its twin RJ13 is the same shape and used to carry a plant that reported as fired — an artefact of
+# `plant-check.sh` matching ^FAIL: <id> as a PREFIX, which credited it to RJ13b going red under the
+# same mutation. This comment predicted that landing #355 would make it start failing PC1, and on
+# 2026-08-16 the Linux runner did exactly that while macOS stayed green. RJ13 now carries no plant
+# for the reason stated above, and its mutation was moved to RJ13b, which is exercised on every
+# platform. RRP3 had no such sibling to move a mutation to, which is why it was the honest one of
+# the pair from the start.
 # plant: RRP4 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | { [ -n "$_t2" ] && [ "$_t2" -ef "$_top" ]; } || { printf '%s' "$TARGET"; exit 0; } | :
 # plant: RRP5 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | [ -d "$_d" ] || { printf '%s' "$TARGET"; exit 0; } | [ -d "$_d" ] || { printf 'WRONG-%s' "$TARGET"; exit 0; }
 # plant: RRP6 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | not a git repository: %s\n' "$SELF" "$TOP" >&2 exit 3 | not a git repository: %s\n' "$SELF" "$TOP" >&2; exit 0
