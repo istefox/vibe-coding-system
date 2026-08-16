@@ -19,10 +19,17 @@
 # likely future "fix" and it is exactly the wrong one; every caller wired by ADR-0047 would start
 # halting unattended runs on a heuristic with no type information and no test execution.
 #
-# literal-assertion-added SHIPS DISABLED BY DEFAULT (ADR-0051 §D5, Task 4 measurement). It is
-# opt-in via WEAKENING_SCAN_LITERAL_ASSERTION=1. Section HA pins that it does NOT fire without the
-# opt-in and DOES fire with it; section HG pins the awk-interval guard that protects it when
-# opted in.
+# literal-assertion-added IS RETIRED (issue #314, ADR-0144), and with it the AWKGUARD interval
+# probe that existed only to guard it. Sections HA4, HG1-HG5 and HC5 asserted their behaviour and
+# are gone; section HG now holds the reverse guard that keeps the surface retired. Re-measured over
+# all 383 non-merge commits reachable from `main`: 8 findings, 0 of them the behaviour the detector
+# exists to catch.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: RET1 | plugin/skills/review-triage-fix/scripts/weakening-scan.sh | AWK="${WEAKENING_SCAN_AWK:-awk}" | AWK="${WEAKENING_SCAN_AWK:-awk}"; LIT_ENABLED=0
+# plant: RET2 | plugin/skills/review-triage-fix/scripts/weakening-scan.sh | literal-assertion-added IS RETIRED (issue #314, ADR-0144). | this note was removed by a plant.
 #
 # THE FIXTURES HERE CONTAIN NO KEY-SHAPED LITERAL and no fixture path contains "secret",
 # "credential", ".env", ".pem", or ".key" — secret-dep-gate.test.sh section D scans this
@@ -105,33 +112,6 @@ if printf '%s\n' "$ha3_out" | grep -q "^SUSPECT${TAB}src/y.js${TAB}swallowed-err
   ok "HA3: swallowed-error fires on a newly-added catch block with neither a log nor a rethrow"
 else
   bad "HA3: expected a SUSPECT/swallowed-error line — got: $ha3_out"
-fi
-
-cat >"$TMP/ha4.diff" <<EOF
-diff --git a/src/calc.py b/src/calc.py
---- a/src/calc.py
-+++ b/src/calc.py
-@@ -1,2 +1,2 @@
--def add(a, b): return a + b
-+def add(a, b): return 42
-diff --git a/tests/test_calc.py b/tests/test_calc.py
---- a/tests/test_calc.py
-+++ b/tests/test_calc.py
-@@ -1,2 +1,2 @@
--    assert add(1, 2) == 3
-+    assert add(1, 2) == 42
-EOF
-ha4_default=$(bash "$W" <"$TMP/ha4.diff")
-if printf '%s\n' "$ha4_default" | grep -q '^SUSPECT.*literal-assertion-added'; then
-  bad "HA4a: literal-assertion-added fired WITHOUT the opt-in env var — it must ship disabled by default (ADR-0051 §D5) — got: $ha4_default"
-else
-  ok "HA4a: literal-assertion-added does NOT fire by default (ships disabled, ADR-0051 §D5)"
-fi
-ha4_optin=$(WEAKENING_SCAN_LITERAL_ASSERTION=1 bash "$W" <"$TMP/ha4.diff")
-if printf '%s\n' "$ha4_optin" | grep -q "^SUSPECT${TAB}tests/test_calc.py${TAB}literal-assertion-added"; then
-  ok "HA4b: literal-assertion-added fires with WEAKENING_SCAN_LITERAL_ASSERTION=1 on an impl+test co-change introducing a literal"
-else
-  bad "HA4b: expected a SUSPECT/literal-assertion-added line with the opt-in set — got: $ha4_optin"
 fi
 
 # ==================================================================================================
@@ -268,12 +248,6 @@ done
 exec /usr/bin/awk "$@"
 FAKEEOF
 chmod +x "$fake_awk"
-hc5_out=$(WEAKENING_SCAN_LITERAL_ASSERTION=1 WEAKENING_SCAN_AWK="$fake_awk" bash "$W" <"$TMP/ha1.diff" 2>/dev/null); hc5_rc=$?
-if [ "$hc5_rc" -eq 0 ] && ! printf '%s\n' "$hc5_out" | grep -qx 'CLEAN'; then
-  ok "HC5: an AWKGUARD-only run (interval probe failed, no other finding) still exits 0 and never claims CLEAN"
-else
-  bad "HC5: expected exit 0 and no bare CLEAN on an AWKGUARD-only run — got rc=$hc5_rc out=$hc5_out"
-fi
 
 # ==================================================================================================
 # HD. SUSPECT does NOT match ^WEAKENED (ADR-0051 §D2) — pinned so a future edit cannot silently
@@ -294,18 +268,20 @@ if printf '%s\n' "$ha3_out" | grep -q '^WEAKENED'; then
 else
   ok "HD3: swallowed-error output does not match ^WEAKENED"
 fi
-if printf '%s\n' "$ha4_optin" | grep -q '^WEAKENED'; then
-  bad "HD4: a SUSPECT-only run (literal-assertion-added) unexpectedly matched grep '^WEAKENED'"
-else
-  ok "HD4: literal-assertion-added output does not match ^WEAKENED"
-fi
-# Forward guard against a future edit re-spelling the sentinel: the four new detector names must
-# only ever appear after a literal "SUSPECT" prefix in the script source, never after "WEAKENED".
-HD5_BAD=$(grep -nE 'WEAKENED.*(literal-assertion-added|zero-assertion-test|deleted-public-symbol|swallowed-error)' "$W" || true)
+# HD4 covered literal-assertion-added and went with it (#314, ADR-0144). It is named here rather
+# than deleted in silence because the gap in the sequence is otherwise the kind of thing a later
+# reader restores from ADR-0051 without knowing why it left.
+#
+# Forward guard against a future edit re-spelling the sentinel: the three remaining detector names
+# must only ever appear after a literal "SUSPECT" prefix in the script source, never after
+# "WEAKENED". `literal-assertion-added` is deliberately NOT in this alternation any more: it would
+# match the retirement note in the header, which is a comment explaining an absence — rule 12, on a
+# guard whose subject no longer exists.
+HD5_BAD=$(grep -nE 'WEAKENED.*(zero-assertion-test|deleted-public-symbol|swallowed-error)' "$W" || true)
 if [ -z "$HD5_BAD" ]; then
-  ok "HD5: none of the four new detector names appear on a WEAKENED line in the script source"
+  ok "HD5: none of the three SUSPECT detector names appear on a WEAKENED line in the script source"
 else
-  bad "HD5: a new detector name appears on a WEAKENED-prefixed line — got: $HD5_BAD"
+  bad "HD5: a SUSPECT detector name appears on a WEAKENED-prefixed line — got: $HD5_BAD"
 fi
 
 # ==================================================================================================
@@ -447,43 +423,41 @@ else
 fi
 
 # ==================================================================================================
-# HG. The awk interval-syntax guard (ADR-0051 Task 2, mirroring ADR-0046 §D4's secret-scan.sh
-# probe). Only literal-assertion-added needs interval syntax ({2,}), and only when opted in — so
-# the probe runs (and can fail loudly) only when WEAKENING_SCAN_LITERAL_ASSERTION=1.
+# HG. literal-assertion-added is RETIRED (#314, ADR-0144), and so is the AWKGUARD interval probe
+# that existed only for it. What stood here — HG1..HG5, HA4a/HA4b, HC5 — asserted the behaviour of
+# that detector and its probe. Five of the eight kept PASSING after the removal, because they
+# asserted an ABSENCE that had become trivially true, which is precisely why they could not stay:
+# an assertion satisfied by the deletion of its own subject reads as coverage and pins nothing.
+#
+# What replaces them is a reverse guard (rule 9): the retired surface must STAY retired, and a
+# re-added copy must be caught rather than silently re-enabled by someone reading ADR-0051 without
+# ADR-0144. The needle is the EXECUTION surface, not the name: the retirement note in the header
+# names `literal-assertion-added` on purpose, and a guard that grepped for the string would be red
+# on its own documentation (rule 12).
 # ==================================================================================================
-hg1_out=$(WEAKENING_SCAN_LITERAL_ASSERTION=1 WEAKENING_SCAN_AWK="$fake_awk" bash "$W" <"$TMP/ha4.diff" 2>"$TMP/hg1err")
-if printf '%s\n' "$hg1_out" | grep -q '^AWKGUARD.*literal-assertion-added'; then
-  ok "HG1: an awk without ERE interval support produces an AWKGUARD line naming literal-assertion-added, opted in"
+_ret_live=""
+# The list is the retired surface in full: the env gate a caller would set, the shell variable it
+# fed, the rule, the probe, and the buffer the rule wrote into. `LIT_ENABLED` was missing from the
+# first version of this list and the plant on RET1 is what said so — it re-added exactly that
+# variable and the assertion stayed green, which is a guard whose needle does not reach the
+# mechanism it names.
+for _tok in 'WEAKENING_SCAN_LITERAL_ASSERTION' 'LIT_ENABLED' 'is_literal_assert' 'AWKGUARD' 'lit_n'; do
+  # Comment lines are stripped first: the header MUST be free to name what was retired and why.
+  if grep -v '^[[:space:]]*#' "$W" | grep -qF "$_tok"; then _ret_live="$_ret_live $_tok"; fi
+done
+if [ -z "$_ret_live" ]; then
+  ok "RET1: the retired detector's execution surface is absent (env gate, rule, probe and buffer)"
 else
-  bad "HG1: expected an AWKGUARD/literal-assertion-added line — got: $hg1_out"
-fi
-if [ -s "$TMP/hg1err" ]; then
-  ok "HG2: the interval-guard failure also produces a loud stderr diagnostic"
-else
-  bad "HG2: expected a non-empty stderr diagnostic on interval-guard failure"
-fi
-
-hg3_out=$(WEAKENING_SCAN_LITERAL_ASSERTION=1 WEAKENING_SCAN_AWK="$fake_awk" bash "$W" <"$TMP/ha4.diff" 2>/dev/null)
-if printf '%s\n' "$hg3_out" | grep -q '^SUSPECT.*literal-assertion-added'; then
-  bad "HG3: literal-assertion-added produced a finding despite the interval probe failing — it must be SKIPPED, not silently run"
-else
-  ok "HG3: literal-assertion-added is skipped (not silently run) when the interval probe fails"
+  bad "RET1: retired surface is live again in $W —$_ret_live — see ADR-0144 before re-enabling it"
 fi
 
-hg4_rc_out=$(WEAKENING_SCAN_LITERAL_ASSERTION=1 WEAKENING_SCAN_AWK="$fake_awk" bash "$W" <"$TMP/ha4.diff" 2>/dev/null); hg4_rc=$?
-if [ "$hg4_rc" -eq 0 ]; then
-  ok "HG4: the interval-guard failure path still exits 0 (§D4 preserved even in the degraded path)"
+# The denominator for RET1: a grep over a file that moved or emptied would report the same clean
+# result as a genuine retirement (rule 7).
+_ret_lines=$(grep -c . "$W" || true)
+if [ "${_ret_lines:-0}" -ge 100 ] && grep -q 'literal-assertion-added IS RETIRED' "$W"; then
+  ok "RET2: RET1 read a live script ($_ret_lines lines) carrying the retirement note"
 else
-  bad "HG4: expected exit 0 on the interval-guard failure path — got rc=$hg4_rc"
-fi
-
-# The disabled-by-default path must NEVER probe or warn — a probe for a feature nobody asked to
-# run has nothing to report.
-hg5_out=$(WEAKENING_SCAN_AWK="$fake_awk" bash "$W" <"$TMP/hc3.diff" 2>"$TMP/hg5err")
-if [ ! -s "$TMP/hg5err" ] && ! printf '%s\n' "$hg5_out" | grep -q '^AWKGUARD'; then
-  ok "HG5: with literal-assertion-added disabled (default), a broken awk produces no probe warning and no AWKGUARD line"
-else
-  bad "HG5: the disabled-by-default path probed or warned anyway — err=[$(cat "$TMP/hg5err" 2>/dev/null)] out=[$hg5_out]"
+  bad "RET2: $W is $_ret_lines line(s) or carries no retirement note — RET1 proved nothing"
 fi
 
 # Forward guard: the probe itself is built by string concatenation, mirroring secret-scan.sh's

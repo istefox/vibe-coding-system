@@ -1951,9 +1951,9 @@ fi
 
 **SUSPECT findings (ADR-0051, issue #105) — advisory, non-blocking, extracted from the same
 `$_wk` output.** `weakening-scan.sh` also emits a separate `SUSPECT<TAB><file><TAB><detector><TAB><line>`
-sentinel for four heuristic reward-hacking detectors (`literal-assertion-added` — ships disabled
-by default, see the script header — `zero-assertion-test`, `deleted-public-symbol`,
-`swallowed-error`). `SUSPECT` never matches `^WEAKENED` and this gate must never grep for it as a
+sentinel for three heuristic reward-hacking detectors (`zero-assertion-test`,
+`deleted-public-symbol`, `swallowed-error`). A fourth, `literal-assertion-added`, shipped disabled
+and was retired on measurement — 0 true positives in 383 commits (#314, ADR-0144). `SUSPECT` never matches `^WEAKENED` and this gate must never grep for it as a
 blocking condition — that promotion is exactly what ADR-0051 §D2 rejects:
 ```bash
 if [ -n "$_wscan" ]; then

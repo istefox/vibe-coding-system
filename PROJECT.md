@@ -1198,8 +1198,8 @@ wave order.
 
 - [ ] the weakening scan is blind to an in-place assertion edit  (issue #311)
 - [x] spec-coverage measures citation not implementation  (issue #312)  (completed: 2026-08-14)
-- [ ] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)
-- [ ] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)
+- [x] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)  (completed: 2026-08-16 — measured to zero instances, closed with a reverse guard, ADR-0144)
+- [x] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)  (completed: 2026-08-16 — retired on 0 true positives in 383 commits, ADR-0144)
 - [ ] The Step 5 checkpoint has no mechanism to tell an expected red from a real one  (issue #273)
 - [ ] seventeen ADRs carry the same instruction-not-an-enforcement paragraph and the class is undecided  (issue #315)
 

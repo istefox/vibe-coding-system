@@ -3972,3 +3972,46 @@ Key architectural decisions:
   what to re-read.
 
 Detail: `docs/architecture/ADR-0143-350-plant-registry-parallel.md`.
+
+## Decisions from the #313/#314 triage (ADR-0144)
+
+Two issues whose titles describe a change that measurement then refused. `literal-assertion-added`
+was re-measured by enabling it and scanning **every** non-merge commit reachable from `main` — 383,
+no sampling: 8 findings across 5 commits, **0 of them the behaviour it exists to catch**. Four are
+comments narrating an assertion, two are `printf` calls writing JSON fixtures, two are the
+detector's own fixture. `spec-coverage.sh`'s unrecognised-heading gap was measured by instrumenting
+the checker and running it over all 78 SPECs: the outside-every-recognised-section population is
+**empty in both branches**, the `DECL_N == 0` one and the mixed one nobody had counted.
+
+Key architectural decisions:
+
+- **A disabled detector is retired, not left disabled.** It shipped off at 25% precision under
+  ADR-0051 §D5 and stayed there because nobody remembers to delete a feature nobody can rely on.
+  The AWKGUARD interval probe went with it: it guarded only that rule, and a probe with no subject
+  is the shape rule 9 warns about.
+- **The retirement is bounded and says by what.** This corpus is documentation and Bash; the
+  detector was written for `assert <expr> == <literal>` in application code, which this repository
+  barely has. The decision is about THIS repository, and presenting the number as a general verdict
+  would overreach.
+- **Five assertions kept passing after their subject was deleted, which is why they had to go.**
+  `HA4a`, `HC5`, `HG3`, `HG4`, `HG5` each asserted an ABSENCE that had become trivially true. An
+  assertion satisfied by the deletion of its own subject reads as coverage and pins nothing.
+  `RET1`/`RET2` replace them with a reverse guard over the EXECUTION surface — comment lines
+  stripped first, so the header stays free to name what was retired without turning its own guard
+  red (rule 12).
+- **"No instances" is not a close.** #313's population is zero because two generator templates feed
+  75 of 78 SPECs, and one template edit would end that silently. `RH1` derives the recognised set by
+  RUNNING the predicate the checker runs — both files, in the checker's own load order — rather than
+  restating the heading list, which would pass while the rule drifted away from it.
+- **Widening was rejected for having no instance.** The recognised heading set is untouched, and so
+  is ADR-0072 §D5's asymmetry: nothing measured argues against it, and the measurement says the
+  branch is never reached.
+- **The plants corrected the assertions again.** `RET1`'s first form re-added `LIT_ENABLED` and the
+  assertion stayed green — the token list did not include the variable, so the needle did not reach
+  the mechanism it named. Second time in three days, after ADR-0143's `PP0`.
+- **A `set -u` failure inside a pipeline subshell fires the inherited `EXIT` trap.** One surviving
+  reference to a removed variable killed the `printf` subshell, whose inherited
+  `trap 'rm -rf "$TMP"' EXIT` deleted the shared fixture directory mid-run; fourteen later
+  assertions then failed for reasons that looked unrelated. `bash -n` passes on that file.
+
+Detail: `docs/architecture/ADR-0144-313-314-triage-outcomes.md`.

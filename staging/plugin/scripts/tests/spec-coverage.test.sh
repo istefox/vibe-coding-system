@@ -1341,6 +1341,7 @@ else
 fi
 
 # plant: RX5 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if [ -n "$TROOT" ] && grep_boundary_test "$id"; then | if [ -n "$TROOT" ] && false && grep_boundary_test "$id"; then
+# plant: RH1 | plugin/skills/interview-driver/SKILL.md | ## Success criteria | ## Criteri di successo
 cat >"$TMP/rx5.spec.md" <<'EOF'
 ## Success criteria
 - [ ] R-01 — allegedly not testable. (no-test: a documentation obligation, nothing executable to assert)
@@ -1366,6 +1367,50 @@ if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1
   ok "RX6 (negative twin of RX1-RX5, CLAUDE.md rule 8): the RS1 fixture, carrying NO (no-test: ...) marker at all, still reads UNSCOPED as normal — the no-test: code path does not swallow the ordinary scope verdict when no marker is present"
 else
   bad "RX6: expected the plain UNSCOPED R-01 1 verdict from the marker-less RS1 fixture — got rc=$RC out=[$OUT]"
+fi
+
+# ==================================================================================================
+# RH. The two SPEC GENERATORS still emit a heading this checker recognises (issue #313, ADR-0144).
+#
+# Measured 2026-08-16 by instrumenting the checker and running it over all 78 `docs/specs/*.spec.md`:
+# the population of ids sitting outside every recognised section is EMPTY, in both branches — the
+# `DECL_N == 0` one that already reports MALFORMED and the mixed one that is dropped in silence by
+# the deliberate ADR-0072 §D5 asymmetry. So the defect #313 describes has no instances.
+#
+# It has none for a reason that can stop being true in one edit: all 78 spell `## Success criteria`
+# identically because two generator templates emit it, and 75 of the 78 are generator-produced.
+# Closing that issue on "no instances" alone would leave an exemption whose subject nobody
+# re-checks — rule 9 — so this is the reverse check.
+#
+# The recognised set is DERIVED by running the predicate itself, never restated here: a copy of the
+# heading list in this file would pass while the checker's own rule drifted away from it, which is
+# the failure this assertion exists to prevent, one level up.
+# ==================================================================================================
+# Both predicate files, in the order the checker itself loads them at spec-coverage.sh:229 —
+# is_spec_section_heading() calls heading_level(), which lives in the other one. Loading only the
+# spec predicate produces "calling undefined function", which this probe reports as unreadable
+# rather than as a heading that is not recognised: rule 4, on the instrument.
+RH_PRED0="$STAGING/plugin/skills/concept-to-code/scripts/plan-task-predicate.awk"
+RH_PRED="$STAGING/plugin/skills/concept-to-code/scripts/spec-id-predicate.awk"
+cat >"$TMP/rh-probe.awk" <<'RHEOF'
+{ if (is_spec_section_heading($0)) n++ }
+END { print n + 0 }
+RHEOF
+RH_MISSING=""; RH_SEEN=0
+for _rh in interview-driver spec-from-issue; do
+  _rhf="$STAGING/plugin/skills/$_rh/SKILL.md"
+  if [ ! -f "$_rhf" ]; then RH_MISSING="$RH_MISSING $_rh(absent)"; continue; fi
+  _rhn=$(awk -f "$RH_PRED0" -f "$RH_PRED" -f "$TMP/rh-probe.awk" "$_rhf" 2>/dev/null)
+  case "${_rhn:-x}" in
+    ''|*[!0-9]*) RH_MISSING="$RH_MISSING $_rh(probe-unreadable)" ;;
+    0)           RH_MISSING="$RH_MISSING $_rh(emits-no-recognised-heading)" ;;
+    *)           RH_SEEN=$((RH_SEEN + 1)) ;;
+  esac
+done
+if [ -z "$RH_MISSING" ] && [ "$RH_SEEN" -eq 2 ]; then
+  ok "RH1: both SPEC generators emit a heading spec-id-predicate.awk recognises, so a generated SPEC cannot land its criteria outside the checker's reach"
+else
+  bad "RH1: a SPEC generator no longer emits a recognised heading —$RH_MISSING (probed $RH_SEEN of 2) — every id it writes would be silently unread (issue #313)"
 fi
 
 echo "----"
