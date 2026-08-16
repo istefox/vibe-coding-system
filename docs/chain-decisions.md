@@ -4077,3 +4077,32 @@ Key architectural decisions:
   successor is #449, with the measurement and the four things to derive first.
 
 Detail: `docs/architecture/ADR-0146-310-undefined-helper-scope.md`.
+
+## Decisions from the producer-destination-anchor chain (ADR-0147)
+
+ADR-0095's `has_producer` counted a line as a producer if it named the target and carried the word
+"transition" anywhere. Measured over the corpus first: 28 targets, 45 pairs, and **every target has
+a genuine producer today** — the third issue running whose stated defect has no live instance.
+
+Key architectural decisions:
+
+- **The looseness was large and decidable.** On `step_6_review`, eleven lines counted as producers
+  and exactly one was an instruction: three negations, one negation wrapped onto a second line, four
+  narrations, one narrative arrow, and one line where the target is the SOURCE.
+- **What that cost was not precision, it was plantability.** TP1 could not be planted: delete the
+  one real producer and ten prose lines hold it green. Measured both ways on the same mutation — old
+  predicate `PASS=14 FAIL=0`, new predicate `FAIL: TP1 … undeclared: step_6_review`.
+- **The preceding word separates an instruction from prose, and form cannot** (ADR-0117, applied to
+  a second predicate). `the transition to X`, `before transitioning to X`, `it never blocks the
+  transition to X` are all narration and all decidable.
+- **An arrow whose left operand is the target is the target's SOURCE** — #355's right anchor in a
+  second place. The legal-source set is derived from the same pair table the targets come from;
+  `block the Step 5 → step_6_review` has no source at all.
+- **Paragraph joining was implemented and rejected on measurement.** It credited a second state with
+  a first state's `manifest-transition.sh` call and destroyed the `step_e1_plan` arrow attribution —
+  the exact form ADR-0095 had to add, and the regression R-03 names. Wrapping is handled by a
+  one-line lookback for the split negation instead.
+- **The residue is stated, not closed.** `transitioning to X` with no determiner in front reads as
+  an imperative whether or not it is one. That is English word order, not a parse.
+
+Detail: `docs/architecture/ADR-0147-300-producer-destination-anchor.md`.

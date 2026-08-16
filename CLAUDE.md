@@ -266,3 +266,4 @@ heading naming the same ADR. Open the ADR itself for the full decision record.
 - **ADR-0144** — a detector retired on 0 true positives in 383 commits, and a heading whose zero instances are held there by two templates → `docs/architecture/ADR-0144-313-314-triage-outcomes.md`
 - **ADR-0145** — the fired predicate gains a right anchor; 33 of 387 plants were exposed to a sibling and 0 were mis-credited → `docs/architecture/ADR-0145-355-anchored-fired-predicate.md`
 - **ADR-0146** — a call to a helper the file does not define, guarded by a derived scan; the floor R-02 asked for is refused because a floor absorbs its own plant → `docs/architecture/ADR-0146-310-undefined-helper-scope.md`
+- **ADR-0147** — a producer names the target as a destination, never as a mention; eleven producers on one target, one of them real, and the class guard could not be planted → `docs/architecture/ADR-0147-300-producer-destination-anchor.md`

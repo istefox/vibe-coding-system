@@ -1178,7 +1178,7 @@ wave order.
 
 - [ ] the collapsed snapshot commits live in the reflog only and a git gc destroys them  (issue #298)
 - [ ] fence_is_abort_capable is lexical and four measured fences abort from outside it  (issue #299)
-- [ ] a producer is any line that mentions the target so a target only talked about looks produced  (issue #300)
+- [x] a producer is any line that mentions the target so a target only talked about looks produced  (issue #300)  (completed: 2026-08-16 — 28 of 28 targets already had a real producer; 11 producers on `step_6_review` and 1 of them real, so TP1 could not be planted. Destination-anchored, TP1 planted, ADR-0147)
 - [ ] the transcript-scan population stops at two roots  (issue #301)
 - [ ] the grant-coverage guard matches a bare Bash token so an unrestricted grant in another form passes  (issue #302)
 - [ ] the interpreter enumeration is a fixed list and the escapes are pinned nowhere  (issue #303)
