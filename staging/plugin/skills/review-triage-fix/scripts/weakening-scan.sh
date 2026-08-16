@@ -63,6 +63,12 @@ function is_test(p){ return (p ~ /(^|\/)tests?\//) || (p ~ /(^|\/)spec\//) \
 #     "assertion" and an `ok "…"` message containing "asserts". Precision on the observed sample:
 #     0 of 2. A signal that is always wrong is one its readers learn to dismiss, which is how a
 #     detector makes the CLEAN line here mean LESS rather than more (ADR-0048 §D7).
+#   - RE-MEASURED 2026-08-16 (issue #311, ADR-0148) over **every** non-merge commit reachable from
+#     `main` — 383 commits, no sampling. The same rule fires 6 times and is STILL 0 of 6. Four hits
+#     are prose or `ok`/`bad` message strings. The other two are genuine in-place assertion edits
+#     and both RAISE a floor (15 → 18, 9 → 10), which is the opposite of weakening: the rule cannot
+#     see direction, only that a count matched. A larger corpus moved the finding count and not the
+#     precision, so the 0-of-2 above is not a small-sample artefact.
 #   - ADR-0051 §D5 reached the same wall on this same script and shipped `literal-assertion-added`
 #     disabled by default for it. That detector has since been RETIRED on measurement (#314,
 #     ADR-0144: 0 true positives in 383 commits), which makes the precedent stronger rather than

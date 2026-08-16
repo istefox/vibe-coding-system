@@ -45,6 +45,9 @@
 # plant: PP4 | plugin/scripts/tests/plant-check.sh | rm -rf "$SBX"    # freed at verdict time, not at exit (issue #350) | : # sandbox deliberately kept
 # plant: PP5 | plugin/scripts/tests/plant-check.sh | case "$JOBS" in ''|*[!0-9]*) JOBS=1 ;; esac | case "$JOBS" in ''|*[!0-9]*) : ;; esac
 # plant: PP6 | plugin/scripts/tests/plant-check.sh | printf '^FAIL: %s:?([[:space:]]|$)' | printf '^FAIL: %s'
+# plant: PP7 | plugin/scripts/tests/plant-check.sh | [ "$nfd" -lt 3 ] || [ "$nfd" -gt 4 ] | false
+# plant: PP8 | plugin/scripts/tests/plant-check.sh | out.append('\n'); i += 2; continue | pass
+# plant: PP9 | plugin/scripts/tests/plant-check.sh | out.append('\\'); i += 2; continue | pass
 set -u
 
 TESTS=$(cd "$(dirname "$0")" && pwd)
@@ -275,11 +278,120 @@ else
   bad "PP5: PLANT_JOBS=abc did not behave as one worker — $(diff "$TMP/out1" "$TMP/outbad" | grep -c '^[<>]') differing line(s)"
 fi
 
+# ==================================================================================================
+# THE DECLARATION GRAMMAR — issue #305, ADR-0149. A SECOND fixture, because the first one's plant
+# and file counts are PP0's subject and every assertion above is measured against them.
+#
+# Four properties, one registry run:
+#
+#   PP7  a declaration with more than four fields is BADPLANT. Until #305 nothing checked the count
+#        while the error message had claimed "need 4 fields" since the registry was written, and one
+#        six-field declaration had shipped — `A25`, silently mutating something nobody wrote.
+#   PP8  `\n` in the replacement produces a REAL newline, which is what makes an insertion
+#        expressible. A `\n` left literal keeps the added text on the existing line, `grep -c` still
+#        counts one row, and the plant would report NOFIRE — so this assertion distinguishes.
+#   PP9  `\\` produces exactly ONE backslash. G3 says "no double backslash anywhere" and is GREEN
+#        after a correct mutation, so the registry must report it NOT fired; a `\\` left as two
+#        characters turns it red. G4 carries the same mutation and MUST fire, which is what stops
+#        PP9 from being satisfied by a mutation that never landed.
+#   PP10 the exactly-one-match rule is unchanged by the new form (R-02): the match is on the NEEDLE,
+#        and an insertion whose needle hits twice is BADPLANT like any other.
+# ==================================================================================================
+FIX2="$TMP/fix2"
+mkdir -p "$FIX2/staging/plugin/scripts/tests"
+cp "$PC" "$FIX2/staging/plugin/scripts/tests/plant-check.sh"
+
+cat >"$FIX2/staging/plugin/scripts/demo2.sh" <<'DEMO2'
+#!/bin/bash
+# MARK-G1 a mechanism the three-field form deletes outright
+# TABLE-ROW alpha
+# BSLASH-HERE none
+# TWICE here
+# TWICE here
+DEMO2
+
+cat >"$FIX2/staging/plugin/scripts/tests/zeta.test.sh" <<'HARNESS2'
+#!/bin/bash
+set -u
+D=$(cd "$(dirname "$0")/.." && pwd)/demo2.sh
+if grep -q 'MARK-G1 a mechanism' "$D"; then printf 'PASS: G1\n'; else printf 'FAIL: G1 the marker is gone\n'; fi
+_r=$(grep -c 'TABLE-ROW' "$D")
+if [ "$_r" -eq 1 ]; then printf 'PASS: G2\n'; else printf 'FAIL: G2 rows=%s\n' "$_r"; fi
+if grep -q '\\\\' "$D"; then printf 'FAIL: G3 a double backslash reached the file\n'; else printf 'PASS: G3\n'; fi
+if grep -q 'BSLASH-HERE none' "$D"; then printf 'PASS: G4\n'; else printf 'FAIL: G4 the mutation landed\n'; fi
+exit 0
+HARNESS2
+
+# `@PLANT@` is substituted rather than written literally, for the reason the first fixture gives:
+# a literal `# plant:` at column 1 in THIS file would be collected by the real registry.
+_decl2() {   # <payload-after-the-marker>
+  printf '@PLANT@ %s\n' "$1" | sed 's/@PLANT@/# plant:/' \
+    >>"$FIX2/staging/plugin/scripts/tests/zeta.test.sh"
+}
+_decl2 'G1 | plugin/scripts/demo2.sh | # MARK-G1 a mechanism the three-field form deletes outright'
+_decl2 'G2 | plugin/scripts/demo2.sh | # TABLE-ROW alpha | # TABLE-ROW alpha\n# TABLE-ROW beta'
+_decl2 'G3 | plugin/scripts/demo2.sh | BSLASH-HERE none | BSLASH-HERE \\x'
+_decl2 'G4 | plugin/scripts/demo2.sh | BSLASH-HERE none | BSLASH-HERE \\x'
+_decl2 'G5 | plugin/scripts/demo2.sh | echo a | b | c | d'
+_decl2 'G6 | plugin/scripts/demo2.sh | # TWICE here | # TWICE here\n# TWICE again'
+
+FIX2PC="$FIX2/staging/plugin/scripts/tests/plant-check.sh"
+PLANT_JOBS=2 bash "$FIX2PC" >"$TMP/out2" 2>&1
+
+# The denominator, same lesson as PP0: six declarations over one harness that RUNS, and a verdict
+# reported for each. A fixture that stopped being collected would make all four assertions below
+# compare nothing to nothing.
+#
+# The check is on the SIX VERDICTS, not on PC0's line: this fixture is deliberately below PC0's
+# own >= 10 floor, so PC0 is red here by construction and says nothing about collection. Reading a
+# per-declaration verdict is the stronger denominator anyway — it survives a change to that floor.
+_g_ran=0
+bash "$FIX2/staging/plugin/scripts/tests/zeta.test.sh" 2>/dev/null | grep -q '^PASS: G1$' && _g_ran=1
+_g_decls=$(grep -c '^# plant:' "$FIX2/staging/plugin/scripts/tests/zeta.test.sh" || true)
+_g_verdicts=0
+for _i in G1 G2 G3 G4 G5 G6; do
+  grep -q "zeta.test.sh \[$_i\]" "$TMP/out2" && _g_verdicts=$((_g_verdicts + 1))
+done
+if [ "$_g_ran" -eq 1 ] && [ "${_g_decls:-0}" -eq 6 ] && [ "$_g_verdicts" -eq 6 ]; then
+  ok "PP6b: the grammar fixture is 6 declarations over a harness that runs, and the registry reported a verdict for all 6"
+else
+  bad "PP6b: fixture ran=$_g_ran, declared=$_g_decls, verdicts=$_g_verdicts (want 1, 6, 6) — PP7 to PP10 assert nothing without it"
+fi
+
+if grep -q 'zeta.test.sh \[G5\]: malformed declaration (6 field(s)' "$TMP/out2"; then
+  ok "PP7: a six-field declaration is BADPLANT — the ' | '-inside-a-field limit is enforced, not just stated (#305)"
+else
+  bad "PP7: a six-field declaration was accepted; the needle is being truncated at the first inner ' | ' and the plant mutates something nobody wrote"
+fi
+
+_g1=$(grep -c 'plant zeta.test.sh \[G1\] fired' "$TMP/out2" || true)
+_g2=$(grep -c 'plant zeta.test.sh \[G2\] fired' "$TMP/out2" || true)
+if [ "${_g1:-0}" -eq 1 ] && [ "${_g2:-0}" -eq 1 ]; then
+  ok "PP8: the three-field deletion form and the \\n insertion form both fired"
+else
+  bad "PP8: deletion fired $_g1 time(s) and insertion $_g2 time(s), want 1 each — a literal \\n keeps the added text on one line and grep -c still counts one row"
+fi
+
+_g3fired=$(grep -c 'plant zeta.test.sh \[G3\] fired' "$TMP/out2" || true)
+_g3quiet=$(grep -c 'zeta.test.sh \[G3\] — the assertion still passed' "$TMP/out2" || true)
+_g4=$(grep -c 'plant zeta.test.sh \[G4\] fired' "$TMP/out2" || true)
+if [ "${_g3fired:-1}" -eq 0 ] && [ "${_g3quiet:-0}" -eq 1 ] && [ "${_g4:-0}" -eq 1 ]; then
+  ok "PP9: \\\\ collapses to exactly one backslash (G3 stays green under the same mutation that fires G4)"
+else
+  bad "PP9: G3 fired $_g3fired / stayed-green $_g3quiet, G4 fired $_g4 (want 0, 1, 1) — either \\\\ left two backslashes or the mutation never landed"
+fi
+
+if grep -q 'zeta.test.sh \[G6\]: needle matched 2 times' "$TMP/out2"; then
+  ok "PP10 (R-02): the exactly-one-match rule is unchanged by the insertion form — the match is on the needle"
+else
+  bad "PP10 (R-02): an insertion whose needle matches twice was not refused; a plant hitting sites it did not intend is a defect in the plant"
+fi
+
 # PPZ — assertion-count floor (ADR-0083's vanishing-assertion class). No plant is declared on it:
 # a floor absorbs its own plant (rule 10), and it is here as a vacuity guard, not as a pinned claim.
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 7 ]; then ok "PPZ assertion-count floor ($_total >= 7)"
-else bad "PPZ assertion count fell to $_total (floor 7) — assertions vanished"; fi
+if [ "$_total" -ge 12 ]; then ok "PPZ assertion-count floor ($_total >= 12)"
+else bad "PPZ assertion count fell to $_total (floor 12) — assertions vanished"; fi
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"

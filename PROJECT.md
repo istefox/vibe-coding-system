@@ -1178,12 +1178,12 @@ wave order.
 
 - [ ] the collapsed snapshot commits live in the reflog only and a git gc destroys them  (issue #298)
 - [ ] fence_is_abort_capable is lexical and four measured fences abort from outside it  (issue #299)
-- [ ] a producer is any line that mentions the target so a target only talked about looks produced  (issue #300)
+- [x] a producer is any line that mentions the target so a target only talked about looks produced  (issue #300)  (completed: 2026-08-16 — 28 of 28 targets already had a real producer; 11 producers on `step_6_review` and 1 of them real, so TP1 could not be planted. Destination-anchored, TP1 planted, ADR-0147)
 - [ ] the transcript-scan population stops at two roots  (issue #301)
 - [ ] the grant-coverage guard matches a bare Bash token so an unrestricted grant in another form passes  (issue #302)
 - [ ] the interpreter enumeration is a fixed list and the escapes are pinned nowhere  (issue #303)
 - [ ] the reason floor is duplicated in seven derived guards and nothing stops one drifting  (issue #304)
-- [ ] the plant registry cannot express an insertion  (issue #305)
+- [x] the plant registry cannot express an insertion  (issue #305)  (completed: 2026-08-16 — deletion and same-line insertion were already expressible; a LINE was not. Found measuring: the "4 fields" contract was enforced nowhere and `A25` had been mutating a syntax error for months. Enforced, then `\n`/`\\` added, ADR-0149)
 - [ ] the deployed-only registry's reasons are true today and checked by nothing  (issue #306)
 - [ ] hooks.json is outside PAIRS completeness by a deferred decision  (issue #307)
 - [ ] thirteen skill-private test runners exercise the deployed copy and are dark to CI  (issue #308)
@@ -1196,7 +1196,7 @@ wave order.
 
 ##### Wave 3 — HIGH: detector precision, and the decisions
 
-- [ ] the weakening scan is blind to an in-place assertion edit  (issue #311)
+- [x] the weakening scan is blind to an in-place assertion edit  (issue #311)  (completed: 2026-08-16 — re-measured 0 of 6 over 383 commits, so no detector; disclosed at CIRCUIT BREAKER B and autopilot-build, the two callers that never said so, ADR-0148)
 - [x] spec-coverage measures citation not implementation  (issue #312)  (completed: 2026-08-14)
 - [x] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)  (completed: 2026-08-16 — measured to zero instances, closed with a reverse guard, ADR-0144)
 - [x] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)  (completed: 2026-08-16 — retired on 0 true positives in 383 commits, ADR-0144)

@@ -4077,3 +4077,97 @@ Key architectural decisions:
   successor is #449, with the measurement and the four things to derive first.
 
 Detail: `docs/architecture/ADR-0146-310-undefined-helper-scope.md`.
+
+## Decisions from the producer-destination-anchor chain (ADR-0147)
+
+ADR-0095's `has_producer` counted a line as a producer if it named the target and carried the word
+"transition" anywhere. Measured over the corpus first: 28 targets, 45 pairs, and **every target has
+a genuine producer today** — the third issue running whose stated defect has no live instance.
+
+Key architectural decisions:
+
+- **The looseness was large and decidable.** On `step_6_review`, eleven lines counted as producers
+  and exactly one was an instruction: three negations, one negation wrapped onto a second line, four
+  narrations, one narrative arrow, and one line where the target is the SOURCE.
+- **What that cost was not precision, it was plantability.** TP1 could not be planted: delete the
+  one real producer and ten prose lines hold it green. Measured both ways on the same mutation — old
+  predicate `PASS=14 FAIL=0`, new predicate `FAIL: TP1 … undeclared: step_6_review`.
+- **The preceding word separates an instruction from prose, and form cannot** (ADR-0117, applied to
+  a second predicate). `the transition to X`, `before transitioning to X`, `it never blocks the
+  transition to X` are all narration and all decidable.
+- **An arrow whose left operand is the target is the target's SOURCE** — #355's right anchor in a
+  second place. The legal-source set is derived from the same pair table the targets come from;
+  `block the Step 5 → step_6_review` has no source at all.
+- **Paragraph joining was implemented and rejected on measurement.** It credited a second state with
+  a first state's `manifest-transition.sh` call and destroyed the `step_e1_plan` arrow attribution —
+  the exact form ADR-0095 had to add, and the regression R-03 names. Wrapping is handled by a
+  one-line lookback for the split negation instead.
+- **The residue is stated, not closed.** `transitioning to X` with no determiner in front reads as
+  an imperative whether or not it is one. That is English word order, not a parse.
+
+Detail: `docs/architecture/ADR-0147-300-producer-destination-anchor.md`.
+
+## Decisions from the in-place-assertion-edit chain (ADR-0148)
+
+ADR-0073 recorded the blind spot and declined to close it: an assertion edited in place removes one
+assert-bearing line and adds one, so `assert-removed`'s count comparison cannot fire. Its closing
+sentence is why the issue exists — anyone relying on the weakening gate for assertion integrity is
+relying on something that does not exist. The gate is wired into four paths that can commit with
+nobody present.
+
+Key architectural decisions:
+
+- **Re-measured before designing, and the answer held.** Every non-merge commit reachable from
+  `main` — 383, no sampling: the rule fires 6 times, **0 true positives**. Four are prose or
+  `ok`/`bad` message strings. The other two are genuine in-place edits that *raise* a floor
+  (15 → 18, 9 → 10), which the rule cannot distinguish because it sees a count, not a direction.
+- **The corpus grew 8% and the findings trebled while precision stayed at zero**, so 0-of-2 was not
+  a small-sample artefact. R-01 forbids shipping anything that does not beat it; zero of six does
+  not beat zero of two.
+- **Third refusal on the same script.** ADR-0051 §D5 shipped `literal-assertion-added` disabled
+  rather than face this; ADR-0144 retired it on 0 true positives in 383 commits; ADR-0073 declined a
+  sibling. The structural argument outranks all three measurements: correcting a wrong test and
+  relaxing a right one produce byte-identical diffs.
+- **The work was R-02, and the gap was exactly where it hurts.** The limit was stated in the script
+  header, at c2c Step 5 and at commit Step 1 — but not at CIRCUIT BREAKER B, which
+  `commit/SKILL.md` itself calls "the actual enforcement point", and not at autopilot-build's
+  breaker-B halt, the caller that runs unattended. The place most likely to be mistaken for coverage
+  was the place with no disclosure.
+- **Both numbers stay.** The header records 0-of-2 over 354 *and* 0-of-6 over 383. Overwriting the
+  older one would delete the evidence that a larger corpus did not change the answer.
+- **These assertions pin prose, deliberately** (rule 16). A green `WJ7` is evidence the sentence is
+  present, never evidence anyone read it.
+
+Detail: `docs/architecture/ADR-0148-311-in-place-assertion-edit-refusal.md`.
+
+## Decisions from the plant-declaration-grammar chain (ADR-0149)
+
+ADR-0108 named its own limit — replacement only, two of that session's plants were insertions and
+not expressible. Measured before designing, 383 plants over 43 files, and half the premise had
+already dissolved.
+
+Key architectural decisions:
+
+- **Deletion was never the problem.** 30 of 383 plants already neutralise with `true`, `:` or
+  `if false; then`, and one prepends `exit 42;` on the same line, which is a same-line insertion
+  spelled as a replacement. R-01 as written was satisfied on the day it was written.
+- **What is inexpressible is adding a LINE** — the shape an exhaustiveness assertion guards: an
+  extra table row, a duplicated transition pair, a second heading where the scan counts one.
+- **Measuring found something worse than the issue.** The header says a ` | ` sequence cannot appear
+  inside a field and the error says "need 4 fields", and *nothing checked the count*. One
+  declaration had shipped with six: `A25` truncated its needle at the first inner pipe, substituted
+  `wc -l` for the head of a pipeline, and produced a syntax error instead of `P=0`. The harness died
+  of it and the plant was credited as fired — a plant that pins nothing, inside the mechanism built
+  to find assertions that pin nothing (rule 17).
+- **Enforce first, widen second.** A `\n` escape in a field that can be silently truncated is a
+  widening built on a hole. Three fields is now the declared deletion form — what the code already
+  did by accident, stated so the next reader does not "fix" it.
+- **Two escapes and only two**, `\n` and `\\`. Backward compatible by measurement: zero of the 383
+  existing replacements contains a backslash.
+- **Every new assertion distinguishes.** A `\n` left literal keeps the added text on one line, so
+  `grep -c` still counts one row and the plant reports NOFIRE — which is what makes `PP8` a test
+  rather than a description. `PP9` runs one mutation past two assertions, one that must stay green
+  and one that must go red, because "no double backslash" alone is satisfied by a mutation that
+  never landed.
+
+Detail: `docs/architecture/ADR-0149-305-plant-declaration-grammar.md`.

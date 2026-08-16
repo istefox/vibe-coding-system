@@ -30,7 +30,12 @@
 # plant: A8 | plugin/scripts/acceptance-adapter-swift.sh | IDRE='(^|[^A-Za-z0-9]|test)R-?([0-9]{1,3})(?![0-9])' | IDRE='()R-?([0-9]{1,3})(?![0-9])'
 # plant: A15 | plugin/scripts/acceptance-adapter-swift.sh | no-bound-cases — $NCASES test case(s) ran | no-cases-at-all — $NCASES test case(s) ran
 # plant: A22 | plugin/scripts/acceptance-adapter-swift.sh | if [ "$DECL_N" -eq 0 ]; then | if false; then
-# plant: A25 | plugin/scripts/acceptance-adapter-swift.sh | P=$(awk -F'\t' '$2=="PASS"' "$TMP/verdicts.tsv" | wc -l | tr -d ' ') | P=0
+# A25's needle used to be the whole `P=$(awk … | wc -l | tr -d ' ')` pipeline, whose two ` | `
+# sequences made the declaration SIX fields. Nothing checked the count until issue #305, so the
+# needle was truncated at the first pipe and the replacement became `wc -l` — the mutation applied
+# was a syntax error, not `P=0`, and A25 was credited for a harness that died of it. The needle now
+# stops short of the first pipe and neutralises the awk predicate instead, which still forces P=0.
+# plant: A25 | plugin/scripts/acceptance-adapter-swift.sh | '$2=="PASS"' | '1==0'
 # plant: A27 | plugin/scripts/acceptance-run.sh | [ "$CMD" = "NONE" ] && halt "opted-out | [ "$CMD" = "__never__" ] && halt "opted-out
 # plant: A29 | plugin/scripts/acceptance-run.sh | if ! { [ -f "$TRUST" ] && grep -F -x -q -- "$LINE" "$TRUST" 2>/dev/null; }; then | if false; then
 # plant: A34 | plugin/scripts/acceptance-run.sh | --schema-version 0.1.0 \ | \
