@@ -4106,3 +4106,36 @@ Key architectural decisions:
   an imperative whether or not it is one. That is English word order, not a parse.
 
 Detail: `docs/architecture/ADR-0147-300-producer-destination-anchor.md`.
+
+## Decisions from the in-place-assertion-edit chain (ADR-0148)
+
+ADR-0073 recorded the blind spot and declined to close it: an assertion edited in place removes one
+assert-bearing line and adds one, so `assert-removed`'s count comparison cannot fire. Its closing
+sentence is why the issue exists — anyone relying on the weakening gate for assertion integrity is
+relying on something that does not exist. The gate is wired into four paths that can commit with
+nobody present.
+
+Key architectural decisions:
+
+- **Re-measured before designing, and the answer held.** Every non-merge commit reachable from
+  `main` — 383, no sampling: the rule fires 6 times, **0 true positives**. Four are prose or
+  `ok`/`bad` message strings. The other two are genuine in-place edits that *raise* a floor
+  (15 → 18, 9 → 10), which the rule cannot distinguish because it sees a count, not a direction.
+- **The corpus grew 8% and the findings trebled while precision stayed at zero**, so 0-of-2 was not
+  a small-sample artefact. R-01 forbids shipping anything that does not beat it; zero of six does
+  not beat zero of two.
+- **Third refusal on the same script.** ADR-0051 §D5 shipped `literal-assertion-added` disabled
+  rather than face this; ADR-0144 retired it on 0 true positives in 383 commits; ADR-0073 declined a
+  sibling. The structural argument outranks all three measurements: correcting a wrong test and
+  relaxing a right one produce byte-identical diffs.
+- **The work was R-02, and the gap was exactly where it hurts.** The limit was stated in the script
+  header, at c2c Step 5 and at commit Step 1 — but not at CIRCUIT BREAKER B, which
+  `commit/SKILL.md` itself calls "the actual enforcement point", and not at autopilot-build's
+  breaker-B halt, the caller that runs unattended. The place most likely to be mistaken for coverage
+  was the place with no disclosure.
+- **Both numbers stay.** The header records 0-of-2 over 354 *and* 0-of-6 over 383. Overwriting the
+  older one would delete the evidence that a larger corpus did not change the answer.
+- **These assertions pin prose, deliberately** (rule 16). A green `WJ7` is evidence the sentence is
+  present, never evidence anyone read it.
+
+Detail: `docs/architecture/ADR-0148-311-in-place-assertion-edit-refusal.md`.

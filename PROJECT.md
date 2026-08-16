@@ -1196,7 +1196,7 @@ wave order.
 
 ##### Wave 3 — HIGH: detector precision, and the decisions
 
-- [ ] the weakening scan is blind to an in-place assertion edit  (issue #311)
+- [x] the weakening scan is blind to an in-place assertion edit  (issue #311)  (completed: 2026-08-16 — re-measured 0 of 6 over 383 commits, so no detector; disclosed at CIRCUIT BREAKER B and autopilot-build, the two callers that never said so, ADR-0148)
 - [x] spec-coverage measures citation not implementation  (issue #312)  (completed: 2026-08-14)
 - [x] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)  (completed: 2026-08-16 — measured to zero instances, closed with a reverse guard, ADR-0144)
 - [x] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)  (completed: 2026-08-16 — retired on 0 true positives in 383 commits, ADR-0144)

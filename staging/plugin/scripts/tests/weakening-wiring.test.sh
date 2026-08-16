@@ -18,6 +18,12 @@
 # THE FIXTURE DIFFS HERE CONTAIN NO KEY-SHAPED LITERAL. secret-dep-gate.test.sh section D
 # scans this repository's tracked files (via git ls-files) as its false-positive corpus,
 # so a key-shaped string dropped into a fixture in this file would turn that harness red.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# Each line below removes ONE mechanism and names the assertion that must go RED for it.
+# An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
+# plant: WJ7 | plugin/skills/review-triage-fix/SKILL.md | A silent breaker B is not evidence that no test was weakened | Breaker B is the last word
+# plant: WJ8 | plugin/skills/autopilot-build/SKILL.md | The absence of that BLOCKER is not evidence that no test was weakened | Nothing further is needed here
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -545,13 +551,23 @@ fi
 # An assertion edited in place removes one assert-bearing line and adds one, so assert-removed's
 # count comparison cannot fire. No detector was added: the diff shape is ambiguous by construction,
 # and a rule on `asrt_rm == asrt_add > 0` measured 0-of-2 precision over this repository's last 354
-# commits (both hits were prose containing the word "assertion"). What ships instead is the
-# statement, in the script and at BOTH callers — so these assertions pin prose, deliberately, and
-# they are the deliverable rather than a proxy for one.
+# commits (both hits were prose containing the word "assertion"). RE-MEASURED for issue #311 over
+# 383 commits — every non-merge commit reachable from `main`, no sampling — the same rule is 0 of 6,
+# and two of the six are in-place edits that RAISE a floor. What ships instead is the statement, at
+# every caller — so these assertions pin prose, deliberately, and they are the deliverable rather
+# than a proxy for one (rule 16: an instruction is not an enforcement, and this is the instruction).
+#
+# FOUR CALLERS, not two. WJ4 and WJ5 covered c2c Step 5 and commit Step 1 from the day they were
+# written. CIRCUIT BREAKER B in review-triage-fix and the breaker-B halt in autopilot-build were
+# not covered, and breaker B is the one `commit/SKILL.md` itself calls "the actual enforcement
+# point" — so the single place a reader most likely mistakes for coverage was the one place that
+# never said otherwise (issue #311, ADR-0148). WJ7 and WJ8 close that.
 # ==================================================================================================
 WS="$STAGING/plugin/skills/review-triage-fix/scripts/weakening-scan.sh"
 CCM="$STAGING/plugin/skills/concept-to-code/SKILL.md"
 CMT="$STAGING/plugin/skills/commit/SKILL.md"
+RTFS="$STAGING/plugin/skills/review-triage-fix/SKILL.md"
+ABS="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 
 grep -q 'WHAT `CLEAN` DOES NOT MEAN' "$WS" \
   && ok "WJ1: weakening-scan.sh's header states what CLEAN does not cover" \
@@ -578,6 +594,27 @@ grep -q 'not evidence that no test was weakened' "$CMT" \
 grep -q 'NO DETECTOR WAS ADDED' "$WS" \
   && ok "WJ6: the decision itself is recorded in the script, not only in the ADR" \
   || bad "WJ6: the script does not record that no detector was added — this will be rediscovered as a bug"
+
+# Rule 3, for the three assertions below: a clause is the same clause whether it wraps, whether a
+# word in it is bolded or backticked, whether it sits behind a `#` comment marker and whether it
+# opens a sentence. WJ1-WJ6 above grep the raw file and are left alone — they are anchors on short
+# ALL-CAPS headings that do not wrap. These three read running prose, which does.
+flat_has() {
+  sed 's/^[[:space:]]*#*[[:space:]]*//; s/[`*_]//g' "$1" \
+    | tr '\n' ' ' | tr -s ' \t' ' ' | tr 'A-Z' 'a-z' | grep -qF "$2"
+}
+
+flat_has "$WS" '0 of 6' && flat_has "$WS" '383 commits' \
+  && ok "WJ3b: the 2026-08-16 re-measurement is recorded (0 of 6 over 383 commits), so the refusal rests on the CURRENT corpus" \
+  || bad "WJ3b: the header does not record the #311 re-measurement — the decision rests on a 354-commit number nobody re-derived"
+
+flat_has "$RTFS" 'a silent breaker b is not evidence that no test was weakened' \
+  && ok "WJ7: CIRCUIT BREAKER B states the CLEAN limit — the enforcement point commit/SKILL.md defers to" \
+  || bad "WJ7: review-triage-fix's breaker B does not state what a silent scan omits; a reader sees a hard-fail and infers coverage (#311)"
+
+flat_has "$ABS" 'the absence of that blocker is not evidence that no test was weakened' \
+  && ok "WJ8: autopilot-build's breaker-B halt states the CLEAN limit at the one caller with nobody present" \
+  || bad "WJ8: autopilot-build does not state what a missing BLOCKER omits — unattended, nothing downstream catches it (#311)"
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"

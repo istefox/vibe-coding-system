@@ -220,6 +220,16 @@ Apply the circuit breakers:
   `UNRESOLVED — test weakened`, raise a BLOCKER flag in the recap,
   regardless of suite colour. **NO auto-revert** — leave the change in
   place, flag it loud (destructive action stays with the human gate).
+  **A silent breaker B is not evidence that no test was weakened (ADR-0073 §D4,
+  ADR-0148, issue #311).** An assertion edited IN PLACE removes one
+  assert-bearing line and adds one, so `assert-removed`'s count comparison
+  cannot fire and nothing here sees it. No detector exists for it: measured over
+  383 non-merge commits, a rule on `asrt_rm == asrt_add > 0` has a precision of
+  0 of 6, and correcting a wrong test and relaxing a right one produce
+  byte-identical diffs. This breaker is the enforcement point the `commit` skill
+  defers to, which is why the limit is stated here: the only thing in the whole
+  flow that puts a changed assertion in front of a human is the **Test diff**
+  section of `commit`'s Step 4 gate, and nothing in this loop substitutes for it.
 - **CIRCUIT BREAKER C — security finding report-only.** Never enters this loop
   (classified REPORT-ONLY in Step 2 regardless of class or locality); counted in the recap under "Security (deferred to human)". If a finding was mis-routed to `coder` despite being security class, reclassify it REPORT-ONLY here before dispatch.
 - **CIRCUIT BREAKER D — unverified cycle.** If Step 0 returned UNVERIFIED:
