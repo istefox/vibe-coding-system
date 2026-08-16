@@ -4048,3 +4048,32 @@ Key architectural decisions:
   demonstrate.
 
 Detail: `docs/architecture/ADR-0145-355-anchored-fired-predicate.md`.
+
+## Decisions from the undefined-helper-scope chain (ADR-0146)
+
+ADR-0081 found the instance sideways: `pairs-completeness.test.sh` had no `ok()`/`bad()`, a draft
+called them anyway, and six assertions printed "command not found" while the suite reported
+`PASS=244 FAIL=0` and exited 0. Nothing here runs under `set -e`. Measured across all 82 harnesses
+before building anything: **zero** such calls today.
+
+Key architectural decisions:
+
+- **Getting to that zero took three attempts, and the wrong ones are the lesson.** 47 findings, none
+  real — the scan matched the English word "no" inside message strings, and `no` IS a helper here.
+  Then 3, none real — two `case` labels and an assignment, all in command position. Then 0, once the
+  scan tracked quote state ACROSS LINES (the messages wrap), masked heredoc bodies, and excluded
+  `name=` and `name)`.
+- **A detector reporting zero is a claim about the detector.** One `verdict` call was planted into a
+  copy of the corpus: the scan found exactly it, and `bash` confirmed the live behaviour — printed
+  on stderr, execution continues, exit unaffected. `HS2` keeps that demonstration in CI, because
+  `HS1` would be green with a broken scanner.
+- **A derived scan, not 82 copies of a runtime hook.** `command_not_found_handle` in every harness is
+  the same shared-helper problem ADR-0086 already refused, with more surface.
+- **The vocabulary is derived, never listed:** a helper is a function defined by two or more
+  harnesses. A hand-written list would be blind to the file that invents a new helper name (rule 8).
+- **R-02 was refused in the form it was written.** A per-file assertion-count floor is the instrument
+  ADR-0124 retired: a floor absorbs its own plant, so 49 new floors would be 49 lines that mostly
+  cannot fail — the false-green shape the issue exists to remove, added in bulk in its name. The
+  successor is #449, with the measurement and the four things to derive first.
+
+Detail: `docs/architecture/ADR-0146-310-undefined-helper-scope.md`.

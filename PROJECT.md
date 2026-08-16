@@ -1188,7 +1188,7 @@ wave order.
 - [ ] hooks.json is outside PAIRS completeness by a deferred decision  (issue #307)
 - [ ] thirteen skill-private test runners exercise the deployed copy and are dark to CI  (issue #308)
 - [ ] settings.json is never synced and five guardrail hooks are wired by hand  (issue #309)
-- [ ] an undefined assertion helper is indistinguishable from a passing assertion  (issue #310)
+- [x] an undefined assertion helper is indistinguishable from a passing assertion  (issue #310)  (completed: 2026-08-16 — population measured 0 of 82, guarded; R-02 refused and split to #449, ADR-0146)
 - [ ] a manifest terminal by status is exempt from invariant 4 and the state machine still lets it transition  (issue #335)
 - [ ] set-branch-protection.sh unions one context while the audit derives three  (issue #336)
 - [x] plant-check.sh decides a plant fired with a PREFIX match  (issue #355)  (completed: 2026-08-16 — measured 33 of 387 exposed, 0 mis-credited; anchored, ADR-0145)
