@@ -23,7 +23,7 @@
 #   runs on every push.
 #
 # The fixture is not a smaller version of the corpus; it is a corpus chosen so the failure modes are
-# REACHABLE. Its four harnesses sleep for DESCENDING intervals, so completion order is the reverse
+# REACHABLE. Its five harnesses sleep for DESCENDING intervals, so completion order is the reverse
 # of declaration order — without that, an aggregation that reported in completion order would look
 # correct here and be wrong in CI. One of its plants is deliberately built NOT to fire, because an
 # equivalence check between two runs that both found nothing is satisfied by a registry that does
@@ -33,17 +33,18 @@
 # at column 1 anywhere in this file is collected by the real registry as THIS file's own
 # declaration, fixture or not — the collector greps `^# plant:` across `*.test.sh` and cannot know
 # the line was meant for a fixture. The fixture's declarations are therefore written as `@PLANT@`
-# and substituted in. Only the six lines below are this file's real plants.
+# and substituted in. Only the seven lines below are this file's real plants.
 #
 # --- plants (plant-check.sh) ------------------------------------------------------------
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
-# plant: PP0 | plugin/scripts/tests/plant-registry-parallel.test.sh | for _h in alpha beta gamma delta | for _h in alpha
+# plant: PP0 | plugin/scripts/tests/plant-registry-parallel.test.sh | for _h in alpha beta gamma delta epsilon | for _h in alpha
 # plant: PP1 | plugin/scripts/tests/plant-check.sh | SBX="$WORK/sbx$IDX" | SBX="$WORK/sbx"
-# plant: PP2 | plugin/scripts/tests/plant-check.sh | grep -q "^FAIL: $aid" <<PLANT_HARNESS_OUTPUT | grep -q "^" <<PLANT_HARNESS_OUTPUT
+# plant: PP2 | plugin/scripts/tests/plant-check.sh | grep -qE "$(red_re "$aid")" <<PLANT_HARNESS_OUTPUT | grep -qE "" <<PLANT_HARNESS_OUTPUT
 # plant: PP3 | plugin/scripts/tests/plant-check.sh | for _i in $(seq 1 "$DECL_N"); do | for _i in $(seq "$DECL_N" -1 1); do
 # plant: PP4 | plugin/scripts/tests/plant-check.sh | rm -rf "$SBX"    # freed at verdict time, not at exit (issue #350) | : # sandbox deliberately kept
 # plant: PP5 | plugin/scripts/tests/plant-check.sh | case "$JOBS" in ''|*[!0-9]*) JOBS=1 ;; esac | case "$JOBS" in ''|*[!0-9]*) : ;; esac
+# plant: PP6 | plugin/scripts/tests/plant-check.sh | printf '^FAIL: %s:?([[:space:]]|$)' | printf '^FAIL: %s'
 set -u
 
 TESTS=$(cd "$(dirname "$0")" && pwd)
@@ -81,10 +82,12 @@ cat >"$FIX/staging/plugin/scripts/demo.sh" <<'DEMO'
 # MARK-D1 tenth mechanism
 # MARK-D2 eleventh mechanism
 # MARK-D9 twelfth mechanism
+# MARK-E1 thirteenth mechanism
+# MARK-E1b fourteenth mechanism — E1 is a PREFIX of E1b, which is the whole point
 # MARK-UNUSED no assertion depends on this one, by design
 DEMO
 
-# Four harnesses, sleeping for DESCENDING intervals so that under concurrency the LAST declarations
+# Five harnesses, sleeping for DESCENDING intervals so that under concurrency the LAST declarations
 # finish FIRST. An aggregation that reported in completion order would be caught by PP3 here and
 # would otherwise only be caught in CI, on the corpus, months later.
 _mk_harness() {   # <name> <sleep> <id1> <id2> <id3>
@@ -95,20 +98,21 @@ set -u
 D=\$(cd "\$(dirname "\$0")/.." && pwd)/demo.sh
 sleep $_s
 for _m in $_a $_b $_c; do
-  if grep -q "MARK-\$_m" "\$D"; then printf 'PASS: %s\n' "\$_m"; else printf 'FAIL: %s\n' "\$_m"; fi
+  if grep -q "MARK-\$_m " "\$D"; then printf 'PASS: %s\n' "\$_m"; else printf 'FAIL: %s\n' "\$_m"; fi
 done
 exit 0
 HARNESS
 }
 
 # PP0's own subject. Shrink this list and the fixture stops being able to prove anything, which is
-# why PP0 asserts the population the other five assertions are measured against (rule 7).
-for _h in alpha beta gamma delta; do
+# why PP0 asserts the population the other six assertions are measured against (rule 7).
+for _h in alpha beta gamma delta epsilon; do
   case "$_h" in
     alpha) _mk_harness alpha 0.20 A1 A2 A3 ;;
     beta)  _mk_harness beta  0.15 B1 B2 B3 ;;
     gamma) _mk_harness gamma 0.10 C1 C2 C3 ;;
     delta) _mk_harness delta 0.05 D1 D2 D9 ;;
+    epsilon) _mk_harness epsilon 0.12 E1 E1b E1b ;;
   esac
 done
 
@@ -129,6 +133,7 @@ _decl alpha A1 A1; _decl alpha A2 A2; _decl alpha A3 A3
 _decl beta  B1 B1; _decl beta  B2 B2; _decl beta  B3 B3
 _decl gamma C1 C1; _decl gamma C2 C2; _decl gamma C3 C3
 _decl delta D1 D1; _decl delta D2 D2; _decl delta D9 UNUSED
+_decl epsilon E1 E1b
 
 FIXPC="$FIX/staging/plugin/scripts/tests/plant-check.sh"
 FIXN=$(grep -c '^# plant:' "$FIX/staging/plugin/scripts/tests"/*.test.sh 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
@@ -170,15 +175,15 @@ PLANT_JOBS=abc bash "$FIXPC" >"$TMP/outbad" 2>&1
 # leaves four files containing nothing but `# plant:` lines. Counted, that corpus is indisting-
 # uishable from the real one. So PP0 asks the harnesses to RUN.
 _fixran=0
-for _q in alpha beta gamma delta; do
+for _q in alpha beta gamma delta epsilon; do
   _qf="$FIX/staging/plugin/scripts/tests/$_q.test.sh"
   [ -f "$_qf" ] && bash "$_qf" 2>/dev/null | grep -q '^PASS: ' && _fixran=$((_fixran + 1))
 done
-if [ "${FIXN:-0}" -eq 12 ] && [ "${FIXF:-0}" -eq 4 ] && [ "$_fixran" -eq 4 ] \
-   && grep -q "^PASS: PC0 plant declarations discovered (12)$" "$TMP/out1"; then
-  ok "PP0: the fixture is 12 plants over 4 harnesses that run, and the registry collected all 12"
+if [ "${FIXN:-0}" -eq 13 ] && [ "${FIXF:-0}" -eq 5 ] && [ "$_fixran" -eq 5 ] \
+   && grep -q "^PASS: PC0 plant declarations discovered (13)$" "$TMP/out1"; then
+  ok "PP0: the fixture is 13 plants over 5 harnesses that run, and the registry collected all 13"
 else
-  bad "PP0: fixture is $FIXN plant(s) over $FIXF file(s) of which $_fixran actually run (expected 12, 4 and 4), or the registry did not collect them — every assertion below would compare nothing to nothing"
+  bad "PP0: fixture is $FIXN plant(s) over $FIXF file(s) of which $_fixran actually run (expected 13, 5 and 5), or the registry did not collect them — every assertion below would compare nothing to nothing"
 fi
 
 # ==================================================================================================
@@ -230,6 +235,27 @@ fi
 # The lower bound is not decoration. A sampler that never observed a sandbox would report zero, and
 # zero is indistinguishable from "freed immediately" — rule 4, applied to this file's own instrument.
 # ==================================================================================================
+# ==================================================================================================
+# PP6 — a SIBLING's failure does not credit the plant (issue #355, ADR-0145).
+#
+# The predicate used to be `^FAIL: <aid>` with no right anchor, so a plant declared for `E1` was
+# credited when `E1b` failed instead — an entirely different assertion, in the direction that reads
+# as coverage. Measured across the real corpus before the change: 33 of 387 plants are exposed to
+# such a collision and 0 are mis-credited, which is why the anchor was a no-op there and why this
+# fixture has to MANUFACTURE the case the corpus does not currently contain.
+#
+# `epsilon`'s plant names `E1` and mutates the marker only `E1b` reads. So `E1b` goes red, `E1`
+# stays green, and the registry must report that the plant did not fire. Under the old predicate
+# this same fixture reported it as fired.
+# ==================================================================================================
+_pp6=$(grep -c "epsilon.test.sh \[E1\] — the assertion still passed with the mechanism removed" "$TMP/out1" || true)
+_pp6_wrong=$(grep -c "plant epsilon.test.sh \[E1\] fired" "$TMP/out1" || true)
+if [ "${_pp6:-0}" -eq 1 ] && [ "${_pp6_wrong:-0}" -eq 0 ]; then
+  ok "PP6: a sibling's failure (E1b) does not credit the plant declared on E1"
+else
+  bad "PP6: E1 was credited to E1b's failure — reported not-fired $_pp6 time(s), fired $_pp6_wrong time(s); the fired predicate has lost its right anchor (issue #355)"
+fi
+
 if [ "$MAXSBX" -ge 1 ] && [ "$MAXSBX" -le 2 ]; then
   ok "PP4: at most $MAXSBX mutation sandbox existed at once under one worker (freed at verdict time)"
 elif [ "$MAXSBX" -eq 0 ]; then
@@ -252,8 +278,8 @@ fi
 # PPZ — assertion-count floor (ADR-0083's vanishing-assertion class). No plant is declared on it:
 # a floor absorbs its own plant (rule 10), and it is here as a vacuity guard, not as a pinned claim.
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 6 ]; then ok "PPZ assertion-count floor ($_total >= 6)"
-else bad "PPZ assertion count fell to $_total (floor 6) — assertions vanished"; fi
+if [ "$_total" -ge 7 ]; then ok "PPZ assertion-count floor ($_total >= 7)"
+else bad "PPZ assertion count fell to $_total (floor 7) — assertions vanished"; fi
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"

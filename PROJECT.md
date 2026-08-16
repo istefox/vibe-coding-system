@@ -1191,7 +1191,7 @@ wave order.
 - [ ] an undefined assertion helper is indistinguishable from a passing assertion  (issue #310)
 - [ ] a manifest terminal by status is exempt from invariant 4 and the state machine still lets it transition  (issue #335)
 - [ ] set-branch-protection.sh unions one context while the audit derives three  (issue #336)
-- [ ] plant-check.sh decides a plant fired with a PREFIX match: 26 of 166 plants pin nothing  (issue #355)
+- [x] plant-check.sh decides a plant fired with a PREFIX match  (issue #355)  (completed: 2026-08-16 — measured 33 of 387 exposed, 0 mis-credited; anchored, ADR-0145)
 - [x] plant-check.sh cost scales as (plants x target-file runtime), not as their sum  (issue #350)  (completed: 2026-08-15)
 
 ##### Wave 3 — HIGH: detector precision, and the decisions

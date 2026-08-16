@@ -264,3 +264,4 @@ heading naming the same ADR. Open the ADR itself for the full decision record.
 - **ADR-0138** — the requirement-coverage test axis is tightened by SCOPE, because the measured defect was a repo-wide scan, not a comment → `docs/architecture/ADR-0138-312-spec-coverage-scope-not-assertion-shape.md`
 - **ADR-0143** — the plant registry had already paid for isolation and was spending it one core at a time; the verdicts are pinned by a byte-identical diff → `docs/architecture/ADR-0143-350-plant-registry-parallel.md`
 - **ADR-0144** — a detector retired on 0 true positives in 383 commits, and a heading whose zero instances are held there by two templates → `docs/architecture/ADR-0144-313-314-triage-outcomes.md`
+- **ADR-0145** — the fired predicate gains a right anchor; 33 of 387 plants were exposed to a sibling and 0 were mis-credited → `docs/architecture/ADR-0145-355-anchored-fired-predicate.md`

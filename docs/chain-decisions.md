@@ -4015,3 +4015,36 @@ Key architectural decisions:
   assertions then failed for reasons that looked unrelated. `bash -n` passes on that file.
 
 Detail: `docs/architecture/ADR-0144-313-314-triage-outcomes.md`.
+
+## Decisions from the anchored-fired-predicate chain (ADR-0145)
+
+The registry decided a plant had fired with `grep -q "^FAIL: $aid"` — a prefix with no right anchor,
+so a plant declared for `SP5` was credited when `SP5b` failed instead. #355 said anchoring was easy
+but re-verifying the corpus afterwards was "the work, and it needs its own cycle". Measured first:
+**33 of 387 plants are exposed to such a collision and 0 are mis-credited**, because every one of the
+33 mutations turns the NAMED assertion red. The re-verification the issue deferred is that table, and
+it came back clean.
+
+Key architectural decisions:
+
+- **Measure the exposure and the defect separately.** "How many plants COULD be mis-credited" and
+  "how many ARE" are different questions with a factor of 33 between them, and only the second
+  decides whether the fix is a cycle or an afternoon. The second was answered by re-running each
+  exposed mutation and recording the full red set instead of a boolean.
+- **The emitted id set is derived by RUNNING each harness**, not by reading its source: what matters
+  is what the harness prints, because that is what the grep sees. `phase1.test.sh` prints
+  `ok   <label>` and emits no `PASS:` line at all, so its 6 plants were covered from the call sites
+  instead — weaker evidence, disclosed rather than skipped.
+- **The id is escaped before it reaches the regex.** Assertion ids are not all alphanumeric
+  (`CE-secret-scan.sh`), and an unescaped `.` would restore a looser match than the one being
+  removed — the issue's own defect surviving its own fix.
+- **One function, two call sites.** ADR-0140 built the vacuity guard to inherit the looseness on
+  purpose so the two halves would agree; they now share a source rather than a convention.
+- **The fixture manufactures what the corpus cannot show.** With 0 mis-credited plants in 387, an
+  assertion pinned on the real corpus would have passed before the change too. `PP6` builds the case:
+  a plant named `E1` whose mutation only `E1b` reads.
+- **The fixture's own harnesses had to be anchored first** — they grep `MARK-<id>`, and `MARK-E1`
+  matches `MARK-E1b`, so the fixture would have reproduced inside itself the defect it exists to
+  demonstrate.
+
+Detail: `docs/architecture/ADR-0145-355-anchored-fired-predicate.md`.

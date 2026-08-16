@@ -74,6 +74,30 @@ PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
+# red_re <assertion-id> — the ERE that decides whether THIS assertion went red (issue #355).
+#
+# It used to be `^FAIL: <aid>`, an unanchored PREFIX, so a plant declared for `SP5` was credited
+# when `SP5b`, `SP5c` or `SP5d` failed instead — a different assertion, possibly for an unrelated
+# reason, in the direction that reads as coverage.
+#
+# Measured 2026-08-16 before changing it, because the issue said re-verifying the corpus afterwards
+# was its own cycle: **33 of 387 plants sit on such a collision and 0 of them are mis-credited**.
+# Every one of the 33 mutations turns the NAMED assertion red, so the anchor is a no-op on today's
+# corpus and pure hazard removal — the exposure is what grows, not the defect count.
+#
+# The boundary is `:?` then whitespace or end of line, because that is the emitted form across the
+# corpus: `FAIL: <id>: text` and `FAIL: <id> text`. The id is escaped before it reaches the regex —
+# ids are not all alphanumeric (`CE-secret-scan.sh` is one), and an unescaped `.` would restore a
+# looser match than the one being removed.
+#
+# ONE function, two call sites, deliberately: the fired check and the vacuity guard must answer the
+# same question about the same id or the disagreement moves instead of closing (ADR-0140 kept them
+# in sync by hand; ADR-0086's criterion says a shared source is required when two copies giving
+# different answers would be a defect).
+red_re() {
+  printf '^FAIL: %s:?([[:space:]]|$)' "$(printf '%s' "$1" | sed 's/[][\.*^$(){}?+|\/]/\\&/g')"
+}
+
 # build_sandbox <dir> — ONE construction, used by the baseline pass and every mutation run.
 #
 # ADR-0086's criterion applies exactly: the baseline and the mutation runs must answer the same
@@ -90,6 +114,7 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 # (`git ls-files`, `git check-ignore`), and at least one harness detects the absence of a checkout
 # in order to SKIP an assertion it cannot evaluate — copying a `.git` in would change what
 # isolation means here. Those two are covered by the baseline instead of by the environment.
+
 build_sandbox() {
   _sb="$1"
   mkdir -p "$_sb"
@@ -143,7 +168,7 @@ if [ "${1:-}" = "--worker" ]; then
   # agree. That predicate is a PREFIX match (issue #355, still open), so this guard inherits the
   # looseness and may over-refuse a plant whose id is a prefix of an already-red one. Over-refusal
   # fails loud, which is the safe direction; under-refusal is the defect being fixed.
-  if [ -f "$WORK/base/$tfile" ] && grep -q "^FAIL: $aid" "$WORK/base/$tfile"; then
+  if [ -f "$WORK/base/$tfile" ] && grep -qE "$(red_re "$aid")" "$WORK/base/$tfile"; then
     emit VACUOUS "    $tfile [$aid] — already RED in the unmutated sandbox; firing here would prove nothing"
     exit 0
   fi
@@ -230,7 +255,7 @@ PY
   # bash 3.2 on macOS swallows it, so it is invisible where this file is written and visible where
   # it runs. One stray line whose presence depends on timing is enough to make the one-worker /
   # many-worker diff differ, and that diff is the only evidence that concurrency changed nothing.
-  if grep -q "^FAIL: $aid" <<PLANT_HARNESS_OUTPUT
+  if grep -qE "$(red_re "$aid")" <<PLANT_HARNESS_OUTPUT
 $OUT
 PLANT_HARNESS_OUTPUT
   then
