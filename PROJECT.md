@@ -1183,7 +1183,7 @@ wave order.
 - [ ] the grant-coverage guard matches a bare Bash token so an unrestricted grant in another form passes  (issue #302)
 - [ ] the interpreter enumeration is a fixed list and the escapes are pinned nowhere  (issue #303)
 - [ ] the reason floor is duplicated in seven derived guards and nothing stops one drifting  (issue #304)
-- [ ] the plant registry cannot express an insertion  (issue #305)
+- [x] the plant registry cannot express an insertion  (issue #305)  (completed: 2026-08-16 — deletion and same-line insertion were already expressible; a LINE was not. Found measuring: the "4 fields" contract was enforced nowhere and `A25` had been mutating a syntax error for months. Enforced, then `\n`/`\\` added, ADR-0149)
 - [ ] the deployed-only registry's reasons are true today and checked by nothing  (issue #306)
 - [ ] hooks.json is outside PAIRS completeness by a deferred decision  (issue #307)
 - [ ] thirteen skill-private test runners exercise the deployed copy and are dark to CI  (issue #308)

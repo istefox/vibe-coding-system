@@ -4139,3 +4139,35 @@ Key architectural decisions:
   present, never evidence anyone read it.
 
 Detail: `docs/architecture/ADR-0148-311-in-place-assertion-edit-refusal.md`.
+
+## Decisions from the plant-declaration-grammar chain (ADR-0149)
+
+ADR-0108 named its own limit — replacement only, two of that session's plants were insertions and
+not expressible. Measured before designing, 383 plants over 43 files, and half the premise had
+already dissolved.
+
+Key architectural decisions:
+
+- **Deletion was never the problem.** 30 of 383 plants already neutralise with `true`, `:` or
+  `if false; then`, and one prepends `exit 42;` on the same line, which is a same-line insertion
+  spelled as a replacement. R-01 as written was satisfied on the day it was written.
+- **What is inexpressible is adding a LINE** — the shape an exhaustiveness assertion guards: an
+  extra table row, a duplicated transition pair, a second heading where the scan counts one.
+- **Measuring found something worse than the issue.** The header says a ` | ` sequence cannot appear
+  inside a field and the error says "need 4 fields", and *nothing checked the count*. One
+  declaration had shipped with six: `A25` truncated its needle at the first inner pipe, substituted
+  `wc -l` for the head of a pipeline, and produced a syntax error instead of `P=0`. The harness died
+  of it and the plant was credited as fired — a plant that pins nothing, inside the mechanism built
+  to find assertions that pin nothing (rule 17).
+- **Enforce first, widen second.** A `\n` escape in a field that can be silently truncated is a
+  widening built on a hole. Three fields is now the declared deletion form — what the code already
+  did by accident, stated so the next reader does not "fix" it.
+- **Two escapes and only two**, `\n` and `\\`. Backward compatible by measurement: zero of the 383
+  existing replacements contains a backslash.
+- **Every new assertion distinguishes.** A `\n` left literal keeps the added text on one line, so
+  `grep -c` still counts one row and the plant reports NOFIRE — which is what makes `PP8` a test
+  rather than a description. `PP9` runs one mutation past two assertions, one that must stay green
+  and one that must go red, because "no double backslash" alone is satisfied by a mutation that
+  never landed.
+
+Detail: `docs/architecture/ADR-0149-305-plant-declaration-grammar.md`.
