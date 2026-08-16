@@ -106,6 +106,37 @@ retired here — it costs nothing and it is one fewer thing to explain.
 - The exposure count (33) is worth re-deriving after any batch of new assertions. It is not a
   defect count and should never be reported as one.
 
+## Correction — 2026-08-16, one plant did stop firing, and only on Linux
+
+The Consequences above say "if any plant had stopped firing `PC1` would name it". It did, and the
+acceptance run above could not see it: **that run was on macOS, and the plant in question is
+unfirable on a case-sensitive filesystem.**
+
+`RJ13` in `recovery-preflight.test.sh` is behavioural and its precondition — a repository root
+reachable under a different case — can only be BUILT on a case-insensitive filesystem. On APFS it is
+exercised and its plant genuinely turns it red. On the Linux runner it takes a self-naming
+`NOT EXERCISED` branch and passes regardless of what the mechanism does, so no mutation can make it
+fail there. Under the OLD prefix predicate that was invisible: `^FAIL: RJ13` matched `FAIL: RJ13b`,
+and `RJ13b` — a structural grep with no platform dependency — went red under the same mutation on
+every platform. The anchor removed that credit, correctly, and `PC1` reported it on the first CI run
+of PR #450 while the local run stayed green.
+
+**This was written down before it happened.** `recovery-preflight.test.sh`'s own RRP3 note said, in
+these words, that if #355 landed one should "expect RJ13's plant to start failing PC1 for exactly
+the reason written here". The 33-of-387 exposure measurement was correct about mis-crediting; what
+it did not survey is which of the 33 sit on an assertion that is *conditionally exercised*, where
+the sibling was carrying the plant on the platform the original could not reach.
+
+Resolved by moving the mutation, not deleting it: the `#344` string-prefix strip is now `RJ13b`'s
+second plant, and `RJ13` carries no plant with the reason declared in prose — the precedent `RRP3`
+in the same file had already set. Measured 2026-08-16: that mutation turns `RJ13`, `RJ13b` and
+`RRP3` red on macOS, and `RJ13b` alone on a case-sensitive filesystem.
+
+**The lesson is about the measurement, not the anchor.** A plant validated on one platform is
+evidence about that platform. An assertion with a `NOT EXERCISED` branch cannot be planted where
+that branch is taken, and the registry can only say so once nothing else is silently covering for
+it.
+
 ## References
 
 - Issue #355 and the 2026-08-16 measurement comment on it.
