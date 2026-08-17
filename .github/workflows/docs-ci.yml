@@ -37,9 +37,53 @@ jobs:
         with:
           globs: "**/*.md"
 
+  plant-shard:
+    name: plant-shard
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # one broken plant must not cancel the other three and hide the rest
+      matrix:
+        shard: [1, 2, 3, 4]     # THE shard count lives here and nowhere else
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      # The zsh step below is NOT copied here for symmetry with shell-tests' own install step: it is
+      # a build dependency of THIS job specifically (issue #447, ADR-0151 §D8's "not copied for
+      # symmetry" note). The registry re-runs fence-contract-coverage.test.sh's WSA/WSB under
+      # mutation; with zsh absent both fail by design (ADR-0133), the baseline for that harness goes
+      # red, and every plant declared in it becomes VACUOUS. Nothing but this comment says so.
+      - name: Install zsh (a dependency of the harnesses this job re-runs under mutation)
+        run: |
+          set -e
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+          fi
+          zsh --version
+
+      - name: Run the plant registry (shard ${{ matrix.shard }})
+        env:
+          PLANT_SHARD: ${{ matrix.shard }}
+          PLANT_SHARDS: ${{ strategy.job-total }}
+          PLANT_ARTIFACT: ${{ runner.temp }}/plant-shard-${{ matrix.shard }}.tsv
+        run: |
+          echo "runner cores: $(nproc)"
+          bash staging/plugin/scripts/tests/plant-check.sh
+
+      - name: Upload this shard's verdict stream
+        if: always()            # a RED shard's evidence is the evidence the union needs most
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plant-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/plant-shard-${{ matrix.shard }}.tsv
+
   shell-tests:
     name: shell-tests
     runs-on: ubuntu-latest
+    needs: [plant-shard]
+    if: always()            # a failed shard must not skip the union: a required context that never
+                             # reports leaves the pull request pending forever (ADR-0151 §D8)
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -74,33 +118,41 @@ jobs:
             printf '::endgroup::\n'
           done
 
-      # The plant registry runs LAST and separately: it is not a *.test.sh, and it re-runs other
-      # harnesses against mutated copies of the tree. A failure here means an assertion somewhere
-      # pins nothing, which is a different signal from a harness going red.
+      # The plant registry no longer runs HERE: it runs SHARDED, in the plant-shard matrix job
+      # above, on four separate machines (issue #447, ADR-0151). This job downloads each shard's
+      # verdict-stream artifact, asserts every leg succeeded, then evaluates the union over the
+      # concatenation — PC0, PC3, PC5b and Z1, the population assertions no single shard can
+      # evaluate on its own slice, plus PC6 (coverage) and PC7 (imbalance), which only the union
+      # can ask. A failure in any of the three steps below means an assertion somewhere pins
+      # nothing, or a shard's slice was lost or duplicated — a different signal from a harness
+      # going red.
+      #
+      # `if: always()` on this job (above, ADR-0151 §D8) is why it still runs when a shard goes
+      # red — a required context that never reports leaves the pull request pending forever. The
+      # download step's `continue-on-error: true` is the same idea one level down: a total absence
+      # of artifacts must still reach the union, which is what reports exit 3.
       #
       # COST, and HOW IT WAS MEASURED, because the second part is what makes the first usable
-      # (issue #350, ADR-0143). The registry dispatches its mutation phase to one worker per core,
-      # capped at 8.
-      #
-      # Both arms run in ONE job, on ONE machine, from ONE commit, sequential arm SECOND so it
-      # inherits a warm page cache and the comparison is biased AGAINST the change:
-      #
-      #     2026-08-15  2 cores  377 plants  default 1182s  one worker 1723s  1.46x  run 31908681787
-      #     2026-08-15  2 cores  377 plants  default 1131s  one worker 1562s  1.38x  run 31912805468
-      #
-      # Both pairs byte-identical, 386 lines. Do not compare one run against another the way the
-      # first attempt did: the SEQUENTIAL step alone measured 20m07s, 23m32s and 25m51s on three
-      # occasions, a spread wider than the effect, and 19m18s against 20m07s read as "no change"
-      # when the controlled pair says seven to nine minutes.
-      #
-      # Re-derive with the same device rather than trusting these lines. The note they replace said
-      # "~12s for 15 plants" and had been true at 15, which is why the instruction is here at all.
-      # The core count is printed rather than assumed: at 8.4 GB of copying, two cores is the
-      # ceiling, and it is the number that decides what this step costs.
-      - name: Run the plant registry
-        run: |
-          echo "runner cores: $(nproc)"
-          bash staging/plugin/scripts/tests/plant-check.sh
+      # (issue #447, ADR-0151 §D8). Projected critical path ~8.4 min against ~18 min sequential — a
+      # projection from the local cost model scaled to the CI-measured sequential registry step
+      # (15m16s), TO BE RE-DERIVED ON THE RUNNER, not trusted. This comment has gone stale twice
+      # already (ADR-0143, then again by this rewrite); re-measure with a run rather than repeat
+      # the number here a third time.
+      - name: Download every shard's verdict stream
+        continue-on-error: true   # a total absence must reach the union, which reports exit 3
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: plant-shard-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/plant-shards
+
+      - name: Require every plant-shard leg to have succeeded
+        env:
+          SHARD_RESULT: ${{ needs.plant-shard.result }}
+        run: bash staging/plugin/scripts/tests/plant-check.sh --require-legs "$SHARD_RESULT"
+
+      - name: Evaluate the union
+        run: bash staging/plugin/scripts/tests/plant-check.sh --union "${{ runner.temp }}/plant-shards"
 
   links:
     name: links
