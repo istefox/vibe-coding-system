@@ -48,6 +48,26 @@
 # plant: PP7 | plugin/scripts/tests/plant-check.sh | [ "$nfd" -lt 3 ] || [ "$nfd" -gt 4 ] | false
 # plant: PP8 | plugin/scripts/tests/plant-check.sh | out.append('\n'); i += 2; continue | pass
 # plant: PP9 | plugin/scripts/tests/plant-check.sh | out.append('\\'); i += 2; continue | pass
+#
+# TASK 6 (issue #447, ADR-0151) — the twelve plants for PS0-PS10 (PS3b included). Each needle was
+# chosen against the actual mechanism in plant-check.sh, not against the plan's looser sketch —
+# PS2 in particular anchors on the unique "(D3, R-05)" comment immediately above the dispatch line,
+# because the bare stride `seq "$SHARD" "$SHARDS" "$DECL_N"` occurs twice (dispatch and aggregation)
+# and a needle ending before the dispatch line's own ` | ` avoids a five-field BADPLANT declaration.
+# PS11 carries no plant (declared inline at its assertion, Task 2): `.github/` is not a legal plant
+# target.
+# plant: PS0  | plugin/scripts/tests/plant-check.sh | write_artifact "$PLANT_ARTIFACT" | :
+# plant: PS1  | plugin/scripts/tests/plant-check.sh | SHARDS="${PLANT_SHARDS:-1}" | SHARDS="${PLANT_SHARDS:-2}"
+# plant: PS2  | plugin/scripts/tests/plant-check.sh | unchanged (D3, R-05). seq "$SHARD" | unchanged (D3, R-05).\nseq "1"
+# plant: PS3  | plugin/scripts/tests/plant-check.sh | printf 'PC-DEFERRED shard %s/%s | printf 'PC-QUIET shard %s/%s
+# plant: PS3b | plugin/scripts/tests/plant-check.sh | [ "$SHARDS" -gt 1 ] && SHARDED=1 | [ "$SHARDS" -gt 99 ] && SHARDED=1
+# plant: PS4  | plugin/scripts/tests/plant-check.sh | printf 'PC-REFUSED %s\n' "$1" >&2 exit 2 | :
+# plant: PS5  | plugin/scripts/tests/plant-check.sh | _cov_missing="$_cov_missing $_i" | :
+# plant: PS6  | plugin/scripts/tests/plant-check.sh | printf 'PC-UNION-NORUN %s\n' "$1" >&2 exit 3 | printf 'PC-UNION-NORUN %s\n' "$1" >&2 exit 0
+# plant: PS7  | plugin/scripts/tests/plant-check.sh | assert_pc3 "$U_FILES_N" | :
+# plant: PS8  | plugin/scripts/tests/plant-check.sh | [ "${2:-}" = "success" ] | [ "${2:-}" != "nonesuch" ]
+# plant: PS9  | plugin/scripts/tests/plant-check.sh | [ "$_sum" -eq "$U_DECL_N" ] | true
+# plant: PS10 | plugin/scripts/tests/plant-check.sh | _cov_dup="$_cov_dup $_i" | :
 set -u
 
 TESTS=$(cd "$(dirname "$0")" && pwd)
