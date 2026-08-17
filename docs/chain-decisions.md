@@ -4247,3 +4247,45 @@ Key architectural decisions:
 - **No new numbered rule.** This is rules 4 and 7 applied to a new topology, not a new invariant.
 
 Detail: `docs/architecture/ADR-0151-447-shard-the-plant-registry.md`.
+
+## Decisions from the archive-fence-empty-root chain (ADR-0152)
+
+The Step 1 archive fence stops halting on the case its own documentation calls a no-op:
+`staging/plugin/skills/concept-to-code/scripts/spec-archive.sh`,
+`staging/plugin/skills/concept-to-code/SKILL.md`.
+
+Key architectural decisions:
+
+- **The existence check moves above the slug validation, and that is the whole fix.** On an empty
+  root `gate0-detect.sh` reports `spec_topic_slug=unknown`, the fence passes it through, and
+  `spec-archive.sh` refused before it had looked for a file. The caller's contract on exit 3 is
+  HALT, so a brand-new project could not get past Step 1 — the bootstrap path, which is what Gate
+  0d's scaffolding survey exists to serve.
+- **The shape guard stays ABOVE the existence check, and the split is two `case` blocks rather than
+  one reorder.** Sinking the whole guard would make `spec-archive.sh <empty-root> ../../etc/passwd`
+  return `NOSPEC`/0, turning a malformed call into a silent success. What ships preserves every
+  refusal the script made and changes exactly the one that was wrong.
+- **`gate0-detect.sh` is not touched, because the issue's premise did not survive.** It claimed the
+  absent and markerless states are indistinguishable in the detector's output. `spec_owned` is `no`
+  only when the file is absent, so `mode` separates them; the pair `mode` + `spec_topic_slug` is
+  unique. R-02 closes with an assertion over output that already existed, which also keeps this
+  clear of #454.
+- **A green assertion over an input the caller cannot generate is not coverage of that caller.**
+  The fence sees exactly two pairs. `SA1` tested `(no SPEC.md, valid slug)` — greenfield with no
+  file always produces `unknown`, so that pair cannot occur — and it is what made the empty-root
+  case look tested for two months. `SA5`'s pair is unproducible too, but SA5 declared itself as
+  defence-in-depth and SA1 did not. Both keep their verdicts and gain the missing sentence.
+- **SA16 and SF5 are one claim at two levels and carry two plants.** SA16's removes the mechanism,
+  SF5's removes the wiring; SF5 runs the fence body extracted from `SKILL.md` by its fence-contract
+  marker, so it is the orchestrator's own code on the orchestrator's own pair. One shared plant
+  would have left SF5 unproven as a claim about `SKILL.md`.
+- **The corrected prose names the ordering, not the outcome, and its assertion says it is prose.**
+  `SA14b` cannot make the guard order right (rule 16); it stops the sentence reverting to the short
+  form that was false for two months. Its plant is declared with that limitation stated.
+- **Zero live instances, and the fix ships anyway.** 13 greenfield manifests, none from an empty
+  root; the fence has never met one. The defect is invisible to this repository by construction,
+  because its root slot is never empty.
+- **No new numbered rule.** This is rule 17 — a producer and a consumer that never met — with
+  rule 13 on both premises.
+
+Detail: `docs/architecture/ADR-0152-455-archive-fence-empty-root.md`.
