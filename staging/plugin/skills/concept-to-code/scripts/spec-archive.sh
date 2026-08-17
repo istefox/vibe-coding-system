@@ -42,13 +42,11 @@ slug="$2"
 
 [ -d "$root" ] || { echo "spec-archive: not a directory: $root" >&2; exit 3; }
 
-# An unknown slug is exactly the case gate0-detect.sh reports as `unknown` — a SPEC with no marker.
-# That routes to brownfield and never reaches this script, so reaching here means the caller is
-# confused; refuse rather than invent an archive name.
+# THE SHAPE GUARD STAYS ABOVE THE EXISTENCE CHECK, and the two are deliberately no longer one
+# `case` (issue #455). A slug carrying a path, a leading dot or a leading dash is a malformed CALL,
+# and a malformed call is malformed whether or not the root happens to hold a SPEC.md. Sinking it
+# below the check would turn `spec-archive.sh <empty-root> ../../etc/passwd` into a silent 0.
 case "$slug" in
-  ""|unknown)
-    echo "spec-archive: outgoing slug is empty or unknown — refusing to name an archive" >&2
-    exit 3 ;;
   */*|.*|-*)
     echo "spec-archive: refusing a slug that is not a bare name: $slug" >&2
     exit 3 ;;
@@ -56,6 +54,24 @@ esac
 
 spec="$root/SPEC.md"
 [ -f "$spec" ] || { echo "NOSPEC"; exit 0; }
+
+# ONLY NOW is an empty-or-`unknown` slug a defect, and that ordering is the whole of issue #455.
+#
+# `unknown` reaches this script from TWO producers, and until #455 the comment here named only one
+# of them. `gate0-detect.sh` emits `spec_topic_slug=unknown` both for a SPEC.md with no marker —
+# which routes to brownfield and never gets here — AND for a root with no SPEC.md at all, which
+# routes to GREENFIELD and is precisely what Step 1's fence runs on. So the fence's documented
+# "no-op on the genuinely-empty one" was a HALT: this guard refused before anything had looked for
+# the file, and the caller's contract on exit 3 is to stop the chain. That is the bootstrap path,
+# the one case this repository never exercises on itself because its root slot is never empty.
+#
+# The check above settles the empty root as NOSPEC. What survives to here is a SPEC.md that EXISTS
+# with no slug to name its archive — a genuinely confused caller, refused as before.
+case "$slug" in
+  ""|unknown)
+    echo "spec-archive: outgoing slug is empty or unknown — refusing to name an archive" >&2
+    exit 3 ;;
+esac
 
 archive_dir="$root/docs/specs"
 
