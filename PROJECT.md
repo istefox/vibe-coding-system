@@ -1200,6 +1200,7 @@ wave order.
 - [x] spec-coverage measures citation not implementation  (issue #312)  (completed: 2026-08-14)
 - [x] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)  (completed: 2026-08-16 — measured to zero instances, closed with a reverse guard, ADR-0144)
 - [x] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)  (completed: 2026-08-16 — retired on 0 true positives in 383 commits, ADR-0144)
+- [x] a vanished assertion is invisible in 49 of 82 harnesses, and a per-file floor is the wrong instrument  (issue #449)  (completed: 2026-08-17 — refused: 95 of the last 100 harness-touching commits would need a baseline bump, and 3 of 3 measured drops are deliberate with an in-place note. Practice promoted to rule 19, ADR-0150)
 - [ ] The Step 5 checkpoint has no mechanism to tell an expected red from a real one  (issue #273)
 - [ ] seventeen ADRs carry the same instruction-not-an-enforcement paragraph and the class is undecided  (issue #315)
 

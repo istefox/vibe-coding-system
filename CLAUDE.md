@@ -81,7 +81,7 @@ and in the `.claude/` directories of target projects — not here.
 
 ## Rules
 
-Eighteen invariants this repository learned by getting them wrong, each with the one-clause reason
+Nineteen invariants this repository learned by getting them wrong, each with the one-clause reason
 that makes it more than a slogan and the ADR that established it. **They are stated here once.**
 Until issue #380 they were restated across 95 narrative blocks — over two hundred times — which is
 what made this file ~75,000 tokens in every orchestrator turn.
@@ -158,6 +158,12 @@ promoted. What *is* verified is that no line was lost: see ADR-0136.
     satisfied by a stranger's file: measured, every one of 199 declared requirement ids passed on a
     foreign match. Rule 7 guards a denominator that collapsed to zero; this is the same failure with
     the denominator too large, and it reads as coverage just as convincingly. → ADR-0138.
+19. **A deleted assertion leaves a comment where it stood, naming the issue and the ADR.** Nothing
+    counts assertions between runs, and nothing usefully can: a frozen per-file baseline would need
+    a deliberate bump on 95 of the last 100 harness-touching commits, which is a tax and not a
+    guard. What has actually kept deletions honest is the note left behind — 3 of 3 measured drops
+    carry one. Enforced for the 371 planted assertions, where `plant-check.sh` reports `NOFIRE`;
+    an instruction for the other 2622 (rule 16). → ADR-0150.
 
 ## Chain decision index
 
@@ -269,3 +275,4 @@ heading naming the same ADR. Open the ADR itself for the full decision record.
 - **ADR-0147** — a producer names the target as a destination, never as a mention; eleven producers on one target, one of them real, and the class guard could not be planted → `docs/architecture/ADR-0147-300-producer-destination-anchor.md`
 - **ADR-0148** — the in-place assertion edit stays undetected at 0 of 6 over 383 commits; the refusal is disclosed at the enforcement point that never said so → `docs/architecture/ADR-0148-311-in-place-assertion-edit-refusal.md`
 - **ADR-0149** — the plant declaration grammar was stated and enforced nowhere, so one plant had been mutating something nobody wrote; enforced, then widened to express an insertion → `docs/architecture/ADR-0149-305-plant-declaration-grammar.md`
+- **ADR-0150** — the per-file assertion baseline refused at 95% friction and zero silent instances; the in-place deletion note becomes rule 19 → `docs/architecture/ADR-0150-449-vanished-assertion-baseline-refusal.md`
