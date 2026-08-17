@@ -6,9 +6,9 @@ mode: "greenfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-08-17T11:46:18+00:00"
-last_updated_at: "2026-08-17T13:22:26+00:00"
-current_step: "step_5_implementation"
-status: "in_progress"
+last_updated_at: "2026-08-17T18:18:02+00:00"
+current_step: "completed"
+status: "completed"
 
 # Gate 0 routing result (ADR-0017)
 gate0:
@@ -87,7 +87,7 @@ step6_mode: null
 
 # Artifacts (absolute paths, populated as steps complete)
 artifacts:
-  spec: "/Users/stefer/Developer/vibe-coding-system/SPEC.md"
+  spec: "/Users/stefer/Developer/vibe-coding-system/docs/specs/447-shard-the-plant-registry-across-jobs.spec.md"
   brainstorm: null
   ux_blueprint: null
   adr: "/Users/stefer/Developer/vibe-coding-system/docs/architecture/ADR-0151-447-shard-the-plant-registry.md"
@@ -119,9 +119,9 @@ hitl_gates:
     notes: "Implement now (attended, this session)"
   - gate: 5
     label: "review_cycle_decision"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-08-17T18:16:49+00:00"
+    notes: "skip review - diff read by the tester, by the orchestrator at each merge-back, and by Task 9's measurement"
 
 # Session boundary tracking
 session_boundary:

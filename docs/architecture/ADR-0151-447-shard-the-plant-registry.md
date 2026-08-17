@@ -431,7 +431,7 @@ answers — how the registry runs.
   directions), ADR-0080 (a pre-registered re-test condition).
 - CLAUDE.md rules 2, 4, 5, 6, 7, 10, 13, 16, 17, 19.
 
-## Correction — 2026-08-17
+## Correction — 2026-08-17, the fixture cost
 
 The risk flag under Consequences → Negative and D12 estimated `plant-registry-parallel.test.sh` at
 ~13.5s per run and ~+175s (~9%) added to the corpus, with 22 plants. Measured after Task 6 landed:
@@ -443,3 +443,84 @@ validated against their own plants, trading a measured verification for an unmea
 
 The original estimate above is left as written (rule 14): a number inside a completed ADR is a
 correct snapshot of its day.
+
+## Correction — 2026-08-17, what Task 9's measurement found, and the four requirements it settled
+
+**R-12's measurement found a defect this feature introduced, and no test could have.** Every harness
+was green — 26 of 26 — while the whole-corpus verdict diff disagreed on **10 of 411 `V` records**,
+all of them self-referential plants declared in `plant-registry-parallel.test.sh`.
+
+The cause: `plant-check.sh` handed its own environment to the harness it was running under mutation,
+including the three knobs **this feature introduces**. Two consequences, both real:
+
+- With `PLANT_ARTIFACT` set — which the shipped `plant-shard` job always does — a nested fixture
+  registry wrote its 13-line fixture stream to the outer, real artifact path. 23 of that file's 24
+  nested calls inherit the variable.
+- Sharper: `PS1` and `PS3b` have as their subject the fact that `PLANT_SHARD`/`PLANT_SHARDS` are
+  *unset*. Under the shard job those are set, so that harness was mutation-tested in a different
+  world in every shard — which is why each shard failed a different subset.
+
+**A second instance of the same defect sat in `--baseline`**, found while fixing the first. Each
+shard computes the full 45-harness baseline independently, so without that second fix the `B` stream
+would have disagreed even with the worker-mode call repaired.
+
+Fixed at both sites by clearing the three knobs for that one invocation. `PLANT_JOBS` and
+`PLANT_WORKROOT` are deliberately *not* cleared, with the reason recorded at the site: neither can
+change what a mutation run reports or which declarations it evaluates. `PS12` pins the fix and
+carries its own plant.
+
+**This is the reason R-12 exists as a requirement separate from any assertion.** D11 said the corpus
+diff proves parity once and only the fixture keeps proving it. That was right about the fixture and
+wrong about the ordering: the corpus diff did not confirm what the fixture had established, it found
+what the fixture could not see.
+
+### The four requirements, as measured
+
+| | result | how |
+|---|---|---|
+| **R-12** | **satisfied** | 412 `V` records byte-identical between the sequential arm and the four-shard union; `B` streams identical on all four shards. Verified twice, independently. |
+| **R-03** | **satisfied** | `required-checks-audit.sh` exit 0 against live branch protection: the four required contexts (`markdownlint`, `links`, `ci`, `shell-tests`) all have a producer, no `missing-producer`. The set is unchanged, which is what D8 bought. |
+| **R-05** | **satisfied** | `PC0`, `PC3`, `PC4` and `PC5b`'s emitted lines are byte-identical between the pre-restructure file and the current one. |
+| **R-04** | **measured, with its limit stated** | See below. |
+
+**R-04.** Both arms in one workflow run, one commit, one image, started together — the closest
+substitute available, since separate machines are the point of the change and cannot be held
+constant. Two runs with all shards green, the second a rerun of the same commit so only the machine
+draw varies:
+
+| | sequential | sharded | ratio | slowest shard | imbalance |
+|---|---|---|---|---|---|
+| run 2 | 25.3 min | 12.0 min | 2.11x | 9.2 min | 1.52x |
+| run 3 | 25.7 min | 11.0 min | 2.33x | 8.4 min | 1.43x |
+
+The estimate in Context was ~2.1x (8.4 against 18 min). **The ratio holds; the absolute minutes are
+higher on both arms**, so today's runner is slower rather than the split less effective. The achieved
+imbalance of 1.43–1.52x is produced by modulo assignment with no stored cost table, which is what
+R-01 asked to be demonstrated rather than assumed.
+
+**Two runs, not the three the plan required — a deviation, declared rather than left to be noticed.**
+The plan asked for three and gave its reason: the sequential step alone had measured 20m07s, 23m32s
+and 25m51s, a spread wider than the effect. **That spread did not reappear**: these two sequential
+arms are 25.3 and 25.7 min, 0.4 min apart. The operator judged a third sample's marginal value low
+against ~26 min of wall clock. Two samples cannot establish a variance, so this is a weaker result
+than the plan specified, and the honest reading is: the ratio is somewhere near 2.1–2.3x on this
+runner, on a day when the machine draw happened to be stable.
+
+**The sharded figure is short by the union steps**, which did not execute in either run (below). The
+earlier run of the same day measured 11.0 against 25.7 min but its shards were red and aborted early,
+so that pair is a timing of a failure, not a comparison, and is not counted here.
+
+Two limits, stated rather than smoothed. The sharded figure is short by the union steps, which did
+not execute (below). And an earlier run measured 11.0 vs 25.7 min, but its shards were red and
+aborted early, so that pair is not a comparison and is not counted.
+
+### What is NOT yet verified, and must not be read as verified
+
+**The three union steps have never executed on a runner.** `shell-tests` fails in its harness loop —
+for a reason unrelated to this feature, an in-flight manifest — and GitHub skips every step behind a
+failed one. Read from the API rather than inferred: steps 5, 6 and 7 report `skipped`.
+
+So `--require-legs` and `--union` are verified locally and in the fixture, and **not** in CI. Filed
+as issues #457 (the red window) and #458 (the skipped steps). The first CI run that exercises them
+is the one following Step 7's terminal-manifest commit; that run is the evidence, and until it exists
+this ADR does not claim it.
