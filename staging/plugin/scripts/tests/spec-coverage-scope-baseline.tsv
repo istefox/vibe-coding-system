@@ -172,3 +172,16 @@
 410-order-the-manifest-completed-transit.spec.md	R-15	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-16	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-17	UNSCOPED	not-test-assertable	an external-process obligation: the E4/H5 uncommitted-manifest gap is filed as its own issue and referenced from the ADR, not fixed in this feature
+447-shard-the-plant-registry-across-jobs.spec.md	R-01	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-02	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-03	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-04	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-05	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-06	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-07	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-08	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-09	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-10	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-11	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-12	COVERED
+447-shard-the-plant-registry-across-jobs.spec.md	R-13	COVERED

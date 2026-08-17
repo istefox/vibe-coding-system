@@ -4205,3 +4205,45 @@ Key architectural decisions:
   looking for it. Rule 2's second clause, applied to a measurement rather than to a plant.
 
 Detail: `docs/architecture/ADR-0150-449-vanished-assertion-baseline-refusal.md`.
+
+## Decisions from the shard-the-plant-registry chain (ADR-0151)
+
+The plant registry stops being one job and becomes four shards plus a union:
+`.github/workflows/docs-ci.yml`, `staging/plugin/scripts/tests/plant-check.sh`.
+
+Key architectural decisions:
+
+- **The unit of the split is a plant, not a harness, and the issue did not pose it that way.**
+  `spec-coverage.test.sh` alone is 29.5% of the modelled cost, so slicing by harness is capped at
+  3.39x however many shards exist. A plant already costs one sandbox and one harness run, so it is
+  the atomic unit and there is no such floor.
+- **`shell-tests` becomes the union job and keeps its name.** It is one of four required contexts on
+  `main`; making the union a new job would have meant a branch-protection change and a window where
+  the registry is either ungated or blocking every PR. The price is ~2.5 min of harness loop moving
+  onto the critical path, paid knowingly.
+- **A matrix leg can never be a required context.** Measured: `required-checks-audit.sh` derives
+  producers from job ids and `name:` keys, and a leg's context is `<display name> (<value>)`, which
+  is declared nowhere. Requiring one blocks every PR forever.
+- **A union written the obvious way is green while its shards are red.** Measured on a probe run:
+  two of four dependencies `failure`, and inside the job `if: failure()` was skipped while
+  `if: success()` ran. Status functions in a step `if` read that job's own previous steps, not
+  `needs`. The predicate has to be an explicit `needs.<job>.result == 'success'` per leg.
+- **The leg gate lives in `plant-check.sh`, not in the yaml.** A step `if:` cannot be planted, so in
+  yaml the requirement could only ever be an assertion that some text exists (rule 16). As
+  `--require-legs` it is a planted mechanism.
+- **One code path: the sequential run is the 1-of-1 shard.** Both loops walk
+  `seq "$SHARD" "$SHARDS" "$DECL_N"`, which at the defaults is the whole population. A sharded
+  implementation kept beside a sequential one is two copies answering one question (ADR-0086).
+- **A malformed slice refuses where a malformed `PLANT_JOBS` resolves downwards.** The asymmetry is
+  deliberate and stated at the site: one is a performance knob, the other decides which plants run
+  at all.
+- **Assignment is by modulo on the declaration index, with no stored cost table.** It carries no
+  state to go stale (rule 13) and balances precisely because it breaks files apart. The achieved
+  imbalance is printed by the run rather than assumed by the design.
+- **The union re-derives its own denominator.** With the population assertions deferred, a shard
+  whose collector broke would exit 0 and read clean; `PC6` requires every declaration index to be
+  reported exactly once. A per-slice floor was refused because a floor absorbs its own plant
+  (rule 10).
+- **No new numbered rule.** This is rules 4 and 7 applied to a new topology, not a new invariant.
+
+Detail: `docs/architecture/ADR-0151-447-shard-the-plant-registry.md`.
