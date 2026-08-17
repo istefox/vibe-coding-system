@@ -56,6 +56,12 @@
 # and a needle ending before the dispatch line's own ` | ` avoids a five-field BADPLANT declaration.
 # PS11 carries no plant (declared inline at its assertion, Task 2): `.github/` is not a legal plant
 # target.
+#
+# R-11 — "every new assertion is seen RED against a declared plant, with the declaration beside it
+# in the registry" — is answered by THIS block and by nothing else. The id is cited here rather than
+# left to be matched repo-wide: seven other harnesses declare an `R-11` of their own, so without
+# this line the coverage gate resolves it against a stranger's file and reads as covered while this
+# feature's own proof goes unnamed (CLAUDE.md rule 18, ADR-0138).
 # plant: PS0  | plugin/scripts/tests/plant-check.sh | write_artifact "$PLANT_ARTIFACT" | :
 # plant: PS1  | plugin/scripts/tests/plant-check.sh | SHARDS="${PLANT_SHARDS:-1}" | SHARDS="${PLANT_SHARDS:-2}"
 # plant: PS2  | plugin/scripts/tests/plant-check.sh | unchanged (D3, R-05). seq "$SHARD" | unchanged (D3, R-05).\nseq "1"
