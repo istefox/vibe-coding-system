@@ -430,3 +430,16 @@ answers — how the registry runs.
   satisfiable), ADR-0124 and ADR-0150 (why a floor is refused), ADR-0131 (two knobs, opposite failure
   directions), ADR-0080 (a pre-registered re-test condition).
 - CLAUDE.md rules 2, 4, 5, 6, 7, 10, 13, 16, 17, 19.
+
+## Correction — 2026-08-17
+
+The risk flag under Consequences → Negative and D12 estimated `plant-registry-parallel.test.sh` at
+~13.5s per run and ~+175s (~9%) added to the corpus, with 22 plants. Measured after Task 6 landed:
+**27.8s**, roughly **+334s (~17.5%)** on the 1906s corpus — about double the estimate.
+
+The operator decided not to cut fixture invocations. The overshoot sits inside a change that
+removes ~1400s of critical path, and cutting would mean reworking assertions that were just
+validated against their own plants, trading a measured verification for an unmeasured one.
+
+The original estimate above is left as written (rule 14): a number inside a completed ADR is a
+correct snapshot of its day.

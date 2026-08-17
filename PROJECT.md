@@ -1193,6 +1193,7 @@ wave order.
 - [ ] set-branch-protection.sh unions one context while the audit derives three  (issue #336)
 - [x] plant-check.sh decides a plant fired with a PREFIX match  (issue #355)  (completed: 2026-08-16 — measured 33 of 387 exposed, 0 mis-credited; anchored, ADR-0145)
 - [x] plant-check.sh cost scales as (plants x target-file runtime), not as their sum  (issue #350)  (completed: 2026-08-15)
+- [x] the plant registry's ceiling is 2 cores and the only lever left is sharding across jobs  (issue #447)  (completed: 2026-08-17 — four shards plus a union, `shell-tests` becoming the union job so the required-context set on `main` does not change and #336 stays out of scope; split by plant not harness, since `spec-coverage.test.sh` alone is 29.5% of the cost and caps a per-harness split at 3.39x; a matrix leg can never be a required context (`required-checks-audit.sh` derives producers from job ids and `name:` keys, a leg's context is `<display name> (<value>)`, declared nowhere); a union written the obvious way measured GREEN with two of four shards red, since status functions in a step `if` read that job's own previous steps, not `needs`. Twelve plants declared, each seen RED once; registry `PASS=419 FAIL=0` over 411 plants, ADR-0151)
 
 ##### Wave 3 — HIGH: detector precision, and the decisions
 
