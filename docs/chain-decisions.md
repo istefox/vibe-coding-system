@@ -4289,3 +4289,51 @@ Key architectural decisions:
   rule 13 on both premises.
 
 Detail: `docs/architecture/ADR-0152-455-archive-fence-empty-root.md`.
+
+## Decisions from the project-tasks-vendored-bilateral-ledger chain (ADR-0153)
+
+`project-tasks` stops being a private artifact on one machine and becomes a component of the
+system, and `TODO.md` becomes a bilateral index of what is open:
+`staging/plugin/skills/project-tasks/`, `staging/sync-to-claude.sh`,
+`staging/plugin/scripts/tests/project-tasks-ledger.test.sh`, and the chain wiring in
+`concept-to-code` and `project-conductor`.
+
+Key architectural decisions:
+
+- **The GitHub read is its own script, not a sixth `scan.sh` record type.** `scan.sh`'s selftest
+  asserts that two consecutive runs are identical, and that assertion is what makes every other
+  claim it makes reproducible; a network call would force its deletion. `gh-issues.sh` copies
+  `roadmap-from-issues.sh`'s `--issues-json` offline hook, which is what turns the whole GitHub
+  block from prose into executed assertions.
+- **`runs:` is a pure function of the file on disk, so there is no counter to corrupt.** The
+  promotion bar needs "survived two full runs", and a counter incremented before a write the
+  operator then declines would drift silently while still looking plausible. Derived as
+  `on-disk + 1` inside a filter that never writes, an abort discards the candidate and a retry
+  re-derives the same value.
+- **GitHub owns the issue's content, `TODO.md` owns what GitHub has no field for.** The split is
+  per-field — title, state and labels regenerate; local priority, file reference and provenance
+  survive verbatim — so the bilateral design needs no conflict resolution at all.
+- **A declined promotion is recorded and never proposed again.** `reference/chain-integration.md`
+  had already rejected automatic capture on the argument that a noisy ledger stops being read; a
+  gate that re-asks every run is the same failure one level up.
+- **Two premises of the SPEC did not survive measurement, and both inverted work.** The skill was
+  already declared deployed-only, so vendoring means DELETING that declaration rather than adding
+  anything — a waiver that outlives its subject reads as clean (rule 9). And the superseded
+  "an item with an issue number leaves the file" rule lives in `TODO.md`'s own header, not in
+  `reference/file-format.md`, so the requirement as first written was satisfiable by deleting
+  nothing.
+- **The marker detector is narrowed, not retired, and the two halves answer different cases.** A
+  marker registers only in declaration form (keyword then colon) AND with a comment leader earlier
+  on the line. Measured, each half is what rejects a different one of the observed false positives.
+  ADR-0144 retired a detector at comparable precision; the difference is failure mode — that one
+  produced a finding a human dismissed, this one produces a durable ledger entry.
+- **An absence assertion gets a denominator, an absence, and a backward self-test.** "The litter is
+  not in the vendored copy" reads identically to "the directory is not there", so the enumeration
+  is guarded first (rule 7) and the predicate is run against a fixture that deliberately contains
+  the litter. The absence half carries no plant, declared: a plant substitutes inside an existing
+  file, it cannot create litter.
+- **The chain wiring is an instruction, not an enforcement.** A harness pins that the text exists;
+  nothing pins that a model obeys it (rule 16), and the ADR says which half is which rather than
+  letting a green harness read as proof.
+
+Detail: `docs/architecture/ADR-0153-project-tasks-vendored-bilateral-ledger.md`.
