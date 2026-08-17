@@ -715,6 +715,10 @@ fi
 # plant: RS7 | plugin/skills/autopilot/SKILL.md | echo "features=$_scope_features" | echo "FEATURES=$_scope_features"
 # plant: RS9 | plugin/skills/autopilot/SKILL.md | PROJECT.md not found -- the check DID-NOT-RUN | PROJECT.md not found -- the check DID_NOT_RUN
 # plant: RS8 | plugin/skills/autopilot/SKILL.md | "$_dry_run" = "true" | "$_dry_run" = "false"
+# RS10's plant removes the roadmap-row filter itself, which is the whole mechanism #462 added. With
+# it gone the fixture's table row derives the same slug as its roadmap row, the token matches two
+# lines, and the fence takes its ambiguity branch — the exact failure observed on the live run.
+# plant: RS10 | plugin/skills/autopilot/SKILL.md | '- ['*) : ;; | '- ['*) : ;; *) : ;;
 
 RS_ROW1='Add a caching layer for query results  (issue #293)'
 RS_ROW2='Improve structured logging output  (issue #29)'
@@ -870,6 +874,34 @@ if [ "$RC" = "3" ] && printf '%s' "$OUT" | grep -q 'DID-NOT-RUN' && printf '%s' 
   ok "RS9: no PROJECT.md -> exit 3 DID-NOT-RUN naming the file (distinct from RS4's exit 1)"
 else
   bad "RS9: rc=$RC — $(printf '%s' "$OUT" | head -2)"
+fi
+
+# RS10 (issue #462): a NON-ROADMAP line cannot resolve a token. The slug loop read every line of
+# PROJECT.md, and `cut -c1-40` then made a markdown table row collide with the roadmap row it
+# documents — observed on a live autopilot run, 2026-08-17, where a documentation table made its
+# own feature unschedulable by name. The fence's ambiguity refusal was correct; the population it
+# searched was not (CLAUDE.md rule 18).
+#
+# The fixture is the real collision, not an approximation: the roadmap row's title is exactly 40
+# characters once normalised, so the `(issue #7)` marker and the ` | 3.1 | ADR-003 |` columns both
+# fall past the cut and the two lines derive the IDENTICAL slug. Verified against the fence's own
+# derivation before writing this, the way RS3_SLUG/RS5_SLUG were.
+#
+# This asserts the ROADMAP-ROW FILTER and nothing else. The remaining #462 work — whether an
+# indented row survives a `'- ['*` prefix match, and whether the issue-number path has the same
+# exposure — is not covered here and is not claimed to be.
+RS10_ROW='Kindle login with persistent web session  (issue #7)'
+RS10_SLUG='kindle-login-with-persistent-web-session'
+R="$TMPROOT/rs10"; mkdir -p "$R/.claude"
+printf -- '- [ ] %s\n\n| Feature | Spec | ADR |\n| %s | 3.1 | ADR-003 |\n' \
+  "$RS10_ROW" "Kindle login with persistent web session" > "$R/PROJECT.md"
+RC=$(run_fence "autopilot-scope-resolve" "$NA" "$(setup_rs "$R" "arguments" "1" "$RS10_SLUG" "false")")
+OUT=$(out_of autopilot-scope-resolve)
+SF="$R/.claude/autopilot-state/scope"
+if [ "$RC" = "0" ] && [ -f "$SF" ] && grep -qF "only=$RS10_ROW" "$SF"; then
+  ok "RS10: a markdown table row documenting a feature cannot collide with its roadmap row (#462)"
+else
+  bad "RS10: rc=$RC — a non-roadmap line resolved a token, or the collision aborted the fence: $(printf '%s' "$OUT" | head -2)"
 fi
 
 # =====================================================================================

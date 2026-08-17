@@ -774,6 +774,21 @@ FENCE_BASH
          _slug_hits=""
          while IFS= read -r _line; do
            [ -n "$_line" ] || continue
+           # ROADMAP ROWS ONLY (issue #462). Without this guard the loop normalised EVERY line of
+           # PROJECT.md, prose and markdown tables included, and `cut -c1-40` then made a table row
+           # collide with the roadmap row it documents: a feature whose slug is exactly 40
+           # characters ("kindle-login-with-persistent-web-session") truncates to the same slug as
+           # a "| Feature | Spec | ADR |" row describing it, so the token resolved to two lines and
+           # this check aborted as ambiguous. Observed on a live autopilot run, 2026-08-17.
+           # The refusal was right and the population was wrong — CLAUDE.md rule 18: a scan is
+           # satisfied by the whole population it searches, not by the part it meant. Only a
+           # "- [ ]"/"- [x]"/"- [~]" line is a roadmap row, so nothing else belongs in the
+           # comparison. The `sed` below strips that prefix when present and passes anything else
+           # through unchanged, which is precisely why every other line reached the cut.
+           case "$_line" in
+             '- ['*) : ;;
+             *) continue ;;
+           esac
            _title=$(printf '%s' "$_line" | sed -E 's/^- \[[ xX~]\][[:space:]]*//')
            _cslug=$(printf '%s' "$_title" | tr '[:upper:]' '[:lower:]' \
              | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')
