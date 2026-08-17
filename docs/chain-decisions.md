@@ -4171,3 +4171,37 @@ Key architectural decisions:
   never landed.
 
 Detail: `docs/architecture/ADR-0149-305-plant-declaration-grammar.md`.
+
+## Decisions from the vanished-assertion-baseline chain (ADR-0150)
+
+ADR-0146 refused #310's per-file assertion floor and split the real question out as #449: a frozen
+per-file baseline, red on any drop, bumped deliberately. Four things to measure first. All four were
+measured, plus two the issue did not ask for, and the design does not survive them.
+
+Key architectural decisions:
+
+- **The static count is the wrong number, and the runtime one is already free.** A static count of
+  `ok`/`bad` call sites agrees with the runtime count in 3 of 83 harnesses; the delta runs from −98
+  to +256, because assertions are `if/else` pairs of which one branch executes and some are emitted
+  inside a loop. But 77 of 83 harnesses already print `PASS=N`, matching the emitted count in 74.
+  The issue's cost objection — a second suite run does not fit the 300s ceiling — dissolves.
+- **95 of the last 100 harness-touching commits add or remove an assertion.** The issue set this as
+  the deciding question, guard or tax. A line bumped on nineteen commits out of twenty is a line
+  people learn to bump without reading.
+- **No assertion has vanished silently.** Three net drops in those 100 commits, all deliberate, each
+  leaving a comment where the assertion stood naming the issue and the ADR. Fourth issue in a row
+  whose stated defect has no live instance.
+- **The added population is real and is stated anyway:** 2622 of 2993 assertions carry no plant. The
+  argument is not that the exposure is imaginary, it is that the proposed instrument costs more
+  attention than it returns.
+- **The issue named the wrong token.** A vanished planted assertion is caught as `NOFIRE`, not
+  `BADPLANT` — the needle lives in the target file and still resolves. Correct outcome, wrong name,
+  and the two have different repairs.
+- **The practice that worked becomes rule 19**, and it is an instruction for 88% of assertions, an
+  enforcement for the planted 12%. No diff-level rule can close the gap: measured twice on this
+  exact question at zero precision (ADR-0073, ADR-0148).
+- **Two of the measurement's own heuristics were wrong and were caught by inspection** — one counted
+  loops over literal lists, the other missed a denominator guard worded differently from the grep
+  looking for it. Rule 2's second clause, applied to a measurement rather than to a plant.
+
+Detail: `docs/architecture/ADR-0150-449-vanished-assertion-baseline-refusal.md`.
