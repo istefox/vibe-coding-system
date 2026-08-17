@@ -73,6 +73,15 @@
 # The aggregation below therefore reports in DECLARATION order, never completion order. An output
 # that reshuffles per run cannot be diffed against anything, and the diff is the only evidence that
 # parallelising a validator did not change what it validates.
+#
+# SHARDING ACROSS JOBS (issue #447, ADR-0151). `$JOBS` above spends CORES inside one process; the
+# ceiling on a 2-core runner is reached quickly (~1.4x, ADR-0143 §D7). The remaining lever is that
+# CI jobs run on separate MACHINES, so `PLANT_SHARDS`/`PLANT_SHARD` select which declarations THIS
+# invocation evaluates — the sequential run is the 1-of-1 shard, not a second code path (ADR-0151
+# §D3). A shard that discovers nothing in its slice still exits 0: what makes that safe is not the
+# shard, it is that the union (`plant-check.sh --union`) always runs, always re-derives the declared
+# set from the repository, and requires the shards' reported ids to cover it exactly. A shard on its
+# own proves nothing about coverage; the union's exact-coverage check is what does.
 set -u
 
 TESTS=$(cd "$(dirname "$0")" && pwd)
@@ -405,6 +414,39 @@ case "$JOBS" in ''|*[!0-9]*) JOBS=1 ;; esac
 [ "$JOBS" -ge 1 ] || JOBS=1
 if [ -z "${PLANT_JOBS:-}" ] && [ "$JOBS" -gt 8 ]; then JOBS=8; fi
 
+# SHARDS / SHARD — which slice of the DECLARED plants this invocation evaluates (issue #447,
+# ADR-0151 §D1/§D4). `SHARDS` defaults to 1 and `SHARD` to 1, so an unset environment is the 1-of-1
+# shard: the i-th declaration goes to shard `i mod SHARDS`, and at SHARDS=1 that is every
+# declaration — the sequential run IS the 1-of-1 shard, not a second code path (D3).
+#
+# THE DIRECTION IS THE OPPOSITE OF `PLANT_JOBS` ABOVE, and the asymmetry is deliberate (D4).
+# `PLANT_JOBS` is a PERFORMANCE knob: every failure in its resolution chain lands DOWNWARDS on one
+# worker, because a wrong value only costs time and the behaviour this file had before it was
+# parallel is always available as a fallback. `PLANT_SHARD`/`PLANT_SHARDS` are a CORRECTNESS knob: a
+# malformed value could silently select the WHOLE population (if it resolved to "run everything") or
+# NONE of it (an empty slice that still exits 0), and either failure mode reads as clean from
+# outside. So this one REFUSES instead of resolving — exit 2, no plant runs — rather than guessing a
+# safe default. Do not "fix" this to match `PLANT_JOBS`'s downward resolution; the next reader who
+# unifies the two directions reintroduces the silent-selection hazard this comment exists to name.
+_slice_refuse() {
+  printf 'PC-REFUSED %s\n' "$1" >&2
+  exit 2
+}
+SHARDS="${PLANT_SHARDS:-1}"
+SHARD="${PLANT_SHARD:-1}"
+case "$SHARDS" in ''|*[!0-9]*) _slice_refuse "PLANT_SHARDS is not a positive integer: '$SHARDS'" ;; esac
+case "$SHARD"  in ''|*[!0-9]*) _slice_refuse "PLANT_SHARD is not a positive integer: '$SHARD'" ;; esac
+[ "$SHARDS" -ge 1 ] || _slice_refuse "PLANT_SHARDS must be >= 1: '$SHARDS'"
+[ "$SHARD" -ge 1 ] && [ "$SHARD" -le "$SHARDS" ] \
+  || _slice_refuse "PLANT_SHARD must be between 1 and PLANT_SHARDS ($SHARDS): '$SHARD'"
+
+# SHARDED is the ONE predicate the four population assertions below are gated on (PC0, PC3, PC5b,
+# Z1) — a single variable rather than four inline copies of `[ "$SHARDS" -gt 1 ]`, so the four sites
+# cannot drift out of step with each other (ADR-0086's criterion: copies answering one question must
+# share a source). At SHARDS=1 this is 0 and every assertion below runs exactly as it always has.
+SHARDED=0
+[ "$SHARDS" -gt 1 ] && SHARDED=1
+
 # --- collect declarations -----------------------------------------------------------------------
 DECLS="$WORK/decls"; : >"$DECLS"
 for t in "$TESTS"/*.test.sh; do
@@ -418,11 +460,21 @@ DECL_N=${DECL_N:-0}
 
 # PC0 — count guard on the DENOMINATOR (ADR-0085). A glob that stops resolving discovers no plants,
 # reports nothing, and reads exactly like a corpus where every plant fired.
-if [ "$DECL_N" -ge 10 ]; then
-  ok "PC0 plant declarations discovered ($DECL_N)"
-else
-  bad "PC0 only $DECL_N plant declaration(s) found — expected >= 10; the collector is broken, not clean"
-fi
+#
+# DEFERRED IN SHARD MODE (ADR-0151 §D5). DECL_N is the WHOLE corpus's count, not this shard's slice
+# — a shard could in principle still ask this question — but it is a population assertion the union
+# asks exactly once, over the same denominator, so a shard does not ask it a second time (ADR-0086:
+# two copies that could disagree are the defect). The message text is unchanged (R-05); only whether
+# it runs here has changed.
+assert_pc0() {
+  _n="$1"
+  if [ "$_n" -ge 10 ]; then
+    ok "PC0 plant declarations discovered ($_n)"
+  else
+    bad "PC0 only $_n plant declaration(s) found — expected >= 10; the collector is broken, not clean"
+  fi
+}
+[ "$SHARDED" -eq 0 ] && assert_pc0 "$DECL_N"
 
 # --- baseline: which assertions are ALREADY red before any mutation (issue #433) ------------------
 #
@@ -445,7 +497,9 @@ for f in "$WORK/basemiss"/*; do
 done
 
 # --- run each plant -------------------------------------------------------------------------------
-seq 1 "$DECL_N" | xargs -P "$JOBS" -I{} bash "$SELF" --worker {} "$WORK"
+# ONE stride, no shard-mode branch around it: at the defaults (SHARD=1 SHARDS=1) this is
+# `seq 1 1 "$DECL_N"`, which is `seq 1 "$DECL_N"` — the local invocation is unchanged (D3, R-05).
+seq "$SHARD" "$SHARDS" "$DECL_N" | xargs -P "$JOBS" -I{} bash "$SELF" --worker {} "$WORK"
 
 # --- aggregate, IN DECLARATION ORDER ---------------------------------------------------------------
 # RUN_N counts DECLARATIONS — every one is accounted for here, including the ones a worker refused.
@@ -453,7 +507,7 @@ seq 1 "$DECL_N" | xargs -P "$JOBS" -I{} bash "$SELF" --worker {} "$WORK"
 # printed for a run in which nothing ran, which is the shape this file exists to catch.
 NOFIRE=""; BADPLANT=""; VACUOUS=""
 RUN_N=0; RAN_N=0
-for _i in $(seq 1 "$DECL_N"); do
+for _i in $(seq "$SHARD" "$SHARDS" "$DECL_N"); do
   RUN_N=$((RUN_N + 1))
   if [ -f "$WORK/res/$_i.kind" ]; then
     _kind=$(cat "$WORK/res/$_i.kind")
@@ -478,6 +532,15 @@ $_msg" ;;
   fi
 done
 
+# THE DEFERRAL TOKEN (ADR-0151 §D5) — printed exactly once, only in shard mode, once RUN_N (this
+# shard's own declaration count) is known. It names all four assertions it stands in for: a token
+# that stopped naming what it defers is a token that stopped being a report (rule 4). This is the
+# ONLY print site for it; the four assertions below are each individually gated on $SHARDED instead
+# of each printing their own notice, so there is exactly one line, never four.
+if [ "$SHARDED" -eq 1 ]; then
+  printf 'PC-DEFERRED shard %s/%s — PC0 PC3 PC5b Z1 are population assertions and are evaluated once by the union (plant-check.sh --union); this shard'"'"'s exit code covers only its own %s declaration(s)\n' "$SHARD" "$SHARDS" "$RUN_N"
+fi
+
 # PC1 — every plant fired. A plant that does not fire names an assertion pinning nothing, which is
 # the whole reason this file exists.
 if [ -z "$NOFIRE" ]; then
@@ -498,13 +561,21 @@ fi
 
 # PC3 — the plants are spread across files rather than concentrated in one. A registry proving one
 # test file says nothing about the convention.
+#
+# DEFERRED IN SHARD MODE (ADR-0151 §D5): a slice legitimately spans fewer files than the whole
+# corpus, so this would be a false red evaluated per shard. The union asks it once, over the full
+# re-derived set.
 FILES_N=$(cut -f1 "$DECLS" 2>/dev/null | sort -u | grep -c . || true)
 FILES_N=${FILES_N:-0}
-if [ "$FILES_N" -ge 4 ]; then
-  ok "PC3 plants span $FILES_N test files"
-else
-  bad "PC3 plants span only $FILES_N test file(s) — expected >= 4"
-fi
+assert_pc3() {
+  _n="$1"
+  if [ "$_n" -ge 4 ]; then
+    ok "PC3 plants span $_n test files"
+  else
+    bad "PC3 plants span only $_n test file(s) — expected >= 4"
+  fi
+}
+[ "$SHARDED" -eq 0 ] && assert_pc3 "$FILES_N"
 
 # PC4 — no declaration may be INDENTED. The collector above anchors on `^# plant:`, so a
 # declaration written inside an `if`/`for` block, beside the assertion it proves, is silently
@@ -539,15 +610,32 @@ fi
 
 # PC5b — the baseline itself RAN. An empty baseline for a harness that did not run would make PC5
 # pass for every plant declared in it, which is this file's own failure mode turned on its guard.
-if [ -z "$BASE_MISSING" ]; then
-  ok "PC5b the baseline ran for all $BASE_N declaring harness(es)"
-else
-  bad "PC5b the baseline DID NOT RUN for:$BASE_MISSING — PC5 says nothing about plants in those files"
-fi
+#
+# DEFERRED IN SHARD MODE (ADR-0151 §D5): the baseline pass itself is NOT restricted to the slice —
+# every shard runs every declaring harness's baseline (D10) — but the ASSERTION is still deferred so
+# the same population question is not asked four times with four chances to disagree; the union asks
+# it once over the union of `B` records.
+assert_pc5b() {
+  _n="$1"; _missing="$2"
+  if [ -z "$_missing" ]; then
+    ok "PC5b the baseline ran for all $_n declaring harness(es)"
+  else
+    bad "PC5b the baseline DID NOT RUN for:$_missing — PC5 says nothing about plants in those files"
+  fi
+}
+[ "$SHARDED" -eq 0 ] && assert_pc5b "$BASE_N" "$BASE_MISSING"
 
-_total=$((PASS + FAIL))
-if [ "$_total" -ge 14 ]; then ok "Z1 assertion-count floor ($_total >= 14)"
-else bad "Z1 assertion count fell to $_total (floor 14) — plants or assertions vanished"; fi
+# Z1 — the assertion-count floor. DEFERRED IN SHARD MODE (ADR-0151 §D5): a shard's own PASS+FAIL
+# total only covers its own slice, so the floor below is meaningless per shard; the union sums every
+# shard's `M asserts` plus its own and carries the floor that guards THAT total (its floor is its
+# own — a floor absorbs its own plant, rule 10, so the union states its vacuity guard at its site
+# rather than inheriting this one).
+assert_z1() {
+  _total="$1"; _floor="$2"
+  if [ "$_total" -ge "$_floor" ]; then ok "Z1 assertion-count floor ($_total >= $_floor)"
+  else bad "Z1 assertion count fell to $_total (floor $_floor) — plants or assertions vanished"; fi
+}
+[ "$SHARDED" -eq 0 ] && assert_z1 "$((PASS + FAIL))" 14
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"
