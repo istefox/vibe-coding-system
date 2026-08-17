@@ -68,6 +68,10 @@
 # plant: PS8  | plugin/scripts/tests/plant-check.sh | [ "${2:-}" = "success" ] | [ "${2:-}" != "nonesuch" ]
 # plant: PS9  | plugin/scripts/tests/plant-check.sh | [ "$_sum" -eq "$U_DECL_N" ] | true
 # plant: PS10 | plugin/scripts/tests/plant-check.sh | _cov_dup="$_cov_dup $_i" | :
+#
+# PS12 (issue #447, ADR-0151 correction — the registry must not leak its own PLANT_ARTIFACT /
+# PLANT_SHARD / PLANT_SHARDS into the harness it runs, worker mode's own invocation line).
+# plant: PS12 | plugin/scripts/tests/plant-check.sh | unset PLANT_ARTIFACT PLANT_SHARD PLANT_SHARDS; bash "$SBX/staging/plugin/scripts/tests/$tfile" 2>&1 | bash "$SBX/staging/plugin/scripts/tests/$tfile" 2>&1
 set -u
 
 TESTS=$(cd "$(dirname "$0")" && pwd)
@@ -711,6 +715,101 @@ if [ -f "$CIY" ]; then
   fi
 else
   bad "PS11 (R-03, R-07): $CIY not found — cannot evaluate the docs-ci.yml topology"
+fi
+
+# ==================================================================================================
+# PS12 (issue #447, ADR-0151 correction) — the WORKER-MODE mutation-run invocation must not leak this
+# registry's own PLANT_ARTIFACT/PLANT_SHARD/PLANT_SHARDS into the harness it runs. Measured
+# 2026-08-17: without the `unset` this plant reverts, a nested invocation of THIS SAME registry (which
+# is exactly what every `$FIXPC` call above is) inherits the outer three — one nested run silently
+# overwrites the real, outer artifact path with its own fixture verdict stream, and a nested call
+# meaning "knobs UNSET" (PS1's and PS3b's own subject) is corrupted into running sharded instead.
+#
+# A dedicated probe harness (`leakprobe.test.sh`) reports whether it can see the three variables. It
+# lives in a THIRD, throwaway fixture built fresh here — never registered in `docs-ci.yml`'s harness
+# loop, so this is not a fourth real `*.test.sh` file, the same constraint Task 2 already honoured for
+# PS0-PS11. The "reverted" copy of `plant-check.sh` is produced by literally UNDOING the fix's own
+# substitution with `sed`, not by a second hand-written mechanism (rule 6): if the fix's wording ever
+# changes, this `sed` stops matching, the reverted copy is byte-identical to the clean one, and every
+# "must leak" case below goes NOFIRE instead of silently passing — a rotted rewrite fails LOUD, not
+# quiet.
+#
+# Both directions, and each of the three named separately (rule 7 — an assertion satisfied by "both
+# runs produced nothing" pins nothing): the CLEAN copy must show no leak with all three set in the
+# calling shell; the REVERTED copy must show a leak with all three set, and ALSO with each set alone.
+# ==================================================================================================
+FIX3="$TMP/fix3"; FIX3B="$TMP/fix3bad"
+mkdir -p "$FIX3/staging/plugin/scripts/tests" "$FIX3B/staging/plugin/scripts/tests"
+cp "$PC" "$FIX3/staging/plugin/scripts/tests/plant-check.sh"
+sed 's#OUT=$(unset PLANT_ARTIFACT PLANT_SHARD PLANT_SHARDS; bash#OUT=$(bash#' "$PC" \
+  >"$FIX3B/staging/plugin/scripts/tests/plant-check.sh"
+
+cat >"$FIX3/staging/plugin/scripts/tests/leakprobe.test.sh" <<'LEAKPROBE'
+#!/bin/bash
+set -u
+if [ -z "${PLANT_ARTIFACT:-}" ] && [ -z "${PLANT_SHARD:-}" ] && [ -z "${PLANT_SHARDS:-}" ]; then
+  printf 'PASS: LEAK clean\n'
+else
+  printf 'FAIL: LEAK PLANT_ARTIFACT=%s PLANT_SHARD=%s PLANT_SHARDS=%s\n' "${PLANT_ARTIFACT:-<unset>}" "${PLANT_SHARD:-<unset>}" "${PLANT_SHARDS:-<unset>}"
+fi
+exit 0
+LEAKPROBE
+cp "$FIX3/staging/plugin/scripts/tests/leakprobe.test.sh" "$FIX3B/staging/plugin/scripts/tests/leakprobe.test.sh"
+
+FIX3PC="$FIX3/staging/plugin/scripts/tests/plant-check.sh"
+FIX3BPC="$FIX3B/staging/plugin/scripts/tests/plant-check.sh"
+
+# leakprobe.test.sh carries no `# plant:` line of its own — it is never mutation-tested for its own
+# sake, only run through WORKER MODE directly (rule 6: reusing the real entry point rather than
+# re-implementing what it does). The decls file worker mode reads is hand-built accordingly: one
+# line, tab-separated, harness name then the same four-field payload collect_decls would have
+# produced from a real declaration.
+_ps12_mkwork() {   # <workdir>
+  mkdir -p "$1/res" "$1/base" "$1/basemiss"
+  printf 'leakprobe.test.sh\tLEAK | plugin/scripts/tests/leakprobe.test.sh | exit 0 | exit 0\n' >"$1/decls"
+}
+
+_ps12_fail=""
+
+# ---- clean copy, all three set in the calling shell — must NOT leak ------------------------------
+_w1="$TMP/ps12w1"; _ps12_mkwork "$_w1"
+PLANT_ARTIFACT="$TMP/ps12_leak1.tsv" PLANT_SHARD=2 PLANT_SHARDS=4 \
+  bash "$FIX3PC" --worker 1 "$_w1" >/dev/null 2>&1
+_k1=$(cat "$_w1/res/1.kind" 2>/dev/null || true)
+[ "$_k1" = "NOFIRE" ] || _ps12_fail="$_ps12_fail clean-all-three:kind=${_k1:-<none>}(want NOFIRE)"
+
+# ---- reverted copy, all three set — must leak -----------------------------------------------------
+_w2="$TMP/ps12w2"; _ps12_mkwork "$_w2"
+PLANT_ARTIFACT="$TMP/ps12_leak2.tsv" PLANT_SHARD=2 PLANT_SHARDS=4 \
+  bash "$FIX3BPC" --worker 1 "$_w2" >/dev/null 2>&1
+_k2=$(cat "$_w2/res/1.kind" 2>/dev/null || true)
+[ "$_k2" = "FIRED" ] || _ps12_fail="$_ps12_fail reverted-all-three:kind=${_k2:-<none>}(want FIRED)"
+
+# ---- reverted copy, ONLY PLANT_ARTIFACT set — must leak on its own --------------------------------
+_w3="$TMP/ps12w3"; _ps12_mkwork "$_w3"
+PLANT_ARTIFACT="$TMP/ps12_leak3.tsv" \
+  bash "$FIX3BPC" --worker 1 "$_w3" >/dev/null 2>&1
+_k3=$(cat "$_w3/res/1.kind" 2>/dev/null || true)
+[ "$_k3" = "FIRED" ] || _ps12_fail="$_ps12_fail reverted-artifact-only:kind=${_k3:-<none>}(want FIRED)"
+
+# ---- reverted copy, ONLY PLANT_SHARD set — must leak on its own -----------------------------------
+_w4="$TMP/ps12w4"; _ps12_mkwork "$_w4"
+PLANT_SHARD=2 \
+  bash "$FIX3BPC" --worker 1 "$_w4" >/dev/null 2>&1
+_k4=$(cat "$_w4/res/1.kind" 2>/dev/null || true)
+[ "$_k4" = "FIRED" ] || _ps12_fail="$_ps12_fail reverted-shard-only:kind=${_k4:-<none>}(want FIRED)"
+
+# ---- reverted copy, ONLY PLANT_SHARDS set — must leak on its own ----------------------------------
+_w5="$TMP/ps12w5"; _ps12_mkwork "$_w5"
+PLANT_SHARDS=4 \
+  bash "$FIX3BPC" --worker 1 "$_w5" >/dev/null 2>&1
+_k5=$(cat "$_w5/res/1.kind" 2>/dev/null || true)
+[ "$_k5" = "FIRED" ] || _ps12_fail="$_ps12_fail reverted-shards-only:kind=${_k5:-<none>}(want FIRED)"
+
+if [ -z "$_ps12_fail" ]; then
+  ok "PS12: the mutation-run invocation clears PLANT_ARTIFACT/PLANT_SHARD/PLANT_SHARDS before running the harness — no leak with the fix in place, a leak (individually for each of the three, and combined) with it reverted"
+else
+  bad "PS12: leak-detection mismatch(es):$_ps12_fail — either the fix leaks or the check pinning it is broken"
 fi
 
 # PPZ — assertion-count floor (ADR-0083's vanishing-assertion class). No plant is declared on it:

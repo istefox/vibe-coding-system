@@ -376,7 +376,32 @@ PY
     rm -rf "$SBX"; exit 0
   fi
 
-  OUT=$(bash "$SBX/staging/plugin/scripts/tests/$tfile" 2>&1)
+  # PLANT_ARTIFACT, PLANT_SHARD and PLANT_SHARDS are THIS REGISTRY's own control knobs (issue #447,
+  # ADR-0151), exported into this process's environment by the CI shard job (or an operator's shell)
+  # and, unless removed, inherited by every child — including the harness under mutation itself. That
+  # harness can BE a nested invocation of this same registry: `plant-registry-parallel.test.sh` runs
+  # `bash "$FIXPC"` roughly two dozen times as its own fixture. Measured 2026-08-17: with the outer
+  # PLANT_ARTIFACT leaking in, one of those nested runs (whichever does not set its own) overwrites the
+  # OUTER, real artifact path with its 13-line fixture verdict stream instead of the fixture's own; with
+  # the outer PLANT_SHARD/PLANT_SHARDS leaking in, a nested call that means "knobs UNSET" — PS1's and
+  # PS3b's own subject — runs sharded instead, so those two assertions are evaluated in a different
+  # world depending on which CI shard happens to run them. `unset`, not `VAR=`, so the removal does not
+  # depend on every downstream reader consistently using the `${VAR:-default}` (colon) form rather than
+  # `${VAR-default}`. `env -u` was considered and rejected: BSD `env` (macOS, the dev machine) carries
+  # no `-u` flag, only GNU `env` does, and this file is bash-3.2-portable by contract.
+  #
+  # PLANT_JOBS and PLANT_WORKROOT are deliberately NOT cleared here, and that is a decision and not an
+  # omission. Both are inert to a VERDICT. `PLANT_JOBS` is a performance knob whose own equivalence this
+  # file asserts as a first-class claim (`PP1`, `PP5` — mutation output is byte-identical at any worker
+  # count), so a leaked value can only change how long a nested run takes, never what it reports.
+  # `PLANT_WORKROOT` only chooses WHERE a fresh, uniquely-named `mktemp -d` sandbox is created, never
+  # what one contains; `mktemp` never reuses a name, so a nested run building its temp tree under an
+  # inherited workroot cannot collide with or corrupt anything sitting there. Clearing them would remove
+  # no hazard — it would be symmetry for its own sake. If a future `PLANT_*` knob is added, decide THIS
+  # question for it explicitly: can its inherited value change what a mutation run WRITES or WHICH
+  # declarations it EVALUATES? If yes, it belongs in the `unset` below; if it only changes where or how
+  # fast, it does not.
+  OUT=$(unset PLANT_ARTIFACT PLANT_SHARD PLANT_SHARDS; bash "$SBX/staging/plugin/scripts/tests/$tfile" 2>&1)
   # The harness output reaches grep through a HERE-DOCUMENT and not a pipe. `printf … | grep -q`
   # races: grep exits at the first match and closes the pipe while printf is still writing, and the
   # loser prints `write error: Broken pipe`. Measured on the runner 2026-08-15 — bash 5 reports it,
@@ -414,7 +439,17 @@ if [ "${1:-}" = "--baseline" ]; then
   if [ ! -f "$_h" ]; then
     printf 'absent\n' >"$WORK/basemiss/$tfile"; rm -rf "$SBX"; exit 0
   fi
-  _out=$(bash "$_h" 2>&1); _rc=$?
+  # Same leak, same fix, as the mutation-run invocation above (issue #447): this baseline pass also
+  # runs `tfile` as a real subprocess, before any plant fires, and `tfile` can be a nested invocation
+  # of this same registry (plant-registry-parallel.test.sh). Measured 2026-08-17: with the OUTER
+  # PLANT_SHARD/PLANT_SHARDS/PLANT_ARTIFACT leaking into this call, the BASELINE computed for that
+  # harness is wrong before any mutation is applied — PS1 (whose subject is the knobs being UNSET)
+  # reads FAIL in the clean sandbox purely from the leak, which then makes every plant declared on it
+  # VACUOUS ("already RED in the unmutated sandbox") instead of a legitimate FIRED, and the nested
+  # fixture registry's own end-of-run `write_artifact` clobbers the real, outer artifact path. Left
+  # unfixed here, R-12's shard/sequential comparison disagrees for this reason even after the
+  # mutation-run call above is fixed, because a shard's BASELINE pass runs with the same leaked env.
+  _out=$(unset PLANT_ARTIFACT PLANT_SHARD PLANT_SHARDS; bash "$_h" 2>&1); _rc=$?
   _red=$(printf '%s\n' "$_out" | grep '^FAIL: ' 2>/dev/null || true)
   # An empty baseline from a harness that DID NOT RUN would make PC5 pass for every plant in it,
   # so emptiness must be corroborated before it is trusted (rule 7 — guard the denominator).
