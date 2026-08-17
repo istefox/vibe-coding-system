@@ -156,7 +156,14 @@ FIXF=$(ls "$FIX/staging/plugin/scripts/tests"/*.test.sh 2>/dev/null | grep -c . 
 # nothing on the machine it was written on.
 SBXWATCH="$TMP/watch"; mkdir -p "$SBXWATCH"
 
-PLANT_WORKROOT="$SBXWATCH" PLANT_JOBS=1 bash "$FIXPC" >"$TMP/out1" 2>&1 &
+# ART/SEQ — issue #447, ADR-0151 (Task 2). The one-worker run below is re-used as the SEQUENTIAL arm
+# of the shard equivalence proof by adding PLANT_ARTIFACT to it, rather than paying for a sixth
+# registry invocation just to get a sequential artifact. ART holds the four SHARD artifacts built
+# later in this file; SEQ is the one sequential artifact.
+ART="$TMP/artifacts"; mkdir -p "$ART"
+SEQ="$TMP/plant-seq.tsv"
+
+PLANT_WORKROOT="$SBXWATCH" PLANT_JOBS=1 PLANT_ARTIFACT="$SEQ" bash "$FIXPC" >"$TMP/out1" 2>&1 &
 _pid=$!
 MAXSBX=0
 while kill -0 "$_pid" 2>/dev/null; do
@@ -385,6 +392,305 @@ if grep -q 'zeta.test.sh \[G6\]: needle matched 2 times' "$TMP/out2"; then
   ok "PP10 (R-02): the exactly-one-match rule is unchanged by the insertion form — the match is on the needle"
 else
   bad "PP10 (R-02): an insertion whose needle matches twice was not refused; a plant hitting sites it did not intend is a defect in the plant"
+fi
+
+# ==================================================================================================
+# TASK 1 — shard-mode, default-equivalence and refusal assertions (issue #447, ADR-0151, plan
+# 2026-08-17-447-shard-the-plant-registry). PS1/PS3/PS3b/PS4 pin the shard-selection mode
+# `plant-check.sh` does not have yet — no PLANT_SHARDS, no PLANT_SHARD. EXPECTED RED ON ARRIVAL
+# (Batch A). Plants are declared later, in Task 6: declaring one now against a mechanism that does
+# not exist would be a BADPLANT, not a plant.
+#
+# Re-uses the FIX fixture already built above (13 plants, 5 harnesses) — no third fixture.
+# ==================================================================================================
+
+# ---- PS1 (R-05) ----------------------------------------------------------------------------------
+# With PLANT_SHARD/PLANT_SHARDS unset, plant-check.sh must behave EXACTLY as PLANT_SHARDS=1
+# PLANT_SHARD=1 — byte for byte (ADR-0151 D3). The equivalence is asserted, never assumed.
+PLANT_JOBS=1 bash "$FIXPC" >"$TMP/ps1_unset" 2>&1
+PLANT_JOBS=1 PLANT_SHARDS=1 PLANT_SHARD=1 bash "$FIXPC" >"$TMP/ps1_explicit" 2>&1
+if diff -q "$TMP/ps1_unset" "$TMP/ps1_explicit" >/dev/null 2>&1 \
+   && grep -q '^PASS: PC0' "$TMP/ps1_unset" && grep -q '^PASS: PC0' "$TMP/ps1_explicit"; then
+  ok "PS1 (R-05): PLANT_SHARDS/PLANT_SHARD unset behaves exactly as PLANT_SHARDS=1 PLANT_SHARD=1, byte for byte"
+else
+  bad "PS1 (R-05): unset and explicit-1 runs disagree — $(diff "$TMP/ps1_unset" "$TMP/ps1_explicit" 2>/dev/null | grep -c '^[<>]') differing line(s), or PC0 is missing from one/both run(s) (two crashed runs would otherwise satisfy an empty diff)"
+fi
+
+# ---- PS3 (R-06) ------------------------------------------------------------------------------------
+# In shard mode the script must say, once, that it deferred the population assertions, and NAME all
+# four of them — a token that stops naming what it defers is a token that stopped being a report.
+PLANT_JOBS=1 PLANT_SHARDS=4 PLANT_SHARD=2 bash "$FIXPC" >"$TMP/ps3_shard2" 2>&1
+_ps3_n=$(grep -c 'PC-DEFERRED shard 2/4' "$TMP/ps3_shard2" 2>/dev/null || true)
+_ps3_line=$(grep 'PC-DEFERRED shard 2/4' "$TMP/ps3_shard2" 2>/dev/null | head -1)
+if [ "${_ps3_n:-0}" -eq 1 ] \
+   && printf '%s' "$_ps3_line" | grep -q 'PC0' \
+   && printf '%s' "$_ps3_line" | grep -q 'PC3' \
+   && printf '%s' "$_ps3_line" | grep -q 'PC5b' \
+   && printf '%s' "$_ps3_line" | grep -q 'Z1'; then
+  ok "PS3 (R-06): PLANT_SHARDS=4 PLANT_SHARD=2 prints exactly one PC-DEFERRED shard 2/4 line naming PC0, PC3, PC5b and Z1"
+else
+  bad "PS3 (R-06): PC-DEFERRED line(s) matching 'PC-DEFERRED shard 2/4' = ${_ps3_n:-0} (want 1), content [$_ps3_line] — the deferral token is missing or stopped naming what it defers"
+fi
+
+# ---- PS3b (R-02, R-06) -----------------------------------------------------------------------------
+# The negative and the positive twin, together (rule 8): the four population assertions must NOT run
+# inside a shard (re-using PS3's shard-2 run), and must ALL run — with no PC-DEFERRED — at
+# PLANT_SHARDS=1 (re-using PS1's explicit-1 run). Without both halves this is satisfied by a
+# registry that prints nothing at all.
+_ps3b_shard_leak=0
+for _tok in PC0 PC3 PC5b Z1; do
+  grep -qE "^(PASS|FAIL): ${_tok}[: ]" "$TMP/ps3_shard2" 2>/dev/null && _ps3b_shard_leak=1
+done
+_ps3b_s1_ok=1
+for _tok in PC0 PC3 PC5b Z1; do
+  grep -qE "^(PASS|FAIL): ${_tok}[: ]" "$TMP/ps1_explicit" 2>/dev/null || _ps3b_s1_ok=0
+done
+grep -q 'PC-DEFERRED' "$TMP/ps1_explicit" 2>/dev/null && _ps3b_s1_ok=0
+if [ "$_ps3b_shard_leak" -eq 0 ] && [ "$_ps3b_s1_ok" -eq 1 ]; then
+  ok "PS3b (R-02, R-06): PC0/PC3/PC5b/Z1 do not run under PLANT_SHARDS=4 PLANT_SHARD=2, and all four run — with no PC-DEFERRED — at PLANT_SHARDS=1"
+else
+  bad "PS3b (R-02, R-06): shard-mode leaked a population assertion (leak=$_ps3b_shard_leak) or PLANT_SHARDS=1 failed to run all four cleanly (ok=$_ps3b_s1_ok)"
+fi
+
+# ---- PS4 (R-08) --------------------------------------------------------------------------------------
+# Five malformed slice specifications must each REFUSE — exit 2, a PC-REFUSED line on stderr, and no
+# "plant .* fired" line — never selecting the whole population or none of it silently (ADR-0151 D4).
+# Exit code, the stderr token and the fired-line absence are each checked SEPARATELY, never combined
+# into one condition that could pass for the wrong reason.
+_ps4_fail=""
+
+PLANT_JOBS=1 PLANT_SHARDS=0 bash "$FIXPC" >"$TMP/ps4_shards0.out" 2>"$TMP/ps4_shards0.err"; _ps4_rc=$?
+[ "$_ps4_rc" -eq 2 ] || _ps4_fail="$_ps4_fail shards0:exit=$_ps4_rc"
+grep -q '^PC-REFUSED' "$TMP/ps4_shards0.err" 2>/dev/null || _ps4_fail="$_ps4_fail shards0:no-PC-REFUSED-on-stderr"
+grep -qE 'plant .* fired' "$TMP/ps4_shards0.out" "$TMP/ps4_shards0.err" 2>/dev/null && _ps4_fail="$_ps4_fail shards0:a-plant-fired"
+
+PLANT_JOBS=1 PLANT_SHARDS=abc bash "$FIXPC" >"$TMP/ps4_shardsAbc.out" 2>"$TMP/ps4_shardsAbc.err"; _ps4_rc=$?
+[ "$_ps4_rc" -eq 2 ] || _ps4_fail="$_ps4_fail shardsAbc:exit=$_ps4_rc"
+grep -q '^PC-REFUSED' "$TMP/ps4_shardsAbc.err" 2>/dev/null || _ps4_fail="$_ps4_fail shardsAbc:no-PC-REFUSED-on-stderr"
+grep -qE 'plant .* fired' "$TMP/ps4_shardsAbc.out" "$TMP/ps4_shardsAbc.err" 2>/dev/null && _ps4_fail="$_ps4_fail shardsAbc:a-plant-fired"
+
+PLANT_JOBS=1 PLANT_SHARD=0 bash "$FIXPC" >"$TMP/ps4_shard0.out" 2>"$TMP/ps4_shard0.err"; _ps4_rc=$?
+[ "$_ps4_rc" -eq 2 ] || _ps4_fail="$_ps4_fail shard0:exit=$_ps4_rc"
+grep -q '^PC-REFUSED' "$TMP/ps4_shard0.err" 2>/dev/null || _ps4_fail="$_ps4_fail shard0:no-PC-REFUSED-on-stderr"
+grep -qE 'plant .* fired' "$TMP/ps4_shard0.out" "$TMP/ps4_shard0.err" 2>/dev/null && _ps4_fail="$_ps4_fail shard0:a-plant-fired"
+
+PLANT_JOBS=1 PLANT_SHARD=5 PLANT_SHARDS=4 bash "$FIXPC" >"$TMP/ps4_shardOOR.out" 2>"$TMP/ps4_shardOOR.err"; _ps4_rc=$?
+[ "$_ps4_rc" -eq 2 ] || _ps4_fail="$_ps4_fail shardOOR:exit=$_ps4_rc"
+grep -q '^PC-REFUSED' "$TMP/ps4_shardOOR.err" 2>/dev/null || _ps4_fail="$_ps4_fail shardOOR:no-PC-REFUSED-on-stderr"
+grep -qE 'plant .* fired' "$TMP/ps4_shardOOR.out" "$TMP/ps4_shardOOR.err" 2>/dev/null && _ps4_fail="$_ps4_fail shardOOR:a-plant-fired"
+
+PLANT_JOBS=1 PLANT_SHARD=abc bash "$FIXPC" >"$TMP/ps4_shardAbc.out" 2>"$TMP/ps4_shardAbc.err"; _ps4_rc=$?
+[ "$_ps4_rc" -eq 2 ] || _ps4_fail="$_ps4_fail shardAbc:exit=$_ps4_rc"
+grep -q '^PC-REFUSED' "$TMP/ps4_shardAbc.err" 2>/dev/null || _ps4_fail="$_ps4_fail shardAbc:no-PC-REFUSED-on-stderr"
+grep -qE 'plant .* fired' "$TMP/ps4_shardAbc.out" "$TMP/ps4_shardAbc.err" 2>/dev/null && _ps4_fail="$_ps4_fail shardAbc:a-plant-fired"
+
+if [ -z "$_ps4_fail" ]; then
+  ok "PS4 (R-08): five malformed slice specs (SHARDS=0, SHARDS=abc, SHARD=0, SHARD=5/SHARDS=4, SHARD=abc) each exit 2 with PC-REFUSED on stderr and run no plant"
+else
+  bad "PS4 (R-08): malformed slice spec(s) not refused correctly:$_ps4_fail"
+fi
+
+# ==================================================================================================
+# TASK 2 — the artifact, union and leg-gate assertions (issue #447, ADR-0151). Still RED: --union and
+# --require-legs do not exist in plant-check.sh yet, so an unrecognised argument is silently ignored
+# and the fixture's full (unsharded) registry runs instead — which is EXACTLY the trap rule 7 warns
+# about: two runs that both did nothing can look identical to two runs that agree. Several checks
+# below therefore guard the DENOMINATOR explicitly (a V record actually found, a non-empty artifact,
+# an exact population count) rather than trust a coincidental exit code alone.
+#
+# The four shard artifacts are built ONCE here and every negative case below derives from editing
+# COPIES of them — the union builds no sandboxes, so each extra case costs milliseconds.
+# ==================================================================================================
+for _k in 1 2 3 4; do
+  PLANT_JOBS=1 PLANT_SHARDS=4 PLANT_SHARD="$_k" PLANT_ARTIFACT="$ART/plant-shard-$_k.tsv" \
+    bash "$FIXPC" >"$TMP/ps0_shard$_k.out" 2>&1
+done
+
+# ---- PS0 — the denominator for everything below (rule 7). ------------------------------------------
+_ps0_files=0
+for _k in 1 2 3 4; do [ -f "$ART/plant-shard-$_k.tsv" ] && _ps0_files=$((_ps0_files + 1)); done
+_ps0_m_ok=1
+for _k in 1 2 3 4; do
+  _ps0_mn=$(awk -F'\t' -v kk="$_k" '$1=="M" && $2=="shard" && $3==kk' "$ART/plant-shard-$_k.tsv" 2>/dev/null | grep -c . || true)
+  [ "${_ps0_mn:-0}" -eq 1 ] || _ps0_m_ok=0
+done
+_ps0_v_total=0
+for _k in 1 2 3 4; do
+  _ps0_vn=$(awk -F'\t' '$1=="V"' "$ART/plant-shard-$_k.tsv" 2>/dev/null | grep -c . || true)
+  _ps0_v_total=$((_ps0_v_total + ${_ps0_vn:-0}))
+done
+_ps0_seq_v=$(awk -F'\t' '$1=="V"' "$SEQ" 2>/dev/null | grep -c . || true)
+if [ "$_ps0_files" -eq 4 ] && [ "$_ps0_m_ok" -eq 1 ] \
+   && [ "$_ps0_v_total" -eq 13 ] && [ "${_ps0_seq_v:-0}" -eq 13 ]; then
+  ok "PS0: four shard artifacts exist, each carries exactly one M shard k record, the V records total 13 across shards, and the sequential artifact carries 13"
+else
+  bad "PS0: files=$_ps0_files/4, M-records-ok=$_ps0_m_ok, shard-V-total=$_ps0_v_total (want 13), sequential-V=${_ps0_seq_v:-0} (want 13) — every assertion below compares nothing to nothing without this"
+fi
+
+# ---- PS2 (R-05, and R-12's in-CI counterpart) --------------------------------------------------------
+awk -F'\t' '$1=="V"' "$ART/plant-shard-1.tsv" "$ART/plant-shard-2.tsv" "$ART/plant-shard-3.tsv" "$ART/plant-shard-4.tsv" 2>/dev/null \
+  | sort -t "$(printf '\t')" -k2,2n >"$TMP/ps2_union_v"
+awk -F'\t' '$1=="V"' "$SEQ" 2>/dev/null >"$TMP/ps2_seq_v"
+_ps2_seq_n=$(grep -c . "$TMP/ps2_seq_v" 2>/dev/null || true)
+if [ "${_ps2_seq_n:-0}" -eq 13 ] && diff -q "$TMP/ps2_union_v" "$TMP/ps2_seq_v" >/dev/null 2>&1; then
+  ok "PS2 (R-05, R-12): the four shards' V records, sorted by declaration index, equal the sequential artifact's V records byte for byte"
+else
+  bad "PS2 (R-05, R-12): sequential V-record count=${_ps2_seq_n:-0} (want 13), or sharded/sequential V streams disagree — $(diff "$TMP/ps2_union_v" "$TMP/ps2_seq_v" 2>/dev/null | grep -c '^[<>]') differing line(s)"
+fi
+
+# ---- PS5 (R-09, R-10) ----------------------------------------------------------------------------------
+_ps5_dir="$TMP/ps5"; rm -rf "$_ps5_dir"; cp -R "$ART" "$_ps5_dir" 2>/dev/null
+_ps5_removed_idx=$(awk -F'\t' '$1=="V"{print $2; exit}' "$ART/plant-shard-1.tsv" 2>/dev/null)
+if [ -f "$_ps5_dir/plant-shard-1.tsv" ]; then
+  awk -F'\t' 'BEGIN{done=0} $1=="V" && done==0 {done=1; next} {print}' "$_ps5_dir/plant-shard-1.tsv" >"$_ps5_dir/plant-shard-1.tsv.tmp" 2>/dev/null \
+    && mv "$_ps5_dir/plant-shard-1.tsv.tmp" "$_ps5_dir/plant-shard-1.tsv"
+fi
+bash "$FIXPC" --union "$_ps5_dir" >"$TMP/ps5.out" 2>"$TMP/ps5.err"; _ps5_rc=$?
+if [ "$_ps5_rc" -eq 1 ] && [ -n "${_ps5_removed_idx:-}" ] \
+   && grep -q "$_ps5_removed_idx" "$TMP/ps5.out" "$TMP/ps5.err" 2>/dev/null; then
+  ok "PS5 (R-09, R-10): a deleted V record (index $_ps5_removed_idx) with all four artifacts present makes --union exit 1 and name the missing index"
+else
+  bad "PS5 (R-09, R-10): --union exited $_ps5_rc (want 1) and did not clearly name the missing index '${_ps5_removed_idx:-<none: no V record available to remove — the artifact mechanism does not exist yet>}' — a needs-only design cannot see this case"
+fi
+
+# ---- PS6 (R-02, R-10) ----------------------------------------------------------------------------------
+_ps6a_dir="$TMP/ps6a"; rm -rf "$_ps6a_dir"; cp -R "$ART" "$_ps6a_dir" 2>/dev/null
+rm -f "$_ps6a_dir/plant-shard-3.tsv"
+bash "$FIXPC" --union "$_ps6a_dir" >"$TMP/ps6a.out" 2>"$TMP/ps6a.err"; _ps6a_rc=$?
+_ps6a_line=$(grep '^PC-UNION-NORUN' "$TMP/ps6a.out" "$TMP/ps6a.err" 2>/dev/null | head -1)
+_ps6a_ok=0
+[ "$_ps6a_rc" -eq 3 ] && [ -n "$_ps6a_line" ] && printf '%s' "$_ps6a_line" | grep -q '3' && _ps6a_ok=1
+
+_ps6b_dir="$TMP/ps6b"; rm -rf "$_ps6b_dir"; cp -R "$ART" "$_ps6b_dir" 2>/dev/null
+if [ -f "$_ps6b_dir/plant-shard-3.tsv" ]; then
+  awk -F'\t' '$1=="M"' "$_ps6b_dir/plant-shard-3.tsv" >"$_ps6b_dir/plant-shard-3.tsv.tmp" 2>/dev/null \
+    && mv "$_ps6b_dir/plant-shard-3.tsv.tmp" "$_ps6b_dir/plant-shard-3.tsv"
+fi
+bash "$FIXPC" --union "$_ps6b_dir" >"$TMP/ps6b.out" 2>"$TMP/ps6b.err"; _ps6b_rc=$?
+_ps6b_ok=0
+[ "$_ps6b_rc" -eq 1 ] && grep -qE '^FAIL: PC6' "$TMP/ps6b.out" "$TMP/ps6b.err" 2>/dev/null && _ps6b_ok=1
+
+if [ "$_ps6a_ok" -eq 1 ] && [ "$_ps6b_ok" -eq 1 ]; then
+  ok "PS6 (R-02, R-10): a wholly missing artifact is exit 3 with PC-UNION-NORUN naming shard 3; an artifact with zero V records is exit 1 via PC6's coverage check — neither reads as clean"
+else
+  bad "PS6 (R-02, R-10): missing-artifact case exit=$_ps6a_rc ok=$_ps6a_ok, zero-V-records case exit=$_ps6b_rc ok=$_ps6b_ok — want 3/PC-UNION-NORUN naming shard 3, and 1/FAIL: PC6"
+fi
+
+# ---- PS7 (R-02) -----------------------------------------------------------------------------------------
+bash "$FIXPC" --union "$ART" >"$TMP/ps7.out" 2>"$TMP/ps7.err"; _ps7_rc=$?
+_ps7_counts_ok=1
+for _tok in PC0 PC3 PC5b Z1; do
+  _ps7_c=$(grep -cE "^(PASS|FAIL): ${_tok}[: ]" "$TMP/ps7.out" 2>/dev/null || true)
+  [ "${_ps7_c:-0}" -eq 1 ] || _ps7_counts_ok=0
+done
+_ps7_shards_clean=1
+for _k in 1 2 3 4; do
+  for _tok in PC0 PC3 PC5b Z1; do
+    grep -qE "^(PASS|FAIL): ${_tok}[: ]" "$TMP/ps0_shard$_k.out" 2>/dev/null && _ps7_shards_clean=0
+  done
+done
+if [ "$_ps7_rc" -eq 0 ] && [ "$_ps7_counts_ok" -eq 1 ] && [ "$_ps7_shards_clean" -eq 1 ]; then
+  ok "PS7 (R-02): --union over the four unmodified artifacts exits 0 with PC0/PC3/PC5b/Z1 each appearing exactly once, and no shard's own run reports any of them"
+else
+  bad "PS7 (R-02): union exit=$_ps7_rc (want 0), each-token-exactly-once=$_ps7_counts_ok, shards-silent-on-population-checks=$_ps7_shards_clean — PC0/PC3/PC5b/Z1 must be evaluated exactly once, in the union and nowhere else"
+fi
+
+# ---- PS8 (R-07) ------------------------------------------------------------------------------------------
+bash "$FIXPC" --require-legs success >"$TMP/ps8_success.out" 2>"$TMP/ps8_success.err"; _ps8_ok_rc=$?
+_ps8_bad=""
+
+bash "$FIXPC" --require-legs failure >"$TMP/ps8_failure.out" 2>"$TMP/ps8_failure.err"; _ps8_rc=$?
+[ "$_ps8_rc" -eq 1 ] || _ps8_bad="$_ps8_bad failure:exit=$_ps8_rc"
+grep -q 'failure' "$TMP/ps8_failure.out" "$TMP/ps8_failure.err" 2>/dev/null || _ps8_bad="$_ps8_bad failure:state-not-printed"
+
+bash "$FIXPC" --require-legs cancelled >"$TMP/ps8_cancelled.out" 2>"$TMP/ps8_cancelled.err"; _ps8_rc=$?
+[ "$_ps8_rc" -eq 1 ] || _ps8_bad="$_ps8_bad cancelled:exit=$_ps8_rc"
+grep -q 'cancelled' "$TMP/ps8_cancelled.out" "$TMP/ps8_cancelled.err" 2>/dev/null || _ps8_bad="$_ps8_bad cancelled:state-not-printed"
+
+bash "$FIXPC" --require-legs skipped >"$TMP/ps8_skipped.out" 2>"$TMP/ps8_skipped.err"; _ps8_rc=$?
+[ "$_ps8_rc" -eq 1 ] || _ps8_bad="$_ps8_bad skipped:exit=$_ps8_rc"
+grep -q 'skipped' "$TMP/ps8_skipped.out" "$TMP/ps8_skipped.err" 2>/dev/null || _ps8_bad="$_ps8_bad skipped:state-not-printed"
+
+bash "$FIXPC" --require-legs "" >"$TMP/ps8_empty.out" 2>"$TMP/ps8_empty.err"; _ps8_rc=$?
+[ "$_ps8_rc" -eq 1 ] || _ps8_bad="$_ps8_bad empty:exit=$_ps8_rc"
+{ [ -s "$TMP/ps8_empty.out" ] || [ -s "$TMP/ps8_empty.err" ]; } || _ps8_bad="$_ps8_bad empty:no-output"
+
+bash "$FIXPC" --require-legs Success >"$TMP/ps8_wrongcase.out" 2>"$TMP/ps8_wrongcase.err"; _ps8_rc=$?
+[ "$_ps8_rc" -eq 1 ] || _ps8_bad="$_ps8_bad wrongcase:exit=$_ps8_rc"
+grep -q 'Success' "$TMP/ps8_wrongcase.out" "$TMP/ps8_wrongcase.err" 2>/dev/null || _ps8_bad="$_ps8_bad wrongcase:state-not-printed"
+
+if [ "$_ps8_ok_rc" -eq 0 ] && [ -z "$_ps8_bad" ]; then
+  ok "PS8 (R-07): --require-legs success exits 0; failure/cancelled/skipped/empty/Success each exit 1 with the observed state printed"
+else
+  bad "PS8 (R-07): success-arm exit=$_ps8_ok_rc (want 0), reject-arm failure(s):$_ps8_bad"
+fi
+
+# ---- PS9 (R-01) -------------------------------------------------------------------------------------------
+_ps9_imbalance_n=$(grep -c '^PC-IMBALANCE' "$TMP/ps7.out" 2>/dev/null || true)
+_ps9_dir="$TMP/ps9"; rm -rf "$_ps9_dir"; cp -R "$ART" "$_ps9_dir" 2>/dev/null
+if [ -f "$_ps9_dir/plant-shard-2.tsv" ]; then
+  awk -F'\t' 'BEGIN{OFS="\t"} $1=="M" && $2=="slice" {$3=$3+1} {print}' "$_ps9_dir/plant-shard-2.tsv" >"$_ps9_dir/plant-shard-2.tsv.tmp" 2>/dev/null \
+    && mv "$_ps9_dir/plant-shard-2.tsv.tmp" "$_ps9_dir/plant-shard-2.tsv"
+fi
+bash "$FIXPC" --union "$_ps9_dir" >"$TMP/ps9.out" 2>"$TMP/ps9.err"
+_ps9_pc7_red=$(grep -cE '^FAIL: PC7' "$TMP/ps9.out" 2>/dev/null || true)
+if [ "${_ps9_imbalance_n:-0}" -eq 1 ] && [ "${_ps9_pc7_red:-0}" -ge 1 ]; then
+  ok "PS9 (R-01): the clean union prints exactly one PC-IMBALANCE line, and PC7 goes RED when a shard's M slice disagrees with its actual V-record count"
+else
+  bad "PS9 (R-01): PC-IMBALANCE line(s) on the clean run=${_ps9_imbalance_n:-0} (want 1), PC7-red after doctoring M slice=${_ps9_pc7_red:-0} (want >=1)"
+fi
+
+# ---- PS10 (R-09, R-10) -------------------------------------------------------------------------------------
+_ps10_dir="$TMP/ps10"; rm -rf "$_ps10_dir"; cp -R "$ART" "$_ps10_dir" 2>/dev/null
+_ps10_row=$(awk -F'\t' '$1=="V"{print; exit}' "$ART/plant-shard-3.tsv" 2>/dev/null)
+_ps10_dup_idx=$(printf '%s' "$_ps10_row" | awk -F'\t' '{print $2}')
+if [ -n "$_ps10_row" ] && [ -f "$_ps10_dir/plant-shard-2.tsv" ]; then
+  printf '%s\n' "$_ps10_row" >>"$_ps10_dir/plant-shard-2.tsv"
+fi
+bash "$FIXPC" --union "$_ps10_dir" >"$TMP/ps10.out" 2>"$TMP/ps10.err"; _ps10_rc=$?
+if [ "$_ps10_rc" -eq 1 ] && [ -n "${_ps10_dup_idx:-}" ] \
+   && grep -q "$_ps10_dup_idx" "$TMP/ps10.out" "$TMP/ps10.err" 2>/dev/null; then
+  ok "PS10 (R-09, R-10): a V record duplicated across two artifacts (index $_ps10_dup_idx) makes --union exit 1 and name the duplicated index — distinct from PS5's missing-index case"
+else
+  bad "PS10 (R-09, R-10): --union exited $_ps10_rc (want 1) and did not clearly name the duplicated index '${_ps10_dup_idx:-<none: no V record available to duplicate — the artifact mechanism does not exist yet>}'"
+fi
+
+# ---- PS11 (R-03, R-07) -------------------------------------------------------------------------------------
+# NO PLANT. `.github/` is copied into the sandbox for tests to read but is not a legal plant target,
+# and widening the plant target grammar to reach it is out of scope for this change (ADR-0151 §D11)
+# — the same exemption pairs-completeness.test.sh's CI1 already declares for the same file. Its live
+# evidence is that it stays RED until Task 7 lands the workflow.
+CIY="$TESTS/../../../../.github/workflows/docs-ci.yml"
+if [ -f "$CIY" ]; then
+  _yaml_job_body() {   # <job-key, e.g. "plant-shard">
+    awk -v job="  $1:" '
+      $0 == job {f=1; next}
+      f && /^  [A-Za-z0-9_-]+:$/ {f=0}
+      f {print}
+    ' "$CIY"
+  }
+  _ps11_shard_body=$(_yaml_job_body "plant-shard")
+  _ps11_union_body=$(_yaml_job_body "shell-tests")
+  _ps11_shard_flat=$(printf '%s' "$_ps11_shard_body" | tr '\n' ' ' | tr -s ' ')
+  _ps11_union_flat=$(printf '%s' "$_ps11_union_body" | tr '\n' ' ' | tr -s ' ')
+  _ps11_ok=1
+  grep -q '^  plant-shard:$' "$CIY" || _ps11_ok=0
+  printf '%s' "$_ps11_shard_flat" | grep -qi 'fail-fast: false' || _ps11_ok=0
+  printf '%s' "$_ps11_shard_flat" | grep -qiE 'shard: \[1, ?2, ?3, ?4\]' || _ps11_ok=0
+  printf '%s' "$_ps11_shard_flat" | grep -qi 'install zsh' || _ps11_ok=0
+  grep -q '^  shell-tests:$' "$CIY" || _ps11_ok=0
+  printf '%s' "$_ps11_union_flat" | grep -qi 'needs: \[plant-shard\]' || _ps11_ok=0
+  printf '%s' "$_ps11_union_flat" | grep -qi 'if: always()' || _ps11_ok=0
+  grep -qE '^ +for t in ' "$CIY" || _ps11_ok=0
+  printf '%s' "$_ps11_union_flat" | grep -qi -- '--require-legs' || _ps11_ok=0
+  printf '%s' "$_ps11_union_flat" | grep -qi -- '--union' || _ps11_ok=0
+  if [ "$_ps11_ok" -eq 1 ]; then
+    ok "PS11 (R-03, R-07): docs-ci.yml carries a plant-shard job (fail-fast:false, a four-value matrix, a zsh install) and shell-tests carries needs:[plant-shard], if:always(), the unchanged harness-loop line, --require-legs and --union"
+  else
+    bad "PS11 (R-03, R-07): docs-ci.yml does not yet carry the sharded topology (plant-shard job / matrix / zsh / needs / if:always() / --require-legs / --union) — RED until Task 7 lands the workflow"
+  fi
+else
+  bad "PS11 (R-03, R-07): $CIY not found — cannot evaluate the docs-ci.yml topology"
 fi
 
 # PPZ — assertion-count floor (ADR-0083's vanishing-assertion class). No plant is declared on it:
