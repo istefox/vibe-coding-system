@@ -3972,3 +3972,236 @@ Key architectural decisions:
   what to re-read.
 
 Detail: `docs/architecture/ADR-0143-350-plant-registry-parallel.md`.
+
+## Decisions from the #313/#314 triage (ADR-0144)
+
+Two issues whose titles describe a change that measurement then refused. `literal-assertion-added`
+was re-measured by enabling it and scanning **every** non-merge commit reachable from `main` — 383,
+no sampling: 8 findings across 5 commits, **0 of them the behaviour it exists to catch**. Four are
+comments narrating an assertion, two are `printf` calls writing JSON fixtures, two are the
+detector's own fixture. `spec-coverage.sh`'s unrecognised-heading gap was measured by instrumenting
+the checker and running it over all 78 SPECs: the outside-every-recognised-section population is
+**empty in both branches**, the `DECL_N == 0` one and the mixed one nobody had counted.
+
+Key architectural decisions:
+
+- **A disabled detector is retired, not left disabled.** It shipped off at 25% precision under
+  ADR-0051 §D5 and stayed there because nobody remembers to delete a feature nobody can rely on.
+  The AWKGUARD interval probe went with it: it guarded only that rule, and a probe with no subject
+  is the shape rule 9 warns about.
+- **The retirement is bounded and says by what.** This corpus is documentation and Bash; the
+  detector was written for `assert <expr> == <literal>` in application code, which this repository
+  barely has. The decision is about THIS repository, and presenting the number as a general verdict
+  would overreach.
+- **Five assertions kept passing after their subject was deleted, which is why they had to go.**
+  `HA4a`, `HC5`, `HG3`, `HG4`, `HG5` each asserted an ABSENCE that had become trivially true. An
+  assertion satisfied by the deletion of its own subject reads as coverage and pins nothing.
+  `RET1`/`RET2` replace them with a reverse guard over the EXECUTION surface — comment lines
+  stripped first, so the header stays free to name what was retired without turning its own guard
+  red (rule 12).
+- **"No instances" is not a close.** #313's population is zero because two generator templates feed
+  75 of 78 SPECs, and one template edit would end that silently. `RH1` derives the recognised set by
+  RUNNING the predicate the checker runs — both files, in the checker's own load order — rather than
+  restating the heading list, which would pass while the rule drifted away from it.
+- **Widening was rejected for having no instance.** The recognised heading set is untouched, and so
+  is ADR-0072 §D5's asymmetry: nothing measured argues against it, and the measurement says the
+  branch is never reached.
+- **The plants corrected the assertions again.** `RET1`'s first form re-added `LIT_ENABLED` and the
+  assertion stayed green — the token list did not include the variable, so the needle did not reach
+  the mechanism it named. Second time in three days, after ADR-0143's `PP0`.
+- **A `set -u` failure inside a pipeline subshell fires the inherited `EXIT` trap.** One surviving
+  reference to a removed variable killed the `printf` subshell, whose inherited
+  `trap 'rm -rf "$TMP"' EXIT` deleted the shared fixture directory mid-run; fourteen later
+  assertions then failed for reasons that looked unrelated. `bash -n` passes on that file.
+
+Detail: `docs/architecture/ADR-0144-313-314-triage-outcomes.md`.
+
+## Decisions from the anchored-fired-predicate chain (ADR-0145)
+
+The registry decided a plant had fired with `grep -q "^FAIL: $aid"` — a prefix with no right anchor,
+so a plant declared for `SP5` was credited when `SP5b` failed instead. #355 said anchoring was easy
+but re-verifying the corpus afterwards was "the work, and it needs its own cycle". Measured first:
+**33 of 387 plants are exposed to such a collision and 0 are mis-credited**, because every one of the
+33 mutations turns the NAMED assertion red. The re-verification the issue deferred is that table, and
+it came back clean.
+
+Key architectural decisions:
+
+- **Measure the exposure and the defect separately.** "How many plants COULD be mis-credited" and
+  "how many ARE" are different questions with a factor of 33 between them, and only the second
+  decides whether the fix is a cycle or an afternoon. The second was answered by re-running each
+  exposed mutation and recording the full red set instead of a boolean.
+- **The emitted id set is derived by RUNNING each harness**, not by reading its source: what matters
+  is what the harness prints, because that is what the grep sees. `phase1.test.sh` prints
+  `ok   <label>` and emits no `PASS:` line at all, so its 6 plants were covered from the call sites
+  instead — weaker evidence, disclosed rather than skipped.
+- **The id is escaped before it reaches the regex.** Assertion ids are not all alphanumeric
+  (`CE-secret-scan.sh`), and an unescaped `.` would restore a looser match than the one being
+  removed — the issue's own defect surviving its own fix.
+- **One function, two call sites.** ADR-0140 built the vacuity guard to inherit the looseness on
+  purpose so the two halves would agree; they now share a source rather than a convention.
+- **The fixture manufactures what the corpus cannot show.** With 0 mis-credited plants in 387, an
+  assertion pinned on the real corpus would have passed before the change too. `PP6` builds the case:
+  a plant named `E1` whose mutation only `E1b` reads.
+- **The fixture's own harnesses had to be anchored first** — they grep `MARK-<id>`, and `MARK-E1`
+  matches `MARK-E1b`, so the fixture would have reproduced inside itself the defect it exists to
+  demonstrate.
+
+Detail: `docs/architecture/ADR-0145-355-anchored-fired-predicate.md`.
+
+## Decisions from the undefined-helper-scope chain (ADR-0146)
+
+ADR-0081 found the instance sideways: `pairs-completeness.test.sh` had no `ok()`/`bad()`, a draft
+called them anyway, and six assertions printed "command not found" while the suite reported
+`PASS=244 FAIL=0` and exited 0. Nothing here runs under `set -e`. Measured across all 82 harnesses
+before building anything: **zero** such calls today.
+
+Key architectural decisions:
+
+- **Getting to that zero took three attempts, and the wrong ones are the lesson.** 47 findings, none
+  real — the scan matched the English word "no" inside message strings, and `no` IS a helper here.
+  Then 3, none real — two `case` labels and an assignment, all in command position. Then 0, once the
+  scan tracked quote state ACROSS LINES (the messages wrap), masked heredoc bodies, and excluded
+  `name=` and `name)`.
+- **A detector reporting zero is a claim about the detector.** One `verdict` call was planted into a
+  copy of the corpus: the scan found exactly it, and `bash` confirmed the live behaviour — printed
+  on stderr, execution continues, exit unaffected. `HS2` keeps that demonstration in CI, because
+  `HS1` would be green with a broken scanner.
+- **A derived scan, not 82 copies of a runtime hook.** `command_not_found_handle` in every harness is
+  the same shared-helper problem ADR-0086 already refused, with more surface.
+- **The vocabulary is derived, never listed:** a helper is a function defined by two or more
+  harnesses. A hand-written list would be blind to the file that invents a new helper name (rule 8).
+- **R-02 was refused in the form it was written.** A per-file assertion-count floor is the instrument
+  ADR-0124 retired: a floor absorbs its own plant, so 49 new floors would be 49 lines that mostly
+  cannot fail — the false-green shape the issue exists to remove, added in bulk in its name. The
+  successor is #449, with the measurement and the four things to derive first.
+
+Detail: `docs/architecture/ADR-0146-310-undefined-helper-scope.md`.
+
+## Decisions from the producer-destination-anchor chain (ADR-0147)
+
+ADR-0095's `has_producer` counted a line as a producer if it named the target and carried the word
+"transition" anywhere. Measured over the corpus first: 28 targets, 45 pairs, and **every target has
+a genuine producer today** — the third issue running whose stated defect has no live instance.
+
+Key architectural decisions:
+
+- **The looseness was large and decidable.** On `step_6_review`, eleven lines counted as producers
+  and exactly one was an instruction: three negations, one negation wrapped onto a second line, four
+  narrations, one narrative arrow, and one line where the target is the SOURCE.
+- **What that cost was not precision, it was plantability.** TP1 could not be planted: delete the
+  one real producer and ten prose lines hold it green. Measured both ways on the same mutation — old
+  predicate `PASS=14 FAIL=0`, new predicate `FAIL: TP1 … undeclared: step_6_review`.
+- **The preceding word separates an instruction from prose, and form cannot** (ADR-0117, applied to
+  a second predicate). `the transition to X`, `before transitioning to X`, `it never blocks the
+  transition to X` are all narration and all decidable.
+- **An arrow whose left operand is the target is the target's SOURCE** — #355's right anchor in a
+  second place. The legal-source set is derived from the same pair table the targets come from;
+  `block the Step 5 → step_6_review` has no source at all.
+- **Paragraph joining was implemented and rejected on measurement.** It credited a second state with
+  a first state's `manifest-transition.sh` call and destroyed the `step_e1_plan` arrow attribution —
+  the exact form ADR-0095 had to add, and the regression R-03 names. Wrapping is handled by a
+  one-line lookback for the split negation instead.
+- **The residue is stated, not closed.** `transitioning to X` with no determiner in front reads as
+  an imperative whether or not it is one. That is English word order, not a parse.
+
+Detail: `docs/architecture/ADR-0147-300-producer-destination-anchor.md`.
+
+## Decisions from the in-place-assertion-edit chain (ADR-0148)
+
+ADR-0073 recorded the blind spot and declined to close it: an assertion edited in place removes one
+assert-bearing line and adds one, so `assert-removed`'s count comparison cannot fire. Its closing
+sentence is why the issue exists — anyone relying on the weakening gate for assertion integrity is
+relying on something that does not exist. The gate is wired into four paths that can commit with
+nobody present.
+
+Key architectural decisions:
+
+- **Re-measured before designing, and the answer held.** Every non-merge commit reachable from
+  `main` — 383, no sampling: the rule fires 6 times, **0 true positives**. Four are prose or
+  `ok`/`bad` message strings. The other two are genuine in-place edits that *raise* a floor
+  (15 → 18, 9 → 10), which the rule cannot distinguish because it sees a count, not a direction.
+- **The corpus grew 8% and the findings trebled while precision stayed at zero**, so 0-of-2 was not
+  a small-sample artefact. R-01 forbids shipping anything that does not beat it; zero of six does
+  not beat zero of two.
+- **Third refusal on the same script.** ADR-0051 §D5 shipped `literal-assertion-added` disabled
+  rather than face this; ADR-0144 retired it on 0 true positives in 383 commits; ADR-0073 declined a
+  sibling. The structural argument outranks all three measurements: correcting a wrong test and
+  relaxing a right one produce byte-identical diffs.
+- **The work was R-02, and the gap was exactly where it hurts.** The limit was stated in the script
+  header, at c2c Step 5 and at commit Step 1 — but not at CIRCUIT BREAKER B, which
+  `commit/SKILL.md` itself calls "the actual enforcement point", and not at autopilot-build's
+  breaker-B halt, the caller that runs unattended. The place most likely to be mistaken for coverage
+  was the place with no disclosure.
+- **Both numbers stay.** The header records 0-of-2 over 354 *and* 0-of-6 over 383. Overwriting the
+  older one would delete the evidence that a larger corpus did not change the answer.
+- **These assertions pin prose, deliberately** (rule 16). A green `WJ7` is evidence the sentence is
+  present, never evidence anyone read it.
+
+Detail: `docs/architecture/ADR-0148-311-in-place-assertion-edit-refusal.md`.
+
+## Decisions from the plant-declaration-grammar chain (ADR-0149)
+
+ADR-0108 named its own limit — replacement only, two of that session's plants were insertions and
+not expressible. Measured before designing, 383 plants over 43 files, and half the premise had
+already dissolved.
+
+Key architectural decisions:
+
+- **Deletion was never the problem.** 30 of 383 plants already neutralise with `true`, `:` or
+  `if false; then`, and one prepends `exit 42;` on the same line, which is a same-line insertion
+  spelled as a replacement. R-01 as written was satisfied on the day it was written.
+- **What is inexpressible is adding a LINE** — the shape an exhaustiveness assertion guards: an
+  extra table row, a duplicated transition pair, a second heading where the scan counts one.
+- **Measuring found something worse than the issue.** The header says a ` | ` sequence cannot appear
+  inside a field and the error says "need 4 fields", and *nothing checked the count*. One
+  declaration had shipped with six: `A25` truncated its needle at the first inner pipe, substituted
+  `wc -l` for the head of a pipeline, and produced a syntax error instead of `P=0`. The harness died
+  of it and the plant was credited as fired — a plant that pins nothing, inside the mechanism built
+  to find assertions that pin nothing (rule 17).
+- **Enforce first, widen second.** A `\n` escape in a field that can be silently truncated is a
+  widening built on a hole. Three fields is now the declared deletion form — what the code already
+  did by accident, stated so the next reader does not "fix" it.
+- **Two escapes and only two**, `\n` and `\\`. Backward compatible by measurement: zero of the 383
+  existing replacements contains a backslash.
+- **Every new assertion distinguishes.** A `\n` left literal keeps the added text on one line, so
+  `grep -c` still counts one row and the plant reports NOFIRE — which is what makes `PP8` a test
+  rather than a description. `PP9` runs one mutation past two assertions, one that must stay green
+  and one that must go red, because "no double backslash" alone is satisfied by a mutation that
+  never landed.
+
+Detail: `docs/architecture/ADR-0149-305-plant-declaration-grammar.md`.
+
+## Decisions from the vanished-assertion-baseline chain (ADR-0150)
+
+ADR-0146 refused #310's per-file assertion floor and split the real question out as #449: a frozen
+per-file baseline, red on any drop, bumped deliberately. Four things to measure first. All four were
+measured, plus two the issue did not ask for, and the design does not survive them.
+
+Key architectural decisions:
+
+- **The static count is the wrong number, and the runtime one is already free.** A static count of
+  `ok`/`bad` call sites agrees with the runtime count in 3 of 83 harnesses; the delta runs from −98
+  to +256, because assertions are `if/else` pairs of which one branch executes and some are emitted
+  inside a loop. But 77 of 83 harnesses already print `PASS=N`, matching the emitted count in 74.
+  The issue's cost objection — a second suite run does not fit the 300s ceiling — dissolves.
+- **95 of the last 100 harness-touching commits add or remove an assertion.** The issue set this as
+  the deciding question, guard or tax. A line bumped on nineteen commits out of twenty is a line
+  people learn to bump without reading.
+- **No assertion has vanished silently.** Three net drops in those 100 commits, all deliberate, each
+  leaving a comment where the assertion stood naming the issue and the ADR. Fourth issue in a row
+  whose stated defect has no live instance.
+- **The added population is real and is stated anyway:** 2622 of 2993 assertions carry no plant. The
+  argument is not that the exposure is imaginary, it is that the proposed instrument costs more
+  attention than it returns.
+- **The issue named the wrong token.** A vanished planted assertion is caught as `NOFIRE`, not
+  `BADPLANT` — the needle lives in the target file and still resolves. Correct outcome, wrong name,
+  and the two have different repairs.
+- **The practice that worked becomes rule 19**, and it is an instruction for 88% of assertions, an
+  enforcement for the planted 12%. No diff-level rule can close the gap: measured twice on this
+  exact question at zero precision (ADR-0073, ADR-0148).
+- **Two of the measurement's own heuristics were wrong and were caught by inspection** — one counted
+  loops over literal lists, the other missed a denominator guard worded differently from the grep
+  looking for it. Rule 2's second clause, applied to a measurement rather than to a plant.
+
+Detail: `docs/architecture/ADR-0150-449-vanished-assertion-baseline-refusal.md`.

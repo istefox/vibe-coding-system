@@ -27,6 +27,7 @@
 # a waiver travels with the file it excuses, and so does a plant.
 #
 #   # plant: <assertion-id> | <path-relative-to-staging> | <needle> | <replacement>
+#   # plant: <assertion-id> | <path-relative-to-staging> | <needle>                  <- deletes it
 #
 # The path is staging-relative, with one exception: a literal `../docs/` prefix reaches the docs
 # copy the sandbox already makes. Any other `..` is refused. See PATH RESOLUTION below for why that
@@ -36,7 +37,16 @@
 #
 # The needle is matched with its words joined on `\s+`, so a clause that WRAPS is still found. That
 # is today's lesson put into the mechanism rather than left to the author's memory (ADR-0099).
-# A ` | ` sequence cannot appear inside a field; that is the one syntax limit and it is deliberate.
+#
+# THREE OR FOUR FIELDS, never more, and a ` | ` sequence cannot appear inside one. That was already
+# the stated syntax and until issue #305 NOTHING CHECKED IT — one declaration had shipped with six
+# fields and was silently mutating something its author never wrote. The count is enforced where the
+# fields are parsed; the story is there.
+#
+# THE REPLACEMENT TAKES TWO ESCAPES: `\n` is a newline and `\\` is one backslash. A declaration is
+# one line, so without them a plant could not ADD a line — the insertion shape ADR-0108 named as a
+# limit. Deletion never needed them: neutralising with `true`, `:` or `if false; then` is the
+# established form and the three-field spelling above is the explicit one.
 #
 # EXACTLY ONE MATCH IS REQUIRED. Zero means the needle rotted; more than one means the plant hits
 # sites it did not intend. Both are defects in the PLANT, and both happened the day this was
@@ -74,6 +84,30 @@ PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
+# red_re <assertion-id> — the ERE that decides whether THIS assertion went red (issue #355).
+#
+# It used to be `^FAIL: <aid>`, an unanchored PREFIX, so a plant declared for `SP5` was credited
+# when `SP5b`, `SP5c` or `SP5d` failed instead — a different assertion, possibly for an unrelated
+# reason, in the direction that reads as coverage.
+#
+# Measured 2026-08-16 before changing it, because the issue said re-verifying the corpus afterwards
+# was its own cycle: **33 of 387 plants sit on such a collision and 0 of them are mis-credited**.
+# Every one of the 33 mutations turns the NAMED assertion red, so the anchor is a no-op on today's
+# corpus and pure hazard removal — the exposure is what grows, not the defect count.
+#
+# The boundary is `:?` then whitespace or end of line, because that is the emitted form across the
+# corpus: `FAIL: <id>: text` and `FAIL: <id> text`. The id is escaped before it reaches the regex —
+# ids are not all alphanumeric (`CE-secret-scan.sh` is one), and an unescaped `.` would restore a
+# looser match than the one being removed.
+#
+# ONE function, two call sites, deliberately: the fired check and the vacuity guard must answer the
+# same question about the same id or the disagreement moves instead of closing (ADR-0140 kept them
+# in sync by hand; ADR-0086's criterion says a shared source is required when two copies giving
+# different answers would be a defect).
+red_re() {
+  printf '^FAIL: %s:?([[:space:]]|$)' "$(printf '%s' "$1" | sed 's/[][\.*^$(){}?+|\/]/\\&/g')"
+}
+
 # build_sandbox <dir> — ONE construction, used by the baseline pass and every mutation run.
 #
 # ADR-0086's criterion applies exactly: the baseline and the mutation runs must answer the same
@@ -90,6 +124,7 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 # (`git ls-files`, `git check-ignore`), and at least one harness detects the absence of a checkout
 # in order to SKIP an assertion it cannot evaluate — copying a `.git` in would change what
 # isolation means here. Those two are covered by the baseline instead of by the environment.
+
 build_sandbox() {
   _sb="$1"
   mkdir -p "$_sb"
@@ -127,9 +162,27 @@ if [ "${1:-}" = "--worker" ]; then
   tgt=$(printf '%s' "$payload"   | awk -F' \\| ' '{print $2}' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
   ndl=$(printf '%s' "$payload"   | awk -F' \\| ' '{print $3}')
   rep=$(printf '%s' "$payload"   | awk -F' \\| ' '{print $4}')
+  nfd=$(printf '%s' "$payload"   | awk -F' \\| ' '{print NF}')
 
-  if [ -z "$aid" ] || [ -z "$tgt" ] || [ -z "$ndl" ]; then
-    emit BADPLANT "    $tfile: malformed declaration (need 4 fields separated by ' | ')"
+  # THE FIELD COUNT IS CHECKED, and until issue #305 it was not. The message below has said "need 4
+  # fields" since the registry was written while the test beside it asked only that the first three
+  # be non-empty, so a declaration with FIVE OR MORE fields was accepted and silently truncated:
+  # `$3` stopped at the first ` | ` inside the needle and `$4` became whatever followed it.
+  #
+  # One had shipped. `A25` in acceptance-contract.test.sh declared a needle containing
+  # `… | wc -l | tr -d ' '`, so the registry substituted `wc -l` for the head of the pipeline and
+  # produced `wc -l | wc -l | tr -d ' ')` — a syntax error, not the intended `P=0`. The harness went
+  # red for the wrong reason and the plant was credited as having fired. A plant that pins nothing,
+  # inside the mechanism built to find assertions that pin nothing (rule 17: a contract stated in
+  # one place and enforced in none).
+  #
+  # THREE fields is legal and means DELETE the needle — an empty replacement. That is what the code
+  # already did by accident, since awk yields "" for a field that does not exist; making it a stated
+  # form is what stops the next reader from "fixing" it. The alternative spelling, four fields with
+  # an empty fourth, requires a trailing space after the last ` | ` that any editor will strip, so
+  # it is not offered.
+  if [ -z "$aid" ] || [ -z "$tgt" ] || [ -z "$ndl" ] || [ "$nfd" -lt 3 ] || [ "$nfd" -gt 4 ]; then
+    emit BADPLANT "    $tfile [${aid:-?}]: malformed declaration ($nfd field(s); need 3 to delete the needle or 4 to replace it, separated by ' | ', and ' | ' cannot appear INSIDE a field)"
     exit 0
   fi
 
@@ -143,7 +196,7 @@ if [ "${1:-}" = "--worker" ]; then
   # agree. That predicate is a PREFIX match (issue #355, still open), so this guard inherits the
   # looseness and may over-refuse a plant whose id is a prefix of an already-red one. Over-refusal
   # fails loud, which is the safe direction; under-refusal is the defect being fixed.
-  if [ -f "$WORK/base/$tfile" ] && grep -q "^FAIL: $aid" "$WORK/base/$tfile"; then
+  if [ -f "$WORK/base/$tfile" ] && grep -qE "$(red_re "$aid")" "$WORK/base/$tfile"; then
     emit VACUOUS "    $tfile [$aid] — already RED in the unmutated sandbox; firing here would prove nothing"
     exit 0
   fi
@@ -195,9 +248,38 @@ if [ "${1:-}" = "--worker" ]; then
   # Substitute. The needle's words are joined on \s+ so a wrapped clause is still matched, and the
   # replacement is applied through a lambda so backslashes in it are literal rather than group
   # references.
+  #
+  # TWO ESCAPES IN THE REPLACEMENT, and only two (issue #305). `\n` becomes a newline and `\\`
+  # becomes one backslash; every other backslash stays exactly as written.
+  #
+  # A declaration is ONE LINE, so before this the replacement could not contain a line break and an
+  # INSERTION of a new line was inexpressible — ADR-0108 named it as a limit rather than working
+  # around it. Deletion never was: 30 of the 383 plants already neutralise with `true`, `:` or
+  # `if false; then`, and one prepends `exit 42;` on the same line. What was missing is the shape
+  # that ADDS a line: an extra entry in a table an assertion says is exhaustive, a second heading
+  # where the check counts one, a duplicated transition pair. Write those as
+  # `<the existing line>\n<the added line>`.
+  #
+  # Backward compatible by measurement, not by hope: zero of the 383 existing replacements contains
+  # a backslash, so no declaration changes meaning. `PP9` pins `\\` so the first one that needs a
+  # literal backslash has a spelling.
   MRES=$(python3 - "$TARGET" "$ndl" "$rep" <<'PY'
 import re, sys
 path, needle, repl = sys.argv[1], sys.argv[2], sys.argv[3]
+
+def unescape(s):
+    out, i = [], 0
+    while i < len(s):
+        if s[i] == '\\' and i + 1 < len(s):
+            nxt = s[i + 1]
+            if nxt == 'n':
+                out.append('\n'); i += 2; continue
+            if nxt == '\\':
+                out.append('\\'); i += 2; continue
+        out.append(s[i]); i += 1
+    return ''.join(out)
+
+repl = unescape(repl)
 src = open(path, errors='replace').read()
 # A `# plant:` line CONTAINS its own needle verbatim, so a plant whose target is the very test
 # file that declares it always matched twice and was rejected as malformed — the whole class of
@@ -230,7 +312,7 @@ PY
   # bash 3.2 on macOS swallows it, so it is invisible where this file is written and visible where
   # it runs. One stray line whose presence depends on timing is enough to make the one-worker /
   # many-worker diff differ, and that diff is the only evidence that concurrency changed nothing.
-  if grep -q "^FAIL: $aid" <<PLANT_HARNESS_OUTPUT
+  if grep -qE "$(red_re "$aid")" <<PLANT_HARNESS_OUTPUT
 $OUT
 PLANT_HARNESS_OUTPUT
   then

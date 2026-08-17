@@ -1178,28 +1178,29 @@ wave order.
 
 - [ ] the collapsed snapshot commits live in the reflog only and a git gc destroys them  (issue #298)
 - [ ] fence_is_abort_capable is lexical and four measured fences abort from outside it  (issue #299)
-- [ ] a producer is any line that mentions the target so a target only talked about looks produced  (issue #300)
+- [x] a producer is any line that mentions the target so a target only talked about looks produced  (issue #300)  (completed: 2026-08-16 — 28 of 28 targets already had a real producer; 11 producers on `step_6_review` and 1 of them real, so TP1 could not be planted. Destination-anchored, TP1 planted, ADR-0147)
 - [ ] the transcript-scan population stops at two roots  (issue #301)
 - [ ] the grant-coverage guard matches a bare Bash token so an unrestricted grant in another form passes  (issue #302)
 - [ ] the interpreter enumeration is a fixed list and the escapes are pinned nowhere  (issue #303)
 - [ ] the reason floor is duplicated in seven derived guards and nothing stops one drifting  (issue #304)
-- [ ] the plant registry cannot express an insertion  (issue #305)
+- [x] the plant registry cannot express an insertion  (issue #305)  (completed: 2026-08-16 — deletion and same-line insertion were already expressible; a LINE was not. Found measuring: the "4 fields" contract was enforced nowhere and `A25` had been mutating a syntax error for months. Enforced, then `\n`/`\\` added, ADR-0149)
 - [ ] the deployed-only registry's reasons are true today and checked by nothing  (issue #306)
 - [ ] hooks.json is outside PAIRS completeness by a deferred decision  (issue #307)
 - [ ] thirteen skill-private test runners exercise the deployed copy and are dark to CI  (issue #308)
 - [ ] settings.json is never synced and five guardrail hooks are wired by hand  (issue #309)
-- [ ] an undefined assertion helper is indistinguishable from a passing assertion  (issue #310)
+- [x] an undefined assertion helper is indistinguishable from a passing assertion  (issue #310)  (completed: 2026-08-16 — population measured 0 of 82, guarded; R-02 refused and split to #449, ADR-0146)
 - [ ] a manifest terminal by status is exempt from invariant 4 and the state machine still lets it transition  (issue #335)
 - [ ] set-branch-protection.sh unions one context while the audit derives three  (issue #336)
-- [ ] plant-check.sh decides a plant fired with a PREFIX match: 26 of 166 plants pin nothing  (issue #355)
+- [x] plant-check.sh decides a plant fired with a PREFIX match  (issue #355)  (completed: 2026-08-16 — measured 33 of 387 exposed, 0 mis-credited; anchored, ADR-0145)
 - [x] plant-check.sh cost scales as (plants x target-file runtime), not as their sum  (issue #350)  (completed: 2026-08-15)
 
 ##### Wave 3 — HIGH: detector precision, and the decisions
 
-- [ ] the weakening scan is blind to an in-place assertion edit  (issue #311)
+- [x] the weakening scan is blind to an in-place assertion edit  (issue #311)  (completed: 2026-08-16 — re-measured 0 of 6 over 383 commits, so no detector; disclosed at CIRCUIT BREAKER B and autopilot-build, the two callers that never said so, ADR-0148)
 - [x] spec-coverage measures citation not implementation  (issue #312)  (completed: 2026-08-14)
-- [ ] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)
-- [ ] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)
+- [x] spec-coverage is wholly inert for a SPEC whose criteria sit under an unrecognised heading  (issue #313)  (completed: 2026-08-16 — measured to zero instances, closed with a reverse guard, ADR-0144)
+- [x] literal-assertion-added shipped disabled at 25 percent precision and nothing has re-measured it  (issue #314)  (completed: 2026-08-16 — retired on 0 true positives in 383 commits, ADR-0144)
+- [x] a vanished assertion is invisible in 49 of 82 harnesses, and a per-file floor is the wrong instrument  (issue #449)  (completed: 2026-08-17 — refused: 95 of the last 100 harness-touching commits would need a baseline bump, and 3 of 3 measured drops are deliberate with an in-place note. Practice promoted to rule 19, ADR-0150)
 - [ ] The Step 5 checkpoint has no mechanism to tell an expected red from a real one  (issue #273)
 - [ ] seventeen ADRs carry the same instruction-not-an-enforcement paragraph and the class is undecided  (issue #315)
 
@@ -1548,7 +1549,7 @@ itself, so the existing chain keeps principle 11.1.3 intact. Its deliverable is 
 a machine runs, so each `R-NN` is an executed case rather than a citation — the ADR-0138 lesson
 applied at product scale.
 
-- [ ] the acceptance contract, its Swift adapter and harness — `ACCEPTANCE-RESULT` / `ACCEPTANCE-CASE` / `ACCEPTANCE-HALT`, TOFU-gated like `.claude/test-cmd`  (issue #439)
+- [x] the acceptance contract, its Swift adapter and harness — `ACCEPTANCE-RESULT` / `ACCEPTANCE-CASE` / `ACCEPTANCE-HALT`, TOFU-gated like `.claude/test-cmd`  (issue #439, PR #443, ADR-0141)
 - [ ] the `brief-to-app` interview — brief carried verbatim, `design-brainstorm` and `macos-ux` composed rather than reinvented, ending by printing the `/goal` contract  (issue #439)
 - [ ] the ADR, the scoped blueprint deviation, the PAIRS/CI wiring, and the dangling `web-e2e-test` reference resolved  (issue #439)
 
@@ -1557,6 +1558,12 @@ standalone files (`acceptance-run.sh`, `approve-acceptance-cmd.sh`) and touches 
 executes mid-flight, which is the Phase 12 test. Waves 2 and 3 edit `concept-to-code`'s neighbours,
 the blueprint and the PAIRS registry — a run that breaks those breaks itself, and its own green
 stops being evidence.
+
+*Overtaken 2026-08-15: Wave 1 shipped attended, and the run is the reason the note stays. Four
+defects surfaced, none of them by review — two vacuous assertions found by their own plants, a
+wrong permission bit found by the first end-to-end run, and a `-f` on a pipe found only by the
+Linux CI after a green macOS suite. An unattended run would have committed the last one twice
+before anything noticed.*
 
 **Ordering is not negotiable here.** Wave 1 first because it is the only part that exists nowhere,
 and because it is independently useful: pointed at the current chain's output it measures the very

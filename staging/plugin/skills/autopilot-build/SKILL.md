@@ -475,6 +475,11 @@ bash -c "$(cat $project_root/.claude/test-cmd)"
   abort_reason="test weakening flagged by review-triage-fix in Step 6". CIRCUIT BREAKER B
   flags and never reverts, so without this bullet a weakening introduced by the fix cycle
   itself would reach the commit unstopped.
+  **The absence of that BLOCKER is not evidence that no test was weakened (ADR-0148, issue #311).**
+  An assertion edited in place removes one assert-bearing line and adds one, so the count comparison
+  behind CIRCUIT BREAKER B cannot fire and no detector exists for it — measured 0 of 6 over 383
+  commits. This run is unattended by definition, so nothing downstream will catch it either: the
+  morning report is where a human first sees the diff, and that is the only place it is seen.
 
 Set `step6_mode` in manifest via bash sed after dispatch completes.
 

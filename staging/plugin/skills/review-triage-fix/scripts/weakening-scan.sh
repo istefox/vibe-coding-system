@@ -12,48 +12,26 @@
 # information and no test execution (ADR-0051 §D2). Promoting it into that grep is the most
 # likely future "fix" and it is exactly the wrong one.
 #
-# literal-assertion-added SHIPS DISABLED BY DEFAULT (ADR-0051 §D5, Task 4 measurement recorded in
-# the ADR and the feature report). It requires both halves of the condition (an implementation
-# file AND a test file change in the same diff) and a literal comparison introduced in the test —
-# exactly the shape of adding a test for any new constant, so on a synthetic 5-diff legitimate-
-# vs-malicious sample it fired on 4/5, three of them ordinary legitimate co-changes. Real-history
-# measurement against this repo's own last 153 commits produced zero firings either way (this
-# repo's bash test idiom does not use assert-style tokens at all), so the repo's own history gave
-# no evidence either for or against — the synthetic sample is what settled it. The code stays
-# wired and tested; set WEAKENING_SCAN_LITERAL_ASSERTION=1 to opt in.
+# literal-assertion-added IS RETIRED (issue #314, ADR-0144). It shipped disabled by default under
+# ADR-0051 §D5 at a measured 25% precision, and a disabled detector is a feature nobody can rely on
+# and nobody remembers to delete. Re-measured 2026-08-16 by enabling it and scanning **every**
+# non-merge commit reachable from `main` — 383 commits, no sampling — it produced 8 findings across
+# 5 commits and **0 of them were the behaviour it exists to catch**: four are comments narrating an
+# assertion in prose, two are `printf` calls writing JSON fixtures, and two are this detector's own
+# test fixture. Three of the eight are comments written the day before the measurement, which is
+# rule 12 in a new place: the needle matched the prose explaining the thing.
 #
-# AWKGUARD (ADR-0051 Task 2, mirroring ADR-0046 §D4's secret-scan.sh probe): when opted in, the
-# literal-assertion-added detector requires ERE interval syntax ({2,}) to require a literal of at
-# least two characters (filtering the extremely common trivial `== 0`/`== ""` comparisons that
-# would otherwise dominate its output even further). An awk without interval support does not
-# error on {2,} — it treats the braces as literal characters and the rule silently matches
-# nothing. A check that reports nothing must be distinguishable from a check that finds nothing,
-# so this is probed at start-up, but ONLY when the detector is enabled — probing a disabled
-# detector's requirements has nothing to report. On failure, literal-assertion-added alone is
-# skipped (every other detector, WEAKENED or SUSPECT, uses only +/*/?/alternation and needs no
-# interval support) and an AWKGUARD line is emitted instead of a possibly-false CLEAN.
-# WEAKENING_SCAN_AWK overrides the interpreter so this path is testable.
+# The caveat that bounds the number, because it changes what the number licenses: this corpus is
+# documentation and Bash. The detector was written for `assert <expr> == <literal>` in application
+# code, of which this repository has almost none. So the retirement is a decision ABOUT THIS
+# REPOSITORY and says nothing about the detector in a Python or TypeScript codebase.
+#
+# The AWKGUARD interval probe went with it. It existed only for this detector — every other rule
+# here uses +/*/?/alternation and needs no interval support — so with the detector gone the probe
+# had nothing left to guard, and a probe with no subject is the shape rule 9 warns about.
 set -u
 
 AWK="${WEAKENING_SCAN_AWK:-awk}"
-LIT_ENABLED="${WEAKENING_SCAN_LITERAL_ASSERTION:-0}"
-
-# --- the interval probe. Same construction discipline as secret-scan.sh: built by concatenation
-# so this file is not itself a corpus violation for any future secret-content scan. Only run when
-# the detector it guards is actually enabled. ---
-AWKGUARD_LITERAL=0
-if [ "$LIT_ENABLED" = "1" ]; then
-  _probe="aa"; _probe="${_probe}a"
-  _probe_out=$(printf '%s\n' "$_probe" \
-    | "$AWK" '$0 ~ /^a{2,}$/ { print "y" }' 2>/dev/null)
-  if [ "$_probe_out" != "y" ]; then
-    AWKGUARD_LITERAL=1
-    printf 'weakening-scan: WARNING — the awk in use does not support ERE interval syntax ({2,}).\n' >&2
-    printf 'weakening-scan: literal-assertion-added is disabled for this run (see AWKGUARD line).\n' >&2
-    printf 'weakening-scan: awk = %s ; version = %s\n' "$AWK" \
-      "$("$AWK" --version 2>&1 | head -1 || echo unknown)" >&2
-  fi
-fi
 
 TMPD=$(mktemp -d) || { printf 'weakening-scan: cannot create a temp directory\n' >&2; exit 0; }
 trap 'rm -rf "$TMPD"' EXIT
@@ -85,8 +63,16 @@ function is_test(p){ return (p ~ /(^|\/)tests?\//) || (p ~ /(^|\/)spec\//) \
 #     "assertion" and an `ok "…"` message containing "asserts". Precision on the observed sample:
 #     0 of 2. A signal that is always wrong is one its readers learn to dismiss, which is how a
 #     detector makes the CLEAN line here mean LESS rather than more (ADR-0048 §D7).
+#   - RE-MEASURED 2026-08-16 (issue #311, ADR-0148) over **every** non-merge commit reachable from
+#     `main` — 383 commits, no sampling. The same rule fires 6 times and is STILL 0 of 6. Four hits
+#     are prose or `ok`/`bad` message strings. The other two are genuine in-place assertion edits
+#     and both RAISE a floor (15 → 18, 9 → 10), which is the opposite of weakening: the rule cannot
+#     see direction, only that a count matched. A larger corpus moved the finding count and not the
+#     precision, so the 0-of-2 above is not a small-sample artefact.
 #   - ADR-0051 §D5 reached the same wall on this same script and shipped `literal-assertion-added`
-#     disabled by default for it. This is that precedent applied one step earlier: not shipped.
+#     disabled by default for it. That detector has since been RETIRED on measurement (#314,
+#     ADR-0144: 0 true positives in 383 commits), which makes the precedent stronger rather than
+#     weaker: this is it applied one step earlier, not shipped at all.
 #
 # So the blind spot is real, permanent for now, and written down instead of papered over. A CLEAN
 # line from this script means "none of the detectors below fired", never "no weakening occurred".
@@ -151,17 +137,6 @@ function is_log_or_rethrow(s){
 }
 function is_catch_close(s){
   return (s ~ /^\}[ \t]*$/) || (s ~ /^end[ \t]*$/)
-}
-
-# literal-assertion-added: an assertion whose compared value is a literal (>=2 chars/digits —
-# the interval-gated part; requires AWKGUARD_LITERAL_OK).
-function is_literal_assert(s){
-  if (!(s ~ /assert|expect\(|XCTAssert|EXPECT_|ASSERT_|require\.|should|assertEqual|toBe\(/)) return 0
-  if (s ~ /(==|,)[ \t]*-?[0-9]{2,}([^0-9]|$)/) return 1
-  if (s ~ /(==|,)[ \t]*-?[0-9]+\.[0-9]{2,}/) return 1
-  if (s ~ /(==|,)[ \t]*"[^"]{2,}"/) return 1
-  if (s ~ /(==|,)[ \t]*'"'"'[^'"'"']{2,}'"'"'/) return 1
-  return 0
 }
 
 function flush(){
@@ -255,13 +230,6 @@ function close_catch(){
     }
     if(is_public_sym(a)) add_sig_seen[pub_name(a)]=1
 
-    # literal-assertion-added: SHIPS DISABLED BY DEFAULT (see header, ADR-0051 §D5) — gated on
-    # LIT_ENABLED, independent of the awk-capability gate AWKGUARD_LITERAL_OK. Buffered globally,
-    # only emitted if an impl (non-test) file also changed somewhere in the diff (ADR-0051 §D1).
-    if(testf && LIT_ENABLED && AWKGUARD_LITERAL_OK && is_literal_assert(a)){
-      lit_n++; lit_file[lit_n]=file; lit_ln[lit_n]=cur_ln
-    }
-
     # swallowed-error: only newly-introduced (added) catch/except/rescue blocks.
     a_lt=a; gsub(/^[ \t]+/,"",a_lt)
     if(is_catch_open(a_lt)){
@@ -301,31 +269,17 @@ function close_catch(){
 }
 END{
   flush(); close_test(); close_catch()
-  if(g_impl_changed){
-    for(i=1;i<=lit_n;i++) print "SUSPECT\t" lit_file[i] "\tliteral-assertion-added\t" lit_ln[i]
-  }
 }
 AWKEOF
 
 _scan_input="$TMPD/in.diff"
 cat >"$_scan_input"
 
-_out=$("$AWK" -v LIT_ENABLED="$([ "$LIT_ENABLED" = "1" ] && echo 1 || echo 0)" \
-  -v AWKGUARD_LITERAL_OK="$([ "$AWKGUARD_LITERAL" -eq 1 ] && echo 0 || echo 1)" \
-  -f "$TMPD/scan.awk" <"$_scan_input")
+_out=$("$AWK" -f "$TMPD/scan.awk" <"$_scan_input")
 
-if [ "$AWKGUARD_LITERAL" -eq 1 ]; then
-  _guard_line="AWKGUARD	literal-assertion-added	interval-syntax-unsupported"
-  if [ -n "$_out" ]; then
-    printf '%s\n%s\n' "$_out" "$_guard_line"
-  else
-    printf '%s\n' "$_guard_line"
-  fi
+if [ -z "$_out" ]; then
+  echo "CLEAN"
 else
-  if [ -z "$_out" ]; then
-    echo "CLEAN"
-  else
-    printf '%s\n' "$_out"
-  fi
+  printf '%s\n' "$_out"
 fi
 exit 0
