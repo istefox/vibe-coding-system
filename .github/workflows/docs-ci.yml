@@ -78,6 +78,48 @@ jobs:
           name: plant-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/plant-shard-${{ matrix.shard }}.tsv
 
+  # ================================================================================================
+  # TEMPORARY — R-04's measurement arm. DELETE THIS JOB BEFORE THE PULL REQUEST MERGES (issue #447,
+  # ADR-0151, plan Task 9). It is not a required context and nothing depends on it.
+  #
+  # WHY IT EXISTS AT ALL. #350's device held the machine constant and compared both arms inside ONE
+  # job. Sharding cannot do that, because separate machines are the whole point of the change. This
+  # is the closest available substitute: the sequential arm runs in the SAME workflow run, from the
+  # SAME commit, on the SAME image, started at the same time as the four shards — everything equal
+  # except the machine draw, which is precisely what is NOT controlled.
+  #
+  # So this produces a comparison, not a controlled one, and the difference is why the plan asks for
+  # THREE runs and a reported spread rather than one number against one number. The sequential step
+  # alone has measured 20m07s, 23m32s and 25m51s on three separate occasions — a spread wider than
+  # the effect being measured. A single pair of numbers from this job would be worse than no number,
+  # because it would read as settled.
+  # ================================================================================================
+  plant-sequential-TEMP:
+    name: plant-sequential-TEMP
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      # Same build dependency as the shard job, for the same reason: the registry re-runs
+      # fence-contract-coverage.test.sh under mutation and without zsh every plant in it is VACUOUS.
+      - name: Install zsh (a dependency of the harnesses this job re-runs under mutation)
+        run: |
+          set -e
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+          fi
+          zsh --version
+
+      - name: Run the plant registry, whole population, one machine
+        env:
+          PLANT_SHARDS: 1
+          PLANT_SHARD: 1
+        run: |
+          echo "runner cores: $(nproc)"
+          bash staging/plugin/scripts/tests/plant-check.sh
+
   shell-tests:
     name: shell-tests
     runs-on: ubuntu-latest
