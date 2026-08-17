@@ -258,7 +258,7 @@ assertion below fails at the end of this task; that is the point.
 
 Do **not** modify `selftest.sh` here — it is inside the skill tree and belongs to Task 3.
 
-Budget: `staging/plugin/scripts/tests/project-tasks-ledger.test.sh` (~260 lines).
+Budget: staging/plugin/scripts/tests/project-tasks-ledger.test.sh (~260 lines)
 
 ### Task 2 — Vendor byte-identically, wire PAIRS, remove the stale waiver, append to CI (R-01, R-02, R-03)
 
@@ -287,8 +287,7 @@ separated (fact 1).
 copy are byte-identical, and this is the only moment in the feature where that is true. Record the
 output in the task report. CI cannot check this: it has no `$HOME/.claude`.
 
-Budget: `staging/plugin/skills/project-tasks/**`, `staging/sync-to-claude.sh`,
-`.github/workflows/docs-ci.yml` (~30 lines changed outside the copied files).
+Budget: staging/plugin/skills/project-tasks/** (~0 lines, byte-identical copy), staging/sync-to-claude.sh (~12 lines), .github/workflows/docs-ci.yml (~1 line).
 
 ### Task 3 — Narrow the marker predicate, in the vendored copy only (R-15)
 
@@ -322,8 +321,7 @@ the repo root must report **zero** `MARKER` records for
 `staging/plugin/scripts/tests/recovery-preflight.test.sh`, and zero for `SPEC.md`. Record the
 before/after counts (5 before) in the task report.
 
-Budget: `staging/plugin/skills/project-tasks/scripts/scan.sh`,
-`staging/plugin/skills/project-tasks/scripts/selftest.sh` (~90 lines).
+Budget: staging/plugin/skills/project-tasks/scripts/scan.sh (~60 lines), staging/plugin/skills/project-tasks/scripts/selftest.sh (~30 lines).
 
 ### Task 4 — The GitHub-read assertions, written RED (R-04, R-05, R-06)
 
@@ -356,7 +354,7 @@ through `--issues-json <file>`; nothing here calls `gh`, touches the network or 
 Each block's comment header cites its ids (`# NT13/NT13b (R-05) — …`) so the scope filter admits
 them (ADR-0138).
 
-Budget: `staging/plugin/scripts/tests/project-tasks-ledger.test.sh` (~150 lines added).
+Budget: staging/plugin/scripts/tests/project-tasks-ledger.test.sh (~150 lines)
 
 ### Task 5 — Write `gh-issues.sh` (R-04, R-05, R-06)
 
@@ -391,8 +389,7 @@ Records (TSV):
   section is exit 4 (`NT13`). Guard the denominator, not only the matches (rule 7).
 - Writes nothing, ever. Bash 3.2 clean.
 
-Budget: `staging/plugin/skills/project-tasks/scripts/gh-issues.sh`, `staging/sync-to-claude.sh`
-(~150 lines).
+Budget: staging/plugin/skills/project-tasks/scripts/gh-issues.sh (~148 lines), staging/sync-to-claude.sh (~2 lines).
 
 ### Task 6 — The ledger-merge assertions, written RED (R-07, R-08, R-09, R-10, R-11, R-12, R-13, R-14, R-18)
 
@@ -440,7 +437,7 @@ Budget: `staging/plugin/skills/project-tasks/scripts/gh-issues.sh`, `staging/syn
 Every block's comment header cites its ids. `NT16`'s header additionally records that it is the
 contract assertion of ADR-0153 §D2.
 
-Budget: `staging/plugin/scripts/tests/project-tasks-ledger.test.sh` (~320 lines added).
+Budget: staging/plugin/scripts/tests/project-tasks-ledger.test.sh (~320 lines)
 
 ### Task 7 — Write `ledger-merge.sh` (R-07, R-08, R-09, R-10, R-11, R-12, R-13, R-14, R-18)
 
@@ -486,8 +483,7 @@ Design points that are not negotiable:
 - Bash 3.2 driving `awk`. No `python3`, no `jq` (ADR-0153 alternatives 3 and 4). One file, not a
   separate `.awk` — one consumer, so ADR-0086's criterion says do not extract.
 
-Budget: `staging/plugin/skills/project-tasks/scripts/ledger-merge.sh`, `staging/sync-to-claude.sh`
-(~380 lines).
+Budget: staging/plugin/skills/project-tasks/scripts/ledger-merge.sh (~378 lines), staging/sync-to-claude.sh (~2 lines).
 
 ### Task 8 — The skill text, the reference docs, the ledger reshape and the chain wiring (R-16, R-17, R-18, R-19, R-20)
 
@@ -519,10 +515,7 @@ Budget: `staging/plugin/skills/project-tasks/scripts/ledger-merge.sh`, `staging/
    untouched, and move `VCS-022`/`VCS-023` to `Done` with today's date once Tasks 2 and 3 have
    landed. Do not renumber anything.
 
-Budget: `staging/plugin/skills/project-tasks/SKILL.md`,
-`staging/plugin/skills/project-tasks/reference/*.md`,
-`staging/plugin/skills/concept-to-code/SKILL.md`,
-`staging/plugin/skills/project-conductor/SKILL.md`, `TODO.md` (~220 lines).
+Budget: staging/plugin/skills/project-tasks/SKILL.md (~70 lines), staging/plugin/skills/project-tasks/reference/*.md (~90 lines), staging/plugin/skills/concept-to-code/SKILL.md (~15 lines), staging/plugin/skills/project-conductor/SKILL.md (~15 lines), TODO.md (~30 lines).
 
 ### Task 9 — Plants for every new assertion, and the registry run (R-21)
 
@@ -558,7 +551,7 @@ Then:
 3. Full suite via `.claude/test-cmd`.
 4. `bash staging/plugin/skills/project-tasks/scripts/selftest.sh` — 27+ passed, 0 failed.
 
-Budget: `staging/plugin/scripts/tests/project-tasks-ledger.test.sh` (~60 lines of declarations).
+Budget: staging/plugin/scripts/tests/project-tasks-ledger.test.sh (~60 lines)
 
 ### Task 10 — The record (R-22, R-23)
 
@@ -581,7 +574,7 @@ Budget: `staging/plugin/scripts/tests/project-tasks-ledger.test.sh` (~60 lines o
 `R-22` and `R-23` carry `(no-test: …)` in the SPEC: the marker exempts them from the test axis, not
 from needing a task. This is that task.
 
-Budget: `docs/chain-decisions.md`, `CLAUDE.md`, `PROJECT.md` (~70 lines).
+Budget: docs/chain-decisions.md (~50 lines), CLAUDE.md (~1 line), PROJECT.md (~2 lines).
 
 ---
 
