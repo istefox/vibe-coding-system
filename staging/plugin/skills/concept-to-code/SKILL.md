@@ -481,7 +481,12 @@ disk".** The other is a root `SPEC.md` that exists and belongs to a *different* 
 nothing else. The file is still sitting at the path the dispatch below writes to (issue #228).
 
 **Archive the outgoing SPEC first (ADR-0096).** Runs before the dispatch, always, on both states —
-it is a no-op on the genuinely-empty one.
+it is a no-op on the genuinely-empty one **because `spec-archive.sh` looks for the file before it
+validates the slug**. That ordering is load-bearing and was wrong until issue #455: on an empty root
+`gate0-detect.sh` reports `spec_topic_slug=unknown`, the fence passes it through, and the slug guard
+used to refuse with exit 3 — whose contract below is HALT. So the sentence above described the
+bootstrap path and the bootstrap path was the one that could not get past this step. If you move
+that check in `spec-archive.sh`, you are re-breaking this claim (ADR-0152).
 
 <!-- fence-contract: c2c-step1-spec-archive -->
 ```bash

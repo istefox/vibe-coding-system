@@ -28,6 +28,19 @@
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
 # plant: SA7 | plugin/skills/concept-to-code/scripts/spec-archive.sh | cp "$spec" "$dest" | mv "$spec" "$dest"
+#
+# --- issue #455, the guard order -----------------------------------------------------------------
+# SA16 and SF5 assert the SAME correction at two levels, so they carry two different plants rather
+# than one shared needle: SA16's removes the MECHANISM (the existence check that now runs before the
+# slug is validated), SF5's removes the WIRING (the fence's argument passing). A single plant on the
+# mechanism would leave SF5 unproven as an independent claim about SKILL.md.
+# plant: SA16 | plugin/skills/concept-to-code/scripts/spec-archive.sh | [ -f "$spec" ] || { echo "NOSPEC"; exit 0; } | :
+# plant: SA17 | plugin/skills/concept-to-code/scripts/spec-archive.sh | */*|.*|-*) | xxx-no-such-shape-xxx)
+# plant: SF5 | plugin/skills/concept-to-code/SKILL.md | bash "$_sa" "$ROOT" "${OUT_SLUG:-unknown}" | bash "$_sa" "$ROOT/no-such-dir" "${OUT_SLUG:-unknown}"
+# plant: SA9c | plugin/skills/concept-to-code/scripts/gate0-detect.sh | spec_owned="$spec" | spec_owned="yes"
+# SA14b pins PROSE, and its plant says so honestly: removing the clause cannot break the ordering in
+# spec-archive.sh, only the sentence that explains why the ordering is there (CLAUDE.md rule 16).
+# plant: SA14b | plugin/skills/concept-to-code/SKILL.md | looks for the file before it | is magic and
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -97,10 +110,36 @@ fi
 # ===========================================================================
 # SA1..SA7 — the script's contract, both directions per ADR-0039.
 # ===========================================================================
+# SA1 covers a pair the ORCHESTRATOR CANNOT PRODUCE, and that is now recorded rather than left to
+# read as coverage of the caller (issue #455). The fence runs on the greenfield branch only, and
+# there are exactly two ways to be greenfield: no SPEC.md at all, which makes `spec_topic_slug`
+# `unknown`; or a SPEC.md carrying a FOREIGN marker, which makes it that marker's value. A valid
+# slug with no SPEC.md on disk is neither. SA16 below is the pair that actually arrives here.
+# SA5 declares its own unproducible pair the same way; SA1 did not, which is why it looked like the
+# empty-root case was tested for two months while the case that halts was untested.
 r=$(mk_root)
 out=$(bash "$SA" "$r" 111-alpha-topic 2>&1); rc=$?
 if [ "$rc" -eq 0 ] && [ "$out" = "NOSPEC" ]; then ok "SA1 no root SPEC.md → NOSPEC, exit 0"
 else bad "SA1 expected NOSPEC/0, got rc=$rc out=$out"; fi
+
+# SA16 — THE assertion issue #455 exists for. `(no SPEC.md, unknown)` is the one pair Step 1's
+# greenfield fence can produce with an empty root, and until #455 it returned exit 3, whose caller
+# contract is HALT. A brand-new project therefore could not get through Step 1 at all — the
+# bootstrap path, which is exactly what Gate 0d's scaffolding survey exists to serve.
+r=$(mk_root)
+out=$(bash "$SA" "$r" unknown 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && [ "$out" = "NOSPEC" ]; then
+  ok "SA16 no root SPEC.md + the unknown slug gate0-detect.sh emits for it → NOSPEC, exit 0"
+else bad "SA16 the empty-root bootstrap pair is a halt again: expected NOSPEC/0, got rc=$rc out=$out"; fi
+
+# SA17 — the other direction of the same reorder. The existence check was moved ABOVE the
+# empty-or-unknown guard and deliberately BELOW the shape guard: a slug carrying a path is a
+# malformed CALL whether or not the root holds a file, so it must still be refused on an empty root.
+# Sinking the whole guard below the check would have turned this into a silent 0.
+r=$(mk_root)
+out=$(bash "$SA" "$r" "../../etc/passwd" 2>&1); rc=$?
+if [ "$rc" -eq 3 ]; then ok "SA17 no root SPEC.md + a path-shaped slug → still exit 3, not NOSPEC"
+else bad "SA17 the shape guard sank below the existence check; a malformed call now returns rc=$rc out=$out"; fi
 
 r=$(mk_root "$SPEC_A")
 out=$(bash "$SA" "$r" 111-alpha-topic 2>&1); rc=$?
@@ -129,10 +168,17 @@ if [ "$rc" -eq 1 ] && [ "${out%% *}" = "COLLISION" ] \
   ok "SA4 destination taken by different content → COLLISION, exit 1, archive untouched"
 else bad "SA4 expected COLLISION/1 with the archive intact, got rc=$rc out=$out"; fi
 
+# SA5 is the empty-or-unknown guard IN ITS NEW POSITION (issue #455), and the fixture is what makes
+# it mean something different from SA16: the root HOLDS a SPEC.md. That is the case where `unknown`
+# is a genuinely confused caller — a file exists and there is no slug to name its archive — and it
+# is still refused. SA16 is the same slug with no file, and is now a no-op. One guard, two inputs,
+# opposite correct answers; before the reorder both got exit 3 and one of them was the bootstrap
+# path. Like SA1, this pair is defence-in-depth: a markerless SPEC routes to brownfield and never
+# reaches this script.
 r=$(mk_root "$SPEC_A")
 out=$(bash "$SA" "$r" unknown 2>&1); rc=$?
-if [ "$rc" -eq 3 ]; then ok "SA5 unknown slug → exit 3 (did not run), distinct from 0"
-else bad "SA5 expected exit 3 for an unknown slug, got rc=$rc out=$out"; fi
+if [ "$rc" -eq 3 ]; then ok "SA5 a SPEC.md that EXISTS with an unknown slug → exit 3 (did not run), distinct from 0"
+else bad "SA5 expected exit 3 for an unknown slug with a SPEC.md present, got rc=$rc out=$out"; fi
 
 out=$(bash "$SA" 2>&1); rc=$?
 if [ "$rc" -eq 3 ]; then ok "SA6 bad invocation → exit 3"
@@ -162,6 +208,30 @@ out=$(bash "$G0" "$r" "some title" 111-alpha-topic 2>&1)
 if printf '%s\n' "$out" | grep -qx "spec_topic_slug=unknown"; then
   ok "SA9b a SPEC with no marker reports spec_topic_slug=unknown"
 else bad "SA9b expected spec_topic_slug=unknown for a markerless SPEC"; fi
+
+# SA9c — issue #455 claimed the two states that both report `spec_topic_slug=unknown` are
+# indistinguishable in this script's output. MEASURED, THEY ARE NOT, and that is why gate0-detect.sh
+# is untouched by #455: `spec_owned` is "no" only when the file is ABSENT, so `mode` separates them.
+# Neither field distinguishes alone — the PAIR does, uniquely:
+#
+#     no SPEC.md         → mode=greenfield  spec_topic_slug=unknown
+#     SPEC.md, no marker → mode=brownfield  spec_topic_slug=unknown
+#
+# Asserted in BOTH directions, because a check that only confirms the greenfield row would pass on a
+# gate0-detect.sh that reported greenfield for everything. This also keeps #455 clear of #454, which
+# is about a different consumer of the same token.
+r=$(mk_root)                                   # no SPEC.md at all
+_abs=$(bash "$G0" "$r" "some title" 111-alpha-topic 2>&1)
+r=$(mk_root "# SPEC with no marker at all")    # a file, but nothing naming a topic
+_nom=$(bash "$G0" "$r" "some title" 111-alpha-topic 2>&1)
+if printf '%s\n' "$_abs" | grep -qx "mode=greenfield" \
+   && printf '%s\n' "$_abs" | grep -qx "spec_topic_slug=unknown" \
+   && printf '%s\n' "$_nom" | grep -qx "mode=brownfield" \
+   && printf '%s\n' "$_nom" | grep -qx "spec_topic_slug=unknown"; then
+  ok "SA9c an absent SPEC and a markerless SPEC are distinguishable by (mode, spec_topic_slug)"
+else
+  bad "SA9c the two unknown-slug states collapsed: absent=[$(printf '%s' "$_abs" | tr '\n' ' ')] markerless=[$(printf '%s' "$_nom" | tr '\n' ' ')]"
+fi
 
 # SA10 — the argument wins over the marker, asserted by RUNNING it rather than by grepping for the
 # words. The first draft was lexical (`grep -iE 'topic[[:space:]]+slug'`) and failed on a CORRECT
@@ -207,6 +277,18 @@ if printf '%s\n' "$_green_flat" | grep -q 'two different states reach this branc
   ok "SA14 the greenfield branch states both routes into it, not just 'SPEC.md does not exist'"
 else
   bad "SA14 the greenfield branch still describes only the empty-slot route"
+fi
+
+# SA14b — the corrected no-op claim (issue #455). THIS ASSERTION PINS PROSE, and prose is an
+# instruction, not an enforcement (CLAUDE.md rule 16): it cannot make the ordering in
+# spec-archive.sh correct, and SA16/SF5 are what do that. What it buys is that the sentence which
+# was false for two months cannot quietly return to its short form — the branch would then claim a
+# no-op again while the mechanism behind it is the only thing making the claim true.
+# Matched on the FLATTENED copy (rule 3): the clause wraps across lines in the source.
+if printf '%s\n' "$_green_flat" | grep -q 'looks for the file before it validates the slug'; then
+  ok "SA14b the no-op claim names the ordering it depends on, not just the outcome"
+else
+  bad "SA14b the greenfield branch claims a no-op on the empty root without naming what makes it one (#455)"
 fi
 
 if grep -qF 'plugin/skills/concept-to-code/scripts/spec-archive.sh|skills/concept-to-code/scripts/spec-archive.sh' "$SYNC"; then
@@ -266,6 +348,20 @@ out=$(run_fence_body "$r" 111-alpha-topic "$TMP/empty-home"); rc=$?
 if [ "$rc" -eq 3 ] && printf '%s\n' "$out" | grep -q 'SPECARCHIVE_NOSCRIPT'; then
   ok "SF4 an unsynced machine returns 3 (did not run), never a silent 0"
 else bad "SF4 expected rc=3 and SPECARCHIVE_NOSCRIPT, got rc=$rc out=$out"; fi
+
+# SF5 — the bootstrap path, end to end, through the REAL fence (issue #455). This is the strongest
+# form of the SA16 claim and the reason it is worth a second assertion: the body under test is
+# extracted from SKILL.md by its fence-contract marker, so what runs here is the orchestrator's own
+# code receiving the orchestrator's own pair — an empty root and the `unknown` that gate0-detect.sh
+# emits for it. SA16 proves the script; this proves the wiring, including the `${OUT_SLUG:-unknown}`
+# default that turns an unset variable into the very slug the guard used to refuse.
+# rc 0 is the assertion. Under the pre-#455 ordering this returned 3, and the caller's contract on
+# 3 is HALT, so a brand-new project stopped here with the message that a check did not run.
+r=$(mk_root)
+out=$(run_fence_body "$r" unknown "$FHOME"); rc=$?
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q '^NOSPEC$'; then
+  ok "SF5 the fence is a genuine no-op on an empty root — the documented claim, now true"
+else bad "SF5 the empty-root bootstrap halts at the fence again: expected rc=0 and NOSPEC, got rc=$rc out=$out"; fi
 
 # ===========================================================================
 # Z1 — assertion-count floor (ADR-0083 §D3).
