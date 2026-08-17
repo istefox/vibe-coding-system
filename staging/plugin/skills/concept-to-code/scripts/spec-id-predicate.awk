@@ -72,3 +72,29 @@ function to_checklist_item(l,   indent, rest) {
   sub(/^[ \t]*[-*][ \t]+/, "", rest)
   return indent "- [ ] " rest
 }
+
+# item_text() and strip_sep() MOVED HERE from spec-coverage.sh's inline program (issue #439
+# Wave 2, ADR-0142). They were local while there was ONE consumer; acceptance-declare.sh is the
+# second, and two copies deciding what a checklist item's text IS would disagree exactly where it
+# matters — the reconciliation would then report a criterion as undeclared because one side kept a
+# leading separator the other stripped. That is this file's stated purpose, applied on its own
+# terms rather than by adding a copy beside it.
+
+function item_text(l,   t) {
+  t = l
+  sub(/^[ \t]*[-*][ \t]\[[ xX]\][ \t]*/, "", t)
+  return t
+}
+function strip_sep(s,   EM, EN, c) {
+  sub(/^[ \t]+/, "", s)
+  EM = "\342\200\224"
+  EN = "\342\200\223"
+  if (sub("^" EM, "", s)) { }
+  else if (sub("^" EN, "", s)) { }
+  else {
+    c = substr(s, 1, 1)
+    if (c == "-" || c == ":" || c == "." || c == ")") s = substr(s, 2)
+  }
+  sub(/^[ \t]+/, "", s)
+  return s
+}

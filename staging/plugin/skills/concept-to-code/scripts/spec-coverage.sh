@@ -126,28 +126,10 @@ cat >"$TMPD/spec_parse.awk" <<'AWKEOF'
 # not redefine any of them here (awk rejects a duplicate function definition). The section rule is
 # shared with spec-normalize-ids.sh on purpose: a repair keyed on a different rule than the check
 # would rewrite lines the check accepts, or miss the ones it rejects (ADR-0072 §D2).
-function item_text(l,   t) {
-  t = l
-  sub(/^[ \t]*[-*][ \t]\[[ xX]\][ \t]*/, "", t)
-  return t
-}
 # Separator stripping for --list text (ADR-0048 §D6): trim, strip ONE leading separator (em dash,
 # en dash, or one of - : . )), trim again. Em/en dash are matched by literal sub() on the raw UTF-8
 # bytes (octal escapes — \xNN is not POSIX-portable in awk string literals), never a bracket class
 # (a 3-byte character inside [...] is not portable across BSD and GNU awk).
-function strip_sep(s,   EM, EN, c) {
-  sub(/^[ \t]+/, "", s)
-  EM = "\342\200\224"
-  EN = "\342\200\223"
-  if (sub("^" EM, "", s)) { }
-  else if (sub("^" EN, "", s)) { }
-  else {
-    c = substr(s, 1, 1)
-    if (c == "-" || c == ":" || c == "." || c == ")") s = substr(s, 2)
-  }
-  sub(/^[ \t]+/, "", s)
-  return s
-}
 BEGIN { collecting = 0 }
 {
   line = $0

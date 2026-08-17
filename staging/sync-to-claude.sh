@@ -137,6 +137,7 @@ plugin/skills/adr-writer/SKILL.md|skills/adr-writer/SKILL.md
 plugin/skills/code-review-checklist/SKILL.md|skills/code-review-checklist/SKILL.md
 plugin/skills/fastapi-react-vibe/SKILL.md|skills/fastapi-react-vibe/SKILL.md
 plugin/skills/interview-driver/SKILL.md|skills/interview-driver/SKILL.md
+plugin/skills/brief-to-app/SKILL.md|skills/brief-to-app/SKILL.md
 plugin/skills/swift-vibe/SKILL.md|skills/swift-vibe/SKILL.md
 plugin/scripts/auto-format.sh|hooks/auto-format.sh
 plugin/scripts/chain-memory-capture.sh|hooks/chain-memory-capture.sh
@@ -176,6 +177,7 @@ plugin/scripts/approve-test-cmd.sh|hooks/approve-test-cmd.sh
 plugin/scripts/approve-acceptance-cmd.sh|hooks/approve-acceptance-cmd.sh
 plugin/scripts/acceptance-run.sh|hooks/acceptance-run.sh
 plugin/scripts/acceptance-adapter-swift.sh|hooks/acceptance-adapter-swift.sh
+plugin/scripts/acceptance-declare.sh|hooks/acceptance-declare.sh
 plugin/scripts/session-context-inject.sh|hooks/session-context-inject.sh
 plugin/scripts/ensure-state-dir.sh|hooks/ensure-state-dir.sh
 plugin/scripts/mark-dirty.sh|hooks/mark-dirty.sh
