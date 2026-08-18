@@ -76,7 +76,7 @@ a reason to stop autonomously.
 |---|---|
 | `review-triage-fix`, `deep-refactor` | They find and fix. This one records what they chose not to fix. |
 | `security-audit` | Report-only by design. This one imports its unfixed findings; it never fixes them either. |
-| `project-conductor` | Owns `PROJECT.md`, the planned roadmap. This one owns `TODO.md`, what is broken or pending. A roadmap feature is not duplicated as an entry. |
+| `project-conductor` | Owns `PROJECT.md`, the planned roadmap. This one owns `TODO.md`, what is open. An issue that is also a roadmap row appears here **with a pointer to its phase**, rather than being excluded: the ledger stays complete, and the pointer is what stops it becoming a second roadmap. |
 | `commit` | Runs after this one. The ledger update and the code change belong in the same commit. |
 | `vibe-status` | Reports on the vibe-coding system itself. This one reports on the project being built. |
 | TaskCreate / TaskUpdate tools | Ephemeral, one session, execution tracking. This skill is durable, cross-session, state tracking. They do not overlap. |

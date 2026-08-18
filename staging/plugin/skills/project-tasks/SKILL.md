@@ -39,9 +39,11 @@ Copy this checklist into your reply and tick as you go:
 - [ ] 1. Resolve project root, verify it is inside the session CWD
 - [ ] 2. Read or create TODO.md, index existing entries
 - [ ] 3. Run scan.sh (skipped in quick mode)
+- [ ] 3b. Read the open GitHub issues (gh-issues.sh)
 - [ ] 4. Capture from the current session
 - [ ] 5. Reconcile: dedupe, merge, propose closures
 - [ ] 6. Approval gate
+- [ ] 6b. Compose the candidate ledger (ledger-merge.sh)
 - [ ] 7. Write the file
 - [ ] 8. Report and recommend
 ```
@@ -77,6 +79,26 @@ bash scripts/scan.sh --root <project-root>
 TSV on stdout: `MARKER`, `GITFILE`, `GITLOG`, `STALE`, `MAP`, `NOTE`. Exit 3 means the path is
 not a project root — report it, do not work around it. A `NOTE` record about truncation must be
 passed on to the user; never present a capped list as complete.
+
+### 3b. Read the open GitHub issues
+
+```bash
+bash scripts/gh-issues.sh --ledger <project-root>/TODO.md
+```
+
+A **checker**: branch on the exit code, do not read stdout for a verdict. `scan.sh` is a reporter
+and this one is not — the two idioms are opposite and mixing them is how a failure reads as a clean
+run.
+
+- **0** — `ISSUE` records on stdout, possibly zero and legitimately so.
+- **3** — a `DIDNOTRUN` record naming a cause and a remedy. `gh` is absent, unauthenticated, or
+  there is no reachable remote. **Pass the record through to Step 6b unchanged.** The section keeps
+  the entries it already holds and gains a `DID-NOT-RUN` notice; it is never rendered empty and
+  never silently skipped. Report the cause and the remedy to the user in Step 8, and carry on: the
+  rest of the run does not depend on GitHub, and a project with no remote keeps a working ledger
+  minus one section.
+- **4** — zero open issues where the section already held entries. That is a broken derivation, not
+  an empty repository. Stop and report it; do not write a ledger that empties the section.
 
 ### 4. Capture from the current session
 
@@ -118,6 +140,35 @@ Show three tables, empty ones omitted: **Add** (ID, priority, section, one-line 
 
 Recommend "Approve everything" only when every candidate has hard evidence. If any entry rests
 on an inference, put **Select what to write** first and say which entry is the doubtful one.
+
+### 6b. Compose the candidate ledger
+
+```bash
+bash scripts/ledger-merge.sh --ledger TODO.md --issues ISSUES.tsv --manifests docs/manifests --roadmap PROJECT.md --today YYYY-MM-DD --mode MODE --proposals PROPOSALS
+```
+
+One line, no continuations: `selftest.sh` rejects a backslash anywhere in this file or its
+reference pages, and a line-continuation backslash is indistinguishable from a Windows path
+separator to a check that looks for the character.
+
+A pure filter: it prints the candidate and never writes the ledger. Every path is optional and an
+absent one degrades with a stated reason rather than rendering as if the derivation found nothing —
+which is what lets this skill run in a project with no roadmap file, no manifests and no remote.
+
+Exit **3** is a failed self-check, and it names what it found: an issue that would not have been
+rendered, or a local id appearing twice. Never write a candidate that failed its self-check.
+
+**The promotion gate.** On a **full** run only, `--proposals` lists the entries worth turning into
+GitHub issues: every `P1`, every `src:review`, and every entry that has survived two full runs.
+Never on `quick`, `add`, `close` or `map` — those modes exist to be cheap, and a promotion question
+on each is the friction that stops a gate from being read. Ask once, at the Step 6 gate, and record
+a decline as `promote:declined`, which is never proposed again on any later run. The skill never
+opens or closes an issue itself.
+
+**The Steps section** is a header and a case token; the lines under it are yours to write from the
+feature's SPEC, plan and ADRs. One non-terminal manifest names it and reads *derived*; zero omits
+the section with a stated reason; two or more name both candidates and derive nothing, because
+guessing which feature is the one in flight is the ambiguity this system refuses.
 
 ### 7. Write
 

@@ -754,18 +754,24 @@ fi
 # below exercises rather than assumes.
 # ===========================================================================================
 MAN1="$MG/man-one"; mkdir -p "$MAN1"
-cat > "$MAN1/2026-08-17-alpha.manifest.yml" <<'YML'
-topic_slug: "alpha"
+# THE FIXTURE FILENAMES DELIBERATELY DO NOT CONTAIN THE SLUG. They did, and both NT24 and
+# NT25 passed against a reader that was looking for a field name no manifest in the corpus
+# uses (`topic_slug:` — 0 of 61 — where the real field is `topic:` — 61 of 61). Every
+# manifest fell through to the basename, and the basename happened to carry the slug, so
+# two green assertions were evidence about `basename` and not about the reader. Edited in
+# place on 2026-08-18 for that reason (ADR-0073: an in-place assertion edit gets a sentence).
+cat > "$MAN1/2026-08-17-one.manifest.yml" <<'YML'
+topic: "alpha"
 current_step: "step_5_implementation"
 status: "in_progress"
 YML
-cat > "$MAN1/2026-08-01-beta.manifest.yml" <<'YML'
-topic_slug: "beta"
+cat > "$MAN1/2026-08-01-two.manifest.yml" <<'YML'
+topic: "beta"
 current_step: "completed"
 status: "completed"
 YML
-cat > "$MAN1/2026-08-02-gamma.manifest.yml" <<'YML'
-topic_slug: "gamma"
+cat > "$MAN1/2026-08-02-three.manifest.yml" <<'YML'
+topic: "gamma"
 current_step: "step_2_architecture"
 status: "aborted"
 YML
@@ -786,11 +792,11 @@ fi
 # section and a deliberately omitted one must not read alike (rule 4).
 # ===========================================================================================
 MAN0="$MG/man-zero"; mkdir -p "$MAN0"
-cp "$MAN1/2026-08-01-beta.manifest.yml" "$MAN0/"
+cp "$MAN1/2026-08-01-two.manifest.yml" "$MAN0/"
 MAN2="$MG/man-two"; mkdir -p "$MAN2"
-cp "$MAN1/2026-08-17-alpha.manifest.yml" "$MAN2/"
-cat > "$MAN2/2026-08-16-delta.manifest.yml" <<'YML'
-topic_slug: "delta"
+cp "$MAN1/2026-08-17-one.manifest.yml" "$MAN2/"
+cat > "$MAN2/2026-08-16-four.manifest.yml" <<'YML'
+topic: "delta"
 current_step: "step_3_project_memory"
 status: "in_progress"
 YML

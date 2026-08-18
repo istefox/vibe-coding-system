@@ -943,6 +943,23 @@ FENCE_BASH
 
 ---
 
+### Step 5b — Update the task ledger between features (ADR-0153)
+
+Runs on **every advance**, after a roadmap row is marked `[x]` and before the next feature starts.
+Placed here rather than in Step 6A because Step 6A is the session-boundary pause and does not run
+on every outcome, and the question this answers — what is still open now that a feature closed — is
+asked once per advance.
+
+Invoke the `project-tasks` skill in its full mode against the project root. It regenerates the
+`GitHub Issues` section from `gh`, folds in whatever the finished feature left behind, and proposes
+promotions at its own approval gate. Under autopilot it still stops at that gate, so an unattended
+run reports what it would have written and advances without writing.
+
+**This is an INSTRUCTION, not an enforcement** (rule 16). Nothing executes it and no assertion can
+observe that it happened; a harness pinning this paragraph pins only that it is written here.
+
+---
+
 ### Step 6A — Session boundary pause
 
 ```

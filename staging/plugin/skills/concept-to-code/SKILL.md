@@ -2786,6 +2786,38 @@ or it is not), which is exactly why it is allowed to block where a heuristic fin
 - `_irc = 2`, or `_icheck` empty (script did not resolve): fail-open, visibly — note it in the
   summary shown at Gate 5.05 and proceed.
 
+### Step 7b — Update the task ledger, and gate on a P1 this feature introduced (ADR-0153)
+
+Runs immediately before Step 7's commit gate. **This is an INSTRUCTION, not an enforcement**
+(rule 16). Nothing in the harness executes it; what a green assertion pins is that this text
+exists, which is not evidence that a model followed it. It changes the failure shape — a P1 that
+this feature introduced becomes visible at the moment somebody can still act on it — and it does
+not change the guarantee.
+
+1. Invoke the `project-tasks` skill in its full mode against the project root. It reads the open
+   GitHub issues, rescans the markers, and composes a candidate ledger behind its own approval
+   gate. It never edits source and never writes before that gate.
+
+2. Then run the gate. `--since` is the date the feature's manifest was created, which is what makes
+   "introduced by this feature" answerable at all:
+
+   ```
+   bash ~/.claude/skills/project-tasks/scripts/ledger-merge.sh --ledger <root>/TODO.md --p1-gate --since <manifest-created-date>
+   ```
+
+   Branch on the exit code. It is a checker; the ids are on stdout.
+
+   - **0** — no open P1. Proceed to Step 7.
+   - **5** — only pre-existing P1s. **Report them and proceed.** A gate that blocks every commit on
+     a standing debt is a gate people learn to route around, and a routed-around gate protects
+     nothing.
+   - **1** — at least one P1 opened on or after that date, i.e. introduced while this feature was
+     being built. **Stop before the commit gate**, name the ids, and ask whether to fix now or to
+     record the decision to defer. Under autopilot, write `needs-human` with the ids and halt: an
+     unattended run has nobody to answer the question.
+   - **2** or **3** — the gate could not evaluate. An unrun check is not a clean result (rule 4).
+     Report the reason and proceed, saying explicitly that the gate did not run.
+
 ### Step 7 — Commit (invoke `commit` skill, always)
 
 **Step 7.0 — collapse the Step 5 snapshots first (issue #249, ADR-0104).**

@@ -119,6 +119,9 @@ makes ageing visible.
 
 - Anything fixed and verified inside the same session.
 - Style opinions with no defect behind them.
-- Work already tracked in `PROJECT.md` as a roadmap feature — that file owns the roadmap.
+- A *new local entry* duplicating a `PROJECT.md` roadmap feature — that file owns the order of
+  work. This is not an exclusion of roadmap items from the ledger: an item that is also an open
+  GitHub issue appears in the `GitHub Issues` section with a pointer to its phase. What never
+  becomes an entry is a second, hand-written copy of a roadmap row.
 - Generic wishes ("improve performance", "add more tests") with no file and no symptom.
 - Anything in a gitignored or vendored path.

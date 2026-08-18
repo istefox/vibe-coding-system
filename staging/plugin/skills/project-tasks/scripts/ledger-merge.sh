@@ -155,7 +155,11 @@ if [ -n "$MANIFESTS" ]; then
       _st=$(awk -F'"' '/^status:/{print $2}' "$_m" | head -1)
       case "$_st" in completed|aborted|failed) continue ;; esac
       case "$_cs" in completed|aborted) continue ;; esac
-      _slug=$(awk -F'"' '/^topic_slug:/{print $2}' "$_m" | head -1)
+      # `topic:`, measured, not `topic_slug:`, assumed. 61 of 61 manifests in this
+      # repository's corpus carry `topic:` and 0 carry `topic_slug:` (2026-08-18), so the
+      # first version of this line read a field that exists nowhere and every manifest
+      # fell through to the basename. Rule 13: measure the premise before designing on it.
+      _slug=$(awk -F'"' '/^topic:/{print $2}' "$_m" | head -1)
       [ -n "$_slug" ] || _slug=$(basename "$_m")
       MAN_NAMES="$MAN_NAMES${MAN_NAMES:+, }$_slug"
       MAN_FILE=$(basename "$_m")
@@ -227,17 +231,30 @@ function set_promote(l, v) {
   return l
 }
 function disk_runs(l,   n) { n = 0; if (match(l, /runs:[0-9]+/)) n = substr(l, RSTART+5, RLENGTH-5) + 0; return n }
-BEGIN { insec = 0; inopen = 0 }
+BEGIN { insec = 0; inopen = 0; made = 0 }
 # This script owns exactly three notice comments. Dropping them on read is what
 # makes a re-run idempotent instead of accumulating a copy per run.
 /^<!-- (github-read|steps|roadmap): / { next }
 /^## GitHub Issues/ {
   print
-  insec = 1; inopen = 0
+  insec = 1; inopen = 0; made = 1
   if (section_mode != "untouched") { while ((getline l < secfile) > 0) print l; close(secfile) }
   next
 }
 /^## / {
+  # A ledger with NO GitHub Issues section is every ledger written before this feature
+  # existed, and the section has to be CREATED rather than assumed. Without this the
+  # rendered body had no header to follow and was dropped in silence; the self-check
+  # caught it on the first real ledger, and no fixture had it because every fixture was
+  # written after the section existed.
+  if (!made && section_mode != "untouched") {
+    print "## GitHub Issues"
+    print ""
+    while ((getline l < secfile) > 0) print l
+    close(secfile)
+    print ""
+    made = 1
+  }
   if (insec) insec = 0
   inopen = ($0 ~ secre) ? 1 : 0
   print
@@ -301,24 +318,32 @@ fi
 # Appended at the end so nothing above them moves. Emitted only when the caller
 # asked the question: with no --manifests and no --roadmap there is no question
 # and therefore no answer, which is what keeps NT16's pass-through exact.
-{
-  cat "$WORK/pass2"
-  case "$MAN_STATE" in
-    missing) echo "<!-- steps: no manifests directory at $MANIFESTS — section omitted -->" ;;
-    zero)    echo "<!-- steps: no non-terminal manifest under $MANIFESTS — section omitted -->" ;;
-  esac
-  case "$ROADMAP_STATE" in
-    missing) echo "<!-- roadmap: no roadmap file at $ROADMAP — phase pointers omitted -->" ;;
-  esac
-} > "$WORK/pass3"
-
-# The Steps header is region 3 and is written only when there is something to
-# head. One non-terminal manifest names it and reads derived; two or more name
-# the candidates and derive nothing, because guessing which feature is "the" one
-# in flight is the ambiguity the rest of this system refuses.
+# The Steps block is region 3: either the header, when there is something to head,
+# or the one-line notice that stands in for it. One non-terminal manifest names it
+# and reads derived; two or more name the candidates and derive nothing, because
+# guessing which feature is "the" one in flight is the ambiguity the rest of this
+# system refuses.
+: > "$WORK/steps"
 case "$MAN_STATE" in
-  one)  printf '\n## Steps — %s (derived from %s)\n' "$MAN_NAMES" "$MAN_FILE" >> "$WORK/pass3" ;;
-  many) printf '\n## Steps — ambiguous (candidates: %s) — nothing derived\n' "$MAN_NAMES" >> "$WORK/pass3" ;;
+  one)     printf '## Steps — %s (derived from %s)\n\n' "$MAN_NAMES" "$MAN_FILE" > "$WORK/steps" ;;
+  many)    printf '## Steps — ambiguous (candidates: %s) — nothing derived\n\n' "$MAN_NAMES" > "$WORK/steps" ;;
+  missing) printf '<!-- steps: no manifests directory at %s — section omitted -->\n' "$MANIFESTS" > "$WORK/steps" ;;
+  zero)    printf '<!-- steps: no non-terminal manifest under %s — section omitted -->\n' "$MANIFESTS" > "$WORK/steps" ;;
+esac
+
+# It goes where the declared section order puts it — before Project Map — and not at
+# the end of the file. Appending was the first shape and it put the section after
+# Done, which is the one place a reader has already stopped looking.
+if [ -s "$WORK/steps" ] && grep -q '^## Project Map' "$WORK/pass2"; then
+  awk -v f="$WORK/steps" '/^## Project Map/ && !done { while ((getline l < f) > 0) print l; close(f); done = 1 } {print}' \
+    "$WORK/pass2" > "$WORK/pass3"
+else
+  cat "$WORK/pass2" > "$WORK/pass3"
+  [ -s "$WORK/steps" ] && cat "$WORK/steps" >> "$WORK/pass3"
+fi
+
+case "$ROADMAP_STATE" in
+  missing) echo "<!-- roadmap: no roadmap file at $ROADMAP — phase pointers omitted -->" >> "$WORK/pass3" ;;
 esac
 
 # --- the self-check ----------------------------------------------------------
@@ -328,11 +353,29 @@ SELF_ERR=""
 if [ "$SECTION_MODE" = "rendered" ]; then
   while IFS=$'\t' read -r _tag _n _rest; do
     [ "$_tag" = "ISSUE" ] || continue
-    _c=$(awk '/^## GitHub Issues/{f=1; next} /^## /{f=0} f' "$WORK/pass3" | grep -c "#$_n\b" || true)
+    # Count RENDERINGS, not mentions - the same defect as the duplicate check one level
+    # down, and found the same way. An issue whose title cites another issue number puts
+    # that number inside the section: on this repository #437's title names #426 and
+    # #309, so both reported "renders 2 times" against a section that rendered each once.
+    # A rendering is the line whose LEADING token is the issue, which is also why a
+    # promoted local entry - whose leading token is its local id - is not counted here.
+    _c=$(awk '/^## GitHub Issues/{f=1; next} /^## /{f=0} f' "$WORK/pass3" \
+         | grep -cE "^- \[[ x]\] \`#$_n\`" || true)
     [ "$_c" = "1" ] || SELF_ERR="$SELF_ERR issue #$_n renders $_c time(s)"
   done < "$WORK/issues"
 fi
-DUP_IDS=$(grep -oE '`[A-Za-z]+-[0-9]+`' "$WORK/pass3" | sort | uniq -d | tr -d '`' | tr '\n' ' ')
+# Count DEFINITIONS, not mentions. An id is defined by standing at the head of an entry
+# line; anywhere else it is a cross-reference, and this ledger is full of them - an entry
+# routinely explains that it is blocked by another entry and names it. Counting every
+# backticked id reported four false duplicates on this repository's own ledger, all four
+# of them prose citations (rule 18: a scan is satisfied by the whole population it
+# searches, not by the part it meant). The prefix is read from the header rather than
+# assumed, so a foreign `ADR-0153` in an entry's text is outside the population by
+# construction and not merely by luck.
+PREFIX=$(sed -n 's/.*project-tasks:[[:space:]]*prefix=\([A-Za-z][A-Za-z]*\).*/\1/p' "$LEDGER" | head -1)
+[ -n "$PREFIX" ] || PREFIX='[A-Za-z][A-Za-z]*'
+DUP_IDS=$(grep -oE "^- \[[ x]\] \`$PREFIX-[0-9]+\`" "$WORK/pass3" \
+          | grep -oE "$PREFIX-[0-9]+" | sort | uniq -d | tr '\n' ' ')
 [ -z "$DUP_IDS" ] || SELF_ERR="$SELF_ERR local id(s) appearing more than once: $DUP_IDS"
 if [ -n "$SELF_ERR" ]; then
   echo "ledger-merge.sh: self-check failed —$SELF_ERR" >&2

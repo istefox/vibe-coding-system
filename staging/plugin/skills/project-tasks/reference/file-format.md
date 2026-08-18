@@ -94,14 +94,23 @@ at most: this ledger is a radar, not an issue tracker.
 
 | Section | Holds | Empty section |
 |---|---|---|
+| `GitHub Issues` | Every open GitHub issue, one line each, grouped by state; a roadmap row carries a pointer to its phase | keep, write `_none_` |
 | `Open Issues` | Bugs, defects, technical debt, deferred review and security findings | keep, write `_none_` |
 | `In Progress` | What is actively being worked on right now, with the branch | keep, write `_none_` |
 | `Backlog / To Add` | Features and ideas not yet started | keep, write `_none_` |
 | `Blocked / Decisions Needed` | Needs a user decision or an external input before anyone can proceed | keep, write `_none_` |
+| `Steps — <feature>` | Conditional. What remains inside the feature in flight, derived from its own SPEC, plan and ADRs | omitted, with a stated reason |
 | `Project Map` | The stable landmarks of the project | always populated |
 | `Done` | Closed entries, most recent first | keep |
 
 Sections stay in this order. A section the user adds by hand is kept where they put it.
+
+`GitHub Issues` comes first because it is the section with the most lines and the least local
+authorship: nothing in it is written by hand, so a reader scrolling past it loses nothing.
+
+`Steps` is the only conditional section. It is omitted when there is no single feature in flight,
+and the omission carries a one-line reason as an HTML comment. An omission with a stated reason is
+not the same as a section that is quietly absent — the second reads as "nothing to do".
 
 ## Priorities
 
@@ -133,6 +142,38 @@ changed afterwards. Number: zero-padded to three digits, `lastId + 1`, never reu
 `opened:YYYY-MM-DD` is set once and never rewritten. It is what makes "open for 14 days"
 answerable.
 
+### The two promotion keys
+
+| Key | Meaning |
+|---|---|
+| `runs:<N>` | Full runs this entry has survived. Incremented once per full run, never on `quick`, `add`, `close` or `map`. Absent means zero. |
+| `promote:declined` | The operator declined promotion. Never proposed again, on any later run. |
+| `promote:<YYYY-MM-DD>` | Promoted on that date; the entry now carries an issue number as well as its local id. |
+
+`runs:` is **derived, never accumulated**: the value on disk plus one, computed inside a filter
+that never writes. An abort between reading and writing therefore cannot corrupt it — there is no
+counter to leave half-incremented.
+
+The promotion proposal reads the value **on disk**, not the incremented one. An entry at `runs:1`
+is not proposed on the run that takes it to 2; it is proposed on the next. "Survived two full runs"
+is a claim about the past, and reading the incremented value would make it a claim about this one.
+
+Promotion state lives in the entry's own provenance comment rather than in a separate state file:
+one file, no second source that can diverge from the ledger it describes, invisible when rendered,
+and already covered by the preservation rules below.
+
+### What survives promotion
+
+One line, in `GitHub Issues`, carrying **both** identifiers:
+
+```
+- [ ] `VCS-031` -> #470 **P2** <title regenerated from GitHub> <!-- src:session opened:2026-08-17 runs:2 promote:2026-08-18 -->
+```
+
+The local id survives because commits, notes and prior ledger entries already cite it, and ids are
+never reused: dropping it would orphan every existing reference. The entry **moves** section, it is
+not duplicated, and it appears exactly once in the whole file.
+
 ## Archiving
 
 `Done` keeps the 25 most recent entries. Older ones move into the `<details>` block at the
@@ -144,6 +185,23 @@ second file, no `docs/` spill.
 On rewrite, the following survive verbatim: sections the skill does not know about, free
 prose anywhere in the file, hand-written entries without an ID (leave them as they are, do
 not renumber them), and any HTML comment other than the header.
+
+### The three merge regions
+
+`ledger-merge.sh` states the same rule from the other side, as the only thing it is allowed to
+change. The output is byte-identical to the input EXCEPT inside three regions:
+
+1. the `GitHub Issues` section;
+2. each entry's provenance comment, and within it only `runs:` and `promote:` — never `opened:`,
+   never `src:`;
+3. the `Steps` section header, and the one-line notice that stands in for it when the section is
+   omitted.
+
+Everything else passes through unread. This is the whole safety argument for letting a script
+compose a file a human also writes in, and it is what makes the field-ownership table above
+enforceable rather than aspirational: GitHub owns title, state and labels, `TODO.md` owns local
+priority, the file reference, `src:` and `opened:`, and the boundary is a diff rather than a
+convention.
 
 If the file has drifted so far that it cannot be parsed, do not repair it silently: report
 what could not be read and ask before writing.
