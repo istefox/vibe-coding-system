@@ -1571,3 +1571,30 @@ before anything noticed.*
 and because it is independently useful: pointed at the current chain's output it measures the very
 defect that motivated the lane, which is the measurement Wave 2 should be designed on rather than
 assumed from (rule 13).
+
+### Phase 14 — the ledger the chain never updated (ADR-0153, plan of 2026-08-17)
+
+`project-tasks` was deployed and unvendored: `sync-to-claude.sh` reported it under *deployed skill(s)
+neither vendored nor declared* on every `--apply`, and its own `reference/chain-integration.md` was
+an unapplied paste-in, so the description's claim that both chains invoke it held for neither. The
+ledger it maintains answered half a question — "what is open" had two answers, in `TODO.md` and in
+GitHub, and neither was complete.
+
+This phase vendors the skill and makes the ledger **bilateral**: every open GitHub issue is
+regenerated into the file on each run, local entries are promoted to issues at an approval gate, and
+a roadmap item carries a pointer to its `PROJECT.md` phase rather than a transcription of it.
+
+- [x] vendor byte-identically, wire PAIRS, delete the `deployed-only` waiver, narrow the marker predicate  (ADR-0153, Tasks 2–3, `VCS-022`/`VCS-023`)
+- [x] `gh-issues.sh` and `ledger-merge.sh`, their assertions written RED first, and the chain wiring in both skills  (ADR-0153, Tasks 4–8)
+- [x] a plant per new assertion and the registry run  (ADR-0153, Task 9)
+
+*The wiring in `concept-to-code` and `project-conductor` is an instruction and not an enforcement
+(rule 16), stated at both sites. What is enforced is the merge contract, the marker predicate, the
+`runs:` derivation and the gate's exit codes — all executed by `project-tasks-ledger.test.sh` and
+mutated by the registry.*
+
+*Five defects reached the ADR's `## Correction` block rather than a review: they were found by
+running the pipeline against this repository's own ledger with 39 assertions already green. Two
+further ones were found by plants that did not fire, and both convicted an assertion rather than a
+plant. The lesson is Phase 13's, arrived at from the other end — a green harness is evidence about
+the harness.*
