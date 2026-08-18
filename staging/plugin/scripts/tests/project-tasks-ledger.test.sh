@@ -507,6 +507,439 @@ else
 fi
 
 # ===========================================================================================
+# Task 6 (tester-owned) — the ledger-merge assertions, NT16..NT30. EVERY ONE IS EXPECTED RED at
+# Batch E except NT30, which is GREEN on arrival by design: Task 2 vendored the field it pins
+# byte-identically, so NT30 is a regression pin aimed at Task 8 item 1 and its evidence is its
+# plant at Task 9, not a red checkpoint (Amendment 1, batching table).
+#
+# NT28, NT29, NT29b and NT30 are Amendment 1's. They cover the lane the plan originally specified
+# nowhere: the skill invoked outside the chain, where a manifest, a PROJECT.md and a GitHub remote
+# all need not exist.
+#
+# ledger-merge.sh never writes, so every assertion below compares stdout against an expectation.
+# ===========================================================================================
+MERGE="$SKILL/scripts/ledger-merge.sh"
+MG="$TMP/merge"
+mkdir -p "$MG"
+
+# lm_strip_regions <file> — everything the CONTRACT allows ledger-merge.sh to change, removed, so
+# what survives is the region that must pass through untouched. Drops the GitHub Issues section
+# body, drops any Steps header, and blanks every entry's provenance comment. NT16 diffs the input
+# and the output through this filter; a non-empty diff is a line changed outside the contract.
+lm_strip_regions() {
+  awk '/^## GitHub Issues/{f=1; print; next} /^## /{f=0} f{next} {print}' "$1" \
+    | sed -e '/^## Steps/d' -e 's/<!--[^>]*-->//g'
+}
+
+cat > "$MG/issues.tsv" <<'TSV'
+ISSUE	401	OPEN	first issue	bug,p1
+ISSUE	402	OPEN	second issue	
+ISSUE	403	OPEN	third issue	docs
+TSV
+
+cat > "$MG/base.md" <<'MD'
+<!-- project-tasks: prefix=VCS lastId=31 -->
+# PROJECT TASKS
+
+Updated: 2026-08-18 · Open: 3 (P1: 1)
+
+Free prose that belongs to nobody and must survive a run unread.
+
+## GitHub Issues
+
+_none_
+
+## Open Issues
+
+- [ ] `VCS-028` **P1** a blocking thing — `src/a.sh:12` <!-- src:session opened:2026-08-01 -->
+- [ ] `VCS-029` **P3** a small thing — `src/b.sh:4` <!-- src:session opened:2026-08-02 runs:1 -->
+- [ ] `VCS-030` **P2** a reviewed thing — `src/c.sh:9` <!-- src:review opened:2026-08-03 -->
+- [ ] `VCS-031` **P2** a survivor — `src/d.sh:1` <!-- src:session opened:2026-08-04 runs:2 -->
+- [ ] `VCS-032` **P2** a declined one — `src/e.sh:2` <!-- src:session opened:2026-08-05 runs:3 promote:declined -->
+- [ ] a hand-written entry with no id at all, which must never be renumbered
+
+## Notes For Later
+
+An unknown section the skill has never heard of. <!-- a stray comment -->
+
+## Project Map
+
+- **Entry point**: nothing here is derived.
+MD
+
+# ===========================================================================================
+# NT16 (R-07) — THE PASS-THROUGH CONTRACT, and the assertion the whole safety argument of
+# ADR-0153 §D2 rests on. Do not relax it later to accommodate a new section: the fixture carries
+# an unknown section, free prose, a hand-written entry with no id and a stray HTML comment, and
+# every one of them must survive a full run unread. Compared through lm_strip_regions, so the
+# three regions the contract DOES allow to change are removed from both sides first.
+# ===========================================================================================
+NT16_OUT="$MG/out16.md"; NT16_RC=99
+if [ -f "$MERGE" ]; then
+  bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --mode full --today 2026-08-18 > "$NT16_OUT" 2>/dev/null
+  NT16_RC=$?
+fi
+NT16_DIFF="n/a"
+if [ -f "$MERGE" ] && [ -s "$NT16_OUT" ]; then
+  lm_strip_regions "$MG/base.md" > "$MG/a16"; lm_strip_regions "$NT16_OUT" > "$MG/b16"
+  NT16_DIFF=$(diff "$MG/a16" "$MG/b16" | wc -l | tr -d ' ')
+fi
+NT16_PROSE=$(grep -c 'Free prose that belongs to nobody' "$NT16_OUT" 2>/dev/null); [ -z "$NT16_PROSE" ] && NT16_PROSE=0
+NT16_UNK=$(grep -c '^## Notes For Later' "$NT16_OUT" 2>/dev/null); [ -z "$NT16_UNK" ] && NT16_UNK=0
+NT16_NOID=$(grep -c 'a hand-written entry with no id at all' "$NT16_OUT" 2>/dev/null); [ -z "$NT16_NOID" ] && NT16_NOID=0
+NT16_STRAY=$(grep -c 'a stray comment' "$NT16_OUT" 2>/dev/null); [ -z "$NT16_STRAY" ] && NT16_STRAY=0
+if [ "$NT16_RC" -eq 0 ] && [ "$NT16_DIFF" = "0" ] \
+   && [ "$NT16_PROSE" -eq 1 ] && [ "$NT16_UNK" -eq 1 ] && [ "$NT16_NOID" -eq 1 ] && [ "$NT16_STRAY" -eq 1 ]; then
+  ok "NT16 (R-07): everything outside the three contract regions passes through unread"
+else
+  bad "NT16 (R-07): rc=$NT16_RC diff-lines=$NT16_DIFF prose=$NT16_PROSE unknown-section=$NT16_UNK no-id-entry=$NT16_NOID stray-comment=$NT16_STRAY"
+fi
+
+# ===========================================================================================
+# NT17 (R-07) — the field-ownership table, enforced. GitHub owns title, state and labels; TODO.md
+# owns local priority, the file reference, src: and opened:. Feed a payload that changes the
+# GitHub-owned fields of an entry and assert the locally-owned ones are byte-identical.
+# ===========================================================================================
+cat > "$MG/issues-changed.tsv" <<'TSV'
+ISSUE	401	CLOSED	a completely different title	renamed,labels
+TSV
+NT17_LINE=""
+if [ -f "$MERGE" ]; then
+  NT17_LINE=$(bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues-changed.tsv" --mode full --today 2026-08-18 2>/dev/null \
+              | grep 'VCS-030')
+fi
+NT17_OK=0
+printf '%s' "$NT17_LINE" | grep -q '\*\*P2\*\*' && \
+printf '%s' "$NT17_LINE" | grep -q 'src/c\.sh:9' && \
+printf '%s' "$NT17_LINE" | grep -q 'src:review' && \
+printf '%s' "$NT17_LINE" | grep -q 'opened:2026-08-03' && NT17_OK=1
+if [ "$NT17_OK" -eq 1 ]; then
+  ok "NT17 (R-07): local priority, file reference, src: and opened: survive a payload that rewrites the GitHub-owned fields"
+else
+  bad "NT17 (R-07): a locally-owned field was lost — line was: '$NT17_LINE'"
+fi
+
+# ===========================================================================================
+# NT18 (R-10) — runs: is DERIVED, absent -> 1 -> 2 across three successive --mode full runs, each
+# fed the previous output. opened: byte-identical in all three, because it is never in the
+# rewritten key set (ADR-0153 §D3).
+# ===========================================================================================
+NT18_SEQ=""; NT18_OPENED=""
+if [ -f "$MERGE" ]; then
+  cp "$MG/base.md" "$MG/r0.md"
+  i=0
+  while [ "$i" -lt 3 ]; do
+    bash "$MERGE" --ledger "$MG/r$i.md" --issues "$MG/issues.tsv" --mode full --today 2026-08-18 > "$MG/r$((i+1)).md" 2>/dev/null
+    i=$((i+1))
+    _v=$(grep 'VCS-028' "$MG/r$i.md" | grep -oE 'runs:[0-9]+' | head -1)
+    [ -z "$_v" ] && _v="runs:absent"
+    NT18_SEQ="$NT18_SEQ $_v"
+    NT18_OPENED="$NT18_OPENED $(grep 'VCS-028' "$MG/r$i.md" | grep -oE 'opened:[0-9-]+' | head -1)"
+  done
+fi
+NT18_UNIQ_OPENED=$(printf '%s\n' $NT18_OPENED | sort -u | wc -l | tr -d ' ')
+if [ "$NT18_SEQ" = " runs:1 runs:2 runs:3" ] && [ "$NT18_UNIQ_OPENED" -eq 1 ]; then
+  ok "NT18 (R-10): runs: derives absent -> 1 -> 2 -> 3 across three full runs, opened: unchanged throughout"
+else
+  bad "NT18 (R-10): sequence was '$NT18_SEQ' (want ' runs:1 runs:2 runs:3'), distinct opened: values=$NT18_UNIQ_OPENED (want 1)"
+fi
+
+# ===========================================================================================
+# NT19a..NT19d (R-10, R-08) — FOUR sub-assertions, one per cheap mode, which is what the plan asks
+# for in these words: "a loop over one mode would pass with three modes unimplemented". Under
+# quick, add, close and map, runs: is unchanged and no promotion proposal is rendered.
+# ===========================================================================================
+for _m in quick add close map; do
+  case "$_m" in quick) _lbl=NT19a ;; add) _lbl=NT19b ;; close) _lbl=NT19c ;; map) _lbl=NT19d ;; esac
+  _runs=""; _props=99; _rc=99
+  if [ -f "$MERGE" ]; then
+    bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --mode "$_m" --today 2026-08-18 \
+      --proposals "$MG/prop-$_m" > "$MG/out-$_m.md" 2>/dev/null
+    _rc=$?
+    _runs=$(grep 'VCS-031' "$MG/out-$_m.md" 2>/dev/null | grep -oE 'runs:[0-9]+' | head -1)
+    # rule 5: never `grep -c ... || echo 0` — on zero matches grep PRINTS 0 and exits 1, so the
+    # fallback appends a second line and the comparison below dies on "0\n0". `|| true` only
+    # neutralises the exit code.
+    _props=0; [ -f "$MG/prop-$_m" ] && _props=$(grep -c . "$MG/prop-$_m" || true)
+  fi
+  if [ "$_rc" -eq 0 ] && [ "$_runs" = "runs:2" ] && [ "$_props" -eq 0 ]; then
+    ok "$_lbl (R-10, R-08): --mode $_m leaves runs: at 2 and renders no proposal"
+  else
+    bad "$_lbl (R-10, R-08): --mode $_m rc=$_rc runs='$_runs' (want runs:2) proposals=$_props (want 0)"
+  fi
+done
+
+# ===========================================================================================
+# NT20 (R-08) — the proposal set under --mode full is EXACTLY: every P1, every src:review, and
+# every entry at runs: >= 2. The negative case is what proves the predicate is a filter and not a
+# pass-through: VCS-029 is P3, is not src:review and sits at runs:1, so it must be absent.
+# ===========================================================================================
+NT20_SET=""
+if [ -f "$MERGE" ]; then
+  bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --mode full --today 2026-08-18 \
+    --proposals "$MG/prop-full" >/dev/null 2>&1
+  NT20_SET=$(grep -oE 'VCS-0[0-9]+' "$MG/prop-full" 2>/dev/null | sort -u | tr '\n' ' ')
+fi
+if [ "$NT20_SET" = "VCS-028 VCS-030 VCS-031 " ]; then
+  ok "NT20 (R-08): the proposal set is exactly the P1, the src:review and the runs:>=2 entry — the P3 at runs:1 is absent"
+else
+  bad "NT20 (R-08): proposal set was '$NT20_SET' (want 'VCS-028 VCS-030 VCS-031 ')"
+fi
+
+# ===========================================================================================
+# NT21 (R-09) — promote:declined is never proposed AGAIN, which is a claim about subsequent runs
+# and not about one. VCS-032 qualifies on every other condition (runs:3). Assert it is absent from
+# the first run's proposals, then feed that run's output back and assert it is still absent.
+# ===========================================================================================
+NT21_FIRST=99; NT21_SECOND=99
+if [ -f "$MERGE" ]; then
+  bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --mode full --today 2026-08-18 \
+    --proposals "$MG/prop-d1" > "$MG/out-d1.md" 2>/dev/null
+  NT21_FIRST=$(grep -c 'VCS-032' "$MG/prop-d1" 2>/dev/null || true); [ -n "$NT21_FIRST" ] || NT21_FIRST=0
+  bash "$MERGE" --ledger "$MG/out-d1.md" --issues "$MG/issues.tsv" --mode full --today 2026-08-19 \
+    --proposals "$MG/prop-d2" > /dev/null 2>&1
+  NT21_SECOND=$(grep -c 'VCS-032' "$MG/prop-d2" 2>/dev/null || true); [ -n "$NT21_SECOND" ] || NT21_SECOND=0
+fi
+if [ "$NT21_FIRST" -eq 0 ] && [ "$NT21_SECOND" -eq 0 ]; then
+  ok "NT21 (R-09): a promote:declined entry is absent from the proposals on this run and on the next"
+else
+  bad "NT21 (R-09): declined entry proposed — run 1=$NT21_FIRST, run 2=$NT21_SECOND (both want 0)"
+fi
+
+# ===========================================================================================
+# NT22 (R-11) — after promotion the entry is ONE line in GitHub Issues carrying both identifiers,
+# and the local id appears exactly once in the WHOLE FILE. Assert the whole-file count and not
+# merely the old section's absence: the entry MOVES section, it is not duplicated, and a copy left
+# behind reads as two open things.
+# ===========================================================================================
+NT22_WHOLE=0; NT22_LINE=""
+if [ -f "$MERGE" ]; then
+  bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --mode full --today 2026-08-18 \
+    --promote VCS-031=470 > "$MG/out22.md" 2>/dev/null
+  NT22_WHOLE=$(grep -c 'VCS-031' "$MG/out22.md" 2>/dev/null || true); [ -n "$NT22_WHOLE" ] || NT22_WHOLE=0
+  NT22_LINE=$(awk '/^## GitHub Issues/{f=1; next} /^## /{f=0} f' "$MG/out22.md" 2>/dev/null | grep 'VCS-031')
+fi
+NT22_BOTH=0
+printf '%s' "$NT22_LINE" | grep -q 'VCS-031' && printf '%s' "$NT22_LINE" | grep -q '#470' && NT22_BOTH=1
+if [ "$NT22_WHOLE" -eq 1 ] && [ "$NT22_BOTH" -eq 1 ]; then
+  ok "NT22 (R-11): the promoted entry is one line in GitHub Issues carrying both VCS-031 and #470, and appears once in the whole file"
+else
+  bad "NT22 (R-11): whole-file occurrences=$NT22_WHOLE (want 1), section line carries both ids=$NT22_BOTH — line: '$NT22_LINE'"
+fi
+
+# ===========================================================================================
+# NT23 (R-04) — the self-check, exercised through its WHOLE-FILE UNIQUENESS half: a fixture whose
+# input already carries VCS-031 twice must exit 3 naming the id, never render a file that repeats
+# it. NO SEAM WAS ADDED to drive this. The other half of the self-check — an input ISSUE that the
+# rendered section drops — cannot be driven from outside a correct renderer by construction, since
+# a correct renderer produces no such input; the plan allowed a planted count comparison for it and
+# that is Task 9's job, which is the mechanism rule 2 describes and not a gap in this assertion.
+# ===========================================================================================
+sed 's/^- \[ \] `VCS-030`/- [ ] `VCS-031`/' "$MG/base.md" > "$MG/dup-id.md"
+NT23_RC=99; NT23_ERR=""
+if [ -f "$MERGE" ]; then
+  NT23_ERR=$(bash "$MERGE" --ledger "$MG/dup-id.md" --issues "$MG/issues.tsv" --mode full --today 2026-08-18 2>&1 >/dev/null)
+  NT23_RC=$?
+fi
+if [ "$NT23_RC" -eq 3 ] && printf '%s' "$NT23_ERR" | grep -q 'VCS-031'; then
+  ok "NT23 (R-04): the self-check exits 3 and names the id that appears twice"
+else
+  bad "NT23 (R-04): rc=$NT23_RC (want 3), stderr names VCS-031: $(printf '%s' "$NT23_ERR" | grep -c 'VCS-031')"
+fi
+
+# ===========================================================================================
+# NT24 (R-12) — with exactly one non-terminal manifest the Steps header names it and the case
+# token reads "derived". Non-terminal is current_step AND status both non-terminal, and
+# status: aborted is terminal even when current_step is not (ADR-0113), which the fixture set
+# below exercises rather than assumes.
+# ===========================================================================================
+MAN1="$MG/man-one"; mkdir -p "$MAN1"
+cat > "$MAN1/2026-08-17-alpha.manifest.yml" <<'YML'
+topic_slug: "alpha"
+current_step: "step_5_implementation"
+status: "in_progress"
+YML
+cat > "$MAN1/2026-08-01-beta.manifest.yml" <<'YML'
+topic_slug: "beta"
+current_step: "completed"
+status: "completed"
+YML
+cat > "$MAN1/2026-08-02-gamma.manifest.yml" <<'YML'
+topic_slug: "gamma"
+current_step: "step_2_architecture"
+status: "aborted"
+YML
+NT24_HDR=""
+if [ -f "$MERGE" ]; then
+  NT24_HDR=$(bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --manifests "$MAN1" \
+              --mode full --today 2026-08-18 2>/dev/null | grep '^## Steps')
+fi
+if printf '%s' "$NT24_HDR" | grep -q 'alpha' && printf '%s' "$NT24_HDR" | grep -qi 'derived'; then
+  ok "NT24 (R-12): one non-terminal manifest — the Steps header names it and reads derived"
+else
+  bad "NT24 (R-12): Steps header was '$NT24_HDR' (want it to name alpha and read derived)"
+fi
+
+# ===========================================================================================
+# NT25 (R-13) — zero non-terminal manifests omits the section AND states the reason; two name both
+# candidates and derive nothing. Assert the STATED reason in the zero case: a silently absent
+# section and a deliberately omitted one must not read alike (rule 4).
+# ===========================================================================================
+MAN0="$MG/man-zero"; mkdir -p "$MAN0"
+cp "$MAN1/2026-08-01-beta.manifest.yml" "$MAN0/"
+MAN2="$MG/man-two"; mkdir -p "$MAN2"
+cp "$MAN1/2026-08-17-alpha.manifest.yml" "$MAN2/"
+cat > "$MAN2/2026-08-16-delta.manifest.yml" <<'YML'
+topic_slug: "delta"
+current_step: "step_3_project_memory"
+status: "in_progress"
+YML
+NT25_ZERO_HDR="x"; NT25_ZERO_REASON=0; NT25_TWO=""
+if [ -f "$MERGE" ]; then
+  _z=$(bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --manifests "$MAN0" --mode full --today 2026-08-18 2>/dev/null)
+  NT25_ZERO_HDR=$(printf '%s\n' "$_z" | grep -c '^## Steps')
+  NT25_ZERO_REASON=$(printf '%s\n' "$_z" | grep -ci 'no non-terminal manifest')
+  NT25_TWO=$(bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --manifests "$MAN2" --mode full --today 2026-08-18 2>/dev/null | grep -A2 '^## Steps')
+fi
+NT25_TWO_OK=0
+printf '%s' "$NT25_TWO" | grep -q 'alpha' && printf '%s' "$NT25_TWO" | grep -q 'delta' && NT25_TWO_OK=1
+if [ "$NT25_ZERO_HDR" = "0" ] && [ "$NT25_ZERO_REASON" -ge 1 ] && [ "$NT25_TWO_OK" -eq 1 ]; then
+  ok "NT25 (R-13): zero manifests omits the section with a stated reason; two name both candidates"
+else
+  bad "NT25 (R-13): zero-case headers=$NT25_ZERO_HDR (want 0) reason-lines=$NT25_ZERO_REASON (want >=1); two-case names both=$NT25_TWO_OK"
+fi
+
+# ===========================================================================================
+# NT26 (R-14) — both directions inside one PROJECT.md fixture: an issue number that is also a
+# roadmap row renders with a pointer to its phase, one that is not renders without.
+# ===========================================================================================
+cat > "$MG/PROJECT.md" <<'MD'
+# ROADMAP
+
+## Phase 11 — hardening
+
+- [ ] first issue (issue #401)
+
+## Phase 12 — later
+
+- [x] something already done (issue #999)
+MD
+NT26_401=""; NT26_402=""
+if [ -f "$MERGE" ]; then
+  _o=$(bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --roadmap "$MG/PROJECT.md" --mode full --today 2026-08-18 2>/dev/null)
+  NT26_401=$(printf '%s\n' "$_o" | grep '#401')
+  NT26_402=$(printf '%s\n' "$_o" | grep '#402')
+fi
+NT26_OK=0
+printf '%s' "$NT26_401" | grep -qi 'phase 11' && ! printf '%s' "$NT26_402" | grep -qi 'phase' && NT26_OK=1
+if [ "$NT26_OK" -eq 1 ]; then
+  ok "NT26 (R-14): the roadmap issue carries its phase pointer and the non-roadmap issue carries none"
+else
+  bad "NT26 (R-14): #401 line='$NT26_401' (want a Phase 11 pointer), #402 line='$NT26_402' (want no phase)"
+fi
+
+# ===========================================================================================
+# NT27 (R-18) — --p1-gate is a CHECKER with three distinct exit codes so its caller in
+# concept-to-code can branch (rule 5). A P1 opened after --since is NEW and blocks; one opened
+# before is pre-existing and is reported without blocking. Assert both codes and both id lists.
+# ===========================================================================================
+NT27_NEW_RC=99; NT27_OLD_RC=99; NT27_NEW_IDS=""; NT27_OLD_IDS=""
+if [ -f "$MERGE" ]; then
+  NT27_NEW_IDS=$(bash "$MERGE" --ledger "$MG/base.md" --p1-gate --since 2026-07-01 2>/dev/null); NT27_NEW_RC=$?
+  NT27_OLD_IDS=$(bash "$MERGE" --ledger "$MG/base.md" --p1-gate --since 2026-08-15 2>/dev/null); NT27_OLD_RC=$?
+fi
+if [ "$NT27_NEW_RC" -ne "$NT27_OLD_RC" ] \
+   && printf '%s' "$NT27_NEW_IDS" | grep -q 'VCS-028' \
+   && printf '%s' "$NT27_OLD_IDS" | grep -q 'VCS-028'; then
+  ok "NT27 (R-18): --p1-gate separates a new P1 (rc=$NT27_NEW_RC) from a pre-existing one (rc=$NT27_OLD_RC), naming the id in both"
+else
+  bad "NT27 (R-18): new-rc=$NT27_NEW_RC old-rc=$NT27_OLD_RC (must differ); new-ids='$NT27_NEW_IDS' old-ids='$NT27_OLD_IDS'"
+fi
+
+# ===========================================================================================
+# NT28 (R-06, R-13) — AMENDMENT 1. THE PRODUCER/CONSUMER MEETING POINT. NT14 and NT15 prove
+# gh-issues.sh reports DIDNOTRUN and writes nothing; NT16..NT27 prove ledger-merge.sh behaves on
+# well-formed input; nothing until here hands one's output to the other. A consumer that read
+# DIDNOTRUN as an empty issue set would silently empty the section on every run without a network
+# and every other assertion in this file would stay green while it did (rule 17). The record is
+# taken from gh-issues.sh's ACTUAL output, not hand-written, so a change to its record shape
+# breaks this assertion rather than sliding past it.
+# ===========================================================================================
+NT28_SECTION_IN=""; NT28_SECTION_OUT=""; NT28_REASON=0
+if [ -f "$MERGE" ] && [ -f "$GHISSUES" ]; then
+  PATH="$GH_TMP/nobin:/usr/bin:/bin" bash "$GHISSUES" > "$MG/didnotrun.tsv" 2>/dev/null
+  _o=$(bash "$MERGE" --ledger "$GH_TMP/ledger-two.md" --issues "$MG/didnotrun.tsv" --mode full --today 2026-08-18 2>/dev/null)
+  NT28_SECTION_IN=$(awk '/^## GitHub Issues/{f=1; next} /^## /{f=0} f' "$GH_TMP/ledger-two.md" | grep -c '#[0-9]')
+  NT28_SECTION_OUT=$(printf '%s\n' "$_o" | awk '/^## GitHub Issues/{f=1; next} /^## /{f=0} f' | grep -c '#[0-9]')
+  NT28_REASON=$(printf '%s\n' "$_o" | grep -ci 'did-not-run\|didnotrun')
+fi
+if [ -n "$NT28_SECTION_IN" ] && [ "$NT28_SECTION_IN" = "$NT28_SECTION_OUT" ] && [ "$NT28_SECTION_IN" -gt 0 ] && [ "$NT28_REASON" -ge 1 ]; then
+  ok "NT28 (R-06, R-13): a DIDNOTRUN record from gh-issues.sh leaves the $NT28_SECTION_IN existing entries untouched and states the cause"
+else
+  bad "NT28 (R-06, R-13): entries before=$NT28_SECTION_IN after=$NT28_SECTION_OUT (must be equal and > 0), stated reason lines=$NT28_REASON (want >=1)"
+fi
+
+# ===========================================================================================
+# NT29 (R-14) — AMENDMENT 1. PROJECT.md ABSENT IS NOT PROJECT.md WITH NO MATCH. NT26 fixes both
+# directions inside a fixture that exists. Zero matches can be correct; zero candidates is a broken
+# derivation, and from the rendered section the two are identical (rule 7). This is the assertion
+# that keeps the skill usable in a repository with no roadmap file, which is every repository
+# except this one.
+# ===========================================================================================
+NT29_PHASES=99; NT29_REASON=0; NT29_RC=99
+if [ -f "$MERGE" ]; then
+  _o=$(bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --roadmap "$MG/NO-SUCH-PROJECT.md" \
+        --mode full --today 2026-08-18 2>/dev/null); NT29_RC=$?
+  NT29_PHASES=$(printf '%s\n' "$_o" | grep -ci 'phase [0-9]')
+  NT29_REASON=$(printf '%s\n' "$_o" | grep -ci 'no roadmap file')
+fi
+if [ "$NT29_RC" -eq 0 ] && [ "$NT29_PHASES" -eq 0 ] && [ "$NT29_REASON" -ge 1 ]; then
+  ok "NT29 (R-14): an absent roadmap file renders no phase pointer and says so in one line"
+else
+  bad "NT29 (R-14): rc=$NT29_RC phase-pointers=$NT29_PHASES (want 0) stated-reason=$NT29_REASON (want >=1)"
+fi
+
+# ===========================================================================================
+# NT29b (R-12, R-13) — AMENDMENT 1. The same third state on the other derived section: a
+# --manifests root that DOES NOT EXIST is distinct from one holding zero non-terminal manifests
+# (NT25). Assert the two reasons differ in text. ADR-0109 gives seven entry tokens for exactly
+# this reason: "no file" and "unparseable" are inputs, not environments.
+# ===========================================================================================
+NT29B_MISSING=""; NT29B_EMPTY=""
+if [ -f "$MERGE" ]; then
+  NT29B_MISSING=$(bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --manifests "$MG/no-such-dir" \
+                   --mode full --today 2026-08-18 2>/dev/null | grep -i 'manifest' | head -1)
+  NT29B_EMPTY=$(bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --manifests "$MAN0" \
+                 --mode full --today 2026-08-18 2>/dev/null | grep -i 'manifest' | head -1)
+fi
+if [ -n "$NT29B_MISSING" ] && [ -n "$NT29B_EMPTY" ] && [ "$NT29B_MISSING" != "$NT29B_EMPTY" ]; then
+  ok "NT29b (R-12, R-13): an absent manifests root and an empty one state two different reasons"
+else
+  bad "NT29b (R-12, R-13): missing='$NT29B_MISSING' empty='$NT29B_EMPTY' (both non-empty and different)"
+fi
+
+# ===========================================================================================
+# NT30 (R-24) — AMENDMENT 1. The standalone triggers survive in the description: frontmatter.
+# GREEN THE MOMENT IT IS WRITTEN, because Task 2 vendored the field byte-identically. It is a
+# regression pin aimed at Task 8 item 1, which rewrites that same field, so its evidence is its
+# plant at Task 9 and not a red checkpoint (rule 2). NT9 pins the other direction — that the
+# description names both chains and both chains name it back — and the two must not be merged: a
+# description naming only the chains would pass NT9 and leave the skill unreachable by hand.
+# Matched against a flattened, undecorated, case-insensitive copy (rule 3).
+# ===========================================================================================
+NT30_DESC=""
+[ -f "$SKILLMD" ] && NT30_DESC=$(flatten_prose "$SKILLMD")
+NT30_MISSING=""
+for _t in "/project-tasks" "aggiorna il todo" "cosa resta da fare" "update the task ledger" "track this issue"; do
+  printf '%s' "$NT30_DESC" | grep -qF "$_t" || NT30_MISSING="$NT30_MISSING [$_t]"
+done
+if [ -f "$SKILLMD" ] && [ -z "$NT30_MISSING" ]; then
+  ok "NT30 (R-24): the description keeps all five standalone trigger phrases"
+else
+  bad "NT30 (R-24): vendored SKILL.md absent, or trigger phrase(s) gone —$NT30_MISSING"
+fi
+
+# ===========================================================================================
 # Z1 — assertion-count floor, forward-declared across this file's Task 1, 4 and 6 blocks (ADR-0153
 # §D7 names the full NT0..NT27 set; ADR-0083 §D3 is the floor pattern this repeats). The plan's own
 # task list totals at least 31 named assertion ids once Tasks 4 (7 ids: NT11, NT12, NT13, NT13b,
