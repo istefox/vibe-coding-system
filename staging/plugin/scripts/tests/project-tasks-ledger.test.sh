@@ -316,6 +316,197 @@ else
 fi
 
 # ===========================================================================================
+# Task 4 (tester-owned) — the GitHub-read assertions, NT11..NT15. EVERY ONE IS EXPECTED RED at
+# Batch C: gh-issues.sh is written by Task 5, at Batch D. Nothing here calls `gh`, touches the
+# network or reads $HOME; every assertion drives the helper through --issues-json, the offline
+# hook staging/plugin/scripts/roadmap-from-issues.sh already establishes.
+# ===========================================================================================
+GHISSUES="$SKILL/scripts/gh-issues.sh"
+
+# gh_stub <dir> <mode> — build a fake `gh` on a private PATH so NT14b's three causes are each
+# EXECUTED rather than text-pinned. mode: auth-fail | repo-fail. The absent case needs no stub,
+# only a PATH without gh.
+gh_stub() {
+  mkdir -p "$1"
+  cat > "$1/gh" <<STUB
+#!/bin/bash
+case "\$1 \$2" in
+  "auth status") [ "$2" = auth-fail ] && { echo "not logged in" >&2; exit 1; } ; exit 0 ;;
+  "repo view")   [ "$2" = repo-fail ] && { echo "no remote" >&2; exit 1; } ; echo '{"nameWithOwner":"o/n"}' ; exit 0 ;;
+esac
+exit 0
+STUB
+  chmod +x "$1/gh"
+}
+
+GH_TMP="$TMP/gh"
+mkdir -p "$GH_TMP/nobin"
+
+cat > "$GH_TMP/three.json" <<'JSON'
+[{"number":401,"title":"first issue","state":"OPEN","labels":[{"name":"bug"},{"name":"p1"}]},{"number":402,"title":"second issue","state":"OPEN","labels":[]},{"number":403,"title":"third issue","state":"OPEN","labels":[{"name":"docs"}]}]
+JSON
+cat > "$GH_TMP/dup.json" <<'JSON'
+[{"number":401,"title":"first issue","state":"OPEN","labels":[]},{"number":401,"title":"same number again","state":"OPEN","labels":[]}]
+JSON
+printf '[]\n' > "$GH_TMP/empty.json"
+
+cat > "$GH_TMP/ledger-two.md" <<'MD'
+<!-- project-tasks: prefix=VCS lastId=27 -->
+# PROJECT TASKS
+
+## GitHub Issues
+
+- [ ] `#401` **P2** first issue <!-- src:github opened:2026-08-01 -->
+- [ ] `#402` **P3** second issue <!-- src:github opened:2026-08-01 -->
+
+## Open Issues
+
+_none_
+MD
+cat > "$GH_TMP/ledger-empty.md" <<'MD'
+<!-- project-tasks: prefix=VCS lastId=27 -->
+# PROJECT TASKS
+
+## GitHub Issues
+
+_none_
+
+## Open Issues
+
+_none_
+MD
+
+# ===========================================================================================
+# NT11 (R-04) — three open issues in, exactly three ISSUE records out, exit 0. Assert the FIELDS
+# and not only the count: a helper emitting three records with an empty title or a dropped label
+# set satisfies a count and loses the payload the ledger is built from.
+# ===========================================================================================
+NT11_OUT=""; NT11_RC=99
+if [ -f "$GHISSUES" ]; then
+  NT11_OUT=$(bash "$GHISSUES" --issues-json "$GH_TMP/three.json" 2>/dev/null); NT11_RC=$?
+fi
+NT11_N=$(printf '%s\n' "$NT11_OUT" | grep -c '^ISSUE'); [ -z "$NT11_N" ] && NT11_N=0
+NT11_NUMS=$(printf '%s\n' "$NT11_OUT" | awk -F'\t' '/^ISSUE/{print $2}' | sort | tr '\n' ' ')
+NT11_TITLE=$(printf '%s\n' "$NT11_OUT" | awk -F'\t' '/^ISSUE/ && $2==402 {print $4}')
+NT11_LBL=$(printf '%s\n' "$NT11_OUT" | awk -F'\t' '/^ISSUE/ && $2==401 {print $5}')
+NT11_STATE=$(printf '%s\n' "$NT11_OUT" | awk -F'\t' '/^ISSUE/ && $2==403 {print $3}')
+if [ "$NT11_RC" -eq 0 ] && [ "$NT11_N" -eq 3 ] && [ "$NT11_NUMS" = "401 402 403 " ] \
+   && [ "$NT11_TITLE" = "second issue" ] && [ -n "$NT11_LBL" ] && [ -n "$NT11_STATE" ]; then
+  ok "NT11 (R-04): 3 issues in, 3 ISSUE records out with number, state, title and labels (rc=0)"
+else
+  bad "NT11 (R-04): rc=$NT11_RC records=$NT11_N nums='$NT11_NUMS' title402='$NT11_TITLE' labels401='$NT11_LBL' state403='$NT11_STATE'"
+fi
+
+# ===========================================================================================
+# NT12 (R-04) — a duplicated issue number is a DETECTABLE FAILURE, not a silent dedup. Exit 3 and
+# the number named on stderr. R-04 says each issue appears exactly once; a helper that quietly
+# collapses the pair satisfies that sentence while hiding that its input was wrong.
+# ===========================================================================================
+NT12_ERR=""; NT12_RC=99
+if [ -f "$GHISSUES" ]; then
+  NT12_ERR=$(bash "$GHISSUES" --issues-json "$GH_TMP/dup.json" 2>&1 >/dev/null); NT12_RC=$?
+fi
+if [ "$NT12_RC" -eq 3 ] && printf '%s' "$NT12_ERR" | grep -q '401'; then
+  ok "NT12 (R-04): a duplicated issue number exits 3 and names the number on stderr"
+else
+  bad "NT12 (R-04): rc=$NT12_RC (want 3), stderr names 401: $(printf '%s' "$NT12_ERR" | grep -c '401')"
+fi
+
+# ===========================================================================================
+# NT13/NT13b (R-05) — the denominator guard, both directions (rule 7). Zero issues against a
+# section that ALREADY held two is a broken derivation: exit 4 and a DIDNOTRUN record. Zero issues
+# against an empty section is legitimate: exit 0. Assert the exit code AND the record — a
+# non-zero exit with no record on stdout is indistinguishable from a crash.
+#
+# The exit code asserted here is the CONTRACT's 4 and not merely "non-zero", which is stricter
+# than the plan's own wording for this assertion: the plan's Task 5 block reserves 3 for "could
+# not evaluate" and 4 for "broken derivation", and collapsing them would let a helper that cannot
+# read its input pass as one that read it and found a contradiction.
+# ===========================================================================================
+NT13_OUT=""; NT13_RC=99
+if [ -f "$GHISSUES" ]; then
+  NT13_OUT=$(bash "$GHISSUES" --issues-json "$GH_TMP/empty.json" --ledger "$GH_TMP/ledger-two.md" 2>/dev/null); NT13_RC=$?
+fi
+NT13_REC=$(printf '%s\n' "$NT13_OUT" | grep -c '^DIDNOTRUN'); [ -z "$NT13_REC" ] && NT13_REC=0
+if [ "$NT13_RC" -eq 4 ] && [ "$NT13_REC" -ge 1 ]; then
+  ok "NT13 (R-05): zero issues against a section holding two exits 4 with a DIDNOTRUN record"
+else
+  bad "NT13 (R-05): rc=$NT13_RC (want 4), DIDNOTRUN records=$NT13_REC (want >=1)"
+fi
+
+NT13B_OUT=""; NT13B_RC=99
+if [ -f "$GHISSUES" ]; then
+  NT13B_OUT=$(bash "$GHISSUES" --issues-json "$GH_TMP/empty.json" --ledger "$GH_TMP/ledger-empty.md" 2>/dev/null); NT13B_RC=$?
+fi
+NT13B_N=$(printf '%s\n' "$NT13B_OUT" | grep -c '^ISSUE'); [ -z "$NT13B_N" ] && NT13B_N=0
+if [ "$NT13B_RC" -eq 0 ] && [ "$NT13B_N" -eq 0 ]; then
+  ok "NT13b (R-05): zero issues against an empty section is exit 0 with no ISSUE records"
+else
+  bad "NT13b (R-05): rc=$NT13B_RC (want 0), ISSUE records=$NT13B_N (want 0)"
+fi
+
+# ===========================================================================================
+# NT14 (R-06) — `gh` absent. A DIDNOTRUN record naming BOTH a cause and a remedy, and the
+# reserved did-not-run code 3, never 0. Rule 4: a check that could not run must not read as a
+# check that found nothing. The PATH prefix is the idiom selftest.sh already uses.
+# ===========================================================================================
+NT14_OUT=""; NT14_RC=99
+if [ -f "$GHISSUES" ]; then
+  NT14_OUT=$(PATH="$GH_TMP/nobin:/usr/bin:/bin" bash "$GHISSUES" 2>/dev/null); NT14_RC=$?
+fi
+NT14_REM=$(printf '%s\n' "$NT14_OUT" | awk -F'\t' '/^DIDNOTRUN/{print $3}')
+NT14_CAUSE=$(printf '%s\n' "$NT14_OUT" | awk -F'\t' '/^DIDNOTRUN/{print $2}')
+if [ "$NT14_RC" -eq 3 ] && [ -n "$NT14_CAUSE" ] && [ -n "$NT14_REM" ]; then
+  ok "NT14 (R-06): gh absent gives exit 3 and a DIDNOTRUN record carrying a cause and a remedy"
+else
+  bad "NT14 (R-06): rc=$NT14_RC (want 3), cause='$NT14_CAUSE' remedy='$NT14_REM' (both must be non-empty)"
+fi
+
+# ===========================================================================================
+# NT14b (R-06) — the three causes are DISTINGUISHABLE, and all three are EXECUTED, not text-pinned
+# (rule 16). A fake `gh` on a private PATH produces the unauthenticated and no-remote branches
+# without a network, so no branch here is asserted by its message string alone.
+# ===========================================================================================
+gh_stub "$GH_TMP/bin-auth" auth-fail
+gh_stub "$GH_TMP/bin-repo" repo-fail
+NT14B_ABSENT=""; NT14B_AUTH=""; NT14B_REPO=""
+NT14B_RC_AUTH=99; NT14B_RC_REPO=99
+if [ -f "$GHISSUES" ]; then
+  NT14B_ABSENT=$(PATH="$GH_TMP/nobin:/usr/bin:/bin" bash "$GHISSUES" 2>/dev/null | awk -F'\t' '/^DIDNOTRUN/{print $2}')
+  NT14B_AUTH=$(PATH="$GH_TMP/bin-auth:/usr/bin:/bin" bash "$GHISSUES" 2>/dev/null | awk -F'\t' '/^DIDNOTRUN/{print $2}')
+  NT14B_RC_AUTH=$?
+  NT14B_REPO=$(PATH="$GH_TMP/bin-repo:/usr/bin:/bin" bash "$GHISSUES" 2>/dev/null | awk -F'\t' '/^DIDNOTRUN/{print $2}')
+  NT14B_RC_REPO=$?
+fi
+NT14B_UNIQ=$(printf '%s\n%s\n%s\n' "$NT14B_ABSENT" "$NT14B_AUTH" "$NT14B_REPO" | grep -v '^$' | sort -u | wc -l | tr -d ' ')
+if [ "$NT14B_UNIQ" -eq 3 ]; then
+  ok "NT14b (R-06): gh absent, unauthenticated and no-remote give three distinct causes, all executed"
+else
+  bad "NT14b (R-06): $NT14B_UNIQ distinct cause(s) (want 3) — absent='$NT14B_ABSENT' auth='$NT14B_AUTH' repo='$NT14B_REPO'"
+fi
+
+# ===========================================================================================
+# NT15 (R-06) — the helper is a REPORTER of evidence and never a writer, exactly as scan.sh is.
+# Assert the ledger file is byte-identical across every invocation shape above, including the two
+# that fail. Compared by content, not by mtime: a rewrite with identical bytes is still a write
+# this assertion is content to allow, and a mtime check would be flaky under a same-second run.
+# ===========================================================================================
+cp "$GH_TMP/ledger-two.md" "$GH_TMP/ledger-probe.md"
+NT15_BEFORE=$(shasum "$GH_TMP/ledger-probe.md" | awk '{print $1}')
+if [ -f "$GHISSUES" ]; then
+  bash "$GHISSUES" --issues-json "$GH_TMP/three.json" --ledger "$GH_TMP/ledger-probe.md" >/dev/null 2>&1
+  bash "$GHISSUES" --issues-json "$GH_TMP/empty.json" --ledger "$GH_TMP/ledger-probe.md" >/dev/null 2>&1
+  bash "$GHISSUES" --issues-json "$GH_TMP/dup.json"   --ledger "$GH_TMP/ledger-probe.md" >/dev/null 2>&1
+  PATH="$GH_TMP/nobin:/usr/bin:/bin" bash "$GHISSUES" --ledger "$GH_TMP/ledger-probe.md" >/dev/null 2>&1
+fi
+NT15_AFTER=$(shasum "$GH_TMP/ledger-probe.md" | awk '{print $1}')
+if [ -f "$GHISSUES" ] && [ "$NT15_BEFORE" = "$NT15_AFTER" ]; then
+  ok "NT15 (R-06): the ledger is byte-identical after four invocations, two of them failing"
+else
+  bad "NT15 (R-06): gh-issues.sh absent, or the ledger changed ($NT15_BEFORE -> $NT15_AFTER)"
+fi
+
+# ===========================================================================================
 # Z1 — assertion-count floor, forward-declared across this file's Task 1, 4 and 6 blocks (ADR-0153
 # §D7 names the full NT0..NT27 set; ADR-0083 §D3 is the floor pattern this repeats). The plan's own
 # task list totals at least 31 named assertion ids once Tasks 4 (7 ids: NT11, NT12, NT13, NT13b,
