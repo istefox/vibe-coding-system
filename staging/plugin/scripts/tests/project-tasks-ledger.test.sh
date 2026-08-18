@@ -366,6 +366,32 @@ STUB
 GH_TMP="$TMP/gh"
 mkdir -p "$GH_TMP/nobin"
 
+# gh_absent_path — a PATH on which `gh` genuinely DOES NOT EXIST.
+#
+# The first version of this was `PATH="$TMP/nobin:/usr/bin:/bin"`, and it was not hermetic: it
+# excludes /opt/homebrew/bin, where gh lives on this machine, and includes /usr/bin, where gh lives
+# on a GitHub Linux runner. So the "gh absent" case executed the UNAUTHENTICATED branch in CI while
+# passing locally — NT14b caught it (2 distinct causes, not 3) and NT14 did not, because rc=3 with a
+# non-empty cause is true of both branches. A fixture that depends on where a binary happens to be
+# installed is a fixture that tests the machine.
+#
+# Symlinking the exact tools the helper calls is the hermetic form, and the enumeration is
+# GUARDED rather than trusted: a missing tool aborts loudly here instead of silently sending the
+# run down a different branch, which is the failure this whole helper exists to stop.
+GH_NOGH="$GH_TMP/nogh"
+mkdir -p "$GH_NOGH"
+_nogh_missing=""
+for _t in awk cat grep printf sed sort tr uniq wc bash; do
+  _p=$(command -v "$_t" 2>/dev/null)
+  if [ -n "$_p" ]; then ln -sf "$_p" "$GH_NOGH/$_t"; else _nogh_missing="$_nogh_missing $_t"; fi
+done
+if [ -n "$_nogh_missing" ]; then
+  bad "NT14/NT14b fixture: cannot build a gh-free PATH — missing tool(s):$_nogh_missing"
+fi
+if [ -n "$(PATH="$GH_NOGH" command -v gh 2>/dev/null)" ]; then
+  bad "NT14/NT14b fixture: gh is still resolvable on the gh-free PATH — the fixture proves nothing"
+fi
+
 cat > "$GH_TMP/three.json" <<'JSON'
 [{"number":401,"title":"first issue","state":"OPEN","labels":[{"name":"bug"},{"name":"p1"}]},{"number":402,"title":"second issue","state":"OPEN","labels":[]},{"number":403,"title":"third issue","state":"OPEN","labels":[{"name":"docs"}]}]
 JSON
@@ -481,7 +507,7 @@ fi
 # ===========================================================================================
 NT14_OUT=""; NT14_RC=99
 if [ -f "$GHISSUES" ]; then
-  NT14_OUT=$(PATH="$GH_TMP/nobin:/usr/bin:/bin" bash "$GHISSUES" 2>/dev/null); NT14_RC=$?
+  NT14_OUT=$(PATH="$GH_NOGH" bash "$GHISSUES" 2>/dev/null); NT14_RC=$?
 fi
 NT14_REM=$(printf '%s\n' "$NT14_OUT" | awk -F'\t' '/^DIDNOTRUN/{print $3}')
 NT14_CAUSE=$(printf '%s\n' "$NT14_OUT" | awk -F'\t' '/^DIDNOTRUN/{print $2}')
@@ -502,7 +528,7 @@ gh_stub "$GH_TMP/bin-repo" repo-fail
 NT14B_ABSENT=""; NT14B_AUTH=""; NT14B_REPO=""
 NT14B_RC_AUTH=99; NT14B_RC_REPO=99
 if [ -f "$GHISSUES" ]; then
-  NT14B_ABSENT=$(PATH="$GH_TMP/nobin:/usr/bin:/bin" bash "$GHISSUES" 2>/dev/null | awk -F'\t' '/^DIDNOTRUN/{print $2}')
+  NT14B_ABSENT=$(PATH="$GH_NOGH" bash "$GHISSUES" 2>/dev/null | awk -F'\t' '/^DIDNOTRUN/{print $2}')
   NT14B_AUTH=$(PATH="$GH_TMP/bin-auth:/usr/bin:/bin" bash "$GHISSUES" 2>/dev/null | awk -F'\t' '/^DIDNOTRUN/{print $2}')
   NT14B_RC_AUTH=$?
   NT14B_REPO=$(PATH="$GH_TMP/bin-repo:/usr/bin:/bin" bash "$GHISSUES" 2>/dev/null | awk -F'\t' '/^DIDNOTRUN/{print $2}')
@@ -528,7 +554,7 @@ if [ -f "$GHISSUES" ]; then
   bash "$GHISSUES" --issues-json "$GH_TMP/three.json" --ledger "$GH_TMP/ledger-probe.md" >/dev/null 2>&1
   bash "$GHISSUES" --issues-json "$GH_TMP/empty.json" --ledger "$GH_TMP/ledger-probe.md" >/dev/null 2>&1
   bash "$GHISSUES" --issues-json "$GH_TMP/dup.json"   --ledger "$GH_TMP/ledger-probe.md" >/dev/null 2>&1
-  PATH="$GH_TMP/nobin:/usr/bin:/bin" bash "$GHISSUES" --ledger "$GH_TMP/ledger-probe.md" >/dev/null 2>&1
+  PATH="$GH_NOGH" bash "$GHISSUES" --ledger "$GH_TMP/ledger-probe.md" >/dev/null 2>&1
 fi
 NT15_AFTER=$(shasum "$GH_TMP/ledger-probe.md" | awk '{print $1}')
 if [ -f "$GHISSUES" ] && [ "$NT15_BEFORE" = "$NT15_AFTER" ]; then
@@ -917,7 +943,7 @@ fi
 # ===========================================================================================
 NT28_SECTION_IN=""; NT28_SECTION_OUT=""; NT28_REASON=0
 if [ -f "$MERGE" ] && [ -f "$GHISSUES" ]; then
-  PATH="$GH_TMP/nobin:/usr/bin:/bin" bash "$GHISSUES" > "$MG/didnotrun.tsv" 2>/dev/null
+  PATH="$GH_NOGH" bash "$GHISSUES" > "$MG/didnotrun.tsv" 2>/dev/null
   _o=$(bash "$MERGE" --ledger "$GH_TMP/ledger-two.md" --issues "$MG/didnotrun.tsv" --mode full --today 2026-08-18 2>/dev/null)
   NT28_SECTION_IN=$(awk '/^## GitHub Issues/{f=1; next} /^## /{f=0} f' "$GH_TMP/ledger-two.md" | grep -c '#[0-9]')
   NT28_SECTION_OUT=$(printf '%s\n' "$_o" | awk '/^## GitHub Issues/{f=1; next} /^## /{f=0} f' | grep -c '#[0-9]')
