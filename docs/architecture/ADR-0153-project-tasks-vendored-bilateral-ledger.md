@@ -434,3 +434,102 @@ marker from prose is mechanical and two greps long.
 - `TODO.md` — entries `VCS-022`, `VCS-023`, `VCS-027`.
 - `staging/plugin/scripts/roadmap-from-issues.sh` — the `--issues-json` offline hook this design
   copies.
+
+## Correction 2026-08-18 — what executing the design changed, recorded forward
+
+Nothing above this line is edited. The header still reads `R-01 … R-23` and §D9 still states the
+leader set it stated on the 17th; both were correct snapshots of their day (rule 14). This block
+records what the implementation measured, in the order it was found.
+
+### The requirement set grew by one, because the standalone lane was specified nowhere
+
+`R-24` was added at Batch B, before the vendoring landed. The feature has two lanes and the plan
+specified one: inside the chain the skill reads a manifest, a `PROJECT.md` and GitHub, and invoked
+by hand — in this repository or in any other — none of those three need exist. Three gaps sat
+between the assertions that did exist:
+
+- Nothing made the two helpers meet. `NT14`/`NT15` proved `gh-issues.sh` reports `DIDNOTRUN` and
+  writes nothing; `NT16`–`NT27` proved `ledger-merge.sh` behaves on well-formed input; no assertion
+  handed one's output to the other. A consumer reading `DIDNOTRUN` as an empty issue set would
+  empty the section on every offline run with the whole harness green (rule 17). `NT28`.
+- `PROJECT.md` absent and `docs/manifests/` absent were never cases. `NT26` fixed both directions
+  inside a fixture that exists; zero candidates and zero matches render identically (rule 7).
+  `NT29`, `NT29b`.
+- `R-19` protects one direction of `description:` and Task 8 rewrites that field. The same field
+  carries the standalone triggers and nothing claimed they survive; an edit making the description
+  purely chain-facing would pass `NT9`, pass the suite, and leave the skill unreachable by hand.
+  `NT30`.
+
+`NT30` is green the moment it is written, because vendoring copies the field byte-identically. It
+is a regression pin and its evidence is its plant, not a red checkpoint.
+
+### §D9's leader set does not achieve §D9's own stated result, and is corrected in the code
+
+§D9 lists `*` among the comment leaders with no anchor. Applied literally, `**declaration form**`
+in flowing markdown supplies a `*` and readmits the SPEC's own *"it matches a marker only in its
+declaration form"* sentence — one of the three `SPEC.md` lines §D9 names as rejected by the leader
+half. Named by its wording and not by its line: line numbers rot, and fastest in a file being
+corrected (ADR-0082). Measured, not reasoned: after the first implementation
+`SPEC.md` still reported one marker.
+
+`*` means "comment" only as a C block continuation, which is a line-start shape, so it is anchored
+in `scan.sh` and the other six leaders are not. Verified with identical verdicts on nine shapes
+under BSD `grep -E` on macOS and under `rg`. The before/after on this repository is `SPEC.md` 3 to
+0, `untrusted-input.test.sh` 1 to 0, `recovery-preflight.test.sh` 1 to 0 — five before, zero after,
+with genuine markers still firing.
+
+### `topic_slug:` exists in no manifest, and two assertions were green without reading anything
+
+`ledger-merge.sh`'s first manifest reader looked for `topic_slug:`. Measured 2026-08-18 across the
+corpus: **0 of 61** manifests carry it and **61 of 61** carry `topic:`. Every manifest fell through
+to the basename fallback.
+
+`NT24` and `NT25` were GREEN throughout, because the fixture FILENAMES contained the slug and the
+fallback supplied it. They were evidence about `basename`, not about the reader. The fixtures now
+carry `topic:` and are named so the filename cannot supply the answer — an in-place assertion edit,
+disclosed at its site (ADR-0073).
+
+### Five defects the assertions did not see, found by running the pipeline on the real ledger
+
+With 39 assertions green, the composed ledger was produced from this repository's own `TODO.md`
+and 67 live issues. That run found:
+
+1. A ledger with **no** `GitHub Issues` section dropped the entire rendered section in silence —
+   and that is every ledger written before this feature existed. No fixture had it, because every
+   fixture was written after the section did.
+2. The duplicate-id check counted every backticked id anywhere in the file, so an entry citing
+   another entry's id in its own prose read as a second definition: four false duplicates, all four
+   prose citations. It now counts definitions and reads the prefix from the header (rule 18).
+3. The self-check's section half had the same shape one level down: issue #437's title names #426
+   and #309, so both reported "renders 2 times" against a section that rendered each once.
+4. The manifest field, above.
+5. The `Steps` block was appended at the end of the file, which put it after `Done` — the one place
+   a reader has already stopped looking. It now sits before `Project Map`, where the declared
+   section order puts it.
+
+Defect 1 was caught by the script's own self-check, on its author, which is the check working.
+
+### Three plants did not fire on first validation, and two of them convicted assertions
+
+- `NT7` counted FIXME records by matching the record loosely, so the fixture's own line text
+  satisfied it and a plant that blanked the classifier left it green. It now reads the
+  classification field (rule 1, inside an assertion).
+- `NT29b` compared whole notice lines, each of which interpolates its own directory path, so two
+  notices carrying identical wording about different directories read as different. It now compares
+  the reason with the path removed.
+- `NT21`'s plant was malformed for the registry's grammar: its replacement carried a literal `\n`,
+  which the registry turns into a newline, so the mutated `awk` no longer parsed and the assertion
+  passed on an empty file. A plant that breaks the program instead of the assertion proves nothing.
+
+`NT0` carries no plant, and the reason is stated at its site: a plant substitutes text inside a
+file and cannot remove a file from the tree, which is the whole of what that assertion reads.
+
+### R-23's subject, named rather than gestured at
+
+What ships as an **instruction**, not an enforcement: `concept-to-code` Step 7b, `project-conductor`
+Step 5b, and every workflow paragraph added to `project-tasks`'s own `SKILL.md`. Each says so at its
+own site. A green assertion pins that the text exists; nothing pins that a model follows it.
+
+What ships as an **enforcement**: the marker predicate, the three merge regions, `runs:` derivation,
+the promotion predicate, the denominator and self-check guards, and the `--p1-gate` exit codes. All
+are executed by `project-tasks-ledger.test.sh` and mutated by the plant registry.
