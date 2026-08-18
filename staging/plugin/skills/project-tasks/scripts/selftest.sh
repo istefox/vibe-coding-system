@@ -54,8 +54,24 @@ const HACKATHON = "not a marker";
 TS
 
 cat > src/legacy.js <<'JS'
-// HACK: monkeypatch until upstream ships the fix
+foo(); // HACK: monkeypatch until upstream ships the fix
 JS
+
+# Two false-positive shapes measured on the real repository (VCS-023). Both sit
+# inside `#` comments, so the comment-leader half admits them; neither carries a
+# colon, so the declaration half rejects them. Zero markers expected from here.
+mkdir -p tools
+cat > tools/plant.sh <<'SH'
+# UF. THE SELF-COLLISION IS EXPECTED, NOT A BUG (ADR-0059)
+# plant: RRP1 | x.sh | needle | echo NONEMPTY-BUG
+SH
+
+# The other direction: declaration form WITH the colon, in flowing markdown
+# prose with no comment leader on the line. Rejected by the leader half, which
+# is the half the colon test alone cannot supply.
+cat > src/notes.md <<'MD'
+- narrowed: it matches `TODO:`, `FIXME:` and `XXX:` with the colon
+MD
 
 echo "npm test" > .claude/test-cmd
 
@@ -82,6 +98,9 @@ check "exits 0 on a real project"        "0" "$?"
 check "finds exactly 3 markers"          "3" "$(printf '%s\n' "$OUT" | grep -c '^MARKER')"
 check "ignores embedded-keyword decoys"  "0" "$(printf '%s\n' "$OUT" | grep -c 'TODOS\|DEBUGGING\|HACKATHON')"
 check "classifies FIXME"                 "1" "$(printf '%s\n' "$OUT" | grep -c '^MARKER.*FIXME')"
+check "trailing-comment marker fires"     "1" "$(printf '%s\n' "$OUT" | grep -c '^MARKER.*legacy\.js')"
+check "keyword without a colon is not a marker" "0" "$(printf '%s\n' "$OUT" | grep -c '^MARKER.*plant\.sh')"
+check "prose declaration is not a marker" "0" "$(printf '%s\n' "$OUT" | grep -c '^MARKER.*notes\.md')"
 check "reports missing file as stale"    "1" "$(printf '%s\n' "$OUT" | grep -c '^STALE	FX-003.*file-missing')"
 check "reports bad line as stale"        "1" "$(printf '%s\n' "$OUT" | grep -c '^STALE	FX-004.*line-out-of-range')"
 check "no stale for live markers"        "0" "$(printf '%s\n' "$OUT" | grep -c '^STALE	FX-00[12]')"

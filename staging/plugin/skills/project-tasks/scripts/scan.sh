@@ -61,9 +61,38 @@ emit() { printf '%s\n' "$*"; }
 tab() { printf '%s\t' "$@"; }
 
 # --- 1. code markers ---------------------------------------------------------
-# Require a delimiter after the keyword so prose like "todos" or a variable
-# named `bugCount` does not register.
-MARKER_RE='(^|[^A-Za-z_])(TODO|FIXME|HACK|XXX|BUG)([:( ]|$)'
+# Two-part predicate (ADR-0153 D9). A line contributes a marker only when BOTH
+# hold, and each half is required by a different measured false positive:
+#
+#   1. the keyword is in DECLARATION form, colon immediately after it, and
+#      preceded by a non-word character so `bugCount` and `TODOS` stay out;
+#   2. a comment leader appears EARLIER on the same line, so a keyword written
+#      in flowing markdown prose is not a marker.
+#
+# Half 1 alone admitted `NOT A BUG (ADR-0059 ...)` and `echo NONEMPTY-BUG`, both
+# inside `#` comments. Half 2 alone admitted three backticked `TODO:`/`XXX:`
+# mentions in a SPEC's prose. Measured 2026-08-17, VCS-023.
+#
+# The leader is required BEFORE the keyword rather than at the start of the
+# line: `foo(); // TODO: fix` is the common real shape and a start-anchored
+# predicate drops it. `(.*[^A-Za-z_])?` is what keeps the character immediately
+# preceding the keyword a non-word one even when the leader is far to its left;
+# a bare `.*` there would readmit `# fooTODO:`.
+#
+# `*` is ANCHORED and the other leaders are not. ADR-0153 D9 lists `*` in the
+# leader set without an anchor, and applied that way it does not achieve the
+# ADR's own stated result: measured on this repository, `**declaration form**`
+# in a SPEC's flowing prose supplies a `*` and readmits the very line D9 names
+# as one of the three cases the leader half rejects. `*` only means "comment"
+# as a C block continuation, which is a line-start shape, so it is anchored
+# here. The other six can appear after code and must not be.
+#
+# Both the rg path and the grep fallback take this one expression, and
+# selftest.sh's "grep fallback finds the same markers" is what catches a
+# divergence. Keep it POSIX ERE: no lookaround, no \b. The leading `^` inside
+# the alternation is an anchor in both engines, verified 2026-08-18 against BSD
+# grep -E on macOS and against rg, with identical verdicts on nine shapes.
+MARKER_RE='(^[[:space:]]*\*|//|#|--|/\*|<!--|;)(.*[^A-Za-z_])?(TODO|FIXME|HACK|XXX|BUG):'
 
 scan_markers() {
   if command -v rg >/dev/null 2>&1; then
@@ -93,7 +122,9 @@ while IFS= read -r raw; do
   path="${raw%%:*}"; rest="${raw#*:}"
   line="${rest%%:*}"; text="${rest#*:}"
   case "$line" in ''|*[!0-9]*) continue ;; esac
-  kind="$(printf '%s' "$text" | grep -oE '(TODO|FIXME|HACK|XXX|BUG)' | head -1)"
+  # Classify on the declaration form, not on the bare keyword: a line matched on
+  # `TODO:` must not be recorded as a BUG because the word appears earlier in it.
+  kind="$(printf '%s' "$text" | grep -oE '(TODO|FIXME|HACK|XXX|BUG):' | head -1 | tr -d ':')"
   [ -z "$kind" ] && kind="TODO"
   # collapse whitespace and strip common comment leaders for readability
   text="$(printf '%s' "$text" \
