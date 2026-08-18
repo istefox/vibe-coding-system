@@ -1711,6 +1711,7 @@ hand.
 | #432 | `permission-mode-state.sh` returns `UNOBSERVABLE` after any `/clear` and blames the build, so Phase M refuses a correctly configured machine |
 | #470 | the chain never regenerates a generated Xcode project, so `xcodebuild` tests a stale target and `tests_after` counts it |
 | #474 | an autopilot run with no `prep:` block forks every feature from the previous feature's tip |
+| #486 | tester-first assumes a failing assertion still compiles. In Swift the window is a target that does not build, so there are no red tests to classify, the expected-red table cannot be checked, and a real regression reads identically. Measured: `grep -ci 'compil'` over `concept-to-code/SKILL.md` returns **0** — the chain has no state for it. The stop gate dies twice over here, by budget (#477) and independently by the 120s timeout, which ADR-0137 §D5 charges to the same budget |
 
 *#476 — the foreign-`R-NN` scope defect — was closed by ADR-0154 on 2026-08-18 (commit `7eb3340`)
 and is tracked as Phase 15. Nothing in the ADR or the SPEC cites it, which is why it read as open.*
