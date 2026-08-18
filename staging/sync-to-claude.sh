@@ -164,6 +164,7 @@ plugin/skills/project-tasks/reference/capture-sources.md|skills/project-tasks/re
 plugin/skills/project-tasks/reference/chain-integration.md|skills/project-tasks/reference/chain-integration.md
 plugin/skills/project-tasks/templates/TODO.template.md|skills/project-tasks/templates/TODO.template.md
 plugin/skills/project-tasks/scripts/gh-issues.sh|skills/project-tasks/scripts/gh-issues.sh
+plugin/skills/project-tasks/scripts/ledger-merge.sh|skills/project-tasks/scripts/ledger-merge.sh
 project-templates/ci/ci.yml|templates/ci.yml
 plugin/scripts/detect-test-cmd.sh|hooks/detect-test-cmd.sh
 plugin/scripts/roadmap-from-issues.sh|hooks/roadmap-from-issues.sh
