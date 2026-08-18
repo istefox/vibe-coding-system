@@ -4337,3 +4337,45 @@ Key architectural decisions:
   letting a green harness read as proof.
 
 Detail: `docs/architecture/ADR-0153-project-tasks-vendored-bilateral-ledger.md`.
+
+## Decisions from the spec-coverage-scope-back-reference chain (ADR-0154)
+
+`spec-coverage.sh`'s test axis is narrowed a second time: a discovered test file counts only when
+the plan names it **and** its own text names the plan or one of the ADRs the plan cites. Touched:
+`staging/plugin/skills/concept-to-code/scripts/spec-coverage.sh`, its harness, the frozen corpus
+baseline, and one clause in `staging/plugin/agents/architect.md`.
+
+Key architectural decisions:
+
+- **The exposure was measured twice, independently, before this was designed.** On the ADR-0153
+  plan, three harnesses cited as precedents carry seven ids inside that feature's own declared
+  range, and four reported COVERED while cited nowhere in its harness. A separate measurement the
+  day before, on a different feature, found 9 of 13 ids COVERED before implementation existed.
+- **Two designs were refused on measurement, not on taste.** Scoping to a plan's `Budget:` lines
+  would collapse 42 of 53 plans to an empty scope. Requiring the mention to sit in an id-mapping
+  comment header would flip most genuine coverage to uncovered — 87 of 893 mentions have that form
+  — which is the same wall ADR-0138 hit with its own candidate.
+- **The adopted rule loses nothing measured.** 94 of 263 scoped files drop out, all of them
+  precedent citations, and zero ids flip COVERED → UNCOVERED across 52 plans.
+- **An empty scope now has two causes with opposite policies.** Zero *candidates* keeps its
+  fallback, because it may be a broken derivation (rule 7). Zero *back-references* does not fall
+  back: half 1 resolved and half 2 rejected everything, so the zero is a finding. Falling back
+  there would silently restore the pre-ADR-0138 repo-wide scan.
+- **The denominator guard is corpus-level and lives in the harness, not the script.** Per run, zero
+  files passing half 2 is exactly the new legitimate state, so an in-script floor would fire on the
+  state the script exists to report. It is declared a vacuity guard at its site, because a floor
+  absorbs its own plant (rule 10); the regenerated per-row baseline is the real evidence.
+- **The producer-side convention is stated once, in the architect's output contract.** A plan names
+  the harness it creates; the harness names the plan or its ADR back. Rule 17: the producer and the
+  consumer are in two files, so the convention lives with the producer rather than in both.
+- **What it does not fix is stated rather than implied.** The same-file namespace collision
+  survives: 8 of this feature's own 12 ids reported COVERED before a line of work existed, every
+  one off a fixture token inside its own harness. The only candidate fixes are the ones ADR-0138
+  measured and refused.
+- **The feature's own SPEC blocked its own gate, and the block and the pass had the same cause.**
+  Three ids carrying `(no-test: …)` reported STALE-WAIVER because their tokens exist as heredoc
+  fixtures in the harness the plan names. Deleting the clauses cleared the block — and the same
+  fixture tokens then reported those three ids COVERED. The deletion is paired with existence-level
+  assertions for that reason; alone it converts a block into a false pass.
+
+Detail: `docs/architecture/ADR-0154-spec-coverage-scope-back-reference.md`.
