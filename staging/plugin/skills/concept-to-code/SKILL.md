@@ -1489,6 +1489,16 @@ bash <spec-coverage.sh, resolved exactly as in the Requirement-ID coverage gate 
 The tester writes failing tests only, for this task group, and reports back which requirement
 IDs (or which Success Criteria / plan-task lines, per whichever fallback fired) each test covers.
 
+**On a compiled or type-checked language, add this to the brief verbatim (issue #486, ADR-0155
+§D1):** leave the target BUILDING. Declare the interfaces, protocols or types your tests reference
+but which do not exist yet — the signature is yours, and the coder owns the body. A test that names
+a type nobody has written does not fail, it stops the target from compiling, and then no assertion
+runs at all and the red you were dispatched to produce does not exist. Declaring an interface is not
+implementing it: you are writing the boundary the specification already fixes, not the code that
+satisfies it, so this takes nothing away from writing the tests before the implementation.
+`test-write-scope.sh` constrains the coder only, so nothing blocks you from writing that declaration
+on a production path.
+
 **The fallback chain above decides WHAT to assert. The plan decides WHERE and under what name, and
 is read in every case — never as a fallback (ADR-0088, issue #241).** Add to the brief: work
 through this task group's sub-steps and execute every one that creates or edits a test file. Those
@@ -2334,6 +2344,36 @@ wrong reason, so the recorded RED proves nothing and the whole point of writing 
 gone. Violating rule 2 only leaves an intermediate checkpoint red — visible, explainable, and
 resolved by a later batch in the same Step 5.
 
+**A third rule, and on a compiled or type-checked language it outranks both (issue #486,
+ADR-0155).** The tester's batch must leave the target BUILDING. The interface or type declaration
+its tests reference lands with the tests, not with the implementation: **the tester owns the
+signature, the coder owns the body.**
+
+The two rules above assume something nobody wrote down until #486 — that a failing assertion still
+compiles. In bash it does: the harness runs, prints `FAIL: <id>`, and the observed failing set can
+be compared against the plan's expected-red table. In Swift, Rust, Go or TypeScript under
+`tsc --noEmit` it does not. A test referencing a type the coder has not written yet does not fail;
+it stops the target from building, and then nothing runs at all. Measured on a live run against a
+Swift project on 2026-08-18: `cannot find type 'GoogleBooksAPIKeyStoring' in scope`, followed by
+`Testing cancelled because the build failed`.
+
+**Its precedence, in the same terms the tie-break above uses.** Violating rule 1 makes an assertion
+fail for the wrong reason, so the recorded RED proves nothing. Violating this one means there is no
+recorded RED at all, and no checkpoint state describing what happened — a strictly larger loss, and
+why it is a precondition rather than a third peer.
+
+**It does not weaken the generator/verifier separation (ADR-0155 §D2).** What ADR-0049 buys is that
+tests are written without seeing the implementation, and a protocol or type declaration is not an
+implementation — it is the interface, the same vocabulary ADR-0053's protected-interfaces already
+uses. Nothing in the hook layer had to change for this: `test-write-scope.sh` constrains the coder
+only, so it **already permits** the tester to write the declaration (ADR-0155 §D6). What was missing
+was anything telling it to.
+
+**This is an instruction, not an enforcement (rule 16), and nothing here blocks a dispatch.** No
+hook checks that a plan placed the declaration in the tester's task; `test-write-scope.sh` already
+permits it either way. What is enforced is that this rule is written down, and the consequence when
+it is ignored is the fourth checkpoint state below.
+
 **Batch-dispatch policy (≥6 task blocks in plan):** **the number is `$openers`, from
 `plan-tasks.sh --count-openers`, never `$tasks` (issue #242, ADR-0100).** `$tasks` over-counts by
 design — a `## Tasks` section heading and every checkbox sub-step match it — so batching by it
@@ -2397,6 +2437,19 @@ stderr.
    the checkpoint exists for — stop and report. If neither description fits, stop: an unclassifiable
    red is the one that most needs a human.
 
+   **A fourth state exists and it is not a red at all: THE TARGET DID NOT BUILD (issue #486,
+   ADR-0155 §D4).** On a compiled or type-checked language a checkpoint can produce no test result
+   whatsoever — `Testing cancelled because the build failed`, and no assertion ran. Do not classify
+   it as an unclassifiable red: the two look identical in a transcript and they have opposite
+   remedies. Its meaning is specific — **the third batch-boundary rule above was violated**, the
+   interface declaration the tests reference did not land in the tester's batch — and so is its
+   remedy: correct the batching, not the code under test. Nothing here needs debugging.
+
+   The distinction is worth the paragraph because collapsing it is what makes an operator stop
+   reading the section. In this state the expected-red table cannot be checked at all, the
+   controller-side count read has nothing to read, and a genuine regression the coder introduced in
+   an already-green area produces the same output as the intended state.
+
    This is a reading rule, not a mechanism. An **expected-red declaration** in the plan, or a
    comparison against the previous checkpoint's failing set, would let the checkpoint decide rather
    than the reader — both were considered and deferred: the first needs a plan-side syntax, and
@@ -2454,6 +2507,14 @@ every sub-step that creates or edits a test file. Those sub-steps are yours: the
 after you is denied them by a PreToolUse gate, so a skipped sub-step is a sub-step nobody can do.
 Where a sub-step says to confirm a failing assertion and stop, stop — a red assertion left red is
 the deliverable, not an unfinished task.
+
+On a compiled or type-checked language, leave the target BUILDING (ADR-0155 §D1). Declare the
+interfaces, protocols or types your tests reference but which do not exist yet — the signature is
+yours, and the coder owns the body. A test naming a type nobody has written does not fail, it stops the
+target from compiling, and then no assertion runs at all and the red you were dispatched to produce
+does not exist. Declaring an interface is not implementing it: you are writing the boundary the
+specification already fixes, not the code that satisfies it. `test-write-scope.sh` constrains the
+coder only, so nothing blocks you from writing that declaration on a production path.
 
 Writes go under the dispatched worktree, never to an absolute path into the shared checkout: `isolation: worktree` bounds the working directory, not the filesystem, and an absolute path resolves out of it (ADR-0068 §D11, issue #245). Read the planning artifacts by absolute path; write by relative path.
 

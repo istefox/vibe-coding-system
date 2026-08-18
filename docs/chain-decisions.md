@@ -4379,3 +4379,45 @@ Key architectural decisions:
   assertions for that reason; alone it converts a block into a false pass.
 
 Detail: `docs/architecture/ADR-0154-spec-coverage-scope-back-reference.md`.
+
+## Decisions from the compiled-language tester batch chain (ADR-0155)
+
+`concept-to-code`'s tester-before-coder ordering gains a third batch-boundary rule for compiled and
+type-checked languages: the tester's batch must leave the target building. Touched:
+`staging/plugin/skills/concept-to-code/SKILL.md` (the batching rules, the checkpoint classification,
+both tester dispatch briefs) and one clause in `staging/plugin/agents/architect.md`.
+
+Key architectural decisions:
+
+- **The ordering carried an assumption nobody wrote down.** ADR-0049 §D1 dispatches the tester first
+  so it is briefed from the specification and never from the implementation. That works because a
+  failing assertion still compiles — in bash. In Swift a test naming a type the coder has not written
+  does not fail, it stops the target from building, and then no assertion runs at all.
+- **The chain had no word for it, measured.** `grep -ci 'compil'` over the ~4200-line orchestrator
+  skill returned **0**: not in the tester brief, not in the batching rules, not in the checkpoint
+  classification. The machine was designed on an interpreted language and nothing stated what happens
+  elsewhere.
+- **The mechanism already permitted the fix; only the instruction was missing.**
+  `test-write-scope.sh` line 69 short-circuits on anything that is not the coder, so the tester was
+  always free to write an interface declaration on a production path. No hook changed.
+- **The rule is a precondition, not a third peer.** Violating the existing rule 1 makes an assertion
+  fail for the wrong reason, so the recorded RED proves nothing. Violating this one means there is no
+  recorded RED at all, and no checkpoint state describing what happened — a strictly larger loss.
+- **A fourth checkpoint state, because collapsing it is what stops the reading.** "The target did not
+  build" is not a red: the expected-red table cannot be checked, the controller-side count read has
+  nothing to read, and a real regression produces the same output as the intended state. Its remedy
+  is a batching correction, not a fix to the code under test.
+- **The separation caught the author.** The tester wrote all eight assertions from the requirements,
+  never from the prose. Five passed on first contact and three did not, and in every case the
+  assertion was right: `the coder owns the body` had been written as *the body is the coder's*,
+  `instruction, not an enforcement` as *instruction, not enforcement*, `already permits` as *already
+  free*, and `nothing blocks a dispatch` had been left out of the skill while the ADR said it. Four
+  drifts from the house form in four sites, none of which would have surfaced had the same author
+  written both halves.
+- **Two assertions are softer than they look, and it is recorded at the site rather than chased.**
+  `CB2` and `CB6` are ANDs whose second clause is already satisfied by pre-existing text, so a plan
+  duplicating one token without adding the statement would pass. Measured by the plant author:
+  removing one of two occurrences left each green, which is why both plants span the full range.
+  Tightening them would be an in-place assertion edit, invisible to every gate here (ADR-0148).
+
+Detail: `docs/architecture/ADR-0155-compiled-language-tester-batch.md`.
