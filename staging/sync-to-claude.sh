@@ -113,7 +113,6 @@ fi
 # deployed-only: agent-design — proprietary book-derived knowledge base; its own frontmatter `license:` field says so.
 # deployed-only: daily-close — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365).
 # deployed-only: daily-open — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365), same class as daily-close.
-# deployed-only: project-tasks — copied from a foreign repository (steve-skills/tasks), same origin as website-auditor below; its own reference/chain-integration.md is an UNAPPLIED paste-in instruction, so the description's claim that concept-to-code and project-conductor invoke it holds for neither chain (c2c section 25 does not name it, and no staged or deployed SKILL.md mentions it).
 # deployed-only: vibiso-intake — front end of a different project's intake contract (vibiso-system ADR-002).
 # deployed-only: website-auditor — symlink into a foreign repository (steve-skills/website_auditor); moves ADR-0024 section 2.1's exclusion out of prose.
 PAIRS="
@@ -157,6 +156,13 @@ plugin/skills/project-conductor/SKILL.md|skills/project-conductor/SKILL.md
 plugin/skills/project-conductor/scripts/conductor-args.sh|skills/project-conductor/scripts/conductor-args.sh
 plugin/skills/project-conductor/scripts/h16-direction-check.sh|skills/project-conductor/scripts/h16-direction-check.sh
 plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh|skills/project-conductor/scripts/mark-roadmap-skipped.sh
+plugin/skills/project-tasks/SKILL.md|skills/project-tasks/SKILL.md
+plugin/skills/project-tasks/scripts/scan.sh|skills/project-tasks/scripts/scan.sh
+plugin/skills/project-tasks/scripts/selftest.sh|skills/project-tasks/scripts/selftest.sh
+plugin/skills/project-tasks/reference/file-format.md|skills/project-tasks/reference/file-format.md
+plugin/skills/project-tasks/reference/capture-sources.md|skills/project-tasks/reference/capture-sources.md
+plugin/skills/project-tasks/reference/chain-integration.md|skills/project-tasks/reference/chain-integration.md
+plugin/skills/project-tasks/templates/TODO.template.md|skills/project-tasks/templates/TODO.template.md
 project-templates/ci/ci.yml|templates/ci.yml
 plugin/scripts/detect-test-cmd.sh|hooks/detect-test-cmd.sh
 plugin/scripts/roadmap-from-issues.sh|hooks/roadmap-from-issues.sh
