@@ -72,6 +72,12 @@ pt_litter_check() {
 }
 
 # ===========================================================================================
+# NO PLANT DECLARED, AND THIS IS THE REASON RATHER THAN AN OVERSIGHT. A plant SUBSTITUTES text
+# inside one file; it cannot remove a file from the vendored tree, and file presence is the
+# whole of what this assertion reads. Same shape as NT2's reason and a different cause: NT2
+# cannot have litter CREATED for it, this one cannot have a file TAKEN AWAY. Planting the
+# harness's own file list instead would prove the assertion reacts to its own mutation, which
+# is rule 1's trap and not evidence about the tree.
 # NT0 (R-01) — denominator guard. The vendored tree staging/plugin/skills/project-tasks/ exists
 # and holds at least 7 regular files, each of the seven named individually rather than matched by
 # a glob — a misspelled directory name must fail here, loudly, before NT2's absence check runs
@@ -90,6 +96,7 @@ else
   bad "NT0 (R-01): vendored tree incomplete or absent (found $_nt0_count file(s); missing:$_nt0_missing)"
 fi
 
+# plant: NT1 | sync-to-claude.sh | plugin/skills/project-tasks/scripts/ledger-merge.sh|skills/project-tasks/scripts/ledger-merge.sh
 # ===========================================================================================
 # NT1 (R-01) — every one of the nine PAIRS src|dst lines from the plan's vendoring table is
 # present in sync-to-claude.sh's PAIRS block, matched whole-line against the block extracted with
@@ -140,6 +147,7 @@ else
   bad "NT2 (R-03): vendored tree absent, or litter present — $NT2_HITS"
 fi
 
+# plant: NT3 | plugin/scripts/tests/project-tasks-ledger.test.sh | -name '.remember' -o -path '*/.claude/test-cmd' | -name '.no-such-litter-name'
 # ===========================================================================================
 # NT3 (R-03) — backward self-test (ADR-0153 §D8 part 3, the DO4/DO5 shape from
 # pairs-completeness.test.sh). Build a fixture directory holding BOTH .remember/now.md and
@@ -164,6 +172,7 @@ else
   bad "NT3 (R-03): the predicate did not flag the litter fixture — got: $NT3_HITS"
 fi
 
+# plant: NT4 | sync-to-claude.sh | # deployed-only: vibiso-intake | # deployed-only: project-tasks reinstated by a plant
 # ===========================================================================================
 # NT4 (R-02) — sync-to-claude.sh contains NO `deployed-only: project-tasks` line. Needle built at
 # run time (DMARK, rule 12) so this harness does not match its own explanatory prose above — the
@@ -193,20 +202,29 @@ else
   bad "NT5 (R-02): not yet in the post-removal state (count=$NT5_COUNT, project-tasks still declared=$NT5_HAS_PT)"
 fi
 
+# plant: NT6 | plugin/skills/project-tasks/scripts/scan.sh | MARKER_RE='(^[[:space:]]*\*|//|#|--|/\*|<!--|;)(.*[^A-Za-z_])?(TODO|FIXME|HACK|XXX|BUG):' | MARKER_RE='(^|[^A-Za-z_])(TODO|FIXME|HACK|XXX|BUG)([:( ]|$)'
 # ===========================================================================================
 # NT6 (R-15) — the two measured false positives no longer fire. Fixture holds, verbatim, a line
 # `# UF. THE SELF-COLLISION IS EXPECTED, NOT A BUG (ADR-0059 §D4)` and a line
-# `# plant: RRP1 | x.sh | needle | echo NONEMPTY-BUG`. Run the vendored scan.sh --root <fixture>
+# a declaration line ending in `echo NONEMPTY-BUG` (assembled below, see the note there).
+# Run the vendored scan.sh
 # and assert zero MARKER records. A Makefile in the fixture satisfies scan.sh's own project-root
 # guard (exit 3 otherwise) without pulling in git.
 # ===========================================================================================
 NT6_DIR="$TMP/nt6-fixture"
 mkdir -p "$NT6_DIR"
 touch "$NT6_DIR/Makefile"
-cat > "$NT6_DIR/fp.sh" <<'EOF'
-# UF. THE SELF-COLLISION IS EXPECTED, NOT A BUG (ADR-0059 §D4)
-# plant: RRP1 | x.sh | needle | echo NONEMPTY-BUG
-EOF
+# THE DECLARATION KEYWORD IS ASSEMBLED AT RUNTIME, and neither position for a literal works.
+# plant-check.sh collects declarations with a column-1 anchor over the RAW TEXT of every test
+# file, heredocs included, so a verbatim copy here is parsed as a real declaration targeting a
+# file called x.sh; and PC4 refuses an indented one, so moving it right is not an escape either.
+# Splitting the keyword leaves the FIXTURE line byte-identical to the measured original, which is
+# where verbatim actually matters, and leaves this file with no declaration it did not intend.
+_nt6_kw="pl""ant"
+{
+  printf '%s\n' "# UF. THE SELF-COLLISION IS EXPECTED, NOT A BUG (ADR-0059 §D4)"
+  printf '# %s: RRP1 | x.sh | needle | echo NONEMPTY-BUG\n' "$_nt6_kw"
+} > "$NT6_DIR/fp.sh"
 NT6_OUT=""
 [ -f "$SCAN" ] && NT6_OUT=$(bash "$SCAN" --root "$NT6_DIR" 2>/dev/null)
 NT6_HITS=$(printf '%s\n' "$NT6_OUT" | grep -c '^MARKER'); [ -z "$NT6_HITS" ] && NT6_HITS=0
@@ -235,6 +253,7 @@ else
   bad "NT6b (R-15): vendored scan.sh absent, or still emits $NT6B_HITS MARKER record(s) for the prose fixture"
 fi
 
+# plant: NT7 | plugin/skills/project-tasks/scripts/scan.sh | grep -oE '(TODO|FIXME|HACK|XXX|BUG):' | grep -oE 'ZZZNOMATCH'
 # ===========================================================================================
 # NT7 (R-15) — genuine markers still fire, in both shapes. Fixture holds `// TODO: extract`,
 # `// FIXME: leaks`, `// HACK: monkeypatch` on their own lines and `foo(); // TODO: fix` as a
@@ -252,13 +271,17 @@ EOF
 NT7_OUT=""
 [ -f "$SCAN" ] && NT7_OUT=$(bash "$SCAN" --root "$NT7_DIR" 2>/dev/null)
 NT7_TOTAL=$(printf '%s\n' "$NT7_OUT" | grep -c '^MARKER'); [ -z "$NT7_TOTAL" ] && NT7_TOTAL=0
-NT7_FIXME=$(printf '%s\n' "$NT7_OUT" | grep -c '^MARKER.*FIXME'); [ -z "$NT7_FIXME" ] && NT7_FIXME=0
+# Field 4 is the CLASSIFICATION; field 5 is the line's text, and the text of a FIXME marker
+# contains the word FIXME whatever the classifier decides. Matching the record loosely let a
+# plant that blanked the classifier pass — measured 2026-08-18 (rule 1).
+NT7_FIXME=$(printf '%s\n' "$NT7_OUT" | awk -F'\t' '$1=="MARKER" && $4=="FIXME"' | grep -c .); [ -z "$NT7_FIXME" ] && NT7_FIXME=0
 if [ -f "$SCAN" ] && [ "$NT7_TOTAL" -eq 4 ] && [ "$NT7_FIXME" -eq 1 ]; then
   ok "NT7 (R-15): genuine markers still fire — 4 MARKER records, FIXME classified correctly"
 else
   bad "NT7 (R-15): vendored scan.sh absent, or found $NT7_TOTAL MARKER record(s) (want 4) / $NT7_FIXME FIXME record(s) (want 1)"
 fi
 
+# plant: NT8 | plugin/skills/project-tasks/SKILL.md | - **Never auto-close.** | - Auto-closing is fine now.
 # ===========================================================================================
 # NT8 (R-20) — the six hard rules are still stated in the vendored SKILL.md. Matched against a
 # flattened, undecorated, case-insensitive copy of each clause (rule 3, flatten_prose above), not
@@ -279,6 +302,7 @@ else
   bad "NT8 (R-20): hard-rule clause(s) not found —$NT8_MISSING"
 fi
 
+# plant: NT9 | plugin/skills/project-conductor/SKILL.md | Invoke the `project-tasks` skill in its full mode | Invoke the ledger skill in its full mode
 # ===========================================================================================
 # NT9 (R-19) — the vendored SKILL.md's description: names concept-to-code and project-conductor,
 # AND both of those skills' own SKILL.md name project-tasks. Both directions in one assertion: a
@@ -376,6 +400,7 @@ _none_
 _none_
 MD
 
+# plant: NT11 | plugin/skills/project-tasks/scripts/gh-issues.sh | t = field(buf, "title");  gsub(/[\t\n]/, " ", t) | t = ""
 # ===========================================================================================
 # NT11 (R-04) — three open issues in, exactly three ISSUE records out, exit 0. Assert the FIELDS
 # and not only the count: a helper emitting three records with an empty title or a dropped label
@@ -397,10 +422,12 @@ else
   bad "NT11 (R-04): rc=$NT11_RC records=$NT11_N nums='$NT11_NUMS' title402='$NT11_TITLE' labels401='$NT11_LBL' state403='$NT11_STATE'"
 fi
 
+# plant: NT12 | plugin/skills/project-tasks/scripts/gh-issues.sh | if [ -n "$DUPES" ]; then | if false; then
 # ===========================================================================================
 # NT12 (R-04) — a duplicated issue number is a DETECTABLE FAILURE, not a silent dedup. Exit 3 and
 # the number named on stderr. R-04 says each issue appears exactly once; a helper that quietly
 # collapses the pair satisfies that sentence while hiding that its input was wrong.
+# plant: NT13b | plugin/skills/project-tasks/scripts/gh-issues.sh | [ -n "$PREV" ] || PREV=0 | PREV=1
 # ===========================================================================================
 NT12_ERR=""; NT12_RC=99
 if [ -f "$GHISSUES" ]; then
@@ -412,6 +439,7 @@ else
   bad "NT12 (R-04): rc=$NT12_RC (want 3), stderr names 401: $(printf '%s' "$NT12_ERR" | grep -c '401')"
 fi
 
+# plant: NT13 | plugin/skills/project-tasks/scripts/gh-issues.sh | if [ "$PREV" -gt 0 ]; then | if false; then
 # ===========================================================================================
 # NT13/NT13b (R-05) — the denominator guard, both directions (rule 7). Zero issues against a
 # section that ALREADY held two is a broken derivation: exit 4 and a DIDNOTRUN record. Zero issues
@@ -445,6 +473,7 @@ else
   bad "NT13b (R-05): rc=$NT13B_RC (want 0), ISSUE records=$NT13B_N (want 0)"
 fi
 
+# plant: NT14 | plugin/skills/project-tasks/scripts/gh-issues.sh | printf 'DIDNOTRUN\t%s\t%s\n' "$1" "$2" | printf 'DIDNOTRUN\t%s\n' "$1"
 # ===========================================================================================
 # NT14 (R-06) — `gh` absent. A DIDNOTRUN record naming BOTH a cause and a remedy, and the
 # reserved did-not-run code 3, never 0. Rule 4: a check that could not run must not read as a
@@ -462,6 +491,7 @@ else
   bad "NT14 (R-06): rc=$NT14_RC (want 3), cause='$NT14_CAUSE' remedy='$NT14_REM' (both must be non-empty)"
 fi
 
+# plant: NT14b | plugin/skills/project-tasks/scripts/gh-issues.sh | didnotrun "gh-unauthenticated" | didnotrun "gh-absent"
 # ===========================================================================================
 # NT14b (R-06) — the three causes are DISTINGUISHABLE, and all three are EXECUTED, not text-pinned
 # (rule 16). A fake `gh` on a private PATH produces the unauthenticated and no-remote branches
@@ -485,6 +515,7 @@ else
   bad "NT14b (R-06): $NT14B_UNIQ distinct cause(s) (want 3) — absent='$NT14B_ABSENT' auth='$NT14B_AUTH' repo='$NT14B_REPO'"
 fi
 
+# plant: NT15 | plugin/skills/project-tasks/scripts/gh-issues.sh | # --- duplicate detection | [ -n "$LEDGER" ] && echo planted >> "$LEDGER"\n# --- duplicate detection
 # ===========================================================================================
 # NT15 (R-06) — the helper is a REPORTER of evidence and never a writer, exactly as scan.sh is.
 # Assert the ledger file is byte-identical across every invocation shape above, including the two
@@ -567,6 +598,7 @@ An unknown section the skill has never heard of. <!-- a stray comment -->
 - **Entry point**: nothing here is derived.
 MD
 
+# plant: NT16 | plugin/skills/project-tasks/scripts/ledger-merge.sh | /^<!-- (github-read|steps|roadmap): / { next } | /<!--/ { next }
 # ===========================================================================================
 # NT16 (R-07) — THE PASS-THROUGH CONTRACT, and the assertion the whole safety argument of
 # ADR-0153 §D2 rests on. Do not relax it later to accommodate a new section: the fixture carries
@@ -595,6 +627,7 @@ else
   bad "NT16 (R-07): rc=$NT16_RC diff-lines=$NT16_DIFF prose=$NT16_PROSE unknown-section=$NT16_UNK no-id-entry=$NT16_NOID stray-comment=$NT16_STRAY"
 fi
 
+# plant: NT17 | plugin/skills/project-tasks/scripts/ledger-merge.sh | sub(/[[:space:]]*-->/, " runs:1 -->", l) | sub(/opened:[0-9-]+/, "opened:2099-01-01", l)
 # ===========================================================================================
 # NT17 (R-07) — the field-ownership table, enforced. GitHub owns title, state and labels; TODO.md
 # owns local priority, the file reference, src: and opened:. Feed a payload that changes the
@@ -619,6 +652,7 @@ else
   bad "NT17 (R-07): a locally-owned field was lost — line was: '$NT17_LINE'"
 fi
 
+# plant: NT18 | plugin/skills/project-tasks/scripts/ledger-merge.sh | n = substr(l, RSTART+5, RLENGTH-5) + 1 | n = substr(l, RSTART+5, RLENGTH-5) + 0
 # ===========================================================================================
 # NT18 (R-10) — runs: is DERIVED, absent -> 1 -> 2 across three successive --mode full runs, each
 # fed the previous output. opened: byte-identical in all three, because it is never in the
@@ -644,6 +678,7 @@ else
   bad "NT18 (R-10): sequence was '$NT18_SEQ' (want ' runs:1 runs:2 runs:3'), distinct opened: values=$NT18_UNIQ_OPENED (want 1)"
 fi
 
+# plant: NT19a | plugin/skills/project-tasks/scripts/ledger-merge.sh | if (mode == "full") { | if (mode != "__never__") {
 # ===========================================================================================
 # NT19a..NT19d (R-10, R-08) — FOUR sub-assertions, one per cheap mode, which is what the plan asks
 # for in these words: "a loop over one mode would pass with three modes unimplemented". Under
@@ -669,6 +704,7 @@ for _m in quick add close map; do
   fi
 done
 
+# plant: NT20 | plugin/skills/project-tasks/scripts/ledger-merge.sh | if (line ~ /\*\*P1\*\*/ || line ~ /src:review/ || disk_runs(line) >= 2) { | if (1) {
 # ===========================================================================================
 # NT20 (R-08) — the proposal set under --mode full is EXACTLY: every P1, every src:review, and
 # every entry at runs: >= 2. The negative case is what proves the predicate is a filter and not a
@@ -686,6 +722,7 @@ else
   bad "NT20 (R-08): proposal set was '$NT20_SET' (want 'VCS-028 VCS-030 VCS-031 ')"
 fi
 
+# plant: NT21 | plugin/skills/project-tasks/scripts/ledger-merge.sh | if (line !~ /promote:/) props | if (1) props
 # ===========================================================================================
 # NT21 (R-09) — promote:declined is never proposed AGAIN, which is a claim about subsequent runs
 # and not about one. VCS-032 qualifies on every other condition (runs:3). Assert it is absent from
@@ -706,6 +743,7 @@ else
   bad "NT21 (R-09): declined entry proposed — run 1=$NT21_FIRST, run 2=$NT21_SECOND (both want 0)"
 fi
 
+# plant: NT22 | plugin/skills/project-tasks/scripts/ledger-merge.sh | /^## GitHub Issues/{print; print ins; next} | /^## GitHub Issues/{print; next}
 # ===========================================================================================
 # NT22 (R-11) — after promotion the entry is ONE line in GitHub Issues carrying both identifiers,
 # and the local id appears exactly once in the WHOLE FILE. Assert the whole-file count and not
@@ -727,6 +765,7 @@ else
   bad "NT22 (R-11): whole-file occurrences=$NT22_WHOLE (want 1), section line carries both ids=$NT22_BOTH — line: '$NT22_LINE'"
 fi
 
+# plant: NT23 | plugin/skills/project-tasks/scripts/ledger-merge.sh | [ -z "$DUP_IDS" ] || SELF_ERR="$SELF_ERR local id(s) appearing more than once: $DUP_IDS" | :
 # ===========================================================================================
 # NT23 (R-04) — the self-check, exercised through its WHOLE-FILE UNIQUENESS half: a fixture whose
 # input already carries VCS-031 twice must exit 3 naming the id, never render a file that repeats
@@ -747,6 +786,7 @@ else
   bad "NT23 (R-04): rc=$NT23_RC (want 3), stderr names VCS-031: $(printf '%s' "$NT23_ERR" | grep -c 'VCS-031')"
 fi
 
+# plant: NT24 | plugin/skills/project-tasks/scripts/ledger-merge.sh | '/^topic:/{print $2}' | '/^nosuchfield:/{print $2}'
 # ===========================================================================================
 # NT24 (R-12) — with exactly one non-terminal manifest the Steps header names it and the case
 # token reads "derived". Non-terminal is current_step AND status both non-terminal, and
@@ -786,6 +826,7 @@ else
   bad "NT24 (R-12): Steps header was '$NT24_HDR' (want it to name alpha and read derived)"
 fi
 
+# plant: NT25 | plugin/skills/project-tasks/scripts/ledger-merge.sh | case "$MAN_N" in 0) MAN_STATE="zero" ;; 1) MAN_STATE="one" ;; *) MAN_STATE="many" ;; esac | MAN_STATE="one"
 # ===========================================================================================
 # NT25 (R-13) — zero non-terminal manifests omits the section AND states the reason; two name both
 # candidates and derive nothing. Assert the STATED reason in the zero case: a silently absent
@@ -815,6 +856,7 @@ else
   bad "NT25 (R-13): zero-case headers=$NT25_ZERO_HDR (want 0) reason-lines=$NT25_ZERO_REASON (want >=1); two-case names both=$NT25_TWO_OK"
 fi
 
+# plant: NT26 | plugin/skills/project-tasks/scripts/ledger-merge.sh | ptr = (n in phase && phase[n] != "") ? " — " phase[n] : "" | ptr = ""
 # ===========================================================================================
 # NT26 (R-14) — both directions inside one PROJECT.md fixture: an issue number that is also a
 # roadmap row renders with a pointer to its phase, one that is not renders without.
@@ -844,6 +886,7 @@ else
   bad "NT26 (R-14): #401 line='$NT26_401' (want a Phase 11 pointer), #402 line='$NT26_402' (want no phase)"
 fi
 
+# plant: NT27 | plugin/skills/project-tasks/scripts/ledger-merge.sh | if (old != "") { print "P1-PRE\t" old; exit 5 } | if (old != "") { print "P1-PRE\t" old; exit 1 }
 # ===========================================================================================
 # NT27 (R-18) — --p1-gate is a CHECKER with three distinct exit codes so its caller in
 # concept-to-code can branch (rule 5). A P1 opened after --since is NEW and blocks; one opened
@@ -862,6 +905,7 @@ else
   bad "NT27 (R-18): new-rc=$NT27_NEW_RC old-rc=$NT27_OLD_RC (must differ); new-ids='$NT27_NEW_IDS' old-ids='$NT27_OLD_IDS'"
 fi
 
+# plant: NT28 | plugin/skills/project-tasks/scripts/ledger-merge.sh | if [ "$DIDNOTRUN_COUNT" -gt 0 ] && [ "$ISSUE_COUNT" -eq 0 ]; then | if false; then
 # ===========================================================================================
 # NT28 (R-06, R-13) — AMENDMENT 1. THE PRODUCER/CONSUMER MEETING POINT. NT14 and NT15 prove
 # gh-issues.sh reports DIDNOTRUN and writes nothing; NT16..NT27 prove ledger-merge.sh behaves on
@@ -885,6 +929,7 @@ else
   bad "NT28 (R-06, R-13): entries before=$NT28_SECTION_IN after=$NT28_SECTION_OUT (must be equal and > 0), stated reason lines=$NT28_REASON (want >=1)"
 fi
 
+# plant: NT29 | plugin/skills/project-tasks/scripts/ledger-merge.sh | missing) echo "<!-- roadmap: no roadmap file at $ROADMAP | missing) echo "<!-- roadmap: quiet at $ROADMAP
 # ===========================================================================================
 # NT29 (R-14) — AMENDMENT 1. PROJECT.md ABSENT IS NOT PROJECT.md WITH NO MATCH. NT26 fixes both
 # directions inside a fixture that exists. Zero matches can be correct; zero candidates is a broken
@@ -905,6 +950,7 @@ else
   bad "NT29 (R-14): rc=$NT29_RC phase-pointers=$NT29_PHASES (want 0) stated-reason=$NT29_REASON (want >=1)"
 fi
 
+# plant: NT29b | plugin/skills/project-tasks/scripts/ledger-merge.sh | missing) printf '<!-- steps: no manifests directory at %s — section omitted --> | missing) printf '<!-- steps: no non-terminal manifest under %s — section omitted -->
 # ===========================================================================================
 # NT29b (R-12, R-13) — AMENDMENT 1. The same third state on the other derived section: a
 # --manifests root that DOES NOT EXIST is distinct from one holding zero non-terminal manifests
@@ -918,12 +964,19 @@ if [ -f "$MERGE" ]; then
   NT29B_EMPTY=$(bash "$MERGE" --ledger "$MG/base.md" --issues "$MG/issues.tsv" --manifests "$MAN0" \
                  --mode full --today 2026-08-18 2>/dev/null | grep -i 'manifest' | head -1)
 fi
-if [ -n "$NT29B_MISSING" ] && [ -n "$NT29B_EMPTY" ] && [ "$NT29B_MISSING" != "$NT29B_EMPTY" ]; then
+# Compare the REASON, not the line: each notice interpolates its own directory path, so two
+# notices carrying the same words about different directories differ as strings while saying
+# the same thing. Measured 2026-08-18 — a plant that made both wordings identical left this
+# assertion green (rule 1 again, one level down).
+NT29B_MISS_R=$(printf '%s' "$NT29B_MISSING" | sed -e "s|$MG/no-such-dir||" -e "s|$MAN0||")
+NT29B_EMPT_R=$(printf '%s' "$NT29B_EMPTY"   | sed -e "s|$MG/no-such-dir||" -e "s|$MAN0||")
+if [ -n "$NT29B_MISS_R" ] && [ -n "$NT29B_EMPT_R" ] && [ "$NT29B_MISS_R" != "$NT29B_EMPT_R" ]; then
   ok "NT29b (R-12, R-13): an absent manifests root and an empty one state two different reasons"
 else
   bad "NT29b (R-12, R-13): missing='$NT29B_MISSING' empty='$NT29B_EMPTY' (both non-empty and different)"
 fi
 
+# plant: NT30 | plugin/skills/project-tasks/SKILL.md | "aggiorna il TODO", 
 # ===========================================================================================
 # NT30 (R-24) — AMENDMENT 1. The standalone triggers survive in the description: frontmatter.
 # GREEN THE MOMENT IT IS WRITTEN, because Task 2 vendored the field byte-identically. It is a
