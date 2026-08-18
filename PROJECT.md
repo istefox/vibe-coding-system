@@ -1650,6 +1650,7 @@ today's gap; only the reverse check keeps it closed.
 | #445 | `F4` accepts a marker mention as proof a fence was executed, and cannot tell an extractor from a grep |
 | #473 | G13 checks that the architect *wrote* `provisioned: true`, never that the dependency exists |
 | #481 | `agent-metrics.sh`'s `test_count_delta` counts test **files**, so it reports a real, computed `0` for every change to an existing harness — measured live at 250 lines and 18 assertions added |
+| #485 | ADR-0154 §D7's residual, now measured: a self-referential harness reports its own subject-under-test as coverage. Ignoring fixture-borne ids costs **0 of 169** corpus rows and removes **0 of 8** false `COVERED` — the collision rides on assertion code, not heredocs, and requiring the assertion line is ADR-0138 §A2, refused at 73 of 117. Not narrowable by filtering; only a declared citation marker on the `# plant:` precedent could work, and that is a convention across 29 files |
 
 *ADR-0064 §D3 allows two states, absent and a real computed zero. #481 is a third: measured,
 present, and wrong. The corpus §A5 wants for rut detection is being filled with those zeros now.*
