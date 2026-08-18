@@ -308,3 +308,4 @@ and already protected by the preservation rules.
       plant.
 - [ ] R-22 — the record is written: an ADR, a `docs/chain-decisions.md` block, one `CLAUDE.md` index line, and the `PROJECT.md` row (no-test: a documentation obligation no assertion can check beyond its own existence).
 - [ ] R-23 — the ADR states which parts of this feature are instructions rather than enforcements (no-test: a claim about how the record is written, not a behaviour a test can execute), naming the chain wiring specifically.
+- [ ] R-24 — the skill stays invokable outside the chain: its `description:` keeps the standalone trigger phrases, and every section derived from a chain artifact degrades with a stated reason when that artifact is absent, rather than rendering as if the derivation had found nothing.

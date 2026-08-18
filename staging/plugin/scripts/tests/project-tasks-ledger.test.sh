@@ -1,7 +1,17 @@
 #!/bin/bash
 # project-tasks-ledger.test.sh — project-tasks becomes a vendored chain member with a bilateral
-# GitHub issue ledger (ADR-0153; SPEC.md R-01..R-23; plan
+# GitHub issue ledger (ADR-0153; SPEC.md; plan
 # docs/superpowers/plans/2026-08-17-project-tasks-vendored-bilateral-ledger.md).
+#
+# NO REQUIREMENT-ID RANGE ON THIS LINE, deliberately, and NO REQUIREMENT ID ANYWHERE IN THIS
+# COMMENT EITHER. The header used to spell the SPEC's id span as a dotted range. spec-coverage.sh
+# cannot tell a range endpoint from a citation, so the span's upper endpoint counted as a mention
+# in a scoped test file, staled that requirement's own `(no-test: ...)` waiver and exited 3.
+# Measured 2026-08-18: the range manufactured a mention for exactly one id and for no other. The
+# first attempt at this very comment then reintroduced the same id three times while explaining
+# the removal, and the checker stayed red — rule 1, a needle that matches the prose describing the
+# mechanism. The real citations are the per-block comment headers (`# NT0 (R-01) — ...`), the form
+# ADR-0138 asks for. Do not reinstate a range, and do not name a requirement id here.
 #
 # THIS FILE IS THE HARNESS ADR-0153 §D7 ADDS. Its subject is one skill, `project-tasks`, and it is
 # a new file rather than an extension of an existing one for the reason §D7 states: no existing

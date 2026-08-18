@@ -1,7 +1,7 @@
 # Implementation plan — project-tasks becomes a vendored chain member with a bilateral GitHub ledger
 
 - **Issue:** none. Tracked as ledger entries `VCS-022` and `VCS-023` in `TODO.md`.
-- **SPEC:** `/Users/stefer/Developer/vibe-coding-system/SPEC.md` (R-01 … R-23)
+- **SPEC:** `/Users/stefer/Developer/vibe-coding-system/SPEC.md` (R-01 … R-24)
 - **ADR:** `docs/architecture/ADR-0153-project-tasks-vendored-bilateral-ledger.md`
 - **Stack:** Bash 3.2 (macOS-portable — no `[[ ]]`, no arrays, no `mapfile`, no `${var^^}`), POSIX
   `awk`/`sed`/`grep`, markdown. The harnesses under `staging/plugin/scripts/tests/` run by
@@ -197,7 +197,7 @@ are RED **by design**. Every red below is declared. Anything else halts.
 | B | 2, 3 | coder | vendoring + scanner reds go green; `gh-issues`/`ledger-merge` blocks still RED |
 | C | 4 | tester | `NT` GitHub-read assertions added, all RED |
 | D | 5 | coder | GitHub-read block green |
-| E | 6 | tester | `NT` merge assertions added, all RED |
+| E | 6 | tester | `NT` merge assertions added, all RED — **except `NT30`, GREEN on arrival by design** (Amendment 1) |
 | F | 7 | coder | merge block green; full suite green except the prose pins |
 | G | 8 | coder | prose pins green; full suite green |
 | H | 9 | tester | plants declared, each seen RED once; `plant-check.sh` green |
@@ -391,7 +391,7 @@ Records (TSV):
 
 Budget: staging/plugin/skills/project-tasks/scripts/gh-issues.sh (~148 lines), staging/sync-to-claude.sh (~2 lines).
 
-### Task 6 — The ledger-merge assertions, written RED (R-07, R-08, R-09, R-10, R-11, R-12, R-13, R-14, R-18)
+### Task 6 — The ledger-merge assertions, written RED (R-06, R-07, R-08, R-09, R-10, R-11, R-12, R-13, R-14, R-18, R-24)
 
 **Tester-owned.** Extend `project-tasks-ledger.test.sh`. Fixtures are `TODO.md` files under `$TMP`;
 `ledger-merge.sh` never writes, so every assertion compares stdout against an expectation.
@@ -434,10 +434,37 @@ Budget: staging/plugin/skills/project-tasks/scripts/gh-issues.sh (~148 lines), s
   as **new** and one before it as **pre-existing**, with distinct exit codes so a caller can branch
   (rule 5). Assert both codes and the id lists.
 
+- `NT28` (R-06, R-13) — **the producer/consumer meeting point.** `gh-issues.sh` emits `DIDNOTRUN`
+  under `NT14`'s conditions and `NT15` proves it writes nothing; nothing yet proves `ledger-merge.sh`
+  **accepts** that record. Feed the merge helper a `DIDNOTRUN` record together with a ledger whose
+  `GitHub Issues` section holds two entries: the section comes out byte-identical to the input and a
+  reason is emitted. A consumer that read the record as an empty issue set would silently empty the
+  section, and every assertion in Tasks 4 and 6 would stay green while it did (rule 17).
+- `NT29` (R-14) — **`PROJECT.md` absent is not `PROJECT.md` with no match.** `NT26` fixes both
+  directions inside one fixture that exists. Run with no `PROJECT.md` at all: every entry renders
+  without a phase pointer **and** a one-line reason names the missing file. Zero matches can be
+  correct; zero candidates is a broken derivation, and from the rendered section the two are
+  identical (rule 7). This is the assertion that keeps the skill usable in a repository that has no
+  roadmap file, which is every repository except this one.
+- `NT29b` (R-12, R-13) — the same third state on the other derived section: a `--manifests` root that
+  **does not exist** is distinct from one holding zero non-terminal manifests (`NT25`). Assert that
+  the two reasons differ in text. ADR-0109 gives seven entry tokens for precisely this reason — "no
+  file" and "unparseable" are inputs, not environments.
+- `NT30` (R-24) — the `description:` frontmatter still carries its standalone trigger phrases
+  (`/project-tasks`, `aggiorna il TODO`, `cosa resta da fare`, `track this issue`), matched against a
+  flattened, undecorated, case-insensitive copy (rule 3). **This assertion is GREEN the moment it is
+  written**, because Task 2 vendors the field byte-identically; it is a regression pin aimed at Task
+  8 item 1, which rewrites that same field. Its evidence is therefore its plant (Task 9) and not a
+  red checkpoint, and Batch E's row above says so. `NT9` pins the opposite direction and the two must
+  not be merged: a description naming only the two chains would pass `NT9` and leave the skill
+  unreachable by hand.
+
+This file's header no longer carries a requirement-id range, and must not regain one: `SPEC.md R-01..R-23` made `spec-coverage.sh` read the range endpoint as a citation, staling `R-23`'s `(no-test: ...)` waiver and exiting 3. Removed 2026-08-18 under Amendment 1; the per-block headers are the citations.
+
 Every block's comment header cites its ids. `NT16`'s header additionally records that it is the
 contract assertion of ADR-0153 §D2.
 
-Budget: staging/plugin/scripts/tests/project-tasks-ledger.test.sh (~320 lines)
+Budget: staging/plugin/scripts/tests/project-tasks-ledger.test.sh (~390 lines)
 
 ### Task 7 — Write `ledger-merge.sh` (R-07, R-08, R-09, R-10, R-11, R-12, R-13, R-14, R-18)
 
@@ -485,7 +512,7 @@ Design points that are not negotiable:
 
 Budget: staging/plugin/skills/project-tasks/scripts/ledger-merge.sh (~378 lines), staging/sync-to-claude.sh (~2 lines).
 
-### Task 8 — The skill text, the reference docs, the ledger reshape and the chain wiring (R-16, R-17, R-18, R-19, R-20)
+### Task 8 — The skill text, the reference docs, the ledger reshape and the chain wiring (R-16, R-17, R-18, R-19, R-20, R-24)
 
 **Coder-owned.** Prose, in five places. Every claim here is an **instruction, not an enforcement**
 (rule 16); the harness pins that the text exists and nothing pins that it is obeyed.
@@ -494,7 +521,9 @@ Budget: staging/plugin/skills/project-tasks/scripts/ledger-merge.sh (~378 lines)
    workflow checklist (steps 3b and 6b), document the promotion gate, the `DID-NOT-RUN` path and the
    `Steps` section. Keep the six hard rules **verbatim** (`NT8` pins them). Keep the
    `description:` frontmatter's claim about the two chains — Task 8 item 4 makes it true rather than
-   narrowing it (R-19). `selftest.sh`'s frontmatter check caps `description:` at 1024 characters;
+   narrowing it (R-19). Keep the standalone trigger phrases in that same field **untouched** (R-24,
+   pinned by `NT30`): this skill has to stay invokable by hand in a repository that runs neither
+   chain, and narrowing the description to the chain wiring is the cheapest way to lose that. `selftest.sh`'s frontmatter check caps `description:` at 1024 characters;
    re-run it after editing.
 2. **`reference/file-format.md`** — document the `GitHub Issues` and `Steps` sections, the
    `runs:`/`promote:` keys, and the field-ownership table. Add the preservation rule for the three
@@ -630,7 +659,7 @@ changes a contract another harness reads: `sync-to-claude.sh`'s PAIRS block is r
 | R-03 | 1, 2 |
 | R-04 | 4, 5, 6 |
 | R-05 | 4, 5 |
-| R-06 | 4, 5 |
+| R-06 | 4, 5, 6 |
 | R-07 | 6, 7 |
 | R-08 | 6, 7 |
 | R-09 | 6, 7 |
@@ -648,5 +677,66 @@ changes a contract another harness reads: `sync-to-claude.sh`'s PAIRS block is r
 | R-21 | 9 |
 | R-22 | 10 |
 | R-23 | 10 |
+| R-24 | 6, 8 |
 
 CODER-MODEL CANDIDATE: sonnet
+
+---
+
+## Amendment 1 — the standalone lane was specified nowhere (2026-08-18, before Batch B)
+
+**Disclosure, per ADR-0073.** This plan is amended after Batch A landed and before Batch B is
+dispatched. Four assertion ids are added to Task 6, one requirement is proposed for `SPEC.md`, and
+Task 8 item 1 gains a clause. Nothing already written is edited or deleted; Task 1's harness is
+untouched apart from its header comment's id range, which Task 6's tester updates while extending
+the same file.
+
+**What was wrong.** The feature has two lanes and the plan specified one. Inside the chain the
+skill reads a manifest, a `PROJECT.md` and GitHub. Outside it — invoked by hand, in this repository
+or in any other — none of those three need exist. The degraded shapes were specified (`NT25` for
+zero non-terminal manifests, `NT14`/`NT14b`/`NT15` for `gh` unavailable, `NT19` for the manual
+modes), and they are good, but three things fell between them:
+
+1. **Nothing made the two helpers meet.** `NT14` and `NT15` prove `gh-issues.sh` reports
+   `DIDNOTRUN` and writes nothing. `NT16`–`NT27` prove `ledger-merge.sh` behaves on well-formed
+   input. No assertion hands one's output to the other. A merge helper that read `DIDNOTRUN` as an
+   empty issue set would empty the `GitHub Issues` section on every run without a network, and the
+   whole harness would stay green — rule 17, a producer specified in one place and consumed in
+   another with nothing checking they meet, which has shipped here three times.
+2. **`PROJECT.md` and `docs/manifests/` absent were never a case.** `NT26` fixes both directions of
+   the phase-pointer rule inside one fixture that exists; `NT25` fixes zero non-terminal manifests
+   inside a root that exists. A missing file is a third state, and rule 7 is explicit that zero
+   candidates and zero matches read identically from outside. This matters more here than usual:
+   `project-tasks` came from a foreign repository and is meant to run in any project, and no project
+   but this one has a `PROJECT.md` or a `docs/manifests/`.
+3. **`R-19` protects one direction of the `description:` field and Task 8 rewrites that field.**
+   `R-19` says every chain the description names does invoke it, and `NT9` checks it both ways. The
+   same field carries the standalone triggers, and nothing anywhere claims they survive. A Task 8
+   edit that made the description purely chain-facing would pass `NT9`, pass the whole suite, and
+   make the skill unreachable by hand — the exact failure this amendment exists to prevent.
+
+**Proposed `SPEC.md` edit — operator's call, not applied here.** The plan's own §"Requirement-id
+scope" already establishes that `SPEC.md` edits are settled at the gate and are outside the
+architect's write scope, so this is a request and not a change:
+
+```text
+(checkbox syntax elided, for the reason this plan's §"The two `(no-test:)` markers" already gives:
+ a literal checklist item here is counted as a task by plan-tasks.sh's deliberately loose --count
+ predicate. Written with the checkbox, this block moved the count from 10 to 11 — measured, not
+ assumed. Restore the "- [ ]" when the line is transcribed into SPEC.md.)
+
+  R-24 — the skill stays invokable outside the chain: its `description:` keeps the standalone
+  trigger phrases, and every section derived from a chain artifact degrades with a stated reason
+  when that artifact is absent, rather than rendering as if the derivation had found nothing.
+```
+
+Declining it is a real option, and it costs exactly `NT30`: `NT28`, `NT29` and `NT29b` cite `R-06`,
+`R-12`, `R-13` and `R-14`, which already exist, so they land either way. Only the `description:`
+half has no requirement to hang from today.
+
+**What does not change.** `Z1`'s floor stays at 30. It was forward-declared with margin across
+Tasks 1, 4 and 6 and the total moves from roughly 31 named ids to 35, so the line needs no edit —
+which is what a vacuity guard is for (rule 10). The batching table gains one exception and no new
+row: `NT30` is green when written, because Task 2 vendors the field it pins byte-identically. An
+assertion that has never been red pins nothing until its plant fires (rule 2), so `NT30`'s entry in
+Task 9 is not optional bookkeeping, it is the whole of its evidence.
