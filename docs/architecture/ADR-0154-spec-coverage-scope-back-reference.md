@@ -365,3 +365,39 @@ brief consumes it.
 - ADR-0101 — batch-boundary precedence: evidence quality beats checkpoint tidiness
 - ADR-0153 — the plan M1 was measured on
 - CLAUDE.md rules 6, 7, 8, 10, 12, 13, 14, 16, 18
+
+## Correction — 2026-08-18
+
+Five pre-existing assertions in `spec-coverage.test.sh` — `RS1`, `RS2`, `RS4`, `RX5`, `RX6` — turned
+red as a direct and faithful consequence of §D1's conjunction, once Task 2 landed. Their fixtures
+were written before half 2 existed: each names a discovered test file from its own plan, that file
+carries the id under test, and the file's own text never names the plan back. Half 2 now drops it,
+and the scope each fixture depends on collapses.
+
+The five did not fail identically. `RS1` and `RX6` changed only the scope-size field, `1 → 0`. `RS2`
+and `RS4` changed verdict outright, `COVERED → UNSCOPED`. `RX5` changed verdict on the waiver path:
+exit 3 `STALE-WAIVER` became exit 0 `COVERED`.
+
+**`RX5` falsifies half of R-04 as written.** R-04 claims the documentation-exemption waiver
+"behave[s] exactly as before". It does not: when half 2 collapses the scope, the waiver's staleness
+check no longer has a scoped set in which to find the id, so `STALE-WAIVER` stops firing for that
+fixture. The rest of R-04 held — the plan axis, the discovery predicate, the exit codes for every
+path half 2 does not touch — but the waiver clause, taken literally, did not.
+
+The resolution, decided by the operator at the Batch B checkpoint: repair the fixture, never the
+expectation. Each of the five gained one back-reference line naming its own plan, restoring its
+original outcome; no expected value, predicate, exit code or message changed. That direction was
+chosen because half 2 is incidental to what each of these five was written to prove — `RS1`, `RS2`
+and `RS4` exercise half 1 and the plain scope filter, `RX5` exercises the waiver — and rewriting the
+expectations instead would have turned `RS2` into a duplicate of `RY6` and silently dropped half 1's
+own coverage rather than repairing it.
+
+The plan's own "Staleness" section censused `SCOPE-EMPTY`, `RD5`'s stderr substring and every other
+named consumer of the changed contract, and did not find these five. The lesson: a staleness census
+over *consumers of a token* does not reach *fixtures whose premise the change invalidates* — the
+five named no token this decision touches, they simply relied on a scope that stayed non-empty for a
+reason §D1 removes.
+
+One measurement held exactly. The live-corpus comparison (`RS7`/`RS8a`/`RS8b`) stayed green
+throughout, and Task 5's regeneration changed 0 of the 130 rows — M4's zero-flip prediction was
+correct.

@@ -35,6 +35,25 @@
 # (rule 10) — this file's 117 exact rows, compared row-by-row in RS7/RS8, are where R-03 is actually
 # proven.
 #
+# 2026-08-18 — REGENERATED UNDER ADR-0154 (Task 5, spec-coverage-scope-back-reference). The scope
+# filter became a conjunction — a discovered test file must ALSO name the feature back, not only
+# be named by the plan — see spec-coverage.sh's own header and ADR-0154 §D1/§D5. STARTING STATE,
+# re-derived the same day rather than trusted from the 2026-08-14 sentence above (CLAUDE.md rule
+# 13): 16 (spec, plan) pairs, 130 declared ids, 106 COVERED, 24 UNSCOPED. The corpus had already
+# grown by one completed pair since 2026-08-14, for reasons unrelated to this feature and not
+# investigated further here — out of this task's scope.
+#
+# The RS7/RS8 derivation (spec-coverage.test.sh, section RS7-RS10, which IS the regeneration
+# procedure — no row below was hand-edited) was re-run against this same 16-pair corpus with
+# ADR-0154's conjunction filter already in place (commit 2102eeb) and diffed, row by row, against
+# every row already committed here. RESULT: ZERO verdict changes and ZERO row-count changes — the
+# regenerated (spec, id, verdict) set is byte-identical to what was already committed. PER-ROW
+# ACCOUNTING: none required (0 of 130 rows differ; no COVERED -> UNSCOPED flip, no UNSCOPED ->
+# COVERED flip). This confirms ADR-0154's M4 prediction on this feature's own corpus: the
+# back-reference conjunction narrows the wider 52-plan/263-file scope population (94 files dropped,
+# per the ADR) without moving a single frozen verdict in the narrower (spec, id) corpus this file
+# tracks.
+#
 # NO ARCHIVED SPEC IS EDITED FOR THIS FILE (CLAUDE.md rule 14, ADR-0138 §D5). Retro-fitting
 # `(no-test: ...)` into the 4 completed SPECs behind the not-test-assertable rows below would
 # correct a historical record in place. This file is a new record ABOUT that corpus, written

@@ -11,6 +11,15 @@
 #                                                                 test population but not in a file the --plan
 #                                                                 names (ADR-0138 §D1/§D3, issue #312); a
 #                                                                 different remedy, the SAME exit, no new code
+#
+# THE SCOPE FILTER IS A CONJUNCTION (ADR-0154): a discovered test file the plan names (half 1) must
+# ALSO name this feature back — the plan's own basename or one of the ADR-NNNN ids the plan cites
+# (half 2) — or it is dropped as a precedent citation, never re-admitted. stderr gains a SECOND
+# empty-scope token, told apart from the first: SCOPE-EMPTY (unchanged) means the plan names no
+# discovered test file at all and falls back to the unscoped population; SCOPE-NO-BACKREF (new)
+# means the plan names one or more discovered test files and NONE names this feature back — a
+# finding, not a vacuity, so it does NOT fall back; the scope stays empty. No new exit code, no new
+# stdout token — the affected ids report their ordinary UNSCOPED verdict either way.
 #   exit 2  invalid invocation, unreadable file           stdout: nothing
 #   exit 3  structural error in the SPEC or the plan       stdout: DUPLICATE / MALFORMED / ORPHAN lines
 #                                                                 OR STALE-WAIVER<TAB>R-NN — a (no-test: …)
@@ -365,8 +374,59 @@ if [ -n "$TROOT" ]; then
   DISCOVERED_N=$(count_re . "$TESTFILES")
 fi
 
-# --- scope filter (ADR-0138 §D1-§D3, issue #312): the test axis is narrowed to the test files the
-# PLAN itself names, not the whole discovered population above.
+# --- back-reference key set (ADR-0154 §D1). Built ONCE per run, BEFORE the scope loop below: the
+# plan's own basename (WITH its .md extension, escaped exactly like the basename half below escapes
+# its own candidate) OR every ADR-NNNN id $PLAN cites — exactly four digits, found with the SAME
+# both-sides-anchored token scan this file already uses for R-NN (left (^|[^A-Za-z0-9_]), right
+# ([^0-9]|$)) — not read from a designated header line. De-duplicated, assembled into ONE ERE
+# alternation anchored (^|[^A-Za-z0-9_])(…)([^A-Za-z0-9_]|$) — the SAME word-boundary anchor pair the
+# basename half below already uses. This is what half 2 of the scope filter tests a candidate file's
+# OWN text against — see the disclosure at the filter's own site below.
+PLAN_BN="${PLAN##*/}"
+PLAN_BN_ESC=$(printf '%s' "$PLAN_BN" | sed 's/[][\.^$*+?(){}|]/\\&/g')
+BACKREF_ADRS="$TMPD/backref_adrs.txt"; : >"$BACKREF_ADRS"
+cat >"$TMPD/backref_adr_scan.awk" <<'AWKEOF'
+# Same scan-anywhere shape as extract_tokens() below for R-NN, applied to ADR-NNNN (four digits, not
+# two) and to the WHOLE $PLAN — not gated by is_task_line(), because half 2's key set is drawn from
+# every ADR citation in the plan's prose, not only its task lines (ADR-0154 §D1).
+function extract_adr_ids(l,    i, p, pos, cb, leftok, d1, d2, d3, d4, after, rightok) {
+  i = 1
+  while (1) {
+    p = index(substr(l, i), "ADR-")
+    if (p == 0) break
+    pos = i + p - 1
+    if (pos == 1) leftok = 1
+    else {
+      cb = substr(l, pos - 1, 1)
+      leftok = (cb !~ /[A-Za-z0-9_]/)
+    }
+    d1 = substr(l, pos + 4, 1); d2 = substr(l, pos + 5, 1)
+    d3 = substr(l, pos + 6, 1); d4 = substr(l, pos + 7, 1)
+    if (leftok && d1 ~ /[0-9]/ && d2 ~ /[0-9]/ && d3 ~ /[0-9]/ && d4 ~ /[0-9]/) {
+      after = substr(l, pos + 8, 1)
+      rightok = (after == "" || after !~ /[0-9]/)
+      if (rightok) print substr(l, pos, 8) >> ADR_FILE
+    }
+    i = pos + 4
+  }
+}
+{ extract_adr_ids($0) }
+AWKEOF
+awk -v ADR_FILE="$BACKREF_ADRS" -f "$TMPD/backref_adr_scan.awk" "$PLAN"
+BACKREF_ADRS_UNIQ="$TMPD/backref_adrs_uniq.txt"
+sort -u "$BACKREF_ADRS" >"$BACKREF_ADRS_UNIQ" 2>/dev/null || : >"$BACKREF_ADRS_UNIQ"
+
+BACKREF_KEYS="$PLAN_BN_ESC"
+if [ -s "$BACKREF_ADRS_UNIQ" ]; then
+  while IFS= read -r _adr; do
+    [ -n "$_adr" ] || continue
+    BACKREF_KEYS="${BACKREF_KEYS}|${_adr}"
+  done <"$BACKREF_ADRS_UNIQ"
+fi
+BACKREF_RE="(^|[^A-Za-z0-9_])(${BACKREF_KEYS})([^A-Za-z0-9_]|\$)"
+
+# --- scope filter (ADR-0138 §D1-§D3, issue #312; ADR-0154 §D1 narrows it further): the test axis is
+# narrowed to the test files the PLAN itself names, not the whole discovered population above.
 #
 # THE DEVIATION FROM SPEC OBJECTIVE 2, DISCLOSED HERE (CLAUDE.md rule 12 — a later assertion about
 # this filter must anchor on the TESTFILES_SCOPED code below, never on this prose alone, which a
@@ -377,12 +437,17 @@ fi
 # #404's 45 in-scope mentions are ALL comments (45 of 45) — the comment header is this harness's
 # idiomatic requirement-to-assertion map. No comment-versus-assertion distinction is implemented
 # here, by decision. What tightens the gate instead is SCOPE: a discovered test file counts only
-# when its own basename is a whole token somewhere in $PLAN.
+# when its own basename is a whole token somewhere in $PLAN — AND (ADR-0154 §D1, half 2 below) its
+# own text names this feature back. Half 2 is a CONJUNCT on the candidates half 1 already admitted,
+# never a second, independent discovery rule (CLAUDE.md rule 6, ADR-0086) — a file half 1 rejects is
+# never reached by half 2 at all, and $TESTFILES_SCOPED is still the ONE definition of "in scope".
 #
 # ONE definition of "what is a test file" (CLAUDE.md rule 6, ADR-0086): this FILTERS $TESTFILES, it
 # never re-derives the discovery predicate above. The .md exclusion stays closed for free — $TESTFILES
 # is already post-exclusion, so no .md can enter scope through this filter (RS5).
 TESTFILES_SCOPED="$TMPD/testfiles_scoped.txt"; : >"$TESTFILES_SCOPED"
+HALF2_DROPPED="$TMPD/half2_dropped.txt"; : >"$HALF2_DROPPED"
+HALF1_N=0
 if [ -n "$TROOT" ] && [ -s "$TESTFILES" ]; then
   while IFS= read -r _f; do
     [ -n "$_f" ] || continue
@@ -394,20 +459,49 @@ if [ -n "$TROOT" ] && [ -s "$TESTFILES" ]; then
     # mention) — the basename is regex-escaped and searched with the anchor pair instead.
     _esc=$(printf '%s' "$_bn" | sed 's/[][\.^$*+?(){}|]/\\&/g')
     if grep -qE "(^|[^A-Za-z0-9_])${_esc}([^A-Za-z0-9_]|\$)" "$PLAN" 2>/dev/null; then
-      printf '%s\n' "$_f" >>"$TESTFILES_SCOPED"
+      HALF1_N=$((HALF1_N + 1))
+      # Half 2 (ADR-0154 §D1): the file half 1 just admitted must ALSO name this feature back — its
+      # OWN text names the plan's basename or one of the ADR ids the plan cites ($BACKREF_RE, built
+      # above). A precedent citation (a harness the plan names for an unrelated reason) fails this
+      # and is dropped — it was discovered and it passed half 1, it just does not claim this feature.
+      if grep -qE "$BACKREF_RE" "$_f" 2>/dev/null; then
+        printf '%s\n' "$_f" >>"$TESTFILES_SCOPED"
+      else
+        printf '%s\n' "$_f" >>"$HALF2_DROPPED"
+      fi
     fi
   done <"$TESTFILES"
-  # D2 — the denominator guard (CLAUDE.md rule 7, ADR-0085). Zero MATCHES can be a correct scope
-  # (RS3: the id is absent everywhere); zero CANDIDATES out of a non-empty discovered population is
-  # a broken derivation, and from outside the two look identical. Fail open and visible, matching
-  # the gate's existing exit-2 philosophy (CLAUDE.md rule 4) — never a silent wall of UNSCOPED lines.
+  # D2 — the denominator guard (CLAUDE.md rule 7, ADR-0085), now TWO causes, told apart (ADR-0154
+  # §D2). Zero MATCHES can be a correct scope (RS3: the id is absent everywhere); zero CANDIDATES out
+  # of a non-empty discovered population is a broken derivation, and from outside the two look
+  # identical. Fail open and visible, matching the gate's existing exit-2 philosophy (CLAUDE.md rule
+  # 4) — never a silent wall of UNSCOPED lines.
   if [ ! -s "$TESTFILES_SCOPED" ]; then
-    printf '%s: SCOPE-EMPTY — the plan names no discovered test file at all (tests-root=%s, %d file(s) discovered); falling back to the unscoped test population for this invocation\n' \
-      "$SELF" "$TROOT" "$DISCOVERED_N" >&2
-    cat "$TESTFILES" >"$TESTFILES_SCOPED"
+    if [ "$HALF1_N" -gt 0 ]; then
+      # SCOPE-NO-BACKREF (new, ADR-0154 §D2): half 1 matched one or more files and half 2 dropped
+      # ALL of them. Nothing here is broken — the derivation resolved and its answer is that no file
+      # the plan names claims this feature. A finding, not a vacuity: unlike SCOPE-EMPTY below, this
+      # does NOT fall back — the scope stays empty and ids mentioned only in the dropped file(s)
+      # report their ordinary UNSCOPED verdict.
+      _dropped_bns=$(sed -n '1,3p' "$HALF2_DROPPED" 2>/dev/null | while IFS= read -r _d; do printf '%s ' "${_d##*/}"; done)
+      _dropped_bns=${_dropped_bns% }
+      if [ -s "$BACKREF_ADRS_UNIQ" ]; then
+        _adr_list=$(tr '\n' ',' <"$BACKREF_ADRS_UNIQ" | sed 's/,$//; s/,/, /g')
+        printf '%s: SCOPE-NO-BACKREF — the plan names %d discovered test file(s) but none names this feature back (tests-root=%s, %d file(s) discovered); dropped: %s; remedy: add %s or one of %s to one of them\n' \
+          "$SELF" "$HALF1_N" "$TROOT" "$DISCOVERED_N" "$_dropped_bns" "$PLAN_BN" "$_adr_list" >&2
+      else
+        printf '%s: SCOPE-NO-BACKREF — the plan names %d discovered test file(s) but none names this feature back (tests-root=%s, %d file(s) discovered); dropped: %s; remedy: add %s to one of them\n' \
+          "$SELF" "$HALF1_N" "$TROOT" "$DISCOVERED_N" "$_dropped_bns" "$PLAN_BN" >&2
+      fi
+    else
+      printf '%s: SCOPE-EMPTY — the plan names no discovered test file at all (tests-root=%s, %d file(s) discovered); falling back to the unscoped test population for this invocation\n' \
+        "$SELF" "$TROOT" "$DISCOVERED_N" >&2
+      cat "$TESTFILES" >"$TESTFILES_SCOPED"
+    fi
   fi
 fi
 SCOPE_N=$(count_re . "$TESTFILES_SCOPED")
+HALF2_DROPPED_N=$(count_re . "$HALF2_DROPPED")
 
 grep_boundary_test() {
   _id="$1"
@@ -488,8 +582,8 @@ cat "$OUT"
 TROOT_DESC="not-checked"
 [ -n "$TROOT" ] && TROOT_DESC="$TROOT"
 if [ -n "$TROOT" ]; then
-  printf '%s: %d id(s) declared, %d covered, %d uncovered, %d unscoped, tests-root=%s, %d test file(s) discovered, %d in scope\n' \
-    "$SELF" "$DECL_N" "$COV_N" "$UNCOV_N" "$UNSCOPED_N" "$TROOT_DESC" "$DISCOVERED_N" "$SCOPE_N" >&2
+  printf '%s: %d id(s) declared, %d covered, %d uncovered, %d unscoped, tests-root=%s, %d test file(s) discovered, %d in scope, %d dropped by back-reference filter (ADR-0154)\n' \
+    "$SELF" "$DECL_N" "$COV_N" "$UNCOV_N" "$UNSCOPED_N" "$TROOT_DESC" "$DISCOVERED_N" "$SCOPE_N" "$HALF2_DROPPED_N" >&2
 else
   printf '%s: %d id(s) declared, %d covered, %d uncovered, tests-root=%s\n' \
     "$SELF" "$DECL_N" "$COV_N" "$UNCOV_N" "$TROOT_DESC" >&2

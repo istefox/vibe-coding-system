@@ -1598,3 +1598,25 @@ running the pipeline against this repository's own ledger with 39 assertions alr
 further ones were found by plants that did not fire, and both convicted an assertion rather than a
 plant. The lesson is Phase 13's, arrived at from the other end — a green harness is evidence about
 the harness.*
+
+### Phase 15 — the scope that was a list of names becomes a mutual one (ADR-0154, plan of 2026-08-18)
+
+`spec-coverage.sh`'s test axis, narrowed by ADR-0138 to the files a plan names, was satisfied by
+precedent citations carrying a foreign `R-NN` namespace: on a real plan, three cited harnesses
+carried seven ids of their own, four reporting `COVERED` while cited nowhere in that feature's
+harness. Measured across the plan corpus, 94 of 263 scoped files were precedent citations rather
+than genuine coverage.
+
+This phase turns the scope filter into a conjunction: a discovered test file counts only when the
+plan names it **and** the file's own text names the plan's basename or one of the ADRs the plan
+cites back. An empty scope now reports one of two distinct stderr states instead of one, so the
+gate's remedy names the actual defect instead of guessing.
+
+- [x] the conjunction, the two-state empty-scope guard, and the producer-side clause in the architect's contract  (ADR-0154, Tasks 2–3)
+- [x] the RY assertions and RI7 written RED first, the corpus denominator guard, and the regenerated frozen baseline  (ADR-0154, Tasks 1, 4–5)
+- [x] a plant per new assertion and the registry run, plus one pre-existing plant repaired (ADR-0154, Task 7)
+
+*The producer-side clause in `staging/plugin/agents/architect.md` — a plan names the harness it
+creates, and that harness names the plan or its ADR back — is an instruction and not an enforcement
+(rule 16). What is enforced is the consequence at the gate: a harness that does not name its plan or
+a cited ADR back is descoped, and the feature's ids report `UNSCOPED`.*

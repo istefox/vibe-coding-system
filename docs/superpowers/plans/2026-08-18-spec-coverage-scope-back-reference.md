@@ -182,7 +182,7 @@ the idiom the file already uses; no fixture may contain a key-shaped literal.
 R-04's wider claim — no verdict changes meaning — is carried by `RY8` plus the 145 pre-existing
 assertions in this file staying green, not by a new assertion of its own.
 
-Budget: staging/plugin/scripts/tests/spec-coverage.test.sh (~230 lines).
+Budget: staging/plugin/scripts/tests/spec-coverage.test.sh (~230 lines)
 
 ### Task 2 — The conjunction and the two-state empty-scope guard (R-01, R-02, R-03, R-04, R-05)
 
@@ -218,7 +218,7 @@ silent no-ids path, not the `(no-test: …)` waiver, not `grep_boundary_test_all
 Update the contract header at the top of the file to name the new stderr token and ADR-0154, and
 disclose at the filter's own site that half 2 is a conjunct and not a second discovery rule.
 
-Budget: staging/plugin/skills/concept-to-code/scripts/spec-coverage.sh (~75 lines).
+Budget: staging/plugin/skills/concept-to-code/scripts/spec-coverage.sh (~75 lines)
 
 ### Task 3 — The producer-side convention, in the architect's output contract (R-08)
 
@@ -233,7 +233,7 @@ ids report `UNSCOPED`. State in the same breath that this is an instruction and 
 Do not add the same sentence to the concept-to-code Step 2 dispatch brief. One home, on the producer
 side (ADR-0154 §D6, §A10).
 
-Budget: staging/plugin/agents/architect.md (~6 lines).
+Budget: staging/plugin/agents/architect.md (~6 lines)
 
 ### Task 4 — The corpus denominator guard for the back-reference derivation (R-06)
 
@@ -253,7 +253,7 @@ its own plant (rule 10, ADR-0124) — `>= 15` against 16 still passes when one p
 5's regenerated per-row baseline is where a plant bites. `RY10` is **green on arrival** and stays
 green after Task 2; the plant in Task 7 (collapse half 2 for every file) is what pins it.
 
-Budget: staging/plugin/scripts/tests/spec-coverage.test.sh (~55 lines).
+Budget: staging/plugin/scripts/tests/spec-coverage.test.sh (~55 lines)
 
 ### Task 5 — Regenerate the frozen baseline and account for the delta row by row (R-07)
 
@@ -283,7 +283,7 @@ Add a dated `2026-08-18` block to the file's header stating what was regenerated
 the row-count delta, and the per-row accounting. **Do not rewrite the 2026-08-14 measurement
 sentence** — a historical record is corrected forward (rule 14, ADR-0154 §D5).
 
-Budget: staging/plugin/scripts/tests/spec-coverage-scope-baseline.tsv (~45 lines).
+Budget: staging/plugin/scripts/tests/spec-coverage-scope-baseline.tsv (~45 lines)
 
 ### Task 6 — The record (R-10, R-11, R-12)
 
@@ -333,7 +333,7 @@ report `FIRED`. A `NOFIRE`, `BADPLANT` or `VACUOUS` convicts the assertion or th
 run — fix it, do not delete it. If an assertion cannot be planted honestly, record why beside it
 rather than inventing a plant that fires for the wrong reason.
 
-Budget: staging/plugin/scripts/tests/spec-coverage.test.sh (~20 lines).
+Budget: staging/plugin/scripts/tests/spec-coverage.test.sh (~20 lines)
 
 ---
 
