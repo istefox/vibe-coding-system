@@ -111,6 +111,7 @@ fi
 # separator between name and reason is an em dash ("—"), not a hyphen.
 #
 # deployed-only: agent-design — proprietary book-derived knowledge base; its own frontmatter `license:` field says so.
+# deployed-only: auto-learning — symlink into a foreign repository (steve-skills/auto-learning) carrying its own git remote and history; same class as website-auditor below, and vendoring it would duplicate a project that is already versioned elsewhere (ADR-0024/0025's drift).
 # deployed-only: daily-close — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365).
 # deployed-only: daily-open — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365), same class as daily-close.
 # deployed-only: vibiso-intake — front end of a different project's intake contract (vibiso-system ADR-002).
