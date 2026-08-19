@@ -23,6 +23,31 @@ bash "$DETECT" --root "$d" >/dev/null
 grep -q 'xcodebuild test -project' "$d/.claude/test-cmd" && grep -q 'Ondum' "$d/.claude/test-cmd" \
   && ok "detect: xcodeproj -> xcodebuild + scheme" || no "detect: xcodeproj"
 
+# issue #488 / ADR-0159: without -derivedDataPath the build root is whatever the machine's Xcode
+# preference says, shared by every checkout on it — worktrees included. The value written is
+# absolute at DETECTION time ($PWD after detect-test-cmd.sh's own `cd "$ROOT"`), so it names THIS
+# project's root regardless of the cwd a later invocation runs from.
+#
+# NOT PLANTED (rule 2's obligation, disclosed rather than silently skipped). This file's `no()`
+# prints `FAIL <label>`, with no colon and no id — the counter-example named verbatim in
+# prep-row-select.test.sh's own header ("makes every plant declared [t]here unattributable"), which
+# predates this change. A declaration here would be indistinguishable from every other assertion in
+# this file: `plant-check.sh`'s `red_re()` requires `^FAIL: <id>`, never produced. Verified by hand
+# instead (CLAUDE.md rule 2's letter, not the registry's mechanism): reverting `detect-test-cmd.sh`'s
+# `-derivedDataPath` addition on the `-project` branch flips exactly the xcodeproj assertion below
+# to FAIL and nothing else; the same check on the `-workspace` branch flips exactly the xcworkspace
+# assertion. Fixing `prep.test.sh`'s reporting convention itself is out of scope here — it is a
+# pre-existing, separately documented limitation, not a new defect this change introduces.
+grep -q -- '-derivedDataPath' "$d/.claude/test-cmd" && grep -q -- "-derivedDataPath \"$d/.build/DerivedData\"" "$d/.claude/test-cmd" \
+  && ok "detect: xcodeproj -> -derivedDataPath is absolute and per-checkout (issue #488)" \
+  || no "detect: xcodeproj -> -derivedDataPath (issue #488)"
+
+d=$(mk xcws); mkdir -p "$d/Ondum.xcworkspace"
+bash "$DETECT" --root "$d" >/dev/null
+grep -q -- '-derivedDataPath' "$d/.claude/test-cmd" && grep -q -- "-derivedDataPath \"$d/.build/DerivedData\"" "$d/.claude/test-cmd" \
+  && ok "detect: xcworkspace -> -derivedDataPath is absolute and per-checkout (issue #488)" \
+  || no "detect: xcworkspace -> -derivedDataPath (issue #488)"
+
 d=$(mk py); : > "$d/pyproject.toml"
 bash "$DETECT" --root "$d" >/dev/null
 grep -qx 'python3 -m pytest' "$d/.claude/test-cmd" && ok "detect: python -> pytest" || no "detect: python"

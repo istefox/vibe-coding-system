@@ -1631,15 +1631,98 @@ else
   bad "L9: the Express note spells the DISPATCH mechanism literal — moved into a mapped block it would classify that block AMBIGUOUS (rule 12)"
 fi
 
+# Section M (issue #488, ADR-0159) — no two concurrent builds share a build root.
+#
+# `isolation: worktree` gives each dispatch its own working directory. It does not, by itself, give
+# a compiled-language build its own build OUTPUT directory, and a shared one is invisible until two
+# worktrees race on it — reported live: a tester's worktree still building while the controller ran
+# verification in the main checkout, an unsigned framework, a false red. The dangerous direction is
+# the opposite one, a stale product reporting green on a broken tree.
+#
+# M1/M2 pin the pre-flight gate (Step 5.0.4b): a trusted xcodebuild test-cmd without
+# `-derivedDataPath` refuses to dispatch, the same posture as 5.0.4 beside it. M3 pins the
+# generator half (issue #488's other fix, in `detect-test-cmd.sh` — checked here too, since a
+# chain-side prose gate with no corresponding generator update would tell every EXISTING project's
+# operator to fix a file that every NEW project's detector still writes broken).
+# Anchored on the CODE line inside the fence, not a bare substring match against the whole file:
+# the remediation prose a few lines below ALSO mentions "-derivedDataPath" in English, so a bare
+# `grep -F` would still find a hit after the check itself is neutralised (measured — a registry
+# NOFIRE on the first draft).
+_m1=$(grep -F -- "grep -q -- '-derivedDataPath' .claude/test-cmd" "$CC" | head -1)
+# plant: M1 | plugin/skills/concept-to-code/SKILL.md | grep -q -- '-derivedDataPath' .claude/test-cmd | true
+if [ -n "$_m1" ]; then
+  ok "M1: Step 5.0.4b's assertion body checks for -derivedDataPath in .claude/test-cmd, not just for its presence somewhere in the guide"
+else
+  bad "M1: no -derivedDataPath check found in $CC — issue #488's pre-flight gate is missing"
+fi
+
+_m2=$(grep -F '5.0.4b' "$CC" | grep -iF 'xcodebuild')
+# The needle is the HEADING line alone — "build root (issue #488, ADR-0159)." also appears in a
+# second, unrelated sentence at this file's Pre-dispatch worktree-isolation-contract section
+# (measured: the first draft's needle matched both and would have been a registry BADPLANT, "must
+# match exactly 1"). Anchored on "Step 5.0.4b —" to keep it unique to the heading.
+# plant: M2 | plugin/skills/concept-to-code/SKILL.md | Step 5.0.4b — a trusted `xcodebuild` test-cmd names its own build root | Step 5.0.4b — a trusted test-cmd names its own build root
+if [ -n "$_m2" ]; then
+  ok "M2: Step 5.0.4b names xcodebuild — the gate is scoped to the stack it guards, not every test-cmd"
+else
+  bad "M2: Step 5.0.4b does not name xcodebuild — the gate's own scope is unstated or misworded"
+fi
+
+# Anchored on the -project CANDIDATE specifically: the bare flag text appears twice in this file
+# (the -workspace candidate carries the identical suffix), and a needle matching two sites is a
+# registry BADPLANT ("must match exactly 1") rather than a plant proving anything — measured on
+# the first draft. -project is chosen arbitrarily between the two; either would do, and only one
+# needs a plant to prove the count check below actually reads both.
+# plant: M3 | plugin/scripts/detect-test-cmd.sh | CMD="xcodebuild test -project \"$pj\" -scheme \"$scheme\" -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath \"$PWD/.build/DerivedData\"" | CMD="xcodebuild test -project \"$pj\" -scheme \"$scheme\" -destination 'platform=iOS Simulator,name=iPhone 17'"
+# Counted on CMD= lines only — the comment above this script's own two candidates also names the
+# flag in prose, and a bare occurrence count would see three matches for two real candidates.
+_m3_n=$(grep -F 'CMD="xcodebuild' "$STAGING/plugin/scripts/detect-test-cmd.sh" | grep -cF -- '-derivedDataPath')
+if [ "$_m3_n" -eq 2 ]; then
+  ok "M3: detect-test-cmd.sh writes -derivedDataPath on BOTH xcodebuild candidates (xcworkspace and xcodeproj)"
+else
+  bad "M3: detect-test-cmd.sh names -derivedDataPath $_m3_n time(s), expected 2 — a new project's generated candidate would still be broken"
+fi
+
+# M4/M5 (issue #494, ADR-0159) — the batch completion fact is read from the coder's worktree
+# BEFORE that worktree's own merge-back runs, never after. Measured in a scratch repo (git
+# 2.50.1): `git worktree remove` on a worktree whose only dirty content is gitignored succeeds
+# (rc=0) and deletes the whole worktree tree, `.claude/dispatch/*.done` included — so reading the
+# completion fact after an already-run merge-back means reading a path `git worktree remove` just
+# deleted, and `dispatch-state.sh` reports NONE for a directory that does not exist. On a HEALTHY
+# batch that is a spurious HALT, not a stale read: the two were left undistinguished until measured
+# here (rule 13). M4 pins the ordering instruction at the coder-dispatch call site; M5 pins it
+# again at the post-fence branch, where a `complete` verdict authorizes the merge-back rather than
+# the other way round.
+# plant: M4 | plugin/skills/concept-to-code/SKILL.md | BEFORE running its own merge-back | AFTER running its own merge-back
+if grep -qF "BEFORE running its own merge-back" "$CC"; then
+  ok "M4: the coder-dispatch step reads the completion fact BEFORE running that coder's own merge-back"
+else
+  bad "M4: no 'BEFORE running its own merge-back' instruction found in $CC — the completion-fact read could run after the worktree that holds it is removed (#494)"
+fi
+
+# plant: M5 | plugin/skills/concept-to-code/SKILL.md | do NOT run the merge-back | do run the merge-back
+if grep -qF "do NOT run the merge-back" "$CC"; then
+  ok "M5: a HALT from the completion-fact gate explicitly forbids running the merge-back — the worktree stays exactly as it is"
+else
+  bad "M5: no HALT-forbids-merge-back instruction found in $CC — a HALT could still be followed by a merge-back that removes the very worktree it named"
+fi
+
 # Z1 — assertion-count floor. §D8: this file had none, so the vanishing-assertion class ADR-0083
 # exists to catch was open here. A FLOOR, not an exact count, so adding an assertion does not
-# require bumping it — but a section that stops running does.
+# require bumping it — EXCEPT when the addition closes the exact margin Z1's own -3 plant needs
+# (rule 10, a floor absorbs its own plant). Measured, issue #488: Section M's first 3 assertions
+# landed BEFORE this check runs, raising the pre-mutation total from 98 to 101 — exactly enough
+# that 101-3=98 still clears a floor of 98, and the registry reported Z1 a NOFIRE. Bumped to 101 so
+# that mutation cleared the then-current baseline's own margin. Bumped again to 103, issue #494:
+# M4/M5 landed BEFORE this check too, and the same -3 plant against an un-bumped 101 would clear
+# 98 < 101 without the new pair ever having run. Recounted here rather than inherited, the same
+# discipline L9's comment already names for this file.
 # plant: Z1 | plugin/scripts/tests/worktree-isolation-contract.test.sh | _l5_0=$(l_classify "$CC" 0); _l5_4=$(l_classify "$CC" 4) | _l5_0=UNMAPPED; _l5_4=UNMAPPED; PASS=$((PASS-3))
 _z1_total=$((PASS + FAIL + 1))   # +1 counts Z1 itself, so the number matches the final PASS= line
-if [ "$_z1_total" -ge 98 ]; then
-  ok "Z1 (assertion floor): $_z1_total assertions ran (floor: 98)"
+if [ "$_z1_total" -ge 103 ]; then
+  ok "Z1 (assertion floor): $_z1_total assertions ran (floor: 103)"
 else
-  bad "Z1: only $_z1_total assertions ran, floor is 98 — a section stopped running rather than failing"
+  bad "Z1: only $_z1_total assertions ran, floor is 103 — a section stopped running rather than failing"
 fi
 
 echo "----"
