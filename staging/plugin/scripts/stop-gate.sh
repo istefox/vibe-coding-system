@@ -240,9 +240,60 @@ run_with_timeout() {  # $1=secs $2=cmdstring → returns rc; 124=timeout 125=can
     return "$rc"
   fi
 }
-OUT="$DIR/.$SID.testout"
-run_with_timeout "$TMO" "cd $(printf %q "$ROOT") && ( $CMD )" >"$OUT" 2>&1
-RC=$?
+# ADR-0161 D1 (issue #491) — a tree fingerprint, checked BEFORE the suite runs, not after. Every
+# prior de-dup here (ADR-0156's signature) still pays the full $TMO wall-clock cost to LEARN the
+# output is a repeat; only then is the budget spared. Reported live: a Stop fired on every turn
+# spent waiting on a dispatch, not only at a batch boundary, and each one re-ran the suite to
+# completion against a tree nothing had touched since the LAST run. FP is sha256 of the tree's own
+# state — `git status --porcelain` (what changed) plus `git diff HEAD` (what it changed TO), both
+# read at $ROOT, the same root the trust lookup and the command itself already use — never the
+# $DIRTY marker alone, which only ever grows (mark-dirty.sh appends, never truncates) and so cannot
+# tell "touched again with no new content" from "touched with new content" on its own.
+#
+# NOT GIT → NOT CACHED (fail toward running, ADR-0055 §D2's strict-unknown convention applied here):
+# an unreadable git state means FP_CUR is empty, which can never equal a stored non-empty
+# fingerprint, so the branch below is always a miss and the suite always runs. The direction that
+# would be dangerous — skipping a suite that SHOULD run — has no path through an empty fingerprint.
+FP="$DIR/$SID.fp"; RCF="$DIR/$SID.lastrc"; LASTOUT="$DIR/.$SID.lastout"
+FP_CUR=""
+if command -v git >/dev/null 2>&1; then
+  FP_IN="$DIR/.$SID.fpin"
+  { cd "$ROOT" 2>/dev/null && git status --porcelain 2>/dev/null && git diff HEAD 2>/dev/null; } >"$FP_IN" 2>/dev/null
+  [ -s "$FP_IN" ] && FP_CUR=$(sha256_of "$FP_IN")
+  rm -f "$FP_IN" 2>/dev/null
+fi
+CACHE_HIT=0
+if [ -n "$FP_CUR" ] && [ -f "$FP" ] && [ -f "$RCF" ]; then
+  FP_PREV=$(cat "$FP" 2>/dev/null || true)
+  if [ "$FP_CUR" = "$FP_PREV" ]; then
+    RC=$(cat "$RCF" 2>/dev/null); case "$RC" in ''|*[!0-9]*) RC="";; esac
+    if [ -n "$RC" ]; then
+      CACHE_HIT=1
+      echo "stop-gate: tree unchanged since the last run (fingerprint match, ADR-0161 D1) — reusing rc=$RC, suite not re-run" >&2
+    fi
+  fi
+fi
+if [ "$CACHE_HIT" -eq 1 ]; then
+  # A THROWAWAY COPY, never $LASTOUT itself. Every branch below this point is free to `rm -f "$OUT"`
+  # exactly as it always has — that is unchanged code, on purpose, so this fix does not have to
+  # re-verify every existing cleanup call. $LASTOUT is what a FUTURE hit reads and must outlive this
+  # invocation; the copy is what THIS invocation consumes and is free to destroy.
+  OUT="$DIR/.$SID.testout"
+  cp "$LASTOUT" "$OUT" 2>/dev/null || true
+else
+  OUT="$DIR/.$SID.testout"
+  run_with_timeout "$TMO" "cd $(printf %q "$ROOT") && ( $CMD )" >"$OUT" 2>&1
+  RC=$?
+  # Recorded for every outcome the cache can replay (124 and the ordinary-failure "else" branch
+  # below). NOT for 125/126/127: the file's own existing comment already states why they cost
+  # nothing to re-detect (an instantly-failing exec has nothing a cache would save), so caching them
+  # is complexity bought for zero wall-clock — 125/126/127 fall through untouched, below.
+  if [ -n "$FP_CUR" ] && { [ "$RC" -eq 124 ] || { [ "$RC" -ne 0 ] && [ "$RC" -ne 125 ] && [ "$RC" -ne 126 ] && [ "$RC" -ne 127 ]; }; }; then
+    printf '%s' "$FP_CUR" >"$FP" 2>/dev/null || true
+    printf '%s' "$RC" >"$RCF" 2>/dev/null || true
+    cp "$OUT" "$LASTOUT" 2>/dev/null || true
+  fi
+fi
 if [ "$RC" -eq 124 ]; then
   # ADR-0137 D5 — a timeout spends from the SAME per-session budget a block spends from, read
   # with emit_block's own idiom (missing or non-numeric counter reads as 0). Before this, the
@@ -281,7 +332,10 @@ if [ "$RC" -eq 0 ]; then
   # (here-adjacent emit_block, and the timeout branch) and removed in NONE, so a session that
   # reached the cap stayed disarmed permanently, even after the condition that disarmed it was
   # gone. The signature goes with it: after a green run the next failure is new information again.
-  rm -f "$DIRTY" "$OUT" "$CF" "$SF" 2>/dev/null || true
+  # ADR-0161 D1 — the fingerprint cache goes with it too: $FP/$RCF/$LASTOUT describe a NOW-STALE
+  # red cycle, and leaving them would let a later dirty state that happens to hash identically (the
+  # same edit made twice across a session) replay a verdict from a cycle this green run just closed.
+  rm -f "$DIRTY" "$OUT" "$CF" "$SF" "$FP" "$RCF" "$LASTOUT" 2>/dev/null || true
   exit 0
 fi
 TAIL=$(tail -c 600 "$OUT" 2>/dev/null); rm -f "$OUT" 2>/dev/null

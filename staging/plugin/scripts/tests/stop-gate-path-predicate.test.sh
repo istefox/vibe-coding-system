@@ -246,7 +246,11 @@
 # confirmed against the full run, not assumed from the code alone.
 # plant: SGP25 | plugin/scripts/stop-gate.sh | if [ -n "$sig" ] && [ "$sig" = "$prev" ]; then | if [ -n "$sig" ] && false; then
 # plant: SGP26 | plugin/scripts/stop-gate.sh | if [ -n "$sig" ] && [ "$sig" = "$prev" ]; then | if [ -n "$sig" ] && false; then
-# plant: SGP27 | plugin/scripts/stop-gate.sh | rm -f "$DIRTY" "$OUT" "$CF" "$SF" 2>/dev/null || true | rm -f "$DIRTY" "$OUT" 2>/dev/null || true
+# RETARGETED, issue #491/ADR-0161: the green-path cleanup line grew three more paths ($FP/$RCF/
+# $LASTOUT, the fingerprint cache). The needle now matches the current full line; the replacement
+# still drops exactly $CF and $SF (the counter and signature SGP27 checks), leaving the new
+# fingerprint-cache paths cleared either way — that half is SGP35's job, not this one's.
+# plant: SGP27 | plugin/scripts/stop-gate.sh | rm -f "$DIRTY" "$OUT" "$CF" "$SF" "$FP" "$RCF" "$LASTOUT" 2>/dev/null || true | rm -f "$DIRTY" "$OUT" "$FP" "$RCF" "$LASTOUT" 2>/dev/null || true
 # plant: SGP28 | plugin/scripts/stop-gate.sh | if [ "$count" -ge "$N" ]; then set -- "$1 | if false; then set -- "$1
 # plant: SGP29 | plugin/scripts/stop-gate.sh | echo "$tcount" > "$CF" 2>/dev/null || true | echo "1" > "$CF" 2>/dev/null || true
 # plant: SGP30 | plugin/scripts/stop-gate.sh | TAIL=$(tail -c 600 "$OUT" 2>/dev/null); rm -f "$OUT" 2>/dev/null | [ -f "$ROOT/docs/manifests/decoy.manifest.yml" ] && exit 0\nTAIL=$(tail -c 600 "$OUT" 2>/dev/null); rm -f "$OUT" 2>/dev/null
@@ -1339,6 +1343,168 @@ else
 fi
 
 # =====================================================================================
+# ADR-0161 CHECKPOINT (issue #491) — SGP31-SGP35. Reported live: a Stop fired on every turn spent
+# waiting on a dispatch, not only at a batch boundary, and each one re-ran the whole suite against a
+# tree nothing had touched since the last run — paying the full $TMO ceiling every time to
+# rediscover an answer already known. The fingerprint cache added here (D1) skips the RE-RUN, not
+# the DECISION: a repeat Stop on an unchanged tree reuses the recorded rc, a Stop on a tree that DID
+# change still runs for real, and a green run clears the cache along with everything else ADR-0156
+# already clears.
+#
+# THIS SECTION NEEDS A REAL GIT REPO, unlike SGP01-30's fixture: the fingerprint is
+# `git status --porcelain` + `git diff HEAD`, read at $ROOT, and with no git repository there
+# `sha256_of "$FP_IN"` on an empty capture never populates $FP_CUR — every SGP01-30 assertion above
+# ran against exactly that state and stayed green, which is the FAIL-TOWARD-RUNNING direction
+# working as designed (D1's own comment says so) rather than a gap this section exists to close.
+#
+# A COUNTING test-cmd, not gate_new_proj's touch-only sentinel: "sentinel exists" cannot tell "ran
+# once" from "ran twice", and that distinction is the entire subject here. Each invocation appends
+# one line to $RIG_RUNCOUNT; the suite's own exit status is controlled by $RIG_RC_FILE's content, so
+# the SAME command can be made to fail (block) or succeed (green) across calls in one fixture.
+gate_new_git_proj() {
+  gate_new_proj
+  ( cd "$RIG_PROJ" && git init -q . && git config user.email t@example.invalid \
+      && git config user.name t && echo base >base.txt && git add base.txt \
+      && git commit -qm "chore(demo): base" ) >/dev/null 2>&1
+  RIG_RUNCOUNT="$TMP/runcount$CASE_N"; : >"$RIG_RUNCOUNT"
+  RIG_RC_FILE="$TMP/rcwant$CASE_N"; printf '1' >"$RIG_RC_FILE"
+  # Overwrites gate_new_proj's touch-only command, so approve-test-cmd.sh must re-hash and
+  # re-trust the NEW content — trusting the old content would leave this one TOFU-blocked, never
+  # reaching the code this section exists to exercise.
+  printf 'echo run >> %s; exit $(cat %s)\n' \
+    "$(printf '%q' "$RIG_RUNCOUNT")" "$(printf '%q' "$RIG_RC_FILE")" > "$RIG_PROJ/.claude/test-cmd"
+  STOP_GATE_TRUST_FILE="$RIG_TRUST" bash "$SCRIPTS/approve-test-cmd.sh" "$RIG_PROJ" >/dev/null 2>&1
+}
+runcount() { wc -l <"$RIG_RUNCOUNT" 2>/dev/null | tr -d ' '; }
+
+gate_new_git_proj
+( cd "$RIG_PROJ" && echo edited >base.txt ) >/dev/null 2>&1   # the dirty tree the fingerprint reads
+RIG_PATHS="$RIG_PROJ/base.txt"
+# plant: SGP31 | plugin/scripts/stop-gate.sh | { cd "$ROOT" 2>/dev/null && git status --porcelain 2>/dev/null && git diff HEAD 2>/dev/null; } >"$FP_IN" 2>/dev/null | : >"$FP_IN"
+gate_run
+_sgp31_first=$(runcount)
+gate_run   # SAME session, SAME uncommitted content — the repeat this whole feature exists for
+_sgp31_second=$(runcount)
+if [ "$_sgp31_first" = "1" ] && [ "$_sgp31_second" = "1" ]; then
+  ok "SGP31: a second Stop on a tree unchanged since the first block does NOT re-run the suite (runcount stays 1)"
+else
+  bad "SGP31: expected runcount 1 then 1 (cache hit) — got first=$_sgp31_first second=$_sgp31_second out='$RIG_OUT'"
+fi
+
+if printf '%s' "$RIG_OUT" | grep -qi 'fingerprint match'; then
+  ok "SGP32: the cache-hit run says so on stderr (rule 4 — a skip must be visible, not merely fast)"
+else
+  bad "SGP32: expected 'fingerprint match' on stderr for the second (cached) run — got: $RIG_OUT"
+fi
+
+if printf '%s' "$RIG_OUT" | grep -q '"decision":"block"'; then
+  ok "SGP33: the cache-hit run still emits the SAME block decision — skipping the re-run must not silently allow"
+else
+  bad "SGP33: expected a block decision replayed from cache — got: $RIG_OUT"
+fi
+
+( cd "$RIG_PROJ" && echo "edited again" >base.txt ) >/dev/null 2>&1   # genuinely new content
+gate_run
+_sgp34=$(runcount)
+if [ "$_sgp34" = "2" ]; then
+  ok "SGP34 (forward guard): a tree that DID change since the last run is NOT served from cache — runcount advances to 2"
+else
+  bad "SGP34: expected runcount 2 after a real content change — got $_sgp34, out='$RIG_OUT'"
+fi
+
+printf '0' >"$RIG_RC_FILE"           # this call's test-cmd now exits 0 — a green run
+( cd "$RIG_PROJ" && echo "edited a third time" >base.txt ) >/dev/null 2>&1
+gate_run
+_sgp35_fp=0; [ -f "$RIG_STATE/$RIG_SID.fp" ] && _sgp35_fp=1
+_sgp35_rcf=0; [ -f "$RIG_STATE/$RIG_SID.lastrc" ] && _sgp35_rcf=1
+if [ "$_sgp35_fp" -eq 0 ] && [ "$_sgp35_rcf" -eq 0 ]; then
+  ok "SGP35 (ADR-0161 D1, extends ADR-0156 D3): a green run clears the fingerprint cache along with the budget it already cleared — a later coincidentally-identical dirty state cannot replay a verdict from a closed cycle"
+else
+  bad "SGP35: expected the .fp/.lastrc cache files removed after a green run — fp-exists=$_sgp35_fp lastrc-exists=$_sgp35_rcf"
+fi
+
+# =====================================================================================
+# RTFV — issue #411. review-triage-fix's verify.sh read ONLY $RTF_TEST_TIMEOUT and fell back to a
+# hardcoded 120s, never $ROOT/.claude/test-timeout — a second, disagreeing answer to the ceiling
+# question this file's own SGP10-SGP12 already pin for stop-gate.sh. verify.sh now reads the same
+# file with the same validation, once $ROOT is resolved (it cannot be read earlier, same reason
+# stop-gate.sh's own comment gives for its late read).
+#
+# Same stub-timeout technique as SGP10-12 (a PATH-shadowing `timeout` that logs its own first
+# argument and execs the rest), applied directly to verify.sh rather than through the
+# stop-gate.sh Stop-payload rig above: verify.sh takes a root directory argument and prints
+# PASS/FAIL/UNVERIFIED, with no session id or dirty marker to simulate.
+VERIFY="$SCRIPTS/../skills/review-triage-fix/scripts/verify.sh"
+
+rtfv_new_proj() {
+  CASE_N=$((CASE_N + 1))
+  RTFV_PROJ="$TMP/rtfvproj$CASE_N"
+  mkdir -p "$RTFV_PROJ/.claude"
+  printf 'true\n' > "$RTFV_PROJ/.claude/test-cmd"
+  STUB_BIN="$TMP/rtfvstub$CASE_N"; mkdir -p "$STUB_BIN"
+  STUB_TMO_LOG="$TMP/rtfv-tmo-log$CASE_N"; rm -f "$STUB_TMO_LOG"
+  {
+    printf '#!/bin/bash\n'
+    printf 'printf %%s "$1" > %s\n' "$(printf '%q' "$STUB_TMO_LOG")"
+    printf 'shift\n'
+    printf 'exec "$@"\n'
+  } > "$STUB_BIN/timeout"
+  chmod +x "$STUB_BIN/timeout"
+}
+
+rtfv_run() {  # $1 = extra "NAME=value" env tokens, space-separated ("" for none)
+  RTFV_OUT=$(env $1 PATH="$STUB_BIN:$PATH" bash "$VERIFY" "$RTFV_PROJ" 2>&1)
+  RTFV_RC=$?
+}
+
+# RTFV1 — no file, no env => 120 exactly, unchanged default.
+rtfv_new_proj
+rtfv_run ""
+GOT_RTFV1=$(cat "$STUB_TMO_LOG" 2>/dev/null)
+if [ "$GOT_RTFV1" = "120" ]; then
+  ok "RTFV1: no .claude/test-timeout, no RTF_TEST_TIMEOUT — verify.sh's own run_with_timeout receives 120"
+else
+  bad "RTFV1: expected timeout arg '120', got '$GOT_RTFV1' out='$RTFV_OUT'"
+fi
+
+# RTFV2 — a valid ceiling file overrides the default.
+rtfv_new_proj
+printf '45' > "$RTFV_PROJ/.claude/test-timeout"
+rtfv_run ""
+GOT_RTFV2=$(cat "$STUB_TMO_LOG" 2>/dev/null)
+if [ "$GOT_RTFV2" = "45" ]; then
+  ok "RTFV2: a valid .claude/test-timeout (45) is read and used — the second answer to the ceiling question now agrees with stop-gate.sh's"
+else
+  bad "RTFV2: expected timeout arg '45', got '$GOT_RTFV2' out='$RTFV_OUT'"
+fi
+
+# RTFV3 — RTF_TEST_TIMEOUT keeps precedence over the file, the same order STOP_GATE_TEST_TIMEOUT
+# keeps over the file in stop-gate.sh (ADR-0137 §D4).
+rtfv_new_proj
+printf '45' > "$RTFV_PROJ/.claude/test-timeout"
+rtfv_run "RTF_TEST_TIMEOUT=42"
+GOT_RTFV3=$(cat "$STUB_TMO_LOG" 2>/dev/null)
+if [ "$GOT_RTFV3" = "42" ]; then
+  ok "RTFV3: RTF_TEST_TIMEOUT (42) wins over a present .claude/test-timeout (45) — the caller's own override keeps precedence"
+else
+  bad "RTFV3: expected timeout arg '42' (env precedence), got '$GOT_RTFV3' out='$RTFV_OUT'"
+fi
+
+# RTFV4 — a value above TMO_MAX (900) falls back to the 120s default, never to the oversized value
+# itself and never to whatever `case` left behind — the same bound stop-gate.sh's SGP12 pins, same
+# plant shape (drop the upper-bound half, keep the zero check).
+# plant: RTFV4 | plugin/skills/review-triage-fix/scripts/verify.sh | [ "$TMO_BAD" -eq 0 ] && { [ "$TMOV" -eq 0 ] || [ "$TMOV" -gt "$TMO_MAX" ]; } && TMO_BAD=1 | [ "$TMO_BAD" -eq 0 ] && { [ "$TMOV" -eq 0 ]; } && TMO_BAD=1
+rtfv_new_proj
+printf '901' > "$RTFV_PROJ/.claude/test-timeout"
+rtfv_run ""
+GOT_RTFV4=$(cat "$STUB_TMO_LOG" 2>/dev/null)
+if [ "$GOT_RTFV4" = "120" ]; then
+  ok "RTFV4: a .claude/test-timeout above TMO_MAX (901) falls back to the 120s default, not to 901"
+else
+  bad "RTFV4: expected fallback to '120' for an over-ceiling file value, got '$GOT_RTFV4' out='$RTFV_OUT'"
+fi
+
+# =====================================================================================
 # SGPZ1 — VACUITY GUARD ONLY (ADR-0124: a floor absorbs its own plant, so this line pins
 # nothing about any individual assertion — per-assertion pinning is Task 7's plants, not this
 # line's job). This only guards against the whole file silently losing assertions, e.g. a
@@ -1349,12 +1515,14 @@ fi
 # and SGP17 land in the SKIP bucket rather than PASS/FAIL whenever $REPO/.git is not a real
 # directory (a plant-check.sh sandbox, or a git worktree — see the header's TASK 6 CHECKPOINT
 # paragraph), and without counting SKIP the floor would need slack that absorbs exactly the plant
-# Task 7 cannot write for either of them. 31 assertions are declared in this file (SGP01-14,
-# SGP15-17, SGP18, the R-06 GAP CLOSURE block's SGP19-24, the ADR-0156 block's SGP25-30, SGPZ1);
-# every one always lands in PASS, FAIL or SKIP, so FLOOR=30 keeps one point of slack, matching
-# this file's own original ratio (18 of 19, raised 2026-08-14 from 18/19 when SGP19-SGP24 were
-# added, raised again here when SGP25-SGP30 were added).
-FLOOR=30
+# Task 7 cannot write for either of them. 40 assertions are declared in this file (SGP01-14,
+# SGP15-17, SGP18, the R-06 GAP CLOSURE block's SGP19-24, the ADR-0156 block's SGP25-30, the
+# ADR-0161 block's SGP31-35, the RTFV block's RTFV1-4, SGPZ1); every one always lands in PASS,
+# FAIL or SKIP, so FLOOR=39 keeps one point of slack, matching this file's own original ratio
+# (18 of 19, raised 2026-08-14 from 18/19 when SGP19-SGP24 were added, raised again for
+# SGP25-SGP30, raised again for SGP31-SGP35 (issue #491), raised again here for RTFV1-4
+# (issue #411)).
+FLOOR=39
 TOTAL=$((PASS + FAIL + SKIP))
 if [ "$TOTAL" -ge "$FLOOR" ]; then
   ok "SGPZ1"
