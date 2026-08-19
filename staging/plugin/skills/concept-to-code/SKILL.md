@@ -4380,9 +4380,12 @@ options:
 
 Trigger: after Gate 5 (review complete or skipped), before Gate 5.1.
 
-Check whether any UI files were modified in this cycle:
+Check whether any UI files were modified in this cycle (issue #478, ADR-0160 — a `.swift` file is
+UI-bearing only when its own content imports SwiftUI/AppKit/UIKit or declares a `View`/`NSView`/
+`UIViewController`-conforming type; the web extensions stay a bare extension match, the shape
+`ui-file-detect.sh`'s own header explains):
 ```bash
-git diff --name-only HEAD | grep -E '\.(swift|html|css|tsx|jsx|vue)$'
+git diff --name-only HEAD | bash ~/.claude/skills/concept-to-code/scripts/ui-file-detect.sh
 ```
 
 - **Output is empty:** emit "Gate 5.05: no UI files changed — skipping layout audit ✓". No

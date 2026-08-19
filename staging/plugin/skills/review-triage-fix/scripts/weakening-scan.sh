@@ -42,6 +42,17 @@ function is_test(p){ return (p ~ /(^|\/)tests?\//) || (p ~ /(^|\/)spec\//) \
   || (p ~ /\.test\.[a-zA-Z]+$/) || (p ~ /\.spec\.[a-zA-Z]+$/) \
   || (p ~ /Tests?\.[a-zA-Z]+$/) }
 
+# is_hash_comment_lang(p) (issue #472, ADR-0160). `#` opens a comment ONLY in the languages listed
+# below — an ALLOWLIST, not "every extension except Swift": a denylist naming one language would
+# leave every OTHER language where `#` is not a comment (Go, Java, C, JS/TS, ...) mis-scanned too,
+# just unmeasured. This is a bound, not a guess: the zero-assertion-test state machine (close_test())
+# already skips a line matching `^(#|\/\/|\*)` as a comment before checking for an assertion, and in
+# Swift `#` opens a MACRO (`#expect`, `#require`), not a comment — that misreading is the measured
+# defect (32 false findings against 12 real `#expect` calls in one file, issue #472). A `.swift`
+# path is deliberately ABSENT from this list, which is what fixes it: the body-scan below only
+# treats `#` as a comment leader when this returns true.
+function is_hash_comment_lang(p){ return p ~ /\.(py|rb|sh|bash|zsh|pl|pm|yaml|yml|toml|tf|cmake|r|jl)$/ }
+
 # ==================================================================================================
 # WHAT `CLEAN` DOES NOT MEAN (ADR-0073 §D4, issue #177). READ THIS BEFORE TRUSTING A CLEAN LINE.
 #
@@ -77,7 +88,12 @@ function is_test(p){ return (p ~ /(^|\/)tests?\//) || (p ~ /(^|\/)spec\//) \
 # So the blind spot is real, permanent for now, and written down instead of papered over. A CLEAN
 # line from this script means "none of the detectors below fired", never "no weakening occurred".
 # ==================================================================================================
-function is_assert_tok(s){ return s ~ /assert|expect\(|XCTAssert|EXPECT_|ASSERT_|require\.|should|t\.Error|t\.Fatal/ }
+# is_assert_tok() (issue #472, ADR-0160). `#require(` added: Swift Testing's second assertion
+# macro. `#expect(` already matched via the bare `expect\(` token, which is why only #require was
+# missing — `require\.` needs a DOT (Chai/should-style `x.should.require.something`), and `#require(`
+# has none. Verified against Swift Testing's public API (no network in this repo; matched against
+# the two macro names Apple's documentation names, `#expect` and `#require` — checked 2026-08-19).
+function is_assert_tok(s){ return s ~ /assert|expect\(|#require\(|XCTAssert|EXPECT_|ASSERT_|require\.|should|t\.Error|t\.Fatal/ }
 function is_test_def(s){ return s ~ /(def|func|fn)[ \t]+[Tt]est|[ \t]it\(|[ \t]test\(|@Test/ }
 # `xit\(` and `\.skip\(` are token-boundary anchored, not bare substrings (live-defect fix):
 # unanchored, `xit\(` matches the tail of `sys.exit(`/`process.exit(` and `\.skip\(`
@@ -216,7 +232,11 @@ function close_catch(){
         test_body_n=0; test_excluded=0; test_start_ln=cur_ln
       } else if(in_test){
         stripped=a; gsub(/^[ \t]+/,"",stripped); gsub(/[ \t]+$/,"",stripped)
-        if(stripped!="" && stripped !~ /^(#|\/\/|\*)/){
+        # `#` is a comment leader only in is_hash_comment_lang(file)'s languages (issue #472). `//`
+        # and `*` (a block-comment continuation line) are comment leaders everywhere this scan
+        # runs, unaffected by this fix.
+        is_comment_line = (stripped ~ /^(\/\/|\*)/) || (is_hash_comment_lang(file) && stripped ~ /^#/)
+        if(stripped!="" && !is_comment_line){
           if(is_assert_tok(a)) test_saw_assert=1
           test_body_n++
           if(test_body_n==1){
