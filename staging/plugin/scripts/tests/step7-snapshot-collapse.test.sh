@@ -54,7 +54,13 @@ S7=$(grep -n '^### Step 7 — Commit' "$CC" | head -1 | cut -d: -f1)
 if [ -n "${S7:-}" ]; then ok "SC0 the Step 7 anchor resolves (line $S7)"
 else bad "SC0 the Step 7 heading was reworded; SC1 asserts nothing"; fi
 
-BLK=$(awk -v a="${S7:-0}" 'NR>=a && NR<a+120' "$CC")
+# Window widened 120 -> 140 (issue #489, ADR-0158): the collapse fence's own paragraph grew by the
+# sentence stating that Step 6/Gate 5.06 make no commit of their own, and the "Use the commit
+# skill" anchor moved from 127 to 127 lines past the Step 7 heading — inside the old window by
+# exactly one legitimate edit's margin. Re-measured rather than padded blindly (CLAUDE.md rule 13):
+# the actual distance is 127; 140 leaves the same ~13-line slack the original 120 gave over a
+# then-measured ~107.
+BLK=$(awk -v a="${S7:-0}" 'NR>=a && NR<a+140' "$CC")
 COLLAPSE_LINE=$(printf '%s\n' "$BLK" | grep -n 'fence-contract: c2c-step7-snapshot-collapse' | head -1 | cut -d: -f1)
 INVOKE_LINE=$(printf '%s\n' "$BLK" | grep -n 'Use the commit skill' | head -1 | cut -d: -f1)
 if [ -n "${COLLAPSE_LINE:-}" ] && [ -n "${INVOKE_LINE:-}" ] && [ "$COLLAPSE_LINE" -lt "$INVOKE_LINE" ]; then
@@ -157,6 +163,49 @@ else
 fi
 
 # ===========================================================================
+# SC11/SC12 — issue #489/#479, ADR-0158. The collapse sees the WHOLE feature: a post-snapshot
+# correction (Gate 5.06, made by hand and never committed, per the new invariant above) is a plain
+# tracked modification sitting on top of the last snapshot commit when this fence runs. `git add -u`
+# must sweep it in — that is the fix — and must NOT sweep in an untracked file, which is the
+# boundary `commit`'s own Step 1 scope rule already draws and this fence must not cross.
+# ===========================================================================
+R=$(mk 2)
+( cd "$R" && echo "corrected" >s1.txt ) >/dev/null 2>&1   # tracked file, modified, never committed
+out=$(run "$R"); rc=$?
+_staged=$(cd "$R" && git diff --name-only --staged | sort | tr '\n' ' ')
+_content=$(cd "$R" && git show :s1.txt 2>/dev/null)
+# The needle is written with a plain SPACE where the file has a real newline, not a literal `\n`:
+# the `\s+`-joined matcher already treats a real newline as whitespace, and `\n` is an escape valid
+# only in the REPLACEMENT field (it INSERTS a line; ADR-0108's stated limit). A needle containing a
+# literal backslash-n never matches the file's actual bytes there — measured on the first draft.
+# The needle stops BEFORE the real ` | wc -l | tr -d ' '` pipe: the plant declaration's own field
+# delimiter is ` | `, and a needle containing one literally fragments the declaration into extra
+# fields (measured — PC2's registry run reported this exact line MALFORMED, 6 fields instead of 4).
+# The replacement `_staged_n=$(true` leaves the line's own trailing ` | wc -l | tr -d ' ')` intact
+# after substitution — `$(true | wc -l | tr -d ' ')` is still valid bash, evaluates to "0", and
+# `git add -u` is gone from the span either way, which is the actual mutation SC11 needs.
+# plant: SC11 | plugin/skills/concept-to-code/SKILL.md | git add -u _staged_n=$(git diff --name-only --staged | _staged_n=$(true
+if [ "$rc" -eq 0 ] && [ "${out%% *}" = "COLLAPSED" ] && [ "$_staged" = "s0.txt s1.txt " ] && [ "$_content" = "corrected" ]; then
+  ok "SC11 a post-snapshot tracked correction (s1.txt, edited after its own snapshot commit and never re-committed) is swept into the collapse's staged diff, content and all"
+else
+  bad "SC11 expected COLLAPSED with s1.txt's CORRECTED content staged; got rc=$rc out=$out staged=[$_staged] content=[$_content] — a Gate 5.06 fix made after the last snapshot would be silently dropped (#479)"
+fi
+
+R=$(mk 2)
+( cd "$R" && echo stray >debris.txt ) >/dev/null 2>&1   # untracked — never `git add`-ed by the fixture
+out=$(run "$R"); rc=$?
+_staged=$(cd "$R" && git diff --name-only --staged | sort | tr '\n' ' ')
+_untracked=$(cd "$R" && git ls-files --others --exclude-standard)
+# `.baseline` is the fixture's OWN untracked bookkeeping file (written by mk(), not by this test),
+# so it is also untracked and its presence is expected — the assertion is about debris.txt alone.
+if [ "$rc" -eq 0 ] && [ "${out%% *}" = "COLLAPSED" ] && [ "$_staged" = "s0.txt s1.txt " ] \
+   && printf '%s\n' "$_untracked" | grep -qx 'debris.txt'; then
+  ok "SC12 (forward guard, CLAUDE.md rule 6's boundary) an untracked file is NOT staged by the collapse — git add -u, never git add -A/."
+else
+  bad "SC12 expected debris.txt to stay untracked and unstaged; got rc=$rc out=$out staged=[$_staged] untracked=[$_untracked] — the collapse would be staging debris the worktree escape check exists to catch"
+fi
+
+# ===========================================================================
 # SC8 — the cross-file contract. The collapse matches what the merge-back WRITES; if that message
 # is reworded the collapse silently stops recognising its own commits and refuses forever.
 # ===========================================================================
@@ -185,8 +234,9 @@ fi
 # Z1 — assertion-count floor (ADR-0083 §D3).
 # ===========================================================================
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 11 ]; then ok "Z1 assertion-count floor ($_total >= 11)"
-else bad "Z1 assertion count fell to $_total (floor 11) — assertions vanished from this file"; fi
+# Bumped 11 -> 13 (issue #489, ADR-0158): SC11/SC12 added.
+if [ "$_total" -ge 13 ]; then ok "Z1 assertion-count floor ($_total >= 13)"
+else bad "Z1 assertion count fell to $_total (floor 13) — assertions vanished from this file"; fi
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"

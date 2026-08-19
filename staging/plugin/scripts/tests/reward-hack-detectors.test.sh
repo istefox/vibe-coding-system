@@ -134,6 +134,85 @@ else
   bad "HB1: expected CLEAN (single-helper-call exclusion) — got: $hb1_out"
 fi
 
+# ==================================================================================================
+# HI. issue #472 / ADR-0160 — `#` opens a macro in Swift, not a comment. Reported in the field: 32
+# false zero-assertion-test findings against 12 real `#expect` calls in one Swift Testing file, all
+# eleven-times-repeated on the one file that HAD assertions. HI1/HI2 are the true fix (a real
+# `#expect`/`#require` call is no longer read as a comment and hidden from the state machine); HI3
+# is the forward guard proving the detector still fires on a GENUINELY empty Swift test; HI4 is the
+# regression guard proving Python's `#` is UNCHANGED — this fix narrows the languages `#` is a
+# comment IN, it does not remove the comment leader from the ones that had it correctly.
+# ==================================================================================================
+cat >"$TMP/hi1.diff" <<EOF
+diff --git a/Tests/WidgetTests.swift b/Tests/WidgetTests.swift
+--- a/Tests/WidgetTests.swift
++++ b/Tests/WidgetTests.swift
+@@ -1,2 +1,4 @@
+ struct WidgetTests {}
++@Test func widgetName() {
++    #expect(Widget().name == "widget")
++}
+EOF
+hi1_out=$(bash "$W" <"$TMP/hi1.diff")
+# plant: HI1 | plugin/skills/review-triage-fix/scripts/weakening-scan.sh | function is_hash_comment_lang(p){ return p ~ /\.(py|rb|sh|bash|zsh|pl|pm|yaml|yml|toml|tf|cmake|r|jl)$/ } | function is_hash_comment_lang(p){ return 1 }
+if [ "$hi1_out" = "CLEAN" ]; then
+  ok "HI1: an added Swift Testing #expect(...) call is recognised as the assertion it is, not skipped as a comment — no zero-assertion-test SUSPECT"
+else
+  bad "HI1: expected CLEAN — #expect(...) misread as a comment produced: $hi1_out"
+fi
+
+cat >"$TMP/hi2.diff" <<EOF
+diff --git a/Tests/WidgetTests.swift b/Tests/WidgetTests.swift
+--- a/Tests/WidgetTests.swift
++++ b/Tests/WidgetTests.swift
+@@ -1,2 +1,4 @@
+ struct WidgetTests {}
++@Test func widgetExists() {
++    #require(Widget() != nil)
++}
+EOF
+hi2_out=$(bash "$W" <"$TMP/hi2.diff")
+# plant: HI2 | plugin/skills/review-triage-fix/scripts/weakening-scan.sh | function is_assert_tok(s){ return s ~ /assert|expect\(|#require\(|XCTAssert|EXPECT_|ASSERT_|require\.|should|t\.Error|t\.Fatal/ } | function is_assert_tok(s){ return s ~ /assert|expect\(|XCTAssert|EXPECT_|ASSERT_|require\.|should|t\.Error|t\.Fatal/ }
+if [ "$hi2_out" = "CLEAN" ]; then
+  ok "HI2: an added Swift Testing #require(...) call is recognised as an assertion token"
+else
+  bad "HI2: expected CLEAN — #require(...) not recognised as an assertion produced: $hi2_out"
+fi
+
+cat >"$TMP/hi3.diff" <<EOF
+diff --git a/Tests/WidgetTests.swift b/Tests/WidgetTests.swift
+--- a/Tests/WidgetTests.swift
++++ b/Tests/WidgetTests.swift
+@@ -1,2 +1,4 @@
+ struct WidgetTests {}
++@Test func widgetBuilds() {
++    let w = Widget()
++}
+EOF
+hi3_out=$(bash "$W" <"$TMP/hi3.diff")
+if printf '%s\n' "$hi3_out" | grep -q "^SUSPECT${TAB}Tests/WidgetTests.swift${TAB}zero-assertion-test"; then
+  ok "HI3 (forward guard): a genuinely empty Swift @Test still fires zero-assertion-test — the fix narrows what counts as a comment, it does not disable the detector for Swift"
+else
+  bad "HI3: expected a SUSPECT/zero-assertion-test line for a Swift test with no #expect/#require — got: $hi3_out"
+fi
+
+cat >"$TMP/hi4.diff" <<EOF
+diff --git a/tests/test_hash_comment.py b/tests/test_hash_comment.py
+--- a/tests/test_hash_comment.py
++++ b/tests/test_hash_comment.py
+@@ -1,2 +1,4 @@
+ def test_existing():
+     assert True
++def test_new_case():
++    # TODO: no assertion here yet
+EOF
+hi4_out=$(bash "$W" <"$TMP/hi4.diff")
+if printf '%s\n' "$hi4_out" | grep -q "^SUSPECT${TAB}tests/test_hash_comment.py${TAB}zero-assertion-test"; then
+  ok "HI4 (regression guard): a Python test body containing only a # comment still reads as zero-assertion-test — # stays a comment leader in the languages it already was one in"
+else
+  bad "HI4: expected zero-assertion-test on a Python test with only a # comment body — got: $hi4_out — the Swift fix must not widen what counts as a body line elsewhere"
+fi
+
 cat >"$TMP/hb2.diff" <<EOF
 diff --git a/src/api.js b/src/api.js
 --- a/src/api.js
