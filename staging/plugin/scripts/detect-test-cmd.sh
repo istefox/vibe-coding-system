@@ -20,15 +20,24 @@ cd "$ROOT"
 
 has() { compgen -G "$1" >/dev/null 2>&1; }   # glob-exists test, quiet
 
+# -derivedDataPath (issue #488, ADR-0159): without it the build root is whatever the machine's
+# Xcode build-location preference says, which for a custom absolute location is shared by every
+# checkout on the machine — worktrees included. Two concurrent `xcodebuild` runs (a tester's
+# worktree and a coder's, or a worktree and the main checkout's controller-side verification) then
+# overwrite each other's products; observed cost was an unsigned framework and a false red, but the
+# dangerous direction is the opposite one, a stale product reporting green on a broken tree.
+# `"$PWD"` here is `$ROOT` (already `cd`-ed into, above) at DETECTION time, so the value written
+# to `.claude/test-cmd` is an absolute, per-checkout path from the start — it does not depend on the
+# invoker's cwd matching `$ROOT` when the command runs later, only on `$ROOT` itself not moving.
 CMD="NONE"; STACK="unknown"
 if has "*.xcworkspace"; then
   ws=$(compgen -G "*.xcworkspace" | head -1); scheme="${ws%.xcworkspace}"
   STACK="xcode-workspace"
-  CMD="xcodebuild test -workspace \"$ws\" -scheme \"$scheme\" -destination 'platform=iOS Simulator,name=iPhone 17'"
+  CMD="xcodebuild test -workspace \"$ws\" -scheme \"$scheme\" -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath \"$PWD/.build/DerivedData\""
 elif has "*.xcodeproj"; then
   pj=$(compgen -G "*.xcodeproj" | head -1); scheme="${pj%.xcodeproj}"
   STACK="xcode-project"
-  CMD="xcodebuild test -project \"$pj\" -scheme \"$scheme\" -destination 'platform=iOS Simulator,name=iPhone 17'"
+  CMD="xcodebuild test -project \"$pj\" -scheme \"$scheme\" -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath \"$PWD/.build/DerivedData\""
 elif [ -f "Package.swift" ]; then
   STACK="swift-package"; CMD="swift test"
 elif [ -f "package.json" ]; then

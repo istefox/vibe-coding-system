@@ -1,4 +1,4 @@
-300
+600
 # Only the FIRST line is read (stop-gate.sh: `head -n 1 | tr -d '[:space:]'`), so everything
 # below this point is inert commentary and cannot change the value above. Do not add a comment
 # on line 1.
@@ -25,6 +25,24 @@
 # NOT the same number as CI. The `shell-tests` job runs this suite AND `plant-check.sh`, and the
 # whole job took ~25 min on 2026-08-14 — that duration is plant-check's, not the suite's, and
 # attributing it to the suite is what made this gate look unrecoverable.
+#
+# 2026-08-19 — RE-DERIVED, 300 -> 600 (CLAUDE.md rule 14: recorded forward, the block above is left
+# exactly as it was written on its own day). ADR-0156 flagged this file as measured against 79
+# harnesses when there were 85; measured now, same machine, same test-cmd: **415s over 85 harnesses**,
+# all green. So 300 had fallen BELOW the suite's own runtime — the identical defect ADR-0137 §D4
+# fixed at 120s, reappeared by growth rather than by an error, which is why the block above says to
+# re-derive rather than trust it.
+#
+# WHY 600 AND NOT 850. 2x the measured value (the headroom ratio 159 -> 300 used) would be ~830, and
+# the convention argued for it. 600 is the operator's call, taken 2026-08-19: 1.45x headroom, and a
+# suite that hangs blocks a turn for 10 minutes instead of 14. The stated risk is that 415s was
+# measured on an unloaded machine — under concurrent agent builds (the contention ADR-0159 §D1 just
+# addressed) it grows, and 1.45x is a thinner margin than this file has previously carried. If a
+# timeout reappears here, that is the first thing to re-measure, not a reason to raise blindly.
+#
+# ADR-0161 changes what a high ceiling COSTS, which is why raising it at all is affordable: the
+# fingerprint cache means an unchanged tree does not re-run the suite, so the ceiling is paid once
+# per real change instead of on every turn spent waiting on a dispatch.
 #
 # Ceiling: stop-gate.sh caps any value at TMO_MAX=900 and falls back to 120 with a stated reason
 # on a non-positive-integer value. See ADR-0137 §D4.

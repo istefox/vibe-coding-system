@@ -755,6 +755,23 @@ else
   bad "RI6: architect.md line 4 or its Command-scope/Write-scope bullets regressed — this is a forward guard duplicating agent-tool-scoping.test.sh A1/A12/A14, not fix evidence for this feature. Missing:$RI6_MISSING"
 fi
 
+# RI7 (R-08, ADR-0154 D6, D8 — RED until Task 3): the architect's Implementation-plan bullet states
+# that a plan names the harness it creates, and that the harness names the plan or its ADR back, or
+# spec-coverage.sh descopes it. Scoped to that ONE bullet (not the whole file) so the needle cannot
+# be satisfied by the unrelated no-test: bullet, which already carries "instruction"/"enforcement"
+# today for a different clause entirely (rule 1 — a needle must belong to the mechanism it asserts
+# about, and to nothing else).
+# plant: RI7 | plugin/agents/architect.md | A plan names the harness it creates, and that harness must name the plan's own basename or one of the ADRs the plan cites back — or `spec-coverage.sh` descopes it as a precedent citation and the feature's own ids report `UNSCOPED` (ADR-0154). This is an instruction, not an enforcement (rule 16): nothing here forces a plan to follow it; what is enforced is the consequence at the gate.
+RI7_BULLET=$(awk 'BEGIN{g=0} /^- \*\*Implementation plan\*\*/{g=1} g{ if ($0 !~ /^- \*\*Implementation plan\*\*/ && $0 ~ /^- \*\*/) exit; print }' "$ARCH_AGENT" 2>/dev/null | tr -d '`*' | tr '\n' ' ' | tr -s ' ')
+if printf '%s\n' "$RI7_BULLET" | grep -qi 'harness it creates' \
+   && printf '%s\n' "$RI7_BULLET" | grep -qiE 'descope|unscoped' \
+   && printf '%s\n' "$RI7_BULLET" | grep -qi 'instruction' \
+   && printf '%s\n' "$RI7_BULLET" | grep -qi 'enforcement'; then
+  ok "RI7 (R-08): architect.md's Implementation-plan bullet states that a plan names the harness it creates and that the harness names the plan or its ADR back or spec-coverage.sh descopes it, and discloses this is an instruction, not an enforcement (Task 3)"
+else
+  bad "RI7: architect.md's Implementation-plan bullet does not yet state the harness back-reference convention (Task 3) — bullet=[$RI7_BULLET]"
+fi
+
 # ==================================================================================================
 # RN. Issue #171 / ADR-0072 — the near-miss, and the repair that heals it.
 #
@@ -1045,7 +1062,16 @@ fi
 # assertions. Every fixture below was executed against the unmodified checker before this comment
 # was written (CLAUDE.md rule 2 — inspect what a check actually produces, never assume it).
 # ==================================================================================================
-# plant: RS1 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if grep -qE "(^|[^A-Za-z0-9_])${_esc}([^A-Za-z0-9_]|\$)" "$PLAN" 2>/dev/null; then | if :; then
+# ADR-0154 plant widening (Batch F, rule 19 — a changed plant leaves a note explaining why): this
+# plant used to force ONLY half 1 (the "named by the plan" grep) to `if :; then`, which was
+# sufficient before this feature because half 1 was the WHOLE admission test. Half 2 (the
+# back-reference conjunct) now drops beta.test.sh independently of half 1 — its own text never names
+# the plan or an ADR — so the old mutation left the verdict at UNSCOPED unchanged (a measured NOFIRE)
+# and pinned nothing. The replacement below now ALSO appends the current file to $TESTFILES_SCOPED
+# unconditionally, ahead of both halves, defeating the whole conjunction in one mutation — the same
+# outcome as deleting the scope filter outright. RS1's own predicate, expected exit code and message
+# are untouched; only this line's REPLACEMENT field changed.
+# plant: RS1 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if grep -qE "(^|[^A-Za-z0-9_])${_esc}([^A-Za-z0-9_]|\$)" "$PLAN" 2>/dev/null; then | printf '%s\n' "$_f" >>"$TESTFILES_SCOPED"; if :; then
 cat >"$TMP/rs1.spec.md" <<'EOF'
 ## Success criteria
 - [ ] R-01 — first
@@ -1055,8 +1081,16 @@ cat >"$TMP/rs1-plan.md" <<'EOF'
 Test coverage lives in alpha.test.sh.
 EOF
 mkdir -p "$TMP/rs1-tests"
+# ADR-0154 fixture amendment (Batch C Task 4, operator-authorised — see the plan's Work Item 1):
+# alpha.test.sh now names the plan back (rs1-plan.md) so Task 2's half 2 admits it. RS1's own
+# predicate and its expected UNSCOPED R-01 1 outcome below are UNCHANGED — only this fixture's
+# input gained a back-reference. Before ADR-0154, half 1 alone scoped alpha.test.sh in; after it,
+# alpha.test.sh (the file half 1 actually admits) must also name the feature back, or half 2 drops
+# it, the scope collapses to zero, and the verdict flips to UNSCOPED R-01 0 (SCOPE-NO-BACKREF) —
+# a defect in this fixture's fit to a new rule it predates, not in what RS1 was written to prove.
 cat >"$TMP/rs1-tests/alpha.test.sh" <<'EOF'
 # no id here
+# names the plan back: rs1-plan.md
 EOF
 cat >"$TMP/rs1-tests/beta.test.sh" <<'EOF'
 # covers R-01
@@ -1069,8 +1103,15 @@ else
 fi
 
 mkdir -p "$TMP/rs2-tests"
+# ADR-0154 fixture amendment (Batch C Task 4, operator-authorised — see the plan's Work Item 1):
+# alpha.test.sh now names the plan back (rs1-plan.md) so Task 2's half 2 admits it. RS2's own
+# predicate and its expected COVERED R-01 / exit-0 / no-UNSCOPED-line outcome below are UNCHANGED
+# — RS2's INTENT is the positive twin of RS1 (CLAUDE.md rule 8), and half 2 is incidental to that:
+# without a back-reference this file is dropped by half 2, the scope collapses to zero, and R-01
+# (mentioned nowhere else in this tree) flips to UNSCOPED R-01 0.
 cat >"$TMP/rs2-tests/alpha.test.sh" <<'EOF'
 # covers R-01
+# names the plan back: rs1-plan.md
 EOF
 cat >"$TMP/rs2-tests/beta.test.sh" <<'EOF'
 # no id here
@@ -1100,8 +1141,15 @@ cat >"$TMP/rs4-plan.md" <<'EOF'
 Test coverage lives in staging/plugin/scripts/tests/alpha.test.sh, not just the bare name.
 EOF
 mkdir -p "$TMP/rs4-tests"
+# ADR-0154 fixture amendment (Batch C Task 4, operator-authorised — see the plan's Work Item 1):
+# alpha.test.sh now names the plan back (rs4-plan.md) so Task 2's half 2 admits it. RS4's own
+# predicate and its expected COVERED R-01 outcome below are UNCHANGED — RS4's INTENT is to prove
+# a full-path basename mention still satisfies half 1, and half 2 is incidental to that: without a
+# back-reference this lone file is dropped by half 2, the scope collapses to zero, and R-01 (still
+# mentioned in the full discovered population, just not in scope) flips to UNSCOPED R-01 0.
 cat >"$TMP/rs4-tests/alpha.test.sh" <<'EOF'
 # covers R-01
+# names the plan back: rs4-plan.md
 EOF
 run_scov --spec "$TMP/rs1.spec.md" --plan "$TMP/rs4-plan.md" --tests-root "$TMP/rs4-tests"
 if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
@@ -1188,12 +1236,25 @@ done
 # For every resolved pair, compute today's live verdict for every declared id (COVERED / UNCOVERED /
 # UNSCOPED), read straight off the checker's own stdout — one source of truth for what "covered"
 # means, the ADR-0069/ADR-0072 rule applied here too, never a second interpretation of the tokens.
+#
+# ADR-0154 Task 4 (R-06) additive extension, disclosed here per ADR-0073 §D1: the per-pair run's
+# stderr — previously discarded via `2>/dev/null` — is now ALSO captured, into RS_SCOPE below,
+# alongside the unchanged stdout capture RS7/RS8/RS9 already read into $RS_LIVE. Neither $RS_LIVE's
+# contents, $RS_PAIRS, $_list nor $_run's derivation change: this is a second, parallel readout of
+# the SAME per-pair invocation, feeding only the new RY10 corpus-denominator guard further below.
 RS_LIVE="$TMP/rs-live.tsv"; : >"$RS_LIVE"
+RS_SCOPE="$TMP/rs-scope.tsv"; : >"$RS_SCOPE"
 while IFS="$TAB" read -r _bn _spec _plan; do
   [ -n "$_bn" ] || continue
   _list=$(bash "$SCOV" --spec "$_spec" --plan "$_plan" --list 2>/dev/null)
   [ -n "$_list" ] || continue
-  _run=$(bash "$SCOV" --spec "$_spec" --plan "$_plan" --tests-root "$REPO" 2>/dev/null)
+  _run=$(bash "$SCOV" --spec "$_spec" --plan "$_plan" --tests-root "$REPO" 2>"$TMP/rs-live-err.txt")
+  _errtxt=$(cat "$TMP/rs-live-err.txt" 2>/dev/null)
+  _no_backref=0
+  printf '%s\n' "$_errtxt" | grep -q 'SCOPE-NO-BACKREF' && _no_backref=1
+  _scope_n=$(printf '%s\n' "$_errtxt" | grep -oE '[0-9]+ in scope' | awk '{print $1}')
+  [ -n "$_scope_n" ] || _scope_n=0
+  printf '%s\t%s\t%s\n' "$_bn" "$_no_backref" "$_scope_n" >>"$RS_SCOPE"
   printf '%s\n' "$_list" | while IFS="$TAB" read -r _id _txt; do
     [ -n "$_id" ] || continue
     _verdict="UNCOVERED"
@@ -1262,6 +1323,25 @@ if [ "$RS_ID_N" -ge 100 ]; then
   ok "RS9b (denominator guard on the derivation, same vacuity caveat as RS9a): $RS_ID_N paired ids resolved (>= 100). Measured 2026-08-14: 117."
 else
   bad "RS9b: only $RS_ID_N paired ids resolved (< 100) — the derivation is broken, not just short of coverage"
+fi
+
+# ==================================================================================================
+# RY10 (R-06, ADR-0154 D4, Task 4) — the back-reference derivation's own corpus denominator guard.
+# A bug that made half 2 fail for every candidate file would collapse the scope on every pair, and
+# without a guard here that reads as 187 changed baseline rows rather than as a collapse (rule 7).
+#
+# DECLARED A VACUITY GUARD, NOT THE EVIDENCE (rule 10, ADR-0124): a floor absorbs its own plant —
+# >= 15 against 16 resolved pairs still passes when Task 7's plant removes one. RS7's frozen
+# per-row baseline comparison, regenerated by Task 5, is where a total-collapse plant actually
+# bites. RY10 is GREEN ON ARRIVAL (declared, ADR-0101 batch table) and stays green after Task 2 —
+# it does not become evidence at any point in this feature's own batches.
+# ==================================================================================================
+# plant: RY10 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if grep -qE "$BACKREF_RE" "$_f" 2>/dev/null; then | if false; then
+RY10_N=$(awk -F"$TAB" '$2==0 && $3+0>0 {c++} END{print c+0}' "$RS_SCOPE" 2>/dev/null); RY10_N=${RY10_N:-0}
+if [ "$RY10_N" -ge 15 ]; then
+  ok "RY10 (R-06, vacuity guard — see the disclosure above, not the proof): $RY10_N of $RS_PAIR_N resolved (SPEC, plan) pairs run without SCOPE-NO-BACKREF and with a non-empty scope (>= 15). Measured 2026-08-18: 16 pairs resolve."
+else
+  bad "RY10: only $RY10_N of $RS_PAIR_N resolved pairs run without SCOPE-NO-BACKREF and with a non-empty scope (< 15) — the back-reference derivation has stopped resolving across the corpus"
 fi
 
 cat >"$TMP/rs10.spec.md" <<'EOF'
@@ -1351,8 +1431,16 @@ cat >"$TMP/rx5-plan.md" <<'EOF'
 Test coverage lives in stale.test.sh.
 EOF
 mkdir -p "$TMP/rx5-tests"
+# ADR-0154 fixture amendment (Batch C Task 4, operator-authorised — see the plan's Work Item 1):
+# stale.test.sh now names the plan back (rx5-plan.md) so Task 2's half 2 admits it. RX5's own
+# predicate and its expected STALE-WAIVER R-01 / exit-3 / stderr-naming-delete outcome below are
+# UNCHANGED — RX5's INTENT is the reverse check on the (no-test: ...) waiver (CLAUDE.md rule 9),
+# which requires R-01 to actually be found IN SCOPE; without a back-reference stale.test.sh is
+# dropped by half 2, the scope collapses to zero, the waiver is never found stale, and the run
+# silently reads COVERED R-01 / exit 0 instead.
 cat >"$TMP/rx5-tests/stale.test.sh" <<'EOF'
 # covers R-01
+# names the plan back: rx5-plan.md
 EOF
 run_scov --spec "$TMP/rx5.spec.md" --plan "$TMP/rx5-plan.md" --tests-root "$TMP/rx5-tests"
 if [ "$RC" -eq 3 ] && printf '%s\n' "$OUT" | grep -q "^STALE-WAIVER${TAB}R-01\$" \
@@ -1362,11 +1450,309 @@ else
   bad "RX5: expected exit 3 + STALE-WAIVER R-01 + stderr naming 'delete' when the exempted id IS covered by an in-scope test — got rc=$RC out=[$OUT] err=[$ERR]"
 fi
 
+# ADR-0154 fixture amendment note (Batch C Task 4, operator-authorised — see the plan's Work Item
+# 1): RX6 reruns the RS1 tree (rs1.spec.md / rs1-plan.md / rs1-tests), whose alpha.test.sh was
+# amended above (in the RS1 block) to add a back-reference to rs1-plan.md. RX6's own predicate and
+# its expected UNSCOPED R-01 1 outcome below are UNCHANGED — the same repair that restores RS1
+# restores this one, since both read the identical fixture tree; no separate edit was made here.
 run_scov --spec "$TMP/rs1.spec.md" --plan "$TMP/rs1-plan.md" --tests-root "$TMP/rs1-tests"
 if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
   ok "RX6 (negative twin of RX1-RX5, CLAUDE.md rule 8): the RS1 fixture, carrying NO (no-test: ...) marker at all, still reads UNSCOPED as normal — the no-test: code path does not swallow the ordinary scope verdict when no marker is present"
 else
   bad "RX6: expected the plain UNSCOPED R-01 1 verdict from the marker-less RS1 fixture — got rc=$RC out=[$OUT]"
+fi
+
+# ==================================================================================================
+# RY. ADR-0154 (plan: docs/superpowers/plans/2026-08-18-spec-coverage-scope-back-reference.md) — the
+# test axis becomes a conjunction: a discovered test file enters scope only when the plan names it
+# (half 1, unchanged) AND its own text names the plan's basename or one of the ADR-NNNN ids the plan
+# cites (half 2, new). RY1-RY9 and RY12 are EXPECTED RED until Tasks 2/3/6 land (Batches B/D) — the
+# conjunction does not exist yet, so today's checker still scopes on half 1 alone. RY7, RY8 and RY9
+# are POSITIVE CONTROLS / already-true invariants (CLAUDE.md rule 8's negative-twin discipline
+# applied to a state that does not change): verified empirically below against the pre-fix checker,
+# each already reads the way this ADR requires, because it exercises a path half 2 does not touch —
+# SCOPE-EMPTY is unchanged (D2), the .md exclusion runs upstream of both halves (D1), and half 1's
+# own requirement ("the plan must name the file") was never in question. They stay in this section
+# because R-01/R-04/R-05 name them as the guards that prove half 2 did not regress what half 1
+# already guaranteed — the same reasoning RS2-RS5 documented for the first scope filter. RY11 is
+# GREEN ON ARRIVAL: ADR-0154 already exists and already carries both measurements. Every fixture
+# below was executed against the unmodified checker before this comment was written (rule 2).
+#
+# R-07 IS EVIDENCED IN THIS FILE BUT ITS SUBJECT IS NOT A TEST FILE, which is why the id is named
+# here and nowhere else in scope. R-07 asserts that spec-coverage-scope-baseline.tsv is regenerated
+# under the new rule and that every row whose verdict changes is accounted for. That .tsv is not a
+# discovered test file by construction, so the citation has nowhere else to live. The evidence:
+# the baseline was regenerated on 2026-08-18 (dated header block in that file, 0 of 130 rows
+# changed verdict) and is compared row by row by RS7/RS8a/RS8b above, all green.
+# Added by the orchestrator at the Step 5 exit gate, which reported UNSCOPED for R-07 — the id was
+# mentioned only in three foreign harnesses, each carrying an unrelated R-07 of its own. Under the
+# pre-ADR-0154 rule one of those would have reported COVERED. This feature caught its own citation
+# gap with its own rule, one batch after shipping it.
+# ==================================================================================================
+# plant: RY1 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if grep -qE "$BACKREF_RE" "$_f" 2>/dev/null; then | if :; then
+cat >"$TMP/ry1.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+
+cat >"$TMP/ry1-plan.md" <<'EOF'
+### Task 1 -- do thing (R-01)
+Test coverage lives in alpha.test.sh and beta.test.sh.
+EOF
+mkdir -p "$TMP/ry1-tests"
+cat >"$TMP/ry1-tests/alpha.test.sh" <<'EOF'
+# names the plan back: ry1-plan.md
+EOF
+cat >"$TMP/ry1-tests/beta.test.sh" <<'EOF'
+# covers R-01
+EOF
+run_scov --spec "$TMP/ry1.spec.md" --plan "$TMP/ry1-plan.md" --tests-root "$TMP/ry1-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RY1 (R-01, R-03, ADR-0154 D1): the plan names TWO discovered harnesses; alpha.test.sh names the plan back and carries no id, beta.test.sh carries R-01 and names nothing back — R-01's only mention is dropped by half 2, final scope is {alpha.test.sh} (1 file) -> UNSCOPED	R-01	1, exit 1. The two-file shape is load-bearing: a one-file tree would take the SCOPE-EMPTY path instead (RY7) and prove something else. Today (pre-fix, verified) this exact fixture is COVERED, exit 0."
+else
+  bad "RY1: expected exit 1 + UNSCOPED R-01 1 (beta dropped by half 2, alpha carries no id) — got rc=$RC out=[$OUT]"
+fi
+
+# plant: RY2 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | BACKREF_KEYS="$PLAN_BN_ESC" | BACKREF_KEYS="RY2_PLANT_NO_MATCH_ZZZ"
+mkdir -p "$TMP/ry2-tests"
+cat >"$TMP/ry2-tests/alpha.test.sh" <<'EOF'
+# names the plan back: ry1-plan.md
+EOF
+cat >"$TMP/ry2-tests/beta.test.sh" <<'EOF'
+# covers R-01
+# names the plan back: ry1-plan.md
+EOF
+run_scov --spec "$TMP/ry1.spec.md" --plan "$TMP/ry1-plan.md" --tests-root "$TMP/ry2-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$" \
+   && ! printf '%s\n' "$OUT" | grep -q 'UNSCOPED'; then
+  ok "RY2 (R-01, R-02, positive twin of RY1, CLAUDE.md rule 8): the same tree with beta.test.sh ALSO naming the plan's basename (with its .md) back -> COVERED, exit 0, no UNSCOPED line. Without this twin, RY1 is satisfiable by a checker that fails every file regardless of what it names."
+else
+  bad "RY2: expected COVERED R-01 / exit 0 / no UNSCOPED line once beta names the plan back — got rc=$RC out=[$OUT]"
+fi
+
+# plant: RY3 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | BACKREF_KEYS="$PLAN_BN_ESC" if [ -s "$BACKREF_ADRS_UNIQ" ]; then | BACKREF_KEYS="$PLAN_BN_ESC"\nif false; then
+cat >"$TMP/ry3-plan.md" <<'EOF'
+### Task 1 -- do thing (R-01)
+Test coverage lives in alpha.test.sh and beta.test.sh. See ADR-9001 for background.
+EOF
+mkdir -p "$TMP/ry3-tests"
+cat >"$TMP/ry3-tests/alpha.test.sh" <<'EOF'
+# names the plan back: ry3-plan.md
+EOF
+cat >"$TMP/ry3-tests/beta.test.sh" <<'EOF'
+# covers R-01
+# see ADR-9001
+EOF
+run_scov --spec "$TMP/ry1.spec.md" --plan "$TMP/ry3-plan.md" --tests-root "$TMP/ry3-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
+  ok "RY3 (R-02, the OR's second branch, ADR-0154 D1): beta.test.sh names an ADR-NNNN the plan cites (ADR-9001) and NOT the plan's basename -> COVERED, exit 0. The back-reference key set is the plan basename OR any ADR id the plan cites, not the basename alone."
+else
+  bad "RY3: expected COVERED R-01 / exit 0 via the ADR branch of the OR — got rc=$RC out=[$OUT]"
+fi
+
+# plant: RY4 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | BACKREF_RE="(^|[^A-Za-z0-9_])(${BACKREF_KEYS})([^A-Za-z0-9_]|\$)" | BACKREF_RE="(^|[^A-Za-z0-9_])(${BACKREF_KEYS}|ADR-[0-9][0-9][0-9][0-9])([^A-Za-z0-9_]|\$)"
+# Deviation from the Task 7 table (validated 2026-08-18, plant-check.sh --worker): the table paired
+# RY3 and RY4 under one mutation ("drop the ADR ids from the key set"). That mutation reddens RY3
+# but NOFIREs on RY4 — dropping the ADR branch entirely leaves ADR-9002 unmatched exactly as before
+# (it was never in the cited set either way), so RY4's own verdict does not move. What RY4 actually
+# pins is the OTHER failure mode its own comment names ("a rule that accepts any ADR id at all, not
+# one this plan actually cites") — a promiscuous match, planted above by widening BACKREF_RE to
+# accept any ADR-dddd token regardless of $BACKREF_ADRS_UNIQ.
+mkdir -p "$TMP/ry4-tests"
+cat >"$TMP/ry4-tests/alpha.test.sh" <<'EOF'
+# names the plan back: ry3-plan.md
+EOF
+cat >"$TMP/ry4-tests/beta.test.sh" <<'EOF'
+# covers R-01
+# see ADR-9002
+EOF
+run_scov --spec "$TMP/ry1.spec.md" --plan "$TMP/ry3-plan.md" --tests-root "$TMP/ry4-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RY4 (R-02, negative twin of RY3): beta.test.sh names an ADR-NNNN the plan does NOT cite (ADR-9002, the plan cites only ADR-9001) -> dropped by half 2, final scope is {alpha.test.sh} -> UNSCOPED	R-01	1, exit 1. Without this twin, RY3 is satisfied by a rule that accepts any ADR id at all, not one this plan actually cites."
+else
+  bad "RY4: expected exit 1 + UNSCOPED R-01 1 (beta's ADR is not in this plan's key set) — got rc=$RC out=[$OUT]"
+fi
+
+# plant: RY5 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | PLAN_BN="${PLAN##*/}" | PLAN_BN="${PLAN##*/}"\nPLAN_BN="${PLAN_BN%.md}"
+mkdir -p "$TMP/ry5-tests"
+cat >"$TMP/ry5-tests/alpha.test.sh" <<'EOF'
+# names the plan back: ry1-plan.md
+EOF
+cat >"$TMP/ry5-tests/beta.test.sh" <<'EOF'
+# covers R-01
+# see ry1-plan.manifest.yml
+EOF
+run_scov --spec "$TMP/ry1.spec.md" --plan "$TMP/ry1-plan.md" --tests-root "$TMP/ry5-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RY5 (R-02, whole-token, ADR-0154 SA3): beta.test.sh names only ry1-plan.manifest.yml, the plan's STEM plus a different extension, never the plan's own basename ry1-plan.md -> not a back-reference -> dropped by half 2 -> UNSCOPED	R-01	1, exit 1. Pins the escaping and the anchor pair, and pins the refusal of a stem-only match — the rejected A3 alternative would have let this fixture COVER (stem plus non-word boundary is not a token boundary under that anchor pair)."
+else
+  bad "RY5: expected exit 1 + UNSCOPED R-01 1 (stem-only mention does not back-reference) — got rc=$RC out=[$OUT]"
+fi
+
+# ==================================================================================================
+# RY6/RY7. ADR-0154 D2 — an empty scope now has two causes, told apart. RY6 is the new
+# SCOPE-NO-BACKREF state (half 1 non-empty, half 2 drops everything — a finding, no fallback). RY7
+# is the unchanged SCOPE-EMPTY state (half 1 empty — a possibly-broken derivation, falls back). Both
+# are asserted on the SAME kind of tree (one discovered file, one declared id) so only the plan's
+# naming differs between them — that is what "told apart" means.
+# ==================================================================================================
+# RY6a/RY6b/RY6c/RY6d genuinely share one mutation (validated 2026-08-18, plant-check.sh --worker):
+# forcing the HALF1_N>0 branch closed collapses the whole D2 split for this fixture at once — no
+# SCOPE-NO-BACKREF, no named dropped file, SCOPE-EMPTY appears instead, and the fallback restores
+# COVERED — so all four sub-assertions about that one state transition go red together. Declared
+# once per id rather than de-duplicated (rule 2 is per-assertion).
+# plant: RY6a | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if [ "$HALF1_N" -gt 0 ]; then | if false; then
+# plant: RY6b | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if [ "$HALF1_N" -gt 0 ]; then | if false; then
+# plant: RY6c | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if [ "$HALF1_N" -gt 0 ]; then | if false; then
+# plant: RY6d | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if [ "$HALF1_N" -gt 0 ]; then | if false; then
+cat >"$TMP/ry6-plan.md" <<'EOF'
+### Task 1 -- do thing (R-01)
+Test coverage lives in delta.test.sh.
+EOF
+mkdir -p "$TMP/ry6-tests"
+cat >"$TMP/ry6-tests/delta.test.sh" <<'EOF'
+# covers R-01
+EOF
+run_scov --spec "$TMP/ry1.spec.md" --plan "$TMP/ry6-plan.md" --tests-root "$TMP/ry6-tests"
+printf '%s\n' "$ERR" | grep -q 'SCOPE-NO-BACKREF' \
+  && ok "RY6a (R-05, ADR-0154 D2): stderr contains SCOPE-NO-BACKREF — the plan names exactly one discovered harness (delta.test.sh, half 1 count 1 > 0) and it names nothing back" \
+  || bad "RY6a: stderr does not contain SCOPE-NO-BACKREF — err=[$ERR]"
+printf '%s\n' "$ERR" | grep -q 'delta.test.sh' \
+  && ok "RY6b: stderr names the dropped file's basename (delta.test.sh) — the remedy must say what to fix" \
+  || bad "RY6b: stderr does not name delta.test.sh — err=[$ERR]"
+printf '%s\n' "$ERR" | grep -q 'SCOPE-EMPTY' \
+  && bad "RY6c: stderr contains SCOPE-EMPTY — the two empty-scope causes must not share a token, or a caller cannot branch on which one fired" \
+  || ok "RY6c: stderr does NOT contain SCOPE-EMPTY — the two states are told apart on the wire"
+[ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}0\$" \
+  && ok "RY6d: stdout is UNSCOPED	R-01	0, exit 1 — no fallback, the id mentioned only in the dropped file reports the ordinary per-id verdict" \
+  || bad "RY6d: expected UNSCOPED R-01 0 / exit 1 — got rc=$RC out=[$OUT]"
+
+# plant: RY7 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if [ "$HALF1_N" -gt 0 ]; then | if :; then
+cat >"$TMP/ry7-plan.md" <<'EOF'
+### Task 1 -- do thing (R-01)
+No test file is named anywhere in this plan's prose.
+EOF
+mkdir -p "$TMP/ry7-tests"
+cat >"$TMP/ry7-tests/epsilon.test.sh" <<'EOF'
+# covers R-01
+EOF
+run_scov --spec "$TMP/ry1.spec.md" --plan "$TMP/ry7-plan.md" --tests-root "$TMP/ry7-tests"
+ry7_no_backref=1
+printf '%s\n' "$ERR" | grep -q 'SCOPE-NO-BACKREF' && ry7_no_backref=0
+if [ "$RC" -eq 0 ] && printf '%s\n' "$ERR" | grep -q 'SCOPE-EMPTY' \
+   && [ "$ry7_no_backref" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
+  ok "RY7 (R-05, the other direction, twin of RS6/D2, positive control — this state is UNCHANGED by ADR-0154 and already reads this way pre-fix): the plan names NO discovered test file at all -> stderr SCOPE-EMPTY, never SCOPE-NO-BACKREF, stdout falls back to COVERED	R-01, exit 0. Together with RY6 this is what 'told apart' means: same one-file/one-id shape, opposite plan-naming, opposite stderr token, opposite fallback behaviour."
+else
+  bad "RY7: expected stderr SCOPE-EMPTY (never SCOPE-NO-BACKREF) + stdout COVERED R-01 (fallback) + exit 0 — got rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
+# forward guard, positive control (unaffected by ADR-0154 — the .md exclusion runs upstream of both
+# scope halves, RS5's own point, extended here to prove half 2 cannot re-admit what the exclusion
+# already dropped even when the .md file back-references the plan).
+# Deviation from the Task 7 table (validated 2026-08-18, plant-check.sh --worker): the table named
+# "neutralise the .md exclusion" (the second, explicit gate) as RY8's mutation. NOFIREs alone —
+# x.spec.md never reaches that gate: it fails the FIRST gate (the CANDIDATES basename allowlist,
+# which lists *.spec.js/.ts/.tsx/.jsx but no *.spec.md) and so is never a candidate the explicit
+# .md filter has to reject. The honest plant widens the first gate to admit everything AND
+# neutralises the second in the same mutation — the only combination that actually lets a .md
+# candidate survive to $TESTFILES for this fixture.
+# plant: RY8 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | *.test.*|test_*|*_test.*|*Test.*|*Tests.*|test-*.sh|run-tests.sh|*.spec.js|*.spec.ts|*.spec.tsx|*.spec.jsx) printf '%s\n' "$f" ;; esac done >"$CANDIDATES" # Explicit .md exclusion — a separate step on purpose, not folded into the pattern list above. while IFS= read -r f; do case "$f" in *.md) continue ;; | *) printf '%s\\n' "$f" ;; esac done >"$CANDIDATES" # Explicit .md exclusion — a separate step on purpose, not folded into the pattern list above. while IFS= read -r f; do case "$f" in *.md_RY8_NEVER_MATCH) continue ;;
+mkdir -p "$TMP/ry8-tests/docs/specs"
+cat >"$TMP/ry8-tests/docs/specs/x.spec.md" <<'EOF'
+Mentions R-01 in prose, and names the plan back: ry8-plan.md
+EOF
+cat >"$TMP/ry8-plan.md" <<'EOF'
+### Task 1 -- do thing (R-01)
+Background: docs/specs/x.spec.md (also known as x.spec.md).
+EOF
+run_scov --spec "$TMP/ry1.spec.md" --plan "$TMP/ry8-plan.md" --tests-root "$TMP/ry8-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNCOVERED${TAB}R-01${TAB}tests\$"; then
+  ok "RY8 (R-04, forward guard): a .md file that names the plan back AND whose basename the plan names is still excluded -> UNCOVERED	R-01	tests. Half 2 cannot re-admit a .md; the exclusion is upstream of \$TESTFILES entirely (ADR-0154 D1). Already true pre-fix — a positive control, not new-behaviour evidence."
+else
+  bad "RY8: expected UNCOVERED R-01 tests despite the .md file naming the plan back — got rc=$RC out=[$OUT]"
+fi
+
+# forward guard, positive control: the other half of "either half alone is not enough" — a file
+# cannot buy its way into scope purely by back-referencing when the plan never names it.
+# Deviation from the Task 7 table (dispatch correction, confirmed 2026-08-18, plant-check.sh
+# --worker): the table paired RY9 with RY1 under the half-2 mutation. RY9's own fixture never
+# reaches half 2 — the plan never names zeta.test.sh's basename, so half 1 rejects it outright and
+# a half-2 mutation is a NOFIRE by construction. RY9 needs half 1 itself neutralised instead.
+# plant: RY9 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if grep -qE "(^|[^A-Za-z0-9_])${_esc}([^A-Za-z0-9_]|\$)" "$PLAN" 2>/dev/null; then | if :; then
+mkdir -p "$TMP/ry9-tests"
+cat >"$TMP/ry9-plan.md" <<'EOF'
+### Task 1 -- do thing (R-01)
+Test coverage lives in alpha.test.sh.
+EOF
+cat >"$TMP/ry9-tests/alpha.test.sh" <<'EOF'
+# names the plan back: ry9-plan.md
+EOF
+cat >"$TMP/ry9-tests/zeta.test.sh" <<'EOF'
+# covers R-01
+# names the plan back: ry9-plan.md
+EOF
+run_scov --spec "$TMP/ry1.spec.md" --plan "$TMP/ry9-plan.md" --tests-root "$TMP/ry9-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RY9 (R-01, forward guard, the other half of 'either half alone is not enough'): zeta.test.sh names the plan back and carries R-01, but the plan never names zeta.test.sh's own basename -> half 1 rejects it outright, half 2 is never reached -> UNSCOPED	R-01	1, exit 1. Already true pre-fix (half 1 is unchanged) — a positive control proving back-reference alone cannot substitute for half 1."
+else
+  bad "RY9: expected exit 1 + UNSCOPED R-01 1 (zeta excluded by half 1 regardless of its back-reference) — got rc=$RC out=[$OUT]"
+fi
+
+# ==================================================================================================
+# RY11. GREEN ON ARRIVAL, declared (ADR-0101 batch table) — not a defect. ADR-0154 already exists
+# and already records both refused-design measurements and the instruction-vs-enforcement clause.
+# Matched on a flattened, undecorated, case-insensitive copy (CLAUDE.md rule 3); the D6 window is
+# scoped to that one section so the instruction/enforcement needle cannot be satisfied by unrelated
+# prose elsewhere in the ADR (rule 1).
+# ==================================================================================================
+# Deviation from the Task 7 table (dispatch correction, confirmed 2026-08-18, plant-check.sh
+# --worker): the table names one plant ("remove one of the two refused-design measurements") for
+# the whole of RY11. RY11a/b/c each assert something different and one shared mutation cannot
+# redden all three: RY11a is a bare existence check with no content-level failure mode at all — a
+# plant can only mutate file CONTENT, never delete or rename a file, so it is planted here by
+# SELF-TARGETING this harness's own $RY_ADR assignment instead (a supported class, ADR-0149's
+# masking exists precisely so a declaration does not match itself). RY11b and RY11c each get their
+# own mutation against the ADR: RY11b loses one of its two required measurements, RY11c loses the
+# instruction-vs-enforcement phrase inside the D6 window RY11c actually reads.
+# plant: RY11a | plugin/scripts/tests/spec-coverage.test.sh | RY_ADR="$REPO/docs/architecture/ADR-0154-spec-coverage-scope-back-reference.md" | RY_ADR="$REPO/docs/architecture/ADR-0154-DOES-NOT-EXIST-RY11a.md"
+RY_ADR="$REPO/docs/architecture/ADR-0154-spec-coverage-scope-back-reference.md"
+if [ -f "$RY_ADR" ]; then
+  ok "RY11a: $RY_ADR exists and is readable — RY11b/RY11c are meaningful"
+else
+  bad "RY11a: $RY_ADR not found — RY11b/RY11c are vacuous"
+fi
+RY_D6=$(awk '/^### D6 /{grab=1} /^### D7 /{grab=0} grab' "$RY_ADR" 2>/dev/null | tr -d '`*' | tr '\n' ' ' | tr -s ' ')
+# plant: RY11b | ../docs/architecture/ADR-0154-spec-coverage-scope-back-reference.md | 11 of 53 | ELEVEN-OF-FIFTY-THREE-REMOVED-RY11b
+if grep -qi '11 of 53' "$RY_ADR" 2>/dev/null && grep -qi '87 of 893' "$RY_ADR" 2>/dev/null; then
+  ok "RY11b (R-11): the ADR records both refused designs with the measurements that refused them — 11 of 53 plans name a test file in a Budget: line (A1), 87 of 893 R-NN mentions sit in an id-mapping comment header (A2)"
+else
+  bad "RY11b: the ADR is missing one or both refused-design measurements (11 of 53 / 87 of 893)"
+fi
+# plant: RY11c | ../docs/architecture/ADR-0154-spec-coverage-scope-back-reference.md | instruction, not an enforcement | a plain sentence with no special status
+if printf '%s\n' "$RY_D6" | grep -qi 'architect.md' && printf '%s\n' "$RY_D6" | grep -qi 'instruction, not an enforcement'; then
+  ok "RY11c (R-12): D6 states, in the same section naming architect.md's contract line, that it is an instruction and not an enforcement (rule 16) — what is enforced is the consequence at the gate"
+else
+  bad "RY11c: D6 does not name architect.md's contract line as an instruction rather than an enforcement — flat=[$RY_D6]"
+fi
+
+# ==================================================================================================
+# RY12. RED until Task 6 (Batch D) — the record: a docs/chain-decisions.md heading naming ADR-0154,
+# a CLAUDE.md chain-decision index line naming it, and a PROJECT.md row naming it. Verified
+# 2026-08-18: the ADR-authoring step already wrote the first two; the PROJECT.md row is Task 6's own
+# deliverable, so this assertion is red on that one leg alone until it lands.
+# ==================================================================================================
+# plant: RY12 | ../docs/chain-decisions.md | ## Decisions from the spec-coverage-scope-back-reference chain (ADR-0154) | ## Decisions from the spec-coverage-scope-back-reference chain (renamed, no ADR ref)
+RY_CD="$REPO/docs/chain-decisions.md"
+RY_CLMD="$REPO/CLAUDE.md"
+RY_PROJ="$REPO/PROJECT.md"
+ry12_cd=0; ry12_cl=0; ry12_pj=0
+grep -qE '^## .*ADR-0154' "$RY_CD" 2>/dev/null && ry12_cd=1
+grep -qE '^\- \*\*ADR-0154\*\*' "$RY_CLMD" 2>/dev/null && ry12_cl=1
+grep -qF 'ADR-0154' "$RY_PROJ" 2>/dev/null && ry12_pj=1
+if [ "$ry12_cd" -eq 1 ] && [ "$ry12_cl" -eq 1 ] && [ "$ry12_pj" -eq 1 ]; then
+  ok "RY12 (R-10): the record is written — a docs/chain-decisions.md heading naming ADR-0154, a CLAUDE.md chain-decision index line naming it, and a PROJECT.md row naming it, all three present"
+else
+  bad "RY12: the record is incomplete (chain-decisions.md heading=$ry12_cd, CLAUDE.md index line=$ry12_cl, PROJECT.md row=$ry12_pj) — Task 6 has not landed yet"
 fi
 
 # ==================================================================================================
@@ -1411,6 +1797,153 @@ if [ -z "$RH_MISSING" ] && [ "$RH_SEEN" -eq 2 ]; then
   ok "RH1: both SPEC generators emit a heading spec-id-predicate.awk recognises, so a generated SPEC cannot land its criteria outside the checker's reach"
 else
   bad "RH1: a SPEC generator no longer emits a recognised heading —$RH_MISSING (probed $RH_SEEN of 2) — every id it writes would be silently unread (issue #313)"
+fi
+
+# ==================================================================================================
+# RZ. ADR-0157 / issue #487 — the cross-feature id collision. Requirement ids restart at R-01 in every
+# SPEC, so the question "is this id mentioned in the discovered test population?" is satisfied by a
+# STRANGER'S file, and the answer arrives as UNSCOPED ("name the file in your plan") on an id that was
+# never tested. Measured in the field on a Swift project; measured again on this repository's own
+# corpus, where 12 of 24 UNSCOPED rows were foreign matches (see spec-coverage-scope-baseline.tsv's
+# 2026-08-19 accounting block).
+#
+# Every fixture below was executed against the checker BEFORE the fix and produced the OLD verdict
+# (CLAUDE.md rule 2). The plants pin the three predicates that make up the population.
+# ==================================================================================================
+mkdir -p "$TMP/rz1-tests"
+cat >"$TMP/rz1.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz1-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh.
+EOF
+cat >"$TMP/rz1-tests/alpha.test.sh" <<'EOF'
+# no id here
+# names the plan back: rz1-plan.md
+EOF
+# The foreign harness: it carries R-01 and it says whose R-01 it is.
+cat >"$TMP/rz1-tests/beta.test.sh" <<'EOF'
+# covers R-01 (issue #999)
+EOF
+# plant: RZ1 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | elif grep -qE "(^|[^A-Za-z0-9_])#[0-9][0-9]*([^0-9]|\$)" "$_f" 2>/dev/null; then | elif false; then
+run_scov --spec "$TMP/rz1.spec.md" --plan "$TMP/rz1-plan.md" --tests-root "$TMP/rz1-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNCOVERED${TAB}R-01${TAB}tests\$"; then
+  ok "RZ1 (ADR-0157 D1): R-01's only mention is in beta.test.sh, which the plan does not name and which claims ANOTHER feature (#999) — UNCOVERED	R-01	tests, exit 1. Pre-fix this exact fixture reported UNSCOPED R-01 1, whose remedy tells the author to cite a stranger's harness from their plan."
+else
+  bad "RZ1: expected exit 1 + UNCOVERED R-01 tests (a foreign-claimed mention is not this feature's coverage) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ2 — the positive twin (CLAUDE.md rule 8). Same tree, same non-named file, but now it claims THIS
+# feature: the id is in the population again and the verdict returns to UNSCOPED. Without this twin,
+# RZ1 is satisfiable by a checker that reports UNCOVERED for every out-of-scope mention.
+mkdir -p "$TMP/rz2-tests"
+cp "$TMP/rz1.spec.md" "$TMP/rz2.spec.md"
+cp "$TMP/rz1-plan.md" "$TMP/rz2-plan.md"
+cp "$TMP/rz1-tests/alpha.test.sh" "$TMP/rz2-tests/alpha.test.sh"
+sed -i.bak 's/rz1-plan\.md/rz2-plan.md/' "$TMP/rz2-tests/alpha.test.sh" && rm -f "$TMP/rz2-tests/alpha.test.sh.bak"
+# The foreign claim is deliberate: without it this file is merely UNCLAIMED, and an unclaimed file is
+# in the population anyway — so the assertion would pass with the ownership test deleted, which is a
+# plant that fires on nothing (measured: RZ2's first form was a registry NOFIRE). With #999 present,
+# membership rests on ownership alone, and ownership BEATS a foreign claim in the same file.
+cat >"$TMP/rz2-tests/beta.test.sh" <<'EOF'
+# covers R-01 — carried over from issue #999, now this feature's own harness, see rz2-plan.md
+EOF
+# plant: RZ2 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if grep -qE "$OWN_RE" "$_f" 2>/dev/null; then | if false; then
+run_scov --spec "$TMP/rz2.spec.md" --plan "$TMP/rz2-plan.md" --tests-root "$TMP/rz2-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RZ2 (positive twin of RZ1, CLAUDE.md rule 8): the same out-of-scope file, carrying BOTH a foreign #999 and this feature's plan basename -> UNSCOPED	R-01	1, exit 1. Ownership wins over a foreign claim in the same file, and the remedy is the one that fits an unlisted test of one's own"
+else
+  bad "RZ2: expected exit 1 + UNSCOPED R-01 1 (an owned but unlisted test is in the population) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ3 — half 1 wins on its own. The plan NAMES beta.test.sh, half 2 drops it (it names no feature
+# back), and it claims another feature. Membership by half 1 is unconditional, so the verdict is
+# UNSCOPED: the author is told to fix the citation in a file their own plan points at, never to write
+# a test that already exists two lines from there.
+mkdir -p "$TMP/rz3-tests"
+cat >"$TMP/rz3.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz3-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh and beta.test.sh.
+EOF
+cat >"$TMP/rz3-tests/alpha.test.sh" <<'EOF'
+# no id here
+# names the plan back: rz3-plan.md
+EOF
+cat >"$TMP/rz3-tests/beta.test.sh" <<'EOF'
+# covers R-01 (issue #999)
+EOF
+# plant: RZ3 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | printf '%s\n' "$_f" >>"$HALF1_FILES" | :
+run_scov --spec "$TMP/rz3.spec.md" --plan "$TMP/rz3-plan.md" --tests-root "$TMP/rz3-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RZ3 (ADR-0157 D1, the union's other half): a file the PLAN names is in the unscoped-question population unconditionally — even dropped by half 2 and claiming another feature, R-01 reads UNSCOPED	R-01	1, not UNCOVERED"
+else
+  bad "RZ3: expected exit 1 + UNSCOPED R-01 1 (half-1 membership is unconditional) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ4 — the false green ADR-0157 closes, and the one nobody reported. The plan names NO discovered
+# test file, so ADR-0138's SCOPE-EMPTY fallback applies; every discovered file claims another feature.
+# Falling back to the whole population credits a stranger's R-01 as COVERED, exit 0.
+mkdir -p "$TMP/rz4-tests"
+cat >"$TMP/rz4.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz4-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+No test file is named anywhere in this plan.
+EOF
+cat >"$TMP/rz4-tests/beta.test.sh" <<'EOF'
+# covers R-01 (issue #999)
+EOF
+# RZ4 and RZ4b pin two different mechanisms and their plants say which. RZ4's verdict rests on the
+# refusal branch actually REFUSING to fall back — its plant leaves the branch's own detection and
+# message intact and appends the pre-fix `cat "$TESTFILES"` inside it, so the message still names the
+# refusal while the fallback happens anyway and the false green returns. Measured (rule 2, twice):
+# a plant on the ELIF CONDITION alone was a registry NOFIRE, because disabling it routes execution
+# into the SCOPE-EMPTY else branch, whose own fallback reads $UNSCOPED_POP — empty in this fixture by
+# construction — so the verdict stays UNCOVERED regardless. A plant on the unrelated
+# `cat "$UNSCOPED_POP"` line inside that else branch was a second NOFIRE for the same reason: this
+# fixture's execution never reaches it. RZ4b's plant disables the elif condition itself, which IS the
+# right mutation for "does this state get detected at all" — a different question from RZ4's.
+# plant: RZ4 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | "$SELF" "$FOREIGN_CLAIMED_N" "$TROOT" >&2 | "$SELF" "$FOREIGN_CLAIMED_N" "$TROOT" >&2\n      cat "$TESTFILES" >"$TESTFILES_SCOPED"
+run_scov --spec "$TMP/rz4.spec.md" --plan "$TMP/rz4-plan.md" --tests-root "$TMP/rz4-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNCOVERED${TAB}R-01${TAB}tests\$"; then
+  ok "RZ4 (ADR-0157 D2): the plan names no discovered test file and every discovered file claims another feature -> the fallback REFUSES, R-01 is UNCOVERED, exit 1. Pre-fix this fixture reported COVERED, exit 0 — a false green on a stranger's requirement id."
+else
+  bad "RZ4: expected exit 1 + UNCOVERED R-01 tests (SCOPE-FOREIGN-ONLY must not fall back) — got rc=$RC out=[$OUT]"
+fi
+# plant: RZ4b | plugin/skills/concept-to-code/scripts/spec-coverage.sh | elif [ ! -s "$UNSCOPED_POP" ] && [ -s "$FOREIGN_CLAIMED" ]; then | elif false; then
+if printf '%s\n' "$ERR" | grep -q 'SCOPE-FOREIGN-ONLY'; then
+  ok "RZ4b: stderr names the refusal (SCOPE-FOREIGN-ONLY) — a guard that declines to fall back must say so (CLAUDE.md rule 4)"
+else
+  bad "RZ4b: expected SCOPE-FOREIGN-ONLY on stderr — got [$ERR]"
+fi
+if printf '%s\n' "$ERR" | grep -q 'SCOPE-EMPTY'; then
+  bad "RZ4c: stderr says SCOPE-EMPTY as well — the refusal and the fallback are two states and every existing grep -q 'SCOPE-EMPTY' would read this one as the other"
+else
+  ok "RZ4c (ADR-0157 D2): the refusal token is NOT a SCOPE-EMPTY prefix — the two states stay tellable apart by the greps already written against the shorter token"
+fi
+
+# RZ5 — the fallback itself still works, on a population that could belong to this feature. Same shape
+# as RZ4 with the discovered file claiming nobody: SCOPE-EMPTY, fallback, COVERED. This is ADR-0138's
+# behaviour, and RY7 already pins it; what RZ5 adds is that the narrowed fallback did not break it.
+mkdir -p "$TMP/rz5-tests"
+cp "$TMP/rz4.spec.md" "$TMP/rz5.spec.md"
+cp "$TMP/rz4-plan.md" "$TMP/rz5-plan.md"
+cat >"$TMP/rz5-tests/beta.test.sh" <<'EOF'
+# covers R-01
+EOF
+run_scov --spec "$TMP/rz5.spec.md" --plan "$TMP/rz5-plan.md" --tests-root "$TMP/rz5-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$" && printf '%s\n' "$ERR" | grep -q 'SCOPE-EMPTY'; then
+  ok "RZ5 (forward guard): an unclaimed discovered file still reaches the SCOPE-EMPTY fallback and still reports COVERED, exit 0 — ADR-0157 narrows the fallback population without removing the fallback"
+else
+  bad "RZ5: expected exit 0 + COVERED R-01 + SCOPE-EMPTY on stderr — got rc=$RC out=[$OUT] err=[$ERR]"
 fi
 
 echo "----"

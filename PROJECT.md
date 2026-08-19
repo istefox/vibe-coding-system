@@ -1598,3 +1598,171 @@ running the pipeline against this repository's own ledger with 39 assertions alr
 further ones were found by plants that did not fire, and both convicted an assertion rather than a
 plant. The lesson is Phase 13's, arrived at from the other end — a green harness is evidence about
 the harness.*
+
+### Phase 15 — the scope that was a list of names becomes a mutual one (ADR-0154, plan of 2026-08-18)
+
+`spec-coverage.sh`'s test axis, narrowed by ADR-0138 to the files a plan names, was satisfied by
+precedent citations carrying a foreign `R-NN` namespace: on a real plan, three cited harnesses
+carried seven ids of their own, four reporting `COVERED` while cited nowhere in that feature's
+harness. Measured across the plan corpus, 94 of 263 scoped files were precedent citations rather
+than genuine coverage.
+
+This phase turns the scope filter into a conjunction: a discovered test file counts only when the
+plan names it **and** the file's own text names the plan's basename or one of the ADRs the plan
+cites back. An empty scope now reports one of two distinct stderr states instead of one, so the
+gate's remedy names the actual defect instead of guessing.
+
+- [x] the conjunction, the two-state empty-scope guard, and the producer-side clause in the architect's contract  (ADR-0154, Tasks 2–3)
+- [x] the RY assertions and RI7 written RED first, the corpus denominator guard, and the regenerated frozen baseline  (ADR-0154, Tasks 1, 4–5)
+- [x] a plant per new assertion and the registry run, plus one pre-existing plant repaired (ADR-0154, Task 7)
+- [x] the mention-scan population is bounded too, closing the residual: a foreign feature's `R-13` credited the mention scan and read UNSCOPED, and the same unfiltered population fed a false COVERED through the empty-scope fallback  (issue #487)  (completed: 2026-08-19 — ADR-0157. A second, owned-vs-foreign-vs-unclaimed key set for the mention question, distinct from half 2's conjunct key set — the two answer different questions and rule 6 requires saying so. 12 of 130 corpus rows move `UNSCOPED → UNCOVERED`, 0 `COVERED` rows move in either direction. Seven behavioural assertions (RZ1-RZ5 plus RZ4b/RZ4c), five plants, registry `PASS=511 FAIL=0`)
+
+*The producer-side clause in `staging/plugin/agents/architect.md` — a plan names the harness it
+creates, and that harness names the plan or its ADR back — is an instruction and not an enforcement
+(rule 16). What is enforced is the consequence at the gate: a harness that does not name its plan or
+a cited ADR back is descoped, and the feature's ids report `UNSCOPED`.*
+
+### Phase 16 — the verification layer that reports its own success (attended, audit 2026-08-18)
+
+Subject: the class the operator named while reviewing this repo's own helpers — *a verification tool
+that fails in silence or lies about its own outcome*. Counted over the 80 open issues on 2026-08-18,
+it is the largest single cause among them, and it outranks every other group for one reason: until a
+tool's verdict can be trusted, no fix verified by that tool is known to be a fix.
+
+**Attended, and a table rather than a checklist, for the Phase 11 reason** — every item below is a
+precondition for trusting an unattended run at all, not backlog for one to consume. `project-conductor`
+takes the first `- [ ]` line in this file, so a checkbox here would hand the runner the job of
+repairing the instruments that are supposed to judge its own work.
+
+**The first row is not an issue and comes before the rest.** `PROJECT.md` carried 26 of 80 open
+issues on 2026-08-18 — 54 absent entirely, re-derived by the method issue #440 prescribes (search
+`#N` across the whole file, never the row form, rule 7). On 2026-08-15 the same measurement was 27
+of 62. The gap widened by 27 issues in three days with nothing reporting it. Phases 16–22 close
+today's gap; only the reverse check keeps it closed.
+
+| item | state |
+|---|---|
+| a reverse check: derive the open issues, search all of `PROJECT.md` for each, report the absent set | **no issue yet.** rule 8 pointed at the roadmap itself — this file is a list, and nothing runs it backwards (#440). Ten lines. Without it, phases 16–22 become the next thing that goes stale silently. **Two things it must get right, both measured while writing this phase:** search for `#N` anywhere, never the row form, or seven tracked issues read as untracked (#440's own corrected denominator, rule 7); and for the state check, key on the row's OWN `(issue #N)` marker, never every `#N` on the line — a naive pass flagged three rows here, all three legitimate, because a completion note cites a sibling issue as context and a multi-wave row cites a phase issue still open elsewhere (rule 12: the needle matched the prose explaining the row) |
+| #411 | `verify.sh` times out on this repo's test-cmd and silently disables RTF circuit breaker A **on every cycle** — the review loop's own stop condition, unarmed since it was written. **done** — `verify.sh` now reads `$ROOT/.claude/test-timeout` with stop-gate's exact validation (positive integer, ≤9 digits, ≤`TMO_MAX`=900) once `$ROOT` is resolved, keeping `$RTF_TEST_TIMEOUT` as the caller's own override with precedence, mirroring ADR-0137 §D4's environment-then-file order. Both bare `verify.sh` call sites in `concept-to-code/SKILL.md` now name the deployed path. Four behavioural assertions (RTFV1-4, `stop-gate-path-predicate.test.sh`, the same stub-timeout technique SGP10-12 already use), one plant, `FLOOR` 35 → 39 |
+| #458 | a red harness loop skips the union steps, so the plant registry's coverage check has never run in CI |
+| #398 | `commit` Step 6b reads a dead CI watch as green: `gh` exits 0 when the watch dies, not only when every check passed |
+| #482 | `spec-coverage.sh`'s `rc=2` and `diff-budget-check.sh`'s `CLEAN` both make a wrong CWD indistinguishable from a passed gate. The first is a call-site defect, the second a protocol gap: the reporter's vocabulary has no token for "could not read your plan" |
+| #428 | `run-hook-tests.sh` asserts over the retired `backup-before-deploy.sh`, and no gate executes the file, so the red has gone unobserved |
+| #445 | `F4` accepts a marker mention as proof a fence was executed, and cannot tell an extractor from a grep |
+| #473 | G13 checks that the architect *wrote* `provisioned: true`, never that the dependency exists |
+| #481 | `agent-metrics.sh`'s `test_count_delta` counts test **files**, so it reports a real, computed `0` for every change to an existing harness — measured live at 250 lines and 18 assertions added |
+| #485 | ADR-0154 §D7's residual, now measured: a self-referential harness reports its own subject-under-test as coverage. Ignoring fixture-borne ids costs **0 of 169** corpus rows and removes **0 of 8** false `COVERED` — the collision rides on assertion code, not heredocs, and requiring the assertion line is ADR-0138 §A2, refused at 73 of 117. Not narrowable by filtering; only a declared citation marker on the `# plant:` precedent could work, and that is a convention across 29 files |
+
+*ADR-0064 §D3 allows two states, absent and a real computed zero. #481 is a third: measured,
+present, and wrong. The corpus §A5 wants for rut detection is being filled with those zeros now.*
+
+### Phase 17 — the detectors that cry wolf (issues #386, #466, #472, #475, #477, #478, #483)
+
+The same class as Phase 16 in the opposite direction: not false greens but false positives. Nothing
+here blocks, and that is the cost — ADR-0047 §D7's *a report nobody must act on is a report nobody
+reads*, arrived at by erosion rather than by volume.
+
+- [x] one assertion-idiom fix for Swift Testing `#expect`/`#require`: `#` is a comment leader in Python et al, a macro sigil in Swift, and `is_assert_tok`/the comment skip treated it as universal — 32 false `zero-assertion-test` findings against 12 real assertions in one field-reported file  (issues #472, #386)  (completed: 2026-08-19 — ADR-0160 D1. `is_hash_comment_lang()`, an allowlist of the languages `#` IS a comment in, `.swift` deliberately absent; `#require\(` added to `is_assert_tok`. Four behavioural assertions (HI1-HI4), two plants. #386 was the same defect under a different report — closed as a duplicate, comment left on it. #483's `pytest.raises` idiom is a separate token and remains open)
+- [ ] `detect-macos.sh` strips tables and code spans, so a macOS SPEC naming its platform only there reports `NOT_MACOS`  (issue #466)
+- [x] Gate 5.05's UI trigger is extension-only, so every cycle of a Swift project runs `ui-layout-audit` and writes an accessibility checklist about work that has no UI  (issue #478)  (completed: 2026-08-19 — ADR-0160 D2. New `ui-file-detect.sh`: a `.swift` file is UI-bearing only when its own content imports SwiftUI/AppKit/UIKit or declares a `View`/`NSView`/`UIViewController`-conforming type; the web extensions stay extension-only, no measured false positive there. Six behavioural assertions (AIJ1-AIJ6), three plants (AIJ1, AIJ3, AIJ6); AIJ2 is unplantable by class — an existence check, the PT1/PT2 precedent — and AIJ4/AIJ5 are documented not-isolable per the CB2/CB6 precedent)
+- [ ] `assigned-secret`'s prose false positive is a keyword followed by an absolute path, and it occurs 0 times in 423 files  (issue #475)
+- [x] the stop gate spends its whole per-session budget on declared reds, then disarms itself for the rest of the session  (issue #477)  (completed: 2026-08-19 — ADR-0156. The budget is spent by distinct failures, not repeats: a failure hashing to the recorded signature spends nothing and does not block, a different one still blocks and still spends. Measured before the fix: 5 of 16 sessions that ever blocked had reached the cap, `10 × 1` / `1 × 2` / `5 × 3`, and the counter was written in two places and removed in none. A green run now clears counter and signature; the stand-down moved from stderr into the `reason`. The hook still reads only `$ROOT/.claude/` — #477's fourth question, a shared expected-red set, stays with #273. Six behavioural assertions, six plants, registry `PASS=489 FAIL=0`)
+- [x] the stop gate re-runs the whole suite on a tree that has not moved, so every turn spent waiting on a dispatch pays the full ceiling  (issue #491)  (completed: 2026-08-19 — ADR-0161. A sha256 fingerprint of `git status --porcelain` + `git diff HEAD`, checked BEFORE the suite runs — a cache hit skips the re-run but still replays the same block decision, never a silent allow. Fail-toward-running on any unreadable git state (ADR-0055 §D2's strict-unknown convention). Cleared on every green run alongside the budget ADR-0156 already clears. Five behavioural assertions, one plant, `FLOOR` 30 → 35)
+
+*#477 was hit live on 2026-08-18: it blocked six consecutive turn closures during a correct Step 5,
+because the generator/verifier split ADR-0049 requires makes a declared red the normal state at
+every batch boundary between tester and coder.*
+
+### Phase 18 — one answer to "which SPEC is this feature's" (issues #408, #414, #454, #460, #461, #463, #464, #465, #480)
+
+Nine issues that are one design. Five independent derivations answer a single question — *what is
+this feature's slug, and which SPEC belongs to it* — and disagreement between any two is currently
+read as "the SPEC is disowned", which routes a fully specified feature to `greenfield` and dispatches
+an interview with nobody present. It is CLAUDE.md rule 6 at scale: copies answering one question must
+be extracted.
+
+Addressing them separately is how they reached nine.
+
+- [ ] decide which derivation wins, and make the rest read it rather than re-derive it — the conductor's roadmap-prose slug against the SPEC's stamped `**Topic slug:**` marker  (issues #480, #465)
+- [ ] separate "foreign SPEC" from "slug disagreement" in `gate0-detect.sh`: they have opposite remedies and `spec_owned=no` collapses them  (issues #480, #454, #461)
+- [ ] `spec_topic_match` has three values and the code has two; the archive fence halts on any SPEC lacking the marker  (issues #454, #408)
+- [ ] one predicate for SPEC coverage across Phase P step 3 and `project-conductor`, and a pre-flight that asserts the per-feature SPECs ADR-0022 requires actually exist  (issues #414, #463)
+- [ ] `gate0-detect.sh` detects ADRs by one naming convention, so an `adr-tools` repository reports `adr=no`  (issue #464)
+- [ ] Step 7.0b enrols a SPEC in the scope-baseline corpus and nothing bumps the baseline  (issue #460)
+
+*The workaround in use is hand-aligning the slug in the mutable root `SPEC.md` slot, one feature at a
+time. On a project where that slot is gitignored the edits are not durable and the archived copies
+under `docs/specs/` diverge from it. Recorded as a workaround by the operator, not as a fix.*
+
+### Phase 19 — what still stops an unattended run (attended, issues #400, #401, #412, #415, #432, #470, #474)
+
+**Attended, and a table rather than a checklist, for the Phase 12 reason** — every item lives inside
+the runner's own machinery, so a checkbox would offer the unattended runner the job of repairing the
+chain it is running inside.
+
+Seven of the eleven `chain-blocker` issues, minus those already homed in Phases 16 and 18. This phase
+is the delivery mechanism for every other phase: until it closes, each remaining issue is fixed by
+hand.
+
+| issue | what it stops |
+|---|---|
+| #400 | `autopilot-disarm` clears the run scope, so a relaunch after a pause is silently unbounded — the reason `VCS-020` says *relaunch, do not resume* |
+| #401 | Phase P step 4 has no defined prep ref when every prep step skips |
+| #412 | Step 6's Workflow path re-reviews the shared checkout while Phase 3's fixes sit in unmerged worktrees |
+| #415 | Phase 0 check 9's file-wide `--only` matcher aborts on issues whose number appears in a `PROJECT.md` heading |
+| #432 | `permission-mode-state.sh` returns `UNOBSERVABLE` after any `/clear` and blames the build, so Phase M refuses a correctly configured machine |
+| #470 | the chain never regenerates a generated Xcode project, so `xcodebuild` tests a stale target and `tests_after` counts it |
+| #474 | an autopilot run with no `prep:` block forks every feature from the previous feature's tip |
+| #488 | every agent worktree builds into the same derived-data root, so two concurrent `xcodebuild` runs overwrite each other's products — a worktree isolates cwd, not a build's output directory. **done** — ADR-0159 D1/D2: `-derivedDataPath` generated on both `xcodebuild` candidates, and a trusted test-cmd without it refuses to dispatch (Step 5.0.4b), for the existing-project case D1 cannot reach. Three assertions (M1-M3), three plants |
+| #494 | the Step 5 batch completion fact is read at a worktree path the merge-back has already removed — measured on git 2.50.1: `git worktree remove` succeeds (rc=0) on a worktree whose only dirty content is gitignored and deletes the marker with it, so a healthy batch spuriously halts on `NONE`. **done** — ADR-0159 D3: the completion fact is read from the coder's worktree BEFORE that worktree's own merge-back runs, stated at three independent sites (the dispatch instruction, the fence's lead-in, the post-fence HALT branch). Two assertions (M4-M5), two plants |
+| #486 | tester-first assumes a failing assertion still compiles. In Swift the window is a target that does not build, so there are no red tests to classify, the expected-red table cannot be checked, and a real regression reads identically. Measured: `grep -ci 'compil'` over `concept-to-code/SKILL.md` returns **0** — the chain has no state for it. The stop gate dies twice over here, by budget (#477) and independently by the 120s timeout, which ADR-0137 §D5 charges to the same budget. **done** — ADR-0155: a third batch-boundary rule (the tester owns the signature, the coder owns the body), a fourth checkpoint state, both tester briefs and one architect clause. No hook changed: `test-write-scope.sh` already permitted it. `grep -ci 'compil'` is now 7. Eight assertions in `batch-boundary-precedence.test.sh`, nine plants, registry `PASS=483 FAIL=0`. The stop-gate halves stay open as #477 and `.claude/test-timeout` |
+
+*#476 — the foreign-`R-NN` scope defect — was closed by ADR-0154 on 2026-08-18 (commit `7eb3340`)
+and is tracked as Phase 15. Nothing in the ADR or the SPEC cites it, which is why it read as open.*
+
+### Phase 20 — deployment is hand-rolled and drifts in both directions (issues #426, #427, #437)
+
+Issue #437 names itself the common cause behind #426, #309 and `VCS-022`: `staging/plugin` is
+already a plugin, and 2.1.224's archive source with SHA-256 pinning would make staged and deployed one
+artifact instead of two that are synced by hand and drift.
+
+It is not earlier than Phase 16 deliberately. A unified deployment verified by instruments that lie
+about their own outcome is worse than a hand-rolled one, because it ships the drift faster.
+
+- [ ] treat `staging/plugin` as the plugin it is, pinned by SHA-256, so staged and deployed stop being two artifacts  (issue #437)
+- [ ] `settings.json` drift runs in **both** directions — each copy registers a `Stop` hook the other lacks, and `mark-dirty.sh` keeps producing markers for a consumer that was never wired  (issue #426)
+- [ ] the three items #404 left open: the `.git` worktree gate, an unasserted `STOP_GATE_TEST_TIMEOUT=0`, and an exclusion list that now covers tracked content  (issue #427)
+
+### Phase 21 — what the commit path loses without saying so (issues #402, #406, #407, #413, #422, #436, #457, #459, #462, #469, #479)
+
+None of these blocks a run. All of them produce a wrong record, or lose work silently, which is the
+harder failure to notice because the run reports success.
+
+- [ ] `commit` Step 5's fence cannot commit any message containing an apostrophe  (issue #406)
+- [x] Step 7.0's collapse makes `commit`'s "already staged" branch unconditional, so any post-collapse tracked fix is dropped and the Step 4 gate has no slot to show it  (issues #479, #489)  (completed: 2026-08-19 — ADR-0158. Two field defects, one root cause: a mid-feature commit under a subject `_foreign` cannot attribute both aborted the collapse (#489) and, left unstaged instead, was silently dropped by `commit`'s scope rule (#479). Step 6 and Gate 5.06 now make no commit of their own; the collapse fence runs `git add -u` after its soft reset to sweep either into the one feature diff. `_foreign`'s allowlist untouched. Two behavioural assertions (SC11-SC12), one plant, `Z1` floor 11 → 13)
+- [ ] Express E4 and Hybrid H5 never commit the chain manifest at all  (issue #422)
+- [ ] an in-flight manifest turns CI red between Gate 4.0 and Step 7, and no ADR names the window  (issue #457)
+- [ ] the overwrite invariant lost its only backstop: 2.1.228 lets newer models Write over an unread file  (issue #436)
+- [ ] nothing gitignores `.claude/autopilot-state/`, so a run's transient state lands in the PR it opens  (issue #469)
+- [ ] Gate 0d's git auto-detect can never take Outcome A or B  (issue #407)
+- [ ] `autopilot` check 9 normalises every `PROJECT.md` line, so a table row collides with a 40-character feature slug  (issue #462)
+- [ ] the chain-history event log records shell tokens as manifest states, in 6 of 61 records  (issue #459)
+- [ ] `_issue-map.tsv`'s column order is documented in no consumer, and reading it wrong yields a plausible wrong answer  (issue #402)
+- [ ] ADR-0104's squash-merge premise is false: this repo merges with merge commits  (issue #413)
+
+*#479 was reproduced live on 2026-08-18 during the ADR-0154 chain: two orchestrator-side repairs were
+tracked-modified after the collapse and survived only because the operator had flagged the defect
+minutes earlier and the `--include` list was widened by hand (commit `a07f71d`).*
+
+### Phase 22 — the lanes the chain does not have (issues #378, #417, #418, #419, #420, #421, #440, #484)
+
+The only phase whose question is *what to build* rather than *what to repair*, and last for that
+reason: the value of a new lane depends on the reliability of the existing ones.
+
+- [ ] a wayfinding phase: nothing gets an idea from loose to formulable, and no entry point chooses between `concept-to-code`, `autopilot` and wayfinding  (issues #420, #421)
+- [ ] a launcher for the arming ritual — five preconditions checked by hand, each able to fail the run late; it must refuse with a named reason rather than fail mid-run, and must not be able to set the opt-in marker, grant TOFU trust or disarm the guard  (issue #484)
+- [ ] the tester brief specifies what to assert and never what a good assertion is  (issue #417)
+- [ ] context is instrumented and is never a decision: the chain names a phase boundary exactly once  (issue #418)
+- [ ] `Budget:` measures diff lines, and the axis that actually ends runs is context  (issue #419)
+- [ ] `usage-report.py` says sub-agent token cost is not observable, reads it anyway, and mixes it into the daily total unlabelled  (issue #378)
+- [ ] close #440 once the reverse check in Phase 16 is running and has reported once  (issue #440)

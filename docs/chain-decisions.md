@@ -4337,3 +4337,354 @@ Key architectural decisions:
   letting a green harness read as proof.
 
 Detail: `docs/architecture/ADR-0153-project-tasks-vendored-bilateral-ledger.md`.
+
+## Decisions from the spec-coverage-scope-back-reference chain (ADR-0154)
+
+`spec-coverage.sh`'s test axis is narrowed a second time: a discovered test file counts only when
+the plan names it **and** its own text names the plan or one of the ADRs the plan cites. Touched:
+`staging/plugin/skills/concept-to-code/scripts/spec-coverage.sh`, its harness, the frozen corpus
+baseline, and one clause in `staging/plugin/agents/architect.md`.
+
+Key architectural decisions:
+
+- **The exposure was measured twice, independently, before this was designed.** On the ADR-0153
+  plan, three harnesses cited as precedents carry seven ids inside that feature's own declared
+  range, and four reported COVERED while cited nowhere in its harness. A separate measurement the
+  day before, on a different feature, found 9 of 13 ids COVERED before implementation existed.
+- **Two designs were refused on measurement, not on taste.** Scoping to a plan's `Budget:` lines
+  would collapse 42 of 53 plans to an empty scope. Requiring the mention to sit in an id-mapping
+  comment header would flip most genuine coverage to uncovered — 87 of 893 mentions have that form
+  — which is the same wall ADR-0138 hit with its own candidate.
+- **The adopted rule loses nothing measured.** 94 of 263 scoped files drop out, all of them
+  precedent citations, and zero ids flip COVERED → UNCOVERED across 52 plans.
+- **An empty scope now has two causes with opposite policies.** Zero *candidates* keeps its
+  fallback, because it may be a broken derivation (rule 7). Zero *back-references* does not fall
+  back: half 1 resolved and half 2 rejected everything, so the zero is a finding. Falling back
+  there would silently restore the pre-ADR-0138 repo-wide scan.
+- **The denominator guard is corpus-level and lives in the harness, not the script.** Per run, zero
+  files passing half 2 is exactly the new legitimate state, so an in-script floor would fire on the
+  state the script exists to report. It is declared a vacuity guard at its site, because a floor
+  absorbs its own plant (rule 10); the regenerated per-row baseline is the real evidence.
+- **The producer-side convention is stated once, in the architect's output contract.** A plan names
+  the harness it creates; the harness names the plan or its ADR back. Rule 17: the producer and the
+  consumer are in two files, so the convention lives with the producer rather than in both.
+- **What it does not fix is stated rather than implied.** The same-file namespace collision
+  survives: 8 of this feature's own 12 ids reported COVERED before a line of work existed, every
+  one off a fixture token inside its own harness. The only candidate fixes are the ones ADR-0138
+  measured and refused.
+- **The feature's own SPEC blocked its own gate, and the block and the pass had the same cause.**
+  Three ids carrying `(no-test: …)` reported STALE-WAIVER because their tokens exist as heredoc
+  fixtures in the harness the plan names. Deleting the clauses cleared the block — and the same
+  fixture tokens then reported those three ids COVERED. The deletion is paired with existence-level
+  assertions for that reason; alone it converts a block into a false pass.
+
+Detail: `docs/architecture/ADR-0154-spec-coverage-scope-back-reference.md`.
+
+## Decisions from the compiled-language tester batch chain (ADR-0155)
+
+`concept-to-code`'s tester-before-coder ordering gains a third batch-boundary rule for compiled and
+type-checked languages: the tester's batch must leave the target building. Touched:
+`staging/plugin/skills/concept-to-code/SKILL.md` (the batching rules, the checkpoint classification,
+both tester dispatch briefs) and one clause in `staging/plugin/agents/architect.md`.
+
+Key architectural decisions:
+
+- **The ordering carried an assumption nobody wrote down.** ADR-0049 §D1 dispatches the tester first
+  so it is briefed from the specification and never from the implementation. That works because a
+  failing assertion still compiles — in bash. In Swift a test naming a type the coder has not written
+  does not fail, it stops the target from building, and then no assertion runs at all.
+- **The chain had no word for it, measured.** `grep -ci 'compil'` over the ~4200-line orchestrator
+  skill returned **0**: not in the tester brief, not in the batching rules, not in the checkpoint
+  classification. The machine was designed on an interpreted language and nothing stated what happens
+  elsewhere.
+- **The mechanism already permitted the fix; only the instruction was missing.**
+  `test-write-scope.sh` line 69 short-circuits on anything that is not the coder, so the tester was
+  always free to write an interface declaration on a production path. No hook changed.
+- **The rule is a precondition, not a third peer.** Violating the existing rule 1 makes an assertion
+  fail for the wrong reason, so the recorded RED proves nothing. Violating this one means there is no
+  recorded RED at all, and no checkpoint state describing what happened — a strictly larger loss.
+- **A fourth checkpoint state, because collapsing it is what stops the reading.** "The target did not
+  build" is not a red: the expected-red table cannot be checked, the controller-side count read has
+  nothing to read, and a real regression produces the same output as the intended state. Its remedy
+  is a batching correction, not a fix to the code under test.
+- **The separation caught the author.** The tester wrote all eight assertions from the requirements,
+  never from the prose. Five passed on first contact and three did not, and in every case the
+  assertion was right: `the coder owns the body` had been written as *the body is the coder's*,
+  `instruction, not an enforcement` as *instruction, not enforcement*, `already permits` as *already
+  free*, and `nothing blocks a dispatch` had been left out of the skill while the ADR said it. Four
+  drifts from the house form in four sites, none of which would have surfaced had the same author
+  written both halves.
+- **Two assertions are softer than they look, and it is recorded at the site rather than chased.**
+  `CB2` and `CB6` are ANDs whose second clause is already satisfied by pre-existing text, so a plan
+  duplicating one token without adding the statement would pass. Measured by the plant author:
+  removing one of two occurrences left each green, which is why both plants span the full range.
+  Tightening them would be an in-place assertion edit, invisible to every gate here (ADR-0148).
+
+Detail: `docs/architecture/ADR-0155-compiled-language-tester-batch.md`.
+
+## Decisions from the stop-gate distinct-failure budget chain (ADR-0156)
+
+`stop-gate.sh`'s anti-loop budget stops counting invocations and starts counting findings. Touched:
+`staging/plugin/scripts/stop-gate.sh` only, plus six behavioural assertions and their plants in
+ADR-0137's own harness.
+
+Key architectural decisions:
+
+- **The counter was written in two places and removed in none.** `$CF` is incremented inside
+  `emit_block` and again on the timeout path; the green path cleared the dirty marker and the output
+  file and left the counter alone. A session that reached the cap was disarmed *permanently*, and a
+  later green run did not restore it.
+- **5 of 16 sessions that ever blocked had reached the cap**, distributed `10 × 1`, `1 × 2`,
+  `5 × 3`. The shape is the argument: a session that blocks once is a real red, seen and fixed; the
+  five at the cap are the structurally red windows every tester-before-coder batch creates, which
+  spent the whole budget on repeats and then guarded nothing for the rest of the session.
+- **The budget is spent by distinct failures.** A failure whose output hashes to the signature
+  already recorded spends nothing and does not block — the operator has read it. A different one
+  still blocks and still spends, and that pairing is what stops the first half from being a bypass:
+  a real regression has a different signature by definition. The gate became louder about new
+  information and silent about old.
+- **The signature is the OUTPUT, never the exit code.** A suite failing two different assertions
+  exits `1` both times, so keying on the code would dedupe two findings into one and silently drop
+  the second — a false negative in the direction the gate exists to prevent.
+- **A green run now clears the counter and the signature**, so a verified tree refreshes the budget.
+- **The stand-down moved into the `reason`.** This file's own comment on the timeout path already
+  said why stderr is not enough — *a guard that stops guarding silently is this repository's
+  signature failure* — while the block path stood down just as quietly.
+- **The hook still learns nothing about the chain.** It reads only `$ROOT/.claude/`. #477's fourth
+  question, a declared expected-red set both this hook and the Step 5 checkpoint could read, stays
+  with #273: building it here is the one change that would make a project-owned hook depend on the
+  chain's shape. A forward guard drives two identical sessions, one carrying a decoy manifest that
+  declares the failure as expected, and requires the verdicts to match.
+- **Two assertions are not isolable and it is recorded rather than smoothed.** `SGP25` and `SGP26`
+  move together under any single-line mutation, because the count `SGP26` expects is defined against
+  the same counter `SGP25` requires to stay untouched. The alternative mutation that separates them
+  reaches `SGP28` instead — a worse entanglement, and one nobody had named.
+
+Detail: `docs/architecture/ADR-0156-stop-gate-distinct-failure-budget.md`.
+
+## Decisions from the cross-feature requirement-id collision chain (ADR-0157)
+
+`spec-coverage.sh`'s mention scan stops reading the whole tests-root. Touched:
+`staging/plugin/skills/concept-to-code/scripts/spec-coverage.sh`, the frozen corpus baseline
+`spec-coverage-scope-baseline.tsv`, and seven behavioural assertions with four plants in
+ADR-0138's own harness.
+
+Key architectural decisions:
+
+- **Requirement ids restart at R-01 in every SPEC, and the discovered population is the whole
+  tree.** Those two facts do not compose. A stranger's `R-13` satisfied the mention scan, so an
+  untested id reported `UNSCOPED` — "the test exists, name its file in your plan" — and the field
+  operator was left choosing between renumbering a released SPEC and waiving a requirement that
+  was simply not tested. CLAUDE.md rule 18 in its second form; ADR-0138 named the first.
+- **The false green nobody reported.** The same unfiltered population was copied *into scope* by
+  ADR-0138's `SCOPE-EMPTY` fallback, so a stranger's id could report `COVERED`, exit 0. Nobody
+  filed it, because nothing looks at a green.
+- **ADR-0154's key set cannot answer this question, measured.** Half 2 admits a file naming the
+  plan's basename *or any ADR the plan cites*: 39 to 61 of 98 files per feature, median 47. Half the
+  repository "names any feature back". Reusing it here moved **0 of 130** corpus rows — the fix
+  would have shipped green and inert. The plan basename alone is the opposite failure at **6 hits
+  across 16 pairs**. The feature's own issue number as a `#N` token lands at **1 to 11**, and it is
+  the token the house form already writes to say which feature a harness belongs to.
+- **Half 2 is a conjunct; this key set is not.** Half 1 does the discriminating for ADR-0154, so
+  half 2 can be generous. The ownership question has nothing to lean on, so its key set carries the
+  discrimination alone. Two key sets, two questions, said at both sites (rule 6 permits copies that
+  answer different questions and requires declaring it).
+- **Absence of a claim is not evidence of foreign ownership, and two existing assertions said so
+  before this paragraph was written.** The first implementation dropped every file that failed to
+  claim this feature; it produced the same 12 rows and turned `RS1` and `RX6` red, whose fixture is
+  a file the plan does not name and that claims *nobody* — ADR-0138's `UNSCOPED` state, whose remedy
+  is right. The shipped rule has three states, and all 12 flips rest on positive evidence: the file
+  claims a *different* feature.
+- **A file the plan names is in the population unconditionally.** Even dropped by half 2, even
+  claiming another feature. Telling that author to write a test that already exists two lines from
+  where their own plan points is the failure mode the union exists to avoid.
+- **The refusal token is not a prefix of the fallback token.** `SCOPE-FOREIGN-ONLY`, not
+  `SCOPE-EMPTY-OWNED`: a token that is a prefix of another is indistinguishable to every `grep -q`
+  already written against the shorter one, and two assertions branch on exactly that string. The
+  first draft named it the wrong way and would have made both of them lie.
+- **12 of 130 corpus rows move, 0 `COVERED` rows move in either direction.** No id loses coverage
+  and none gains it; what changes is which remedy the 12 are told to apply. The 12 are listed by
+  (spec, id) in the baseline's own dated block, each row carrying the reason in its annotation
+  column, and the three already classed `not-test-assertable` keep that class.
+- **Per-feature id namespacing is refused on cost, not on taste.** It was the field report's own
+  proposal. It touches the declaration predicate, the normaliser, ADR-0122's `strip_emphasis()`
+  shared by reader and repairer, ADR-0072's healer, both SPEC generators and 199+ ids in a closed
+  corpus rule 14 forbids rewriting — and buys nothing the bounded population does not close.
+- **A six-digit colour literal reads as a foreign claim.** Stated as a bound rather than left to be
+  rediscovered: it makes a verdict stricter, never laxer.
+
+Detail: `docs/architecture/ADR-0157-cross-feature-requirement-id-collision.md`.
+
+## Decisions from the Step 6 no-commit / collapse-sees-whole-feature chain (ADR-0158)
+
+Step 6 and Gate 5.06 stop committing their own corrections; Step 7.0's collapse fence gains a
+`git add -u` after its soft reset. Touched: `concept-to-code/SKILL.md` (the fence and two
+paragraphs), plus two behavioural assertions and one plant in ADR-0104's own harness.
+
+Key architectural decisions:
+
+- **One root cause, two field defects.** A Step 6 correction committed under a subject
+  `_foreign` cannot attribute aborted the whole Step 7.0 collapse (#489) — the guard did exactly
+  what it is for, refusing to fold a commit it could not attribute. A correction left uncommitted
+  and unstaged was silently dropped by `commit`'s own "already staged" branch, which only
+  *mentions* unstaged tracked changes as not included (#479). Both disappear once Step 6 and
+  Gate 5.06 make no commit of their own.
+- **Removing the cause, not widening the guard.** The other fix on the table was teaching
+  `_foreign` to recognise a Step 6/Gate 5.06 commit subject. Rejected: it keeps a mid-feature
+  commit that has to be specially recognised forever, for a case that has no reason to exist once
+  the commit itself is removed. `_foreign`'s allowlist is untouched.
+- **`git add -u`, never `git add -A`.** The exact scope `commit`'s own Step 1 already applies —
+  tracked modifications, deletions and renames only. `git add -A` would also stage whatever debris
+  the worktree-escape check (ADR-0068 §D11) exists to catch, and that boundary is pinned by its own
+  forward-guard assertion rather than left to be rediscovered.
+- **The reported count tells the two cases apart for free.** `COLLAPSED <n> <sha> staged=<k>`:
+  `<k>` is the post-`git add -u` total, so it reads `>= <n>`'s file count exactly when a
+  post-snapshot correction existed to sweep in, and equal to it otherwise — no second mechanism to
+  keep in sync with the first.
+- **A soft reset needed no new gate.** It changes nothing about the working tree or the index —
+  only the branch tip moves — so one more staging step ahead of it needed no gate of its own;
+  `commit`'s own Step 4 gate already shows the resulting diff before anything is written.
+- **A ledger of controller-side corrections was rejected on rule 6.** It would be a second record
+  of a fact the working tree already carries — which files changed — for no question the tree
+  cannot already answer.
+
+Detail: `docs/architecture/ADR-0158-step6-no-commit-collapse-sees-whole-feature.md`.
+
+## Decisions from the one-build-root / completion-fact-before-merge-back chain (ADR-0159)
+
+Two field defects sharing the same root cause: `isolation: worktree` bounds a dispatch's working
+directory, never a resource outside it. Touched: `staging/plugin/scripts/detect-test-cmd.sh`,
+`concept-to-code/SKILL.md` (a new pre-flight assertion and three reordered sequencing statements),
+plus five behavioural assertions and their plants in ADR-0068's own harness.
+
+Key architectural decisions:
+
+- **A worktree isolates cwd, not a build's output directory.** `detect-test-cmd.sh` generated
+  `xcodebuild` commands with no `-derivedDataPath`, so the build root was whatever the machine's
+  Xcode preference resolved to — one location shared by every checkout, worktrees included.
+  Reported live as a false red (an unsigned framework, a rerun); the direction that matters is the
+  opposite one, a stale product from a different build reporting green on a broken tree.
+- **The generator fix and the pre-flight gate answer two different populations.** D1 makes every
+  newly generated candidate carry `-derivedDataPath`; D2 catches the project whose `.claude/test-cmd`
+  was already approved before this ADR and will never be regenerated. Neither alone closes the field
+  case — the report came from an existing project.
+- **The completion-fact read and the merge-back were in the wrong order, and the ordering wasn't
+  written down anywhere as a decision — it just happened to be that way.** `dispatch-state.sh`
+  (ADR-0139) reads a marker the coder writes inside its own worktree, because the report itself
+  arrives too late to trust. The SKILL.md text read that marker *after* running the merge-back,
+  whose own last step, on success, deletes the very worktree holding it.
+- **Measured, not assumed, which of the two possible failures this is.** A scratch repo on git
+  2.50.1: a worktree whose only dirty content is gitignored is not "dirty" to `git worktree remove`
+  — it succeeds and deletes the whole tree, marker included. `dispatch-state.sh` then correctly
+  reports `NONE` for a directory that no longer exists, and `NONE` is wired to `HALT`. So the
+  manifestation on a healthy batch is a **spurious halt**, not a silent stale-read pass — the safer
+  of the two directions, and still a defect that would stop every clean run.
+- **The helper's own contract did not move.** `dispatch-state.sh` answers correctly for the
+  directory it is handed; the question was being asked at the wrong point in the sequence. Teaching
+  it to distinguish "never existed" from "existed and was removed" was rejected (A2) as a second
+  record of a fact the filesystem is supposed to be the sole source of.
+- **Three independently-worded prose sites carry the reordering, not one shared assertion.** The
+  coder-dispatch instruction, the completion-gate fence's lead-in, and the post-fence HALT branch
+  each state the "read before remove" rule in their own words, so a reader who only sees one of the
+  three still gets the invariant right. Stated as a disclosed limit rather than left implicit: none
+  of `dispatch-state.sh`'s tokens can mechanically catch a future edit that puts the merge-back back
+  in front — the assertions pin the wording, not the sequencing enforced.
+- **The assertion-count floor was re-derived twice in the same file, not incremented by feel.**
+  98 → 101 (Section M's first three assertions, issue #488) → 103 (M4/M5, issue #494) — each bump
+  computed against the actual pre-mutation total rather than assumed, per rule 10.
+
+Detail: `docs/architecture/ADR-0159-one-build-root-completion-fact-before-merge-back.md`.
+
+## Decisions from the hash-not-comment / extension-not-view chain (ADR-0160)
+
+Two detectors trusting a file's surface shape instead of its content, plus the forward guard that
+change collided with. Touched: `weakening-scan.sh`, a new `ui-file-detect.sh`, `concept-to-code`'s
+Gate 5.05 trigger, and `project-ci-checks.test.sh`'s CE section — nine behavioural assertions
+across three harnesses, six plants.
+
+Key architectural decisions:
+
+- **`#` is a comment leader in Python; in Swift it opens a macro.** Every Swift Testing assertion —
+  `#expect(...)`, `#require(...)` — starts with the character the body scan treated as a universal
+  comment leader. Reported: 32 false `zero-assertion-test` findings against 12 real assertions in
+  one file, all eleven repeats landing on the file that actually had coverage.
+- **An allowlist, not a denylist, and the reason is stated rather than assumed.** Naming "languages
+  where `#` is not a comment" would leave every language absent from that list mis-scanned too, just
+  unmeasured. `is_hash_comment_lang()` names the languages where `#` IS a comment instead, and
+  `.swift` is deliberately absent from it.
+- **A `.swift` extension is not "this diff touched a view."** Gate 5.05's trigger was a bare
+  extension match; a model, a service, a parser are all `.swift` and none is a view. Reported: a
+  feature with no view and no `import SwiftUI` anywhere in its diff still ran the UI audit and
+  recorded a checklist about work that did not exist.
+- **The web extensions stay extension-only, on purpose — narrowing them would be guessing.** No
+  measured false positive exists for `.html`/`.css`/`.tsx`/`.jsx`/`.vue` here; only `.swift` gets a
+  content check, because only `.swift` has a measured false-positive shape (a non-UI Swift file) to
+  correct.
+- **The same shape `detect-macos.sh` already established (ADR-0093): a keyword counts only near its
+  evidence.** `.swift` needs an import of a UI framework or a declaration conforming to a UI type in
+  its OWN content, not merely its extension.
+- **The forward guard this change collided with was narrower in intent than in its literal
+  wording, and the user chose to narrow it again rather than revert the fix.** ADR-0054's CE section
+  says no vendored check script may have an executable-line change — full stop, "if this goes RED,
+  revert the script, never relax this assertion" written directly into the test. ADR-0054's actual
+  constraint (§D1) was that the CI-wrapping feature must not achieve fail-closed by baking posture
+  into the scripts; it was never a permanent freeze against a script's own correctness fixes. Already
+  narrowed once before, for comment-only changes (ADR-0073 §D4) — this is the same move made again,
+  for a different class.
+- **The exemption is declared AND content-verified, not a standing grant.** `CE_EXEMPT_weakening_scan_sh="472"`
+  passes CE only when the live diff itself cites `#472` as a standalone token — re-checked on every
+  run. A later, unrelated edit to the same script that does not cite the issue is not covered by a
+  stale table entry. Explicitly not a widened union (ADR-0044's refused shape): per-file, per-issue,
+  content-checked.
+- **A needle must never embed the plant declaration's own field delimiter.** AIJ1's first plant
+  needle contained a literal ` | ` (the shell pipe in the invocation it was targeting), which
+  silently mis-split the declaration into extra fields and produced a no-op mutation — caught only
+  by manual inspection, since the probe reported "did not fire" rather than an error. Recorded as a
+  needle-authoring lesson, not just a fixed instance.
+- **Two pairs of assertions are documented as not isolable, the same precedent CB2/CB6 and
+  SGP25/SGP26 already set.** AIJ4 and AIJ5 each exercise a fixture that satisfies two of
+  `is_ui_swift()`'s three independently-sufficient checks at once by realistic construction (a real
+  SwiftUI view both imports SwiftUI and declares `: View`), so no single-line mutation isolates
+  either check alone — AIJ3's plant already pins the mechanism gating all three.
+
+Detail: `docs/architecture/ADR-0160-hash-not-comment-in-swift-extension-not-view.md`.
+
+## Decisions from the stop-gate fingerprint-cache chain (ADR-0161)
+
+`stop-gate.sh` stops re-running a suite against a tree nothing has touched since the last run.
+Touched: `staging/plugin/scripts/stop-gate.sh` only, plus five behavioural assertions and one plant
+in ADR-0137's own harness.
+
+Key architectural decisions:
+
+- **ADR-0156's de-dup happens after the cost is already paid.** Spending the budget on distinct
+  failures rather than repeats still requires running the suite once to learn a failure is a repeat.
+  Reported live: a Stop fires on every turn spent waiting on an async dispatch, not only at a batch
+  boundary, and each one re-ran the whole suite at this repository's 300s ceiling against a tree
+  nothing had touched since the previous run.
+- **The fingerprint is over the tree's own state, never the dirty marker alone.**
+  `git status --porcelain` (what changed) plus `git diff HEAD` (what it changed to), both read at
+  `$ROOT`. `mark-dirty.sh` only appends and never truncates, so its marker cannot tell "touched
+  again with no new content" from "touched with new content" — exactly the ambiguity a content hash
+  resolves and a marker cannot.
+- **Not git means not cached, and the direction is fail-toward-running** — ADR-0055 §D2's
+  strict-unknown convention (absent/unreadable resolves to the STRICTEST behavior, not the lightest)
+  applied to a new question. An unreadable git state leaves the fingerprint empty, which can never
+  match a stored one, so the suite always runs when the state cannot be read. There is no path
+  through an unknown fingerprint to a skipped suite.
+- **The cache skips the re-run, never the decision.** A cache hit still emits the exact block verdict
+  the original run produced, still spends the ADR-0156 budget as if the suite had run again — because
+  from the budget's perspective, the fingerprint match IS proof it would have. Skipping the re-run
+  without also replaying the decision would have been silent tolerance.
+- **125/126/127 are deliberately never cached.** They fail instantly by construction — the file's own
+  prior comment already said so — so there is no wall-clock cost caching would save, only bookkeeping
+  for a case that never benefits.
+- **A green run clears the cache along with everything else it already clears (extends ADR-0156
+  §D3).** Left behind, a stale fingerprint would let a LATER dirty state that happens to hash
+  identically — the same edit made twice across a session — replay a verdict from a cycle the green
+  run already closed.
+- **The disclosed limit is the same one ADR-0156 already accepted, in the same direction, not a new
+  one.** A suite whose own output varies run to run hashes the same tree and reuses a stale rc; this
+  is stated as the same class of limit signature-equality already carried, not discovered later.
+
+Detail: `docs/architecture/ADR-0161-stop-gate-fingerprint-cache.md`.

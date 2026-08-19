@@ -7,15 +7,38 @@
 #   exit 0  every declared ID covered, OR the SPEC declares no IDs (backward compatibility)
 #   exit 1  at least one declared ID uncovered           stdout: UNCOVERED<TAB>R-NN<TAB>plan|tests|plan,tests
 #                                                                 OR UNSCOPED<TAB>R-NN<TAB><scope-size> — the
-#                                                                 id is mentioned somewhere in the discovered
-#                                                                 test population but not in a file the --plan
-#                                                                 names (ADR-0138 §D1/§D3, issue #312); a
-#                                                                 different remedy, the SAME exit, no new code
+#                                                                 id is mentioned in a discovered test file
+#                                                                 that CLAIMS THIS FEATURE but that the
+#                                                                 --plan does not name (ADR-0138 §D1/§D3,
+#                                                                 issue #312; population corrected by
+#                                                                 ADR-0157, issue #487); a different remedy,
+#                                                                 the SAME exit, no new code
+#
+# THE SCOPE FILTER IS A CONJUNCTION (ADR-0154): a discovered test file the plan names (half 1) must
+# ALSO name this feature back — the plan's own basename or one of the ADR-NNNN ids the plan cites
+# (half 2) — or it is dropped as a precedent citation, never re-admitted. stderr gains a SECOND
+# empty-scope token, told apart from the first: SCOPE-EMPTY (unchanged) means the plan names no
+# discovered test file at all and falls back to the unscoped population; SCOPE-NO-BACKREF (new)
+# means the plan names one or more discovered test files and NONE names this feature back — a
+# finding, not a vacuity, so it does NOT fall back; the scope stays empty. No new exit code, no new
+# stdout token — the affected ids report their ordinary UNSCOPED verdict either way.
 #   exit 2  invalid invocation, unreadable file           stdout: nothing
 #   exit 3  structural error in the SPEC or the plan       stdout: DUPLICATE / MALFORMED / ORPHAN lines
 #                                                                 OR STALE-WAIVER<TAB>R-NN — a (no-test: …)
 #                                                                 exemption whose id IS found in the scoped
 #                                                                 test set (ADR-0138 §D4, issue #312, Task 5)
+#
+# TWO MORE POPULATIONS ARE BOUNDED BY OWNERSHIP (ADR-0157, issue #487). ADR-0154's half 2 applies to
+# the SCOPED set alone, so the two questions asked of the UNFILTERED discovered population — "is this
+# id mentioned anywhere?" (UNSCOPED vs UNCOVERED) and "what do we fall back to when the plan names no
+# test file?" (SCOPE-EMPTY) — were both answered by a population that holds every OTHER feature's
+# tests. Requirement ids restart per feature, so a stranger's `R-13` mislabelled an untested id as
+# UNSCOPED in the first case and as COVERED in the second. Both now read the OWNED population: the
+# discovered files that claim this feature, by $OWN_RE (its own key set, and the measurement that
+# separates it from half 2's is at its definition). A third stderr empty-scope token follows,
+# SCOPE-EMPTY-OWNED — the plan names no discovered test file AND some file claims this feature, so the
+# fallback narrows to those instead of to everything. SCOPE-EMPTY keeps its name and its
+# full-population fallback for the case where nothing claims this feature at all.
 #
 # THE ADR-NNNN BOUNDARY (ADR-0048 §D2), THE LOAD-BEARING DETAIL.
 # `R-[0-9][0-9]` alone matches 30+ of the 34 SPECs in this repository, every hit coming from the
@@ -365,8 +388,86 @@ if [ -n "$TROOT" ]; then
   DISCOVERED_N=$(count_re . "$TESTFILES")
 fi
 
-# --- scope filter (ADR-0138 §D1-§D3, issue #312): the test axis is narrowed to the test files the
-# PLAN itself names, not the whole discovered population above.
+# --- back-reference key set (ADR-0154 §D1). Built ONCE per run, BEFORE the scope loop below: the
+# plan's own basename (WITH its .md extension, escaped exactly like the basename half below escapes
+# its own candidate) OR every ADR-NNNN id $PLAN cites — exactly four digits, found with the SAME
+# both-sides-anchored token scan this file already uses for R-NN (left (^|[^A-Za-z0-9_]), right
+# ([^0-9]|$)) — not read from a designated header line. De-duplicated, assembled into ONE ERE
+# alternation anchored (^|[^A-Za-z0-9_])(…)([^A-Za-z0-9_]|$) — the SAME word-boundary anchor pair the
+# basename half below already uses. This is what half 2 of the scope filter tests a candidate file's
+# OWN text against — see the disclosure at the filter's own site below.
+PLAN_BN="${PLAN##*/}"
+PLAN_BN_ESC=$(printf '%s' "$PLAN_BN" | sed 's/[][\.^$*+?(){}|]/\\&/g')
+BACKREF_ADRS="$TMPD/backref_adrs.txt"; : >"$BACKREF_ADRS"
+cat >"$TMPD/backref_adr_scan.awk" <<'AWKEOF'
+# Same scan-anywhere shape as extract_tokens() below for R-NN, applied to ADR-NNNN (four digits, not
+# two) and to the WHOLE $PLAN — not gated by is_task_line(), because half 2's key set is drawn from
+# every ADR citation in the plan's prose, not only its task lines (ADR-0154 §D1).
+function extract_adr_ids(l,    i, p, pos, cb, leftok, d1, d2, d3, d4, after, rightok) {
+  i = 1
+  while (1) {
+    p = index(substr(l, i), "ADR-")
+    if (p == 0) break
+    pos = i + p - 1
+    if (pos == 1) leftok = 1
+    else {
+      cb = substr(l, pos - 1, 1)
+      leftok = (cb !~ /[A-Za-z0-9_]/)
+    }
+    d1 = substr(l, pos + 4, 1); d2 = substr(l, pos + 5, 1)
+    d3 = substr(l, pos + 6, 1); d4 = substr(l, pos + 7, 1)
+    if (leftok && d1 ~ /[0-9]/ && d2 ~ /[0-9]/ && d3 ~ /[0-9]/ && d4 ~ /[0-9]/) {
+      after = substr(l, pos + 8, 1)
+      rightok = (after == "" || after !~ /[0-9]/)
+      if (rightok) print substr(l, pos, 8) >> ADR_FILE
+    }
+    i = pos + 4
+  }
+}
+{ extract_adr_ids($0) }
+AWKEOF
+awk -v ADR_FILE="$BACKREF_ADRS" -f "$TMPD/backref_adr_scan.awk" "$PLAN"
+BACKREF_ADRS_UNIQ="$TMPD/backref_adrs_uniq.txt"
+sort -u "$BACKREF_ADRS" >"$BACKREF_ADRS_UNIQ" 2>/dev/null || : >"$BACKREF_ADRS_UNIQ"
+
+BACKREF_KEYS="$PLAN_BN_ESC"
+if [ -s "$BACKREF_ADRS_UNIQ" ]; then
+  while IFS= read -r _adr; do
+    [ -n "$_adr" ] || continue
+    BACKREF_KEYS="${BACKREF_KEYS}|${_adr}"
+  done <"$BACKREF_ADRS_UNIQ"
+fi
+BACKREF_RE="(^|[^A-Za-z0-9_])(${BACKREF_KEYS})([^A-Za-z0-9_]|\$)"
+
+# --- the OWNERSHIP key set (ADR-0157 §D1, issue #487) — a SECOND key set, for a SECOND question, and
+# the measurement is why it is not the one above.
+#
+# $BACKREF_RE answers "may this plan-named file be counted as coverage?" and it is a CONJUNCT: half 1
+# (the plan names the file) does the discriminating, so half 2 can afford to be generous. The question
+# below has no conjunct to lean on — "does this file, which the plan does NOT name, nevertheless
+# belong to this feature?" — so its key set must carry the discrimination alone.
+#
+# MEASURED on this repository's 15-pair corpus (98 discovered test files, 2026-08-19), which is what
+# ruled out reusing $BACKREF_RE here: it admits 39-61 files per feature, a median of 47 of 98, because
+# harnesses identify themselves by ADR id and a plan cites its precedents' ADRs as well as its own.
+# Half the repository "names any feature back". The plan basename ALONE is the opposite failure: 6
+# hits across all 15 pairs, since a harness essentially never cites its plan's filename. The feature's
+# own ISSUE NUMBER as a `#N` token lands between them at 1-11 files per feature, and it is the token
+# the house form already uses ("issue #404") to say which feature a harness belongs to.
+#
+# Derived from the filenames, never from a header line: the plan's `YYYY-MM-DD-<N>-` prefix first,
+# then the SPEC's leading `<N>-`. Absent from both, the key set is the plan basename alone — the
+# narrow direction, and the fallback below declares what that costs.
+OWN_KEYS="$PLAN_BN_ESC"
+OWN_NUM=$(printf '%s' "$PLAN_BN" | sed -n 's/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-\([0-9][0-9]*\)-.*/\1/p')
+if [ -z "$OWN_NUM" ]; then
+  OWN_NUM=$(printf '%s' "${SPEC##*/}" | sed -n 's/^\([0-9][0-9]*\)-.*/\1/p')
+fi
+[ -n "$OWN_NUM" ] && OWN_KEYS="${OWN_KEYS}|#${OWN_NUM}"
+OWN_RE="(^|[^A-Za-z0-9_])(${OWN_KEYS})([^A-Za-z0-9_]|\$)"
+
+# --- scope filter (ADR-0138 §D1-§D3, issue #312; ADR-0154 §D1 narrows it further): the test axis is
+# narrowed to the test files the PLAN itself names, not the whole discovered population above.
 #
 # THE DEVIATION FROM SPEC OBJECTIVE 2, DISCLOSED HERE (CLAUDE.md rule 12 — a later assertion about
 # this filter must anchor on the TESTFILES_SCOPED code below, never on this prose alone, which a
@@ -377,16 +478,65 @@ fi
 # #404's 45 in-scope mentions are ALL comments (45 of 45) — the comment header is this harness's
 # idiomatic requirement-to-assertion map. No comment-versus-assertion distinction is implemented
 # here, by decision. What tightens the gate instead is SCOPE: a discovered test file counts only
-# when its own basename is a whole token somewhere in $PLAN.
+# when its own basename is a whole token somewhere in $PLAN — AND (ADR-0154 §D1, half 2 below) its
+# own text names this feature back. Half 2 is a CONJUNCT on the candidates half 1 already admitted,
+# never a second, independent discovery rule (CLAUDE.md rule 6, ADR-0086) — a file half 1 rejects is
+# never reached by half 2 at all, and $TESTFILES_SCOPED is still the ONE definition of "in scope".
 #
 # ONE definition of "what is a test file" (CLAUDE.md rule 6, ADR-0086): this FILTERS $TESTFILES, it
 # never re-derives the discovery predicate above. The .md exclusion stays closed for free — $TESTFILES
 # is already post-exclusion, so no .md can enter scope through this filter (RS5).
 TESTFILES_SCOPED="$TMPD/testfiles_scoped.txt"; : >"$TESTFILES_SCOPED"
+HALF2_DROPPED="$TMPD/half2_dropped.txt"; : >"$HALF2_DROPPED"
+# THE OWNED POPULATION (ADR-0157 §D1, issue #487) — the discovered files that claim THIS feature by
+# $OWN_RE, whether or not the plan names them. It is what tells UNSCOPED from UNCOVERED below, and it
+# exists because asking that question of the unfiltered population was rule 18 in its second form: a
+# requirement-id namespace restarts per feature, so a STRANGER'S committed `R-13` made this feature's
+# untested `R-13` report UNSCOPED ("name the file in your plan") instead of UNCOVERED ("write the
+# test") — measured in the field, where the only remedies left were renumbering a released SPEC or
+# writing a waiver for a requirement that was simply untested. Measured again on this repository's own
+# corpus afterwards: the class is here too, and the count is in ADR-0157.
+TESTFILES_OWNED="$TMPD/testfiles_owned.txt"; : >"$TESTFILES_OWNED"
+HALF1_FILES="$TMPD/half1_files.txt"; : >"$HALF1_FILES"
+FOREIGN_CLAIMED="$TMPD/foreign_claimed.txt"; : >"$FOREIGN_CLAIMED"
+TESTFILES_UNCLAIMED="$TMPD/testfiles_unclaimed.txt"; : >"$TESTFILES_UNCLAIMED"
+# Declared out here, beside the populations they are derived from, because the summary line and the
+# UNSCOPED predicate read them on EVERY path — including a run with no --tests-root, where the loop
+# that fills them never executes. Under `set -u` a declaration left inside that loop is a fatal error
+# on exactly the invocation that skips it.
+UNSCOPED_POP="$TMPD/unscoped_pop.txt"; : >"$UNSCOPED_POP"
+FOREIGN_CLAIMED_N=0
+HALF1_N=0
 if [ -n "$TROOT" ] && [ -s "$TESTFILES" ]; then
   while IFS= read -r _f; do
     [ -n "$_f" ] || continue
     _bn="${_f##*/}"
+    # The ownership test, evaluated for EVERY discovered file — including the ones half 1 rejects,
+    # which is the whole point: those are where an unlisted test of this feature hides. $BACKREF_RE
+    # (half 2) is evaluated where it always was, inside the half-1 branch below, and neither predicate
+    # reads the other's population.
+    #
+    # THREE STATES, NOT TWO, and the third is why this is not a default (ADR-0157 §D1). A file that
+    # does not claim THIS feature may still be nobody's: the original UNSCOPED state (ADR-0138 §D3)
+    # was "mentioned in the discovered population but not in a file the plan names", and its remedy
+    # — cite the file from your plan — is right for a test that claims nothing. Turning every such
+    # file into evidence of UNCOVERED would have been a guess dressed as a rule; two assertions
+    # written for ADR-0138 (RS1, RX6) said so before this comment was written.
+    #   owned           carries $OWN_RE           -> in the unscoped-question population
+    #   foreign-claimed carries some OTHER #<n>    -> OUT of it: its R-NN belongs to that feature's
+    #                                                own numbering, which restarts at R-01
+    #   unclaimed       carries no #<n> at all     -> in it, unchanged from ADR-0138
+    # The claim token is the bare `#<digits>` the house form already writes ("issue #404", "(#487)").
+    # BOUND, stated rather than discovered later: a six-digit colour literal (`#404040`) reads as a
+    # foreign claim. It excludes that file from the population, which makes a verdict STRICTER, never
+    # laxer, and a colour literal in a test file is not a requirement-id mention either way.
+    if grep -qE "$OWN_RE" "$_f" 2>/dev/null; then
+      printf '%s\n' "$_f" >>"$TESTFILES_OWNED"
+    elif grep -qE "(^|[^A-Za-z0-9_])#[0-9][0-9]*([^0-9]|\$)" "$_f" 2>/dev/null; then
+      printf '%s\n' "$_f" >>"$FOREIGN_CLAIMED"
+    else
+      printf '%s\n' "$_f" >>"$TESTFILES_UNCLAIMED"
+    fi
     # Whole-token basename match, both sides anchored the SAME way the R-NN token regex is
     # (grep_boundary_test() below): (^|[^A-Za-z0-9_]) … ([^A-Za-z0-9_]|$). A basename contains "."
     # and "-", so a bare `grep -F` on it also matches a longer basename that merely CONTAINS it as a
@@ -394,20 +544,95 @@ if [ -n "$TROOT" ] && [ -s "$TESTFILES" ]; then
     # mention) — the basename is regex-escaped and searched with the anchor pair instead.
     _esc=$(printf '%s' "$_bn" | sed 's/[][\.^$*+?(){}|]/\\&/g')
     if grep -qE "(^|[^A-Za-z0-9_])${_esc}([^A-Za-z0-9_]|\$)" "$PLAN" 2>/dev/null; then
-      printf '%s\n' "$_f" >>"$TESTFILES_SCOPED"
+      HALF1_N=$((HALF1_N + 1))
+      # Half 1's members are recorded as their own list, not recovered later by concatenating
+      # $TESTFILES_SCOPED and $HALF2_DROPPED: the fallback below OVERWRITES $TESTFILES_SCOPED, so a
+      # union taken after it would silently pick up the fallback population instead of half 1.
+      printf '%s\n' "$_f" >>"$HALF1_FILES"
+      # Half 2 (ADR-0154 §D1): the file half 1 just admitted must ALSO name this feature back — its
+      # OWN text names the plan's basename or one of the ADR ids the plan cites ($BACKREF_RE, built
+      # above). A precedent citation (a harness the plan names for an unrelated reason) fails this
+      # and is dropped — it was discovered and it passed half 1, it just does not claim this feature.
+      if grep -qE "$BACKREF_RE" "$_f" 2>/dev/null; then
+        printf '%s\n' "$_f" >>"$TESTFILES_SCOPED"
+      else
+        printf '%s\n' "$_f" >>"$HALF2_DROPPED"
+      fi
     fi
   done <"$TESTFILES"
-  # D2 — the denominator guard (CLAUDE.md rule 7, ADR-0085). Zero MATCHES can be a correct scope
-  # (RS3: the id is absent everywhere); zero CANDIDATES out of a non-empty discovered population is
-  # a broken derivation, and from outside the two look identical. Fail open and visible, matching
-  # the gate's existing exit-2 philosophy (CLAUDE.md rule 4) — never a silent wall of UNSCOPED lines.
+  # THE POPULATION THE UNSCOPED-VS-UNCOVERED QUESTION IS ASKED OF (ADR-0157 §D1): half 1 UNION owned.
+  # Not "owned" alone, which is where this fix first went and where six assertions caught it. The two
+  # members answer the same question from opposite ends, and either one alone loses a real state:
+  #
+  #   half 1 (the PLAN names the file) — ADR-0154 drops such a file from SCOPE when it does not name the
+  #   feature back, and UNSCOPED's remedy, "add the plan basename or a cited ADR id to it", is exactly
+  #   right for it. Reading only the owned population would tell that author to write a test that is
+  #   already written, two lines from where the plan points.
+  #
+  #   owned ($OWN_RE) — a test of this feature the plan simply never names. Half 1 cannot see it.
+  #
+  #   unclaimed — a test file that claims no feature at all. ADR-0138's state, kept as it was.
+  #
+  # What falls OUTSIDE the union is the whole defect, and it is identified by POSITIVE evidence rather
+  # than by absence: a file that the plan does not name, that does not claim this feature, and that DOES
+  # claim another one. Its matching `R-13` belongs to that feature's numbering, which restarts at R-01
+  # exactly like this one's.
+  cat "$HALF1_FILES" "$TESTFILES_OWNED" "$TESTFILES_UNCLAIMED" 2>/dev/null | sort -u >"$UNSCOPED_POP"
+  FOREIGN_CLAIMED_N=$(count_re . "$FOREIGN_CLAIMED")
+
+  # D2 — the denominator guard (CLAUDE.md rule 7, ADR-0085), now TWO causes, told apart (ADR-0154
+  # §D2). Zero MATCHES can be a correct scope (RS3: the id is absent everywhere); zero CANDIDATES out
+  # of a non-empty discovered population is a broken derivation, and from outside the two look
+  # identical. Fail open and visible, matching the gate's existing exit-2 philosophy (CLAUDE.md rule
+  # 4) — never a silent wall of UNSCOPED lines.
   if [ ! -s "$TESTFILES_SCOPED" ]; then
-    printf '%s: SCOPE-EMPTY — the plan names no discovered test file at all (tests-root=%s, %d file(s) discovered); falling back to the unscoped test population for this invocation\n' \
-      "$SELF" "$TROOT" "$DISCOVERED_N" >&2
-    cat "$TESTFILES" >"$TESTFILES_SCOPED"
+    if [ "$HALF1_N" -gt 0 ]; then
+      # SCOPE-NO-BACKREF (new, ADR-0154 §D2): half 1 matched one or more files and half 2 dropped
+      # ALL of them. Nothing here is broken — the derivation resolved and its answer is that no file
+      # the plan names claims this feature. A finding, not a vacuity: unlike SCOPE-EMPTY below, this
+      # does NOT fall back — the scope stays empty and ids mentioned only in the dropped file(s)
+      # report their ordinary UNSCOPED verdict.
+      _dropped_bns=$(sed -n '1,3p' "$HALF2_DROPPED" 2>/dev/null | while IFS= read -r _d; do printf '%s ' "${_d##*/}"; done)
+      _dropped_bns=${_dropped_bns% }
+      if [ -s "$BACKREF_ADRS_UNIQ" ]; then
+        _adr_list=$(tr '\n' ',' <"$BACKREF_ADRS_UNIQ" | sed 's/,$//; s/,/, /g')
+        printf '%s: SCOPE-NO-BACKREF — the plan names %d discovered test file(s) but none names this feature back (tests-root=%s, %d file(s) discovered); dropped: %s; remedy: add %s or one of %s to one of them\n' \
+          "$SELF" "$HALF1_N" "$TROOT" "$DISCOVERED_N" "$_dropped_bns" "$PLAN_BN" "$_adr_list" >&2
+      else
+        printf '%s: SCOPE-NO-BACKREF — the plan names %d discovered test file(s) but none names this feature back (tests-root=%s, %d file(s) discovered); dropped: %s; remedy: add %s to one of them\n' \
+          "$SELF" "$HALF1_N" "$TROOT" "$DISCOVERED_N" "$_dropped_bns" "$PLAN_BN" >&2
+      fi
+    elif [ ! -s "$UNSCOPED_POP" ] && [ -s "$FOREIGN_CLAIMED" ]; then
+      # SCOPE-FOREIGN-ONLY (ADR-0157 §D2, issue #487) — the plan names no discovered test file AND
+      # every discovered file claims a DIFFERENT feature. This is the state the old unconditional
+      # fallback got dangerously wrong: it copied the whole population into scope, so a stranger's
+      # `R-13` reported COVERED. A false green — and unlike the mislabelled UNSCOPED, nobody reported
+      # this one, because nothing looks at a green. A finding, not a vacuity, so it does NOT fall
+      # back; the scope stays empty and the ids report UNCOVERED. Its own token, not a SCOPE-EMPTY
+      # suffix: a token that is a PREFIX of another is indistinguishable to every `grep -q` already
+      # written against the shorter one.
+      printf '%s: SCOPE-FOREIGN-ONLY — the plan names no discovered test file and all %d discovered file(s) claim another feature; NOT falling back (tests-root=%s)\n' \
+        "$SELF" "$FOREIGN_CLAIMED_N" "$TROOT" >&2
+    else
+      # SCOPE-EMPTY (ADR-0138 §D2) keeps its name, its exit path and its fallback. What ADR-0157
+      # changes is WHICH population it falls back to: the files that could belong to this feature
+      # (half 1, plus the ones claiming it, plus the ones claiming nobody) instead of every test file
+      # in the tree. On a project where no file claims anything — the common case outside this
+      # repository — the two are the same set, which is why no existing assertion moves.
+      printf '%s: SCOPE-EMPTY — the plan names no discovered test file at all (tests-root=%s, %d file(s) discovered); falling back to the %d file(s) that could belong to this feature for this invocation\n' \
+        "$SELF" "$TROOT" "$DISCOVERED_N" "$(count_re . "$UNSCOPED_POP")" >&2
+      cat "$UNSCOPED_POP" >"$TESTFILES_SCOPED"
+    fi
   fi
 fi
 SCOPE_N=$(count_re . "$TESTFILES_SCOPED")
+HALF2_DROPPED_N=$(count_re . "$HALF2_DROPPED")
+# The owned population's own count, on the summary line below rather than only inside a branch: zero
+# of it with a non-empty discovered population is a legitimate state (a feature whose tests never name
+# it) but it is also the state in which every id can only ever report UNCOVERED, so it must be
+# readable without reproducing the run (CLAUDE.md rule 7's visibility half).
+OWNED_N=$(count_re . "$TESTFILES_OWNED")
+UNSCOPED_POP_N=$(count_re . "$UNSCOPED_POP")
 
 grep_boundary_test() {
   _id="$1"
@@ -415,13 +640,20 @@ grep_boundary_test() {
   tr '\n' '\0' <"$TESTFILES_SCOPED" | xargs -0 grep -qE "(^|[^A-Za-z0-9_])${_id}([^0-9]|\$)" 2>/dev/null
 }
 
-# The unscoped counterpart — reads the FULL discovered population ($TESTFILES), unfiltered. Used
-# only to tell UNCOVERED (mentioned nowhere in the discovered population) apart from UNSCOPED
-# (mentioned, but not in a file the plan names) — ADR-0138 §D3's two-row table.
-grep_boundary_test_all() {
+# The unscoped counterpart — reads $UNSCOPED_POP, the half-1 ∪ owned union built above: every
+# discovered file that either the plan names or that claims this feature. Used only to tell UNCOVERED
+# apart from UNSCOPED — ADR-0138 §D3's two-row table, with ADR-0157 §D1's correction to WHICH
+# population that question is asked of.
+#
+# It read the FULL discovered population until issue #487, and the name said so. That is why it is
+# renamed rather than quietly repointed: a helper called `_all` that reads a filtered set is the kind
+# of half-true name a later reader trusts. Both halves of the answer now come from files that claim
+# this feature, so the two verdicts finally mean what their remedies say — UNSCOPED "this feature has
+# a test for it, name the file in your plan", UNCOVERED "no test of this feature mentions it".
+grep_boundary_test_claimed() {
   _id="$1"
-  [ -s "$TESTFILES" ] || return 1
-  tr '\n' '\0' <"$TESTFILES" | xargs -0 grep -qE "(^|[^A-Za-z0-9_])${_id}([^0-9]|\$)" 2>/dev/null
+  [ -s "$UNSCOPED_POP" ] || return 1
+  tr '\n' '\0' <"$UNSCOPED_POP" | xargs -0 grep -qE "(^|[^A-Za-z0-9_])${_id}([^0-9]|\$)" 2>/dev/null
 }
 
 OUT="$TMPD/out.txt"; : >"$OUT"
@@ -453,7 +685,7 @@ while IFS="$TAB" read -r id _text; do
   elif [ -n "$TROOT" ]; then
     if grep_boundary_test "$id"; then
       :
-    elif grep_boundary_test_all "$id"; then
+    elif grep_boundary_test_claimed "$id"; then
       # D3: mentioned somewhere in the discovered population, but not in scope. A distinct token on
       # the SAME exit-1 channel (no new exit code) — the remedy differs from UNCOVERED's ("write a
       # test") because a test already exists; it just isn't cited from the file this feature wrote.
@@ -488,8 +720,8 @@ cat "$OUT"
 TROOT_DESC="not-checked"
 [ -n "$TROOT" ] && TROOT_DESC="$TROOT"
 if [ -n "$TROOT" ]; then
-  printf '%s: %d id(s) declared, %d covered, %d uncovered, %d unscoped, tests-root=%s, %d test file(s) discovered, %d in scope\n' \
-    "$SELF" "$DECL_N" "$COV_N" "$UNCOV_N" "$UNSCOPED_N" "$TROOT_DESC" "$DISCOVERED_N" "$SCOPE_N" >&2
+  printf '%s: %d id(s) declared, %d covered, %d uncovered, %d unscoped, tests-root=%s, %d test file(s) discovered, %d in scope, %d dropped by back-reference filter (ADR-0154), %d claim this feature, %d in the unscoped-question population, %d claimed by another feature (ADR-0157)\n' \
+    "$SELF" "$DECL_N" "$COV_N" "$UNCOV_N" "$UNSCOPED_N" "$TROOT_DESC" "$DISCOVERED_N" "$SCOPE_N" "$HALF2_DROPPED_N" "$OWNED_N" "$UNSCOPED_POP_N" "$FOREIGN_CLAIMED_N" >&2
 else
   printf '%s: %d id(s) declared, %d covered, %d uncovered, tests-root=%s\n' \
     "$SELF" "$DECL_N" "$COV_N" "$UNCOV_N" "$TROOT_DESC" >&2

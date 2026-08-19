@@ -315,10 +315,21 @@ else
 fi
 
 # ==================================================================================================
-# CE. NO EXISTING CHECK SCRIPT WAS MODIFIED — the guard for the plan's headline constraint.
-# ALWAYS-PASS FORWARD GUARD (true before and after every task in this feature): this is a
-# regression pin, never fix evidence. If this goes RED, the fix is to revert the script, never to
-# relax this assertion.
+# CE. NO EXISTING CHECK SCRIPT WAS MODIFIED WITHOUT SAYING WHY — the guard for the plan's headline
+# constraint (ADR-0054 §D1): the CI-wrapping feature must achieve fail-closed by wrapping the
+# scripts, never by baking posture into them. THAT constraint is unconditional and still has no
+# exemption mechanism below — an executable change with no declared exemption still fails, full
+# stop, revert-not-relax exactly as before.
+#
+# ## Correction, 2026-08-19 (rule 14 — corrected forward, not in place; ADR-0160, issue #472/#478)
+# The guard as first written could not tell D1's constraint apart from an ordinary correctness fix
+# to a script's OWN detection logic — every executable diff failed identically, whether it baked CI
+# posture into the script (what D1 forbids) or fixed a measured false-positive in it (ordinary
+# maintenance, the same class ADR-0073 §D4 already carved comments out for). `weakening-scan.sh`
+# treating a Swift Testing `#expect`/`#require` as a comment is the latter: measured 32 false
+# findings against 12 real assertions in one field-reported file, ADR-0160's Context (#472). D2
+# below is the narrower exemption that distinguishes the two, kept as small and as verified as the
+# comment-only one before it.
 # ==================================================================================================
 # The delimiter is `|`, NOT `:`, and that is load-bearing. With a colon, the first element reads as
 # `secret-scan.sh:<path>` — a name containing "secret" followed by a colon and a value — which is
@@ -326,6 +337,23 @@ fi
 # a SECRET finding on the repository's own tracked files and turned secret-dep-gate.test.sh D1 RED.
 # Do not "tidy" this back to a colon. The rule is not narrowed to accommodate it: ADR-0046 refused
 # to weaken that heuristic, and the test file is what moves.
+#
+# CE_EXEMPT — D2's exemption table, empty for 3 of 4 scripts on purpose. An entry here does not
+# grant blanket cover: the check below still requires the cited issue number to appear IN the live
+# diff it is exempting (rule 1 — a needle must belong to the mechanism it asserts about), so a LATER
+# unrelated edit to the same script, made without citing this issue again, is not exempted by a
+# stale table entry. Adding a script here does not retire CE for it; every future executable diff is
+# still re-checked against this same rule on every run.
+CE_EXEMPT_weakening_scan_sh="472"
+
+# ce_diff_cites_issue <issue-number> — reads diff text on stdin, true iff an ADDED line (`+`
+# prefix) cites `#<issue-number>` as a standalone token. ONE function, called both by the live CE
+# loop below and by D2's synthetic assertions a few lines down (rule 6: one question — "does this
+# diff cite this issue" — one implementation; two independently written copies could disagree).
+ce_diff_cites_issue() {
+  grep -qE "^\+.*#${1}([^0-9]|\$)"
+}
+
 for pair in "secret-scan.sh|staging/plugin/scripts/secret-scan.sh" \
             "dependency-scan.sh|staging/plugin/scripts/dependency-scan.sh" \
             "weakening-scan.sh|staging/plugin/skills/review-triage-fix/scripts/weakening-scan.sh" \
@@ -343,14 +371,56 @@ for pair in "secret-scan.sh|staging/plugin/scripts/secret-scan.sh" \
          | sed -E 's/^[-+][[:space:]]*//' \
          | grep -vE '^(#|$)' | grep -c . || true)
   case "$_chg" in ''|*[!0-9]*) _chg=0 ;; esac
+  # D2's per-file exemption issue number, read via a name built from $dname (bash 3.2: no assoc
+  # arrays). Empty for any script with no CE_EXEMPT_* variable declared above.
+  _evar="CE_EXEMPT_$(printf '%s' "$dname" | sed -E 's/[^A-Za-z0-9]/_/g')"
+  eval "_eissue=\"\${$_evar:-}\""
   if git -C "$REPO" diff --quiet -- "$relpath" 2>/dev/null; then
     ok "CE-$dname: no uncommitted change against the tracked copy of $dname (forward guard)"
   elif [ "$_chg" -eq 0 ]; then
     ok "CE-$dname: uncommitted change to $dname is comment-only — executable lines untouched (forward guard)"
+  elif [ -n "$_eissue" ] && git -C "$REPO" diff -- "$relpath" 2>/dev/null | ce_diff_cites_issue "$_eissue"; then
+    ok "CE-$dname: $_chg executable line change(s), but the diff itself cites the declared exemption #$_eissue (D2, ADR-0160) — a correctness fix, not CI-posture baked into the script"
   else
     bad "CE-$dname: $dname has $_chg uncommitted EXECUTABLE line change(s) — a feature must never modify the behaviour of an existing check script"
   fi
 done
+
+# D2a-D2d — ce_diff_cites_issue() pinned directly, independent of this run's live diff state (which
+# goes empty the moment weakening-scan.sh's fix is committed, and D2's live branch above would stop
+# exercising with it). Synthetic diff lines only.
+# plant: D2a | plugin/scripts/tests/project-ci-checks.test.sh | grep -qE "^\+.*#${1}([^0-9]|\$)" | false
+if printf '+# fix (issue #472, ADR-0160)\n' | ce_diff_cites_issue 472; then
+  ok "D2a (positive): a line citing '#472' as a standalone token matches issue 472's exemption"
+else
+  bad "D2a: '#472, ADR-0160' did not match issue 472's exemption — the citation check is broken"
+fi
+
+# plant: D2b | plugin/scripts/tests/project-ci-checks.test.sh | grep -qE "^\+.*#${1}([^0-9]|\$)" | grep -qE "^\+.*#[0-9]*([^0-9]|\$)"
+if printf '+# fix (issue #999)\n' | ce_diff_cites_issue 472; then
+  bad "D2b: a line citing a DIFFERENT issue (#999) matched issue 472's exemption — the table would grant blanket cover, not per-issue cover"
+else
+  ok "D2b (negative, per-issue): a line citing '#999' does not satisfy issue 472's exemption"
+fi
+
+# plant: D2c | plugin/scripts/tests/project-ci-checks.test.sh | #${1}( | (
+if printf '+some unrelated executable change\n' | ce_diff_cites_issue 472; then
+  bad "D2c: a line with no issue citation at all matched — a future unrelated edit to an exempted script would pass silently"
+else
+  ok "D2c (negative, no citation): a line with no '#<n>' token does not satisfy any exemption"
+fi
+
+_d2d_bad=""
+for _s in secret_scan_sh dependency_scan_sh interface_check_sh; do
+  eval "_v=\"\${CE_EXEMPT_$_s:-}\""
+  [ -z "$_v" ] || _d2d_bad="$_d2d_bad $_s=$_v"
+done
+# plant: D2d | plugin/scripts/tests/project-ci-checks.test.sh | CE_EXEMPT_weakening_scan_sh="472" | CE_EXEMPT_weakening_scan_sh="472"\nCE_EXEMPT_secret_scan_sh="1"
+if [ -z "$_d2d_bad" ]; then
+  ok "D2d (forward guard): only weakening-scan.sh carries a CE_EXEMPT_* entry — the other 3 scripts stay unconditionally frozen"
+else
+  bad "D2d: unexpected CE_EXEMPT_* entrie(s) found:$_d2d_bad — the exemption table was widened past its declared scope"
+fi
 
 # Minimal contract smoke, one call per script — still exits 0 / keeps its documented shape.
 : >"$TMP/empty_list"

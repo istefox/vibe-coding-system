@@ -50,6 +50,94 @@ else
 fi
 
 # ==================================================================================================
+# AIJ. issue #478 / ADR-0160 — the trigger itself. Reported in the field: a feature with no view and
+# no `import SwiftUI` anywhere in its diff still ran ui-layout-audit and recorded the checklist,
+# because the trigger was a bare `.swift` extension match. AIJ1/AIJ2 pin the wiring (the block now
+# invokes ui-file-detect.sh, and the script it invokes exists); AIJ3-AIJ6 pin the script's own
+# behaviour, executed for real, not just grepped for.
+# ==================================================================================================
+UIDET="$STAGING/plugin/skills/concept-to-code/scripts/ui-file-detect.sh"
+# Anchored on the EXECUTABLE fence line, not a bare `grep -qF 'ui-file-detect.sh'` — the prose one
+# line above the fence also names the script ("ui-file-detect.sh's own header explains"), so a bare
+# substring check is satisfied by that mention even with the code line reverted to the old bare
+# extension grep (measured — a registry NOFIRE on the first draft, rule 1/12).
+# The needle avoids embedding a literal " | " — the declaration line itself is split on " | ", so a
+# needle containing a shell pipe with spaces on both sides would fragment into extra fields.
+# plant: AIJ1 | plugin/skills/concept-to-code/SKILL.md | bash ~/.claude/skills/concept-to-code/scripts/ui-file-detect.sh | grep -E '\.(swift|html|css|tsx|jsx|vue)$'
+if printf '%s\n' "$(cat "$G505" 2>/dev/null)" | grep -qF 'bash ~/.claude/skills/concept-to-code/scripts/ui-file-detect.sh'; then
+  ok "AIJ1: the Gate 5.05 trigger invokes ui-file-detect.sh, not a bare extension grep"
+else
+  bad "AIJ1: Gate 5.05's trigger no longer names ui-file-detect.sh — issue #478's fix was reverted or moved"
+fi
+
+# AIJ2 has no plant: it is an EXISTENCE check (a path is a file and is readable), the same class
+# PT1/PT2 in prep.test.sh already documented as unplantable — the registry's mechanism mutates TEXT
+# inside a tracked file, never a file's presence, so there is no text substitution that makes
+# `[ -f "$UIDET" ] && [ -r "$UIDET" ]` go false without literally deleting the file, which is outside
+# what a plant declaration can express. Verified by hand: renaming ui-file-detect.sh does turn AIJ2
+# (and AIJ3-AIJ6, which all invoke it) red.
+if [ -f "$UIDET" ] && [ -r "$UIDET" ]; then
+  ok "AIJ2: ui-file-detect.sh exists at the path Gate 5.05 invokes it from"
+else
+  bad "AIJ2: ui-file-detect.sh not found — AIJ3-AIJ6 below assert nothing"
+fi
+
+UITMP="$TMP/uij"; mkdir -p "$UITMP"
+cat >"$UITMP/Model.swift" <<'EOF'
+struct Widget {
+    let name: String
+}
+EOF
+cat >"$UITMP/ContentView.swift" <<'EOF'
+import SwiftUI
+struct ContentView: View {
+    var body: some View { Text("hi") }
+}
+EOF
+cat >"$UITMP/Controller.swift" <<'EOF'
+import UIKit
+class WidgetController: UIViewController {
+}
+EOF
+# plant: AIJ3 | plugin/skills/concept-to-code/scripts/ui-file-detect.sh | *.swift) is_ui_swift "$f" && printf '%s\n' "$f" ;; | *.swift) printf '%s\n' "$f" ;;
+_uij3_out=$(printf '%s\n' "$UITMP/Model.swift" | bash "$UIDET" 2>/dev/null)
+if [ -z "$_uij3_out" ]; then
+  ok "AIJ3: a .swift file with no UI import and no View/NSView/UIViewController declaration is NOT admitted — this is issue #478's fix"
+else
+  bad "AIJ3: expected no output for a non-UI .swift file — got: $_uij3_out"
+fi
+
+# AIJ4/AIJ5 have no plant, documented rather than forced: like CB2/CB6 (batch-boundary-precedence)
+# and SGP25/SGP26 (stop-gate-path-predicate), they are not isolable by a single mutation. Both
+# fixtures satisfy TWO of is_ui_swift()'s three independently-sufficient grep checks at once by
+# realistic construction (ContentView.swift both imports SwiftUI AND declares `: View`; a real
+# UIViewController subclass realistically also imports UIKit) — mutating any ONE check leaves the
+# other admitting the same fixture, so no single-line change turns either assertion red. Both still
+# run for real against a real fixture and real script, and AIJ3's plant already pins the mechanism
+# that gates ALL THREE checks (the case-statement's call to is_ui_swift at all).
+_uij4_out=$(printf '%s\n' "$UITMP/ContentView.swift" | bash "$UIDET" 2>/dev/null)
+if [ "$_uij4_out" = "$UITMP/ContentView.swift" ]; then
+  ok "AIJ4 (positive twin of AIJ3): a SwiftUI View file (import SwiftUI, struct: View) IS admitted"
+else
+  bad "AIJ4: expected $UITMP/ContentView.swift admitted — got: $_uij4_out"
+fi
+
+_uij5_out=$(printf '%s\n' "$UITMP/Controller.swift" | bash "$UIDET" 2>/dev/null)
+if [ "$_uij5_out" = "$UITMP/Controller.swift" ]; then
+  ok "AIJ5: a UIKit UIViewController subclass is admitted — the second declaration form, not only SwiftUI's"
+else
+  bad "AIJ5: expected $UITMP/Controller.swift admitted — got: $_uij5_out"
+fi
+
+# plant: AIJ6 | plugin/skills/concept-to-code/scripts/ui-file-detect.sh | *.html|*.css|*.tsx|*.jsx|*.vue) | *.html|*.tsx|*.jsx|*.vue)
+_uij6_out=$(printf '%s\n' "$UITMP/nonexistent.css" | bash "$UIDET" 2>/dev/null)
+if [ "$_uij6_out" = "$UITMP/nonexistent.css" ]; then
+  ok "AIJ6 (forward guard): a web-extension file (.css) is admitted unconditionally, content unchecked and even absent — the extension match ADR-0160 keeps for the classes it was never wrong about"
+else
+  bad "AIJ6: expected a .css path admitted unconditionally — got: $_uij6_out"
+fi
+
+# ==================================================================================================
 # AIB. Gate 5.05 records a checklist RESULT (§D1), not merely that the audit ran. Named items:
 # labels, contrast, dynamic-type/scaling, keyboard or assistive-tech reachability. A step that
 # always completes is indistinguishable from a step that always passes (ADR-0043, ADR-0046).

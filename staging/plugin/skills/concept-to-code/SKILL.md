@@ -1003,7 +1003,7 @@ sed -i.bak 's/^tracer_bullet_attempts: 0$/tracer_bullet_attempts: <N>/' "<manife
 
 #### Recovery-readiness pre-flight (ADR-0050, before any dispatch)
 
-Four assertions, run once, at the very top of Step 5 — before dispatch-mode selection, before the Smoke test gate below (which itself dispatches a workflow coder), and before the tester stage ADR-0049 introduced further down. At Step 5 entry the tree must already be clean, so that everything the tester dirties afterward is provably Step 5's own doing.
+Five assertions, run once, at the very top of Step 5 — before dispatch-mode selection, before the Smoke test gate below (which itself dispatches a workflow coder), and before the tester stage ADR-0049 introduced further down. At Step 5 entry the tree must already be clean, so that everything the tester dirties afterward is provably Step 5's own doing. (5.0.4b, added by ADR-0159, is the fifth; ADR-0050's original four are unchanged.)
 
 **ADR-0050 §D4 — the reconciliation, updated by ADR-0068 §D6.** This pre-flight guards entry to Step 5, before anything in Step 5 has executed: a dirty tree here is uncommitted human work of unknown provenance, so it refuses to dispatch. ADR-0049 §D2's dirty-tree condition, which used to guard each coder dispatch *inside* Step 5 by tolerating a tree the tester stage had deliberately left dirty and dropping isolation to a second, worktree-less mode, is retired: the tester now runs in its own worktree and its output is committed and merged into the feature branch before the coder's worktree is created (ADR-0068 §D6), so the condition it tested for cannot arise. The two conditions were sequential, not contradictory, while both existed; the surviving invariant is narrower and is what replaces them both: at Step 5 entry the tree is clean, and every stage's output is committed and merged before the next stage's worktree is created.
 
@@ -1227,7 +1227,28 @@ Non-zero — including a missing or unparseable `settings.json` — counts as **
 
 **Autopilot (`manifest.autopilot = true`) refuses identically — no leniency branch (ADR-0050 §D6).** A dirty tree, a default-branch checkout, or an unverified `worktree.baseRef` halts the unattended path exactly as it halts the attended one. There is no `AskUserQuestion` on this path, so the remediation command above is recorded in the report rather than prompted to a terminal nobody is watching.
 
-**Step 5.0.5 — enter `step_5_implementation` (issue #248, ADR-0095). Runs only after all four
+**Step 5.0.4b — a trusted `xcodebuild` test-cmd names its own build root (issue #488, ADR-0159).**
+Only when `.claude/test-cmd`'s first non-comment, non-blank line (the same line stop-gate.sh's own
+`CMD=$(awk …)` reads) contains the literal substring `xcodebuild`:
+```bash
+grep -q -- '-derivedDataPath' .claude/test-cmd
+```
+Absent means every worktree this feature dispatches into shares one build root with the main
+checkout and with every other worktree — `detect-test-cmd.sh` writes the flag into every candidate
+it generates now, but an EXISTING trusted `.claude/test-cmd` predates that and is untouched by it
+(the script leaves a present file alone, by design, ADR-0023 §D3). Two concurrent `xcodebuild` runs
+then overwrite each other's products; the observed cost was an unsigned framework and a false red,
+the dangerous direction is a stale product reporting green on a broken tree. **Fails closed, the
+same posture as 5.0.4 beside it** — this is a pre-flight assertion, not a hook, and a shared build
+root is exactly the kind of defect that reads as nothing wrong until two worktrees race. On
+refusal, print the literal remediation: "Recovery-readiness pre-flight: .claude/test-cmd runs
+xcodebuild without -derivedDataPath, so every worktree this feature dispatches would share one
+build root. Add -derivedDataPath \"<project-root>/.build/DerivedData\" to it and run:
+bash ~/.claude/hooks/approve-test-cmd.sh \"<project-root>\" — then re-invoke Step 5." Do not
+proceed to dispatch-mode selection. Not a manifest flag: unlike 5.0.4, nothing downstream reads a
+recorded verdict for this one, so there is nothing to set on success.
+
+**Step 5.0.5 — enter `step_5_implementation` (issue #248, ADR-0095). Runs only after all five
 assertions above have passed, and is the LAST thing before dispatch-mode selection.**
 
 ```bash
@@ -1283,6 +1304,14 @@ not `project_root`. If the CWD is not inside a git repo the worktree will fail e
   session CWD is not inside a git repository. The chain cannot dispatch a modification agent
   here. Run the chain from inside the repository, or `git init` the project root, and re-invoke
   Step 5." Do not proceed to dispatch-mode selection.
+
+**No two concurrent builds share a build root (issue #488, ADR-0159).** `isolation: worktree` gives
+each dispatch its own working directory; it does not by itself give a compiled-language build its
+own build output directory, and a shared one is invisible until two worktrees race on it. 5.0.4b
+above is the gate for a project whose test-cmd names one explicitly. The controller-side
+verification a checkpoint runs (below, and at the Step 6 review) is not started while a dispatch it
+depends on is still in flight — the merge-back block's own ordering already enforces this for
+content; this is the same invariant stated for build state.
 
 **Pre-dispatch: artifact existence check (run before any dispatch):**
 ```bash
@@ -1488,6 +1517,16 @@ bash <spec-coverage.sh, resolved exactly as in the Requirement-ID coverage gate 
   task text.
 The tester writes failing tests only, for this task group, and reports back which requirement
 IDs (or which Success Criteria / plan-task lines, per whichever fallback fired) each test covers.
+
+**On a compiled or type-checked language, add this to the brief verbatim (issue #486, ADR-0155
+§D1):** leave the target BUILDING. Declare the interfaces, protocols or types your tests reference
+but which do not exist yet — the signature is yours, and the coder owns the body. A test that names
+a type nobody has written does not fail, it stops the target from compiling, and then no assertion
+runs at all and the red you were dispatched to produce does not exist. Declaring an interface is not
+implementing it: you are writing the boundary the specification already fixes, not the code that
+satisfies it, so this takes nothing away from writing the tests before the implementation.
+`test-write-scope.sh` constrains the coder only, so nothing blocks you from writing that declaration
+on a production path.
 
 **The fallback chain above decides WHAT to assert. The plan decides WHERE and under what name, and
 is read in every case — never as a fallback (ADR-0088, issue #241).** Add to the brief: work
@@ -2334,6 +2373,36 @@ wrong reason, so the recorded RED proves nothing and the whole point of writing 
 gone. Violating rule 2 only leaves an intermediate checkpoint red — visible, explainable, and
 resolved by a later batch in the same Step 5.
 
+**A third rule, and on a compiled or type-checked language it outranks both (issue #486,
+ADR-0155).** The tester's batch must leave the target BUILDING. The interface or type declaration
+its tests reference lands with the tests, not with the implementation: **the tester owns the
+signature, the coder owns the body.**
+
+The two rules above assume something nobody wrote down until #486 — that a failing assertion still
+compiles. In bash it does: the harness runs, prints `FAIL: <id>`, and the observed failing set can
+be compared against the plan's expected-red table. In Swift, Rust, Go or TypeScript under
+`tsc --noEmit` it does not. A test referencing a type the coder has not written yet does not fail;
+it stops the target from building, and then nothing runs at all. Measured on a live run against a
+Swift project on 2026-08-18: `cannot find type 'GoogleBooksAPIKeyStoring' in scope`, followed by
+`Testing cancelled because the build failed`.
+
+**Its precedence, in the same terms the tie-break above uses.** Violating rule 1 makes an assertion
+fail for the wrong reason, so the recorded RED proves nothing. Violating this one means there is no
+recorded RED at all, and no checkpoint state describing what happened — a strictly larger loss, and
+why it is a precondition rather than a third peer.
+
+**It does not weaken the generator/verifier separation (ADR-0155 §D2).** What ADR-0049 buys is that
+tests are written without seeing the implementation, and a protocol or type declaration is not an
+implementation — it is the interface, the same vocabulary ADR-0053's protected-interfaces already
+uses. Nothing in the hook layer had to change for this: `test-write-scope.sh` constrains the coder
+only, so it **already permits** the tester to write the declaration (ADR-0155 §D6). What was missing
+was anything telling it to.
+
+**This is an instruction, not an enforcement (rule 16), and nothing here blocks a dispatch.** No
+hook checks that a plan placed the declaration in the tester's task; `test-write-scope.sh` already
+permits it either way. What is enforced is that this rule is written down, and the consequence when
+it is ignored is the fourth checkpoint state below.
+
 **Batch-dispatch policy (≥6 task blocks in plan):** **the number is `$openers`, from
 `plan-tasks.sh --count-openers`, never `$tasks` (issue #242, ADR-0100).** `$tasks` over-counts by
 design — a `## Tasks` section heading and every checkbox sub-step match it — so batching by it
@@ -2373,7 +2442,18 @@ stderr.
    merge-back step just run, this coder forks from a `HEAD` that already contains the batch's
    failing tests) and use the **Single batch dispatch template** below, which carries the
    TEST-AUTHORING SCOPE marker verbatim.
-3. Checkpoint between batches: run `verify.sh <root>` and check `git status` yourself
+
+   **After this coder's dispatch completes (the notification arrives), read its completion fact
+   (below) BEFORE running its own merge-back (issue #494, ADR-0159).** `$WT` is already known at
+   this point — from the dispatch result (F10) or by enumeration (F19/F20) — and nothing has
+   touched that worktree yet. Only on the `complete` line does the **Merge-back and base-fork
+   audit** block above run again, this time to merge THIS batch's coder worktree into the feature
+   branch; its own final step, `git worktree remove "$WT"`, is what deletes the root the completion
+   fact lives under, so the read must come first. A `HALT` line here means the worktree is left
+   exactly as it is: not merged, not removed.
+3. Checkpoint between batches: run
+   `bash $HOME/.claude/skills/review-triage-fix/scripts/verify.sh <root>` (issue #411 — a bare
+   `verify.sh` is on no `PATH`) and check `git status` yourself
    as the orchestrator — do NOT trust the coder's report to decide whether to continue
    (it may be truncated or incomplete). Also run the `Anti-test-weakening gate — Step 5 →
    Step 6 (ADR-0047)` block at every batch checkpoint — the same command against the same
@@ -2396,6 +2476,19 @@ stderr.
    it, record it, and continue. **A red in this batch's own tests is not expected** and is the case
    the checkpoint exists for — stop and report. If neither description fits, stop: an unclassifiable
    red is the one that most needs a human.
+
+   **A fourth state exists and it is not a red at all: THE TARGET DID NOT BUILD (issue #486,
+   ADR-0155 §D4).** On a compiled or type-checked language a checkpoint can produce no test result
+   whatsoever — `Testing cancelled because the build failed`, and no assertion ran. Do not classify
+   it as an unclassifiable red: the two look identical in a transcript and they have opposite
+   remedies. Its meaning is specific — **the third batch-boundary rule above was violated**, the
+   interface declaration the tests reference did not land in the tester's batch — and so is its
+   remedy: correct the batching, not the code under test. Nothing here needs debugging.
+
+   The distinction is worth the paragraph because collapsing it is what makes an operator stop
+   reading the section. In this state the expected-red table cannot be checked at all, the
+   controller-side count read has nothing to read, and a genuine regression the coder introduced in
+   an already-green area produces the same output as the intended state.
 
    This is a reading rule, not a mechanism. An **expected-red declaration** in the plan, or a
    comparison against the previous checkpoint's failing set, would let the checkpoint decide rather
@@ -2422,8 +2515,9 @@ stderr.
 5. After the last batch: run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)`
    block again, and run the `Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)`
    block once here too — not at the per-batch checkpoint in item 3 above, where an
-   uncovered ID is still the expected state — then final verification (`verify.sh`,
-   `git status`, scope check against the plan) before transitioning to `step_6_review`.
+   uncovered ID is still the expected state — then final verification
+   (`bash $HOME/.claude/skills/review-triage-fix/scripts/verify.sh <root>`, `git status`, scope
+   check against the plan) before transitioning to `step_6_review`.
    The `Diff budget and scope check — Step 5 checkpoints (ADR-0052)` block already ran at
    every batch checkpoint in item 3; no separate final pass is needed for it. Same for the
    `Task-level metrics — Step 5 checkpoints (ADR-0064, issue #118)` block.
@@ -2454,6 +2548,14 @@ every sub-step that creates or edits a test file. Those sub-steps are yours: the
 after you is denied them by a PreToolUse gate, so a skipped sub-step is a sub-step nobody can do.
 Where a sub-step says to confirm a failing assertion and stop, stop — a red assertion left red is
 the deliverable, not an unfinished task.
+
+On a compiled or type-checked language, leave the target BUILDING (ADR-0155 §D1). Declare the
+interfaces, protocols or types your tests reference but which do not exist yet — the signature is
+yours, and the coder owns the body. A test naming a type nobody has written does not fail, it stops the
+target from compiling, and then no assertion runs at all and the red you were dispatched to produce
+does not exist. Declaring an interface is not implementing it: you are writing the boundary the
+specification already fixes, not the code that satisfies it. `test-write-scope.sh` constrains the
+coder only, so nothing blocks you from writing that declaration on a production path.
 
 Writes go under the dispatched worktree, never to an absolute path into the shared checkout: `isolation: worktree` bounds the working directory, not the filesystem, and an absolute path resolves out of it (ADR-0068 §D11, issue #245). Read the planning artifacts by absolute path; write by relative path.
 
@@ -2518,20 +2620,24 @@ transcript and nothing branches on it.
 ```
 
 <!-- dispatch-site: step5-batch-coder class=isolated -->
-After each batch, before running controller-side verification, read the batch's completion fact.
-**Do not look for `PATTERN: DONE` in the agent's report.** Since CC 2.1.232 a non-teammate `Agent`
-dispatch returns immediately with metadata only and the report arrives later as a notification, so
-the tool result never carries that line and a healthy dispatch reads as truncated (issue #435,
-ADR-0139). The coder writes the fact inside its own worktree and `$WT` — already bound by the
-merge-back block above — is the root that holds it:
+After each batch's coder dispatch completes, read the batch's completion fact — **before running
+that coder's own merge-back**, and before running controller-side verification, which needs the
+merge-back to have happened first. **Do not look for `PATTERN: DONE` in the agent's report.** Since
+CC 2.1.232 a non-teammate `Agent` dispatch returns immediately with metadata only and the report
+arrives later as a notification, so the tool result never carries that line and a healthy dispatch
+reads as truncated (issue #435, ADR-0139). The coder writes the fact inside its own worktree and
+`$WT` — bound at dispatch (F10) or by enumeration (F19/F20), NOT by the merge-back block, whose own
+final step deletes this root on success (issue #494, ADR-0159) — is the root that holds it:
 
 <!-- fence-contract: step5-batch-completion-gate -->
 ```bash
 # ADR-0133 §D1 (issue #394): the body below runs under BASH, not the host shell, and the heredoc is
 # QUOTED — so nothing in it expands here. `export` is what carries the caller-bound values in, the
-# same device check 6 of autopilot-build uses. WT is the worktree path the merge-back block above
-# already bound; B is this batch's number. Terminator at COLUMN 0: an indented one is swallowed and
-# destroys this fence's exit code silently.
+# same device check 6 of autopilot-build uses. WT is the worktree path bound at this batch's coder
+# dispatch (F10) or by enumeration (F19/F20) — NOT by the merge-back block, which runs AFTER this
+# fence and whose own last step deletes WT on success (issue #494, ADR-0159); B is this batch's
+# number. Terminator at COLUMN 0: an indented one is swallowed and destroys this fence's exit code
+# silently.
 export WT B CLAUDE_PLUGIN_ROOT
 bash <<'FENCE_BASH'
 set -u
@@ -2546,7 +2652,7 @@ else
   echo "HALT: dispatch-state.sh not found — the check DID NOT RUN. Run: bash <repo>/staging/sync-to-claude.sh --apply"
   exit 2
 fi
-[ -n "${WT:-}" ] || { echo "HALT: WT is unset — the merge-back block above must bind it"; exit 2; }
+[ -n "${WT:-}" ] || { echo "HALT: WT is unset — bind it from the dispatch result before this fence runs"; exit 2; }
 [ -n "${B:-}" ]  || { echo "HALT: B is unset — bind this batch's number"; exit 2; }
 ST=$(bash "$_ds" "$WT" "step5-batch-$B" 2>&1); RC=$?
 [ "$RC" -eq 3 ] && { echo "HALT: dispatch-state DID NOT RUN for batch $B — $ST"; exit 2; }
@@ -2562,9 +2668,10 @@ esac
 FENCE_BASH
 ```
 
-On any `HALT` line: do NOT continue to the next batch or transition. Present the line to the user
-and wait for acknowledgment. On the `complete` line: proceed with controller-side verification as
-normal.
+On any `HALT` line: do NOT run the merge-back, do NOT continue to the next batch or transition —
+the worktree named by `$WT` still holds it, untouched. Present the line to the user and wait for
+acknowledgment. On the `complete` line: run the **Merge-back and base-fork audit** block above
+against this coder's worktree, THEN proceed with controller-side verification as normal.
 
 **Which half is enforcement (rule 16).** The helper's answer is a fact about the filesystem and the
 fence exits non-zero on every non-`DONE` token — that half is mechanical. That the orchestrator then
@@ -2857,17 +2964,38 @@ _foreign=$(git log --format='%H %s' "$_b"..HEAD \
   | grep -vE '^[0-9a-f]+ chore\([^)]*\): (record|snapshot) ' | head -1)
 [ -z "$_foreign" ] || { echo "COLLAPSE_SKIP foreignCommit ${_foreign%% *}"; exit 0; }
 git reset --soft "$_b" || { echo "COLLAPSE_NOREPO"; exit 3; }
-echo "COLLAPSED $_n $_b"
+# issue #489/#479, ADR-0158 — the collapse now sees the whole feature. A Step 6 or Gate 5.06
+# correction made AFTER the last snapshot lands as a plain tracked modification, never a commit
+# (the section below this fence removes the reason the chain ever committed mid-Step-6 at all).
+# `git add -u` sweeps it into the same index the reset just rewound: tracked modifications,
+# deletions and renames ONLY, the exact scope rule `commit`'s own Step 1 already applies — never
+# `git add -A` / `git add .`, which would also stage debris the chain's own worktree escape check
+# exists to catch (ADR-0068 §D11). Without this, `commit`'s "already staged" branch treats such a
+# correction as merely "not included", and it is dropped from the feature commit silently.
+git add -u
+_staged_n=$(git diff --name-only --staged | wc -l | tr -d ' ')
+echo "COLLAPSED $_n $_b staged=$_staged_n"
 exit 0
 FENCE_BASH
 ```
 
-- `COLLAPSED <n> <sha>` → emit `"Step 7: collapsed <n> Step 5 snapshot commit(s) — the feature is
-  now one staged diff."` and invoke `commit` below.
+- `COLLAPSED <n> <sha> staged=<k>` → emit `"Step 7: collapsed <n> Step 5 snapshot commit(s) — the
+  feature is now one staged diff (<k> file(s) staged)."` and invoke `commit` below. `<k>` is the
+  post-`git add -u` total, so it is `>= <n>`'s file count whenever a post-snapshot correction
+  existed to sweep in; equal to it otherwise.
 - `COLLAPSE_SKIP <reason>` → say which reason and invoke `commit` unchanged. **`foreignCommit` is
   the one worth reading**: the range holds a commit the chain did not make, and folding it away
   would take its message with it.
 - exit 3 → report; do not retry, and invoke `commit` unchanged.
+
+**A post-snapshot correction stays uncommitted on purpose (issue #489, ADR-0158).** Step 6 and
+Gate 5.06 below make no commit of their own — a controller-side fix, if one is made, is left as a
+tracked modification for THIS collapse to sweep up with `git add -u` above. The alternative —
+committing it under a `test(...)` or `fix(...)` subject the moment it lands — is what produced
+issue #489: `_foreign`'s allowlist covers only the two mechanical snapshot subjects by design (it
+must refuse to fold a commit it cannot attribute), so any other subject aborts the whole collapse
+and the feature stays scattered. Removing the commit removes the cause; the guard above is
+unchanged and untouched.
 
 **A soft reset keeps the working tree and the index exactly as they are** — no content is created,
 changed or deleted, only the branch tip moves, and the collapsed tips stay in the reflog. That is
@@ -4252,9 +4380,12 @@ options:
 
 Trigger: after Gate 5 (review complete or skipped), before Gate 5.1.
 
-Check whether any UI files were modified in this cycle:
+Check whether any UI files were modified in this cycle (issue #478, ADR-0160 — a `.swift` file is
+UI-bearing only when its own content imports SwiftUI/AppKit/UIKit or declares a `View`/`NSView`/
+`UIViewController`-conforming type; the web extensions stay a bare extension match, the shape
+`ui-file-detect.sh`'s own header explains):
 ```bash
-git diff --name-only HEAD | grep -E '\.(swift|html|css|tsx|jsx|vue)$'
+git diff --name-only HEAD | bash ~/.claude/skills/concept-to-code/scripts/ui-file-detect.sh
 ```
 
 - **Output is empty:** emit "Gate 5.05: no UI files changed — skipping layout audit ✓". No
