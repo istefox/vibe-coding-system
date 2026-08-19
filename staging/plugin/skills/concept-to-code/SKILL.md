@@ -2918,17 +2918,38 @@ _foreign=$(git log --format='%H %s' "$_b"..HEAD \
   | grep -vE '^[0-9a-f]+ chore\([^)]*\): (record|snapshot) ' | head -1)
 [ -z "$_foreign" ] || { echo "COLLAPSE_SKIP foreignCommit ${_foreign%% *}"; exit 0; }
 git reset --soft "$_b" || { echo "COLLAPSE_NOREPO"; exit 3; }
-echo "COLLAPSED $_n $_b"
+# issue #489/#479, ADR-0158 — the collapse now sees the whole feature. A Step 6 or Gate 5.06
+# correction made AFTER the last snapshot lands as a plain tracked modification, never a commit
+# (the section below this fence removes the reason the chain ever committed mid-Step-6 at all).
+# `git add -u` sweeps it into the same index the reset just rewound: tracked modifications,
+# deletions and renames ONLY, the exact scope rule `commit`'s own Step 1 already applies — never
+# `git add -A` / `git add .`, which would also stage debris the chain's own worktree escape check
+# exists to catch (ADR-0068 §D11). Without this, `commit`'s "already staged" branch treats such a
+# correction as merely "not included", and it is dropped from the feature commit silently.
+git add -u
+_staged_n=$(git diff --name-only --staged | wc -l | tr -d ' ')
+echo "COLLAPSED $_n $_b staged=$_staged_n"
 exit 0
 FENCE_BASH
 ```
 
-- `COLLAPSED <n> <sha>` → emit `"Step 7: collapsed <n> Step 5 snapshot commit(s) — the feature is
-  now one staged diff."` and invoke `commit` below.
+- `COLLAPSED <n> <sha> staged=<k>` → emit `"Step 7: collapsed <n> Step 5 snapshot commit(s) — the
+  feature is now one staged diff (<k> file(s) staged)."` and invoke `commit` below. `<k>` is the
+  post-`git add -u` total, so it is `>= <n>`'s file count whenever a post-snapshot correction
+  existed to sweep in; equal to it otherwise.
 - `COLLAPSE_SKIP <reason>` → say which reason and invoke `commit` unchanged. **`foreignCommit` is
   the one worth reading**: the range holds a commit the chain did not make, and folding it away
   would take its message with it.
 - exit 3 → report; do not retry, and invoke `commit` unchanged.
+
+**A post-snapshot correction stays uncommitted on purpose (issue #489, ADR-0158).** Step 6 and
+Gate 5.06 below make no commit of their own — a controller-side fix, if one is made, is left as a
+tracked modification for THIS collapse to sweep up with `git add -u` above. The alternative —
+committing it under a `test(...)` or `fix(...)` subject the moment it lands — is what produced
+issue #489: `_foreign`'s allowlist covers only the two mechanical snapshot subjects by design (it
+must refuse to fold a commit it cannot attribute), so any other subject aborts the whole collapse
+and the feature stays scattered. Removing the commit removes the cause; the guard above is
+unchanged and untouched.
 
 **A soft reset keeps the working tree and the index exactly as they are** — no content is created,
 changed or deleted, only the branch tip moves, and the collapsed tips stay in the reflog. That is
