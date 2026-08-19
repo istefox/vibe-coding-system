@@ -1665,7 +1665,7 @@ reads*, arrived at by erosion rather than by volume.
 - [ ] `detect-macos.sh` strips tables and code spans, so a macOS SPEC naming its platform only there reports `NOT_MACOS`  (issue #466)
 - [ ] Gate 5.05's UI trigger is extension-only, so every cycle of a Swift project runs `ui-layout-audit` and writes an accessibility checklist about work that has no UI  (issue #478)
 - [ ] `assigned-secret`'s prose false positive is a keyword followed by an absolute path, and it occurs 0 times in 423 files  (issue #475)
-- [ ] the stop gate spends its whole per-session budget on declared reds, then disarms itself for the rest of the session  (issue #477)
+- [x] the stop gate spends its whole per-session budget on declared reds, then disarms itself for the rest of the session  (issue #477)  (completed: 2026-08-19 — ADR-0156. The budget is spent by distinct failures, not repeats: a failure hashing to the recorded signature spends nothing and does not block, a different one still blocks and still spends. Measured before the fix: 5 of 16 sessions that ever blocked had reached the cap, `10 × 1` / `1 × 2` / `5 × 3`, and the counter was written in two places and removed in none. A green run now clears counter and signature; the stand-down moved from stderr into the `reason`. The hook still reads only `$ROOT/.claude/` — #477's fourth question, a shared expected-red set, stays with #273. Six behavioural assertions, six plants, registry `PASS=489 FAIL=0`)
 
 *#477 was hit live on 2026-08-18: it blocked six consecutive turn closures during a correct Step 5,
 because the generator/verifier split ADR-0049 requires makes a declared red the normal state at

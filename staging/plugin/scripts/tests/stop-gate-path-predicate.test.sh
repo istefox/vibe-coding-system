@@ -203,6 +203,53 @@
 # assertion whose own text is this exact bullet ("APPENDS and does not truncate... the exact
 # defect Task 2 fixed"). SGP04 itself carries no plant declaration going forward; see the R-06
 # GAP CLOSURE section below for which of SGP19-SGP24 are planted and which are not, and why.
+#
+# ADR-0156 PLANTS (SGP25-SGP30), dispatched 2026-08-18 for the checkpoint's own SGP25-SGP30 block
+# above. Each was validated BY HAND before being declared here: apply the mutation to a scratch
+# copy of stop-gate.sh kept OUTSIDE this repository, run this harness, confirm the FAIL set,
+# revert, confirm the file is unchanged and the harness is back to PASS=29 FAIL=0 SKIP=2 (SGP16/17
+# SKIP in this environment, per the header). SGP27, SGP28, SGP29 and SGP30 each turn ONLY their
+# own id red — verified against the full run, not just grepped for their own id.
+#
+# SGP25 and SGP26 are the one pair that could NOT be isolated from each other, and this is
+# disclosed rather than papered over (the dispatch brief named this exact risk before either
+# mutation was tried). Both obligations are read off the SAME code — emit_block's `sig`/`prev`
+# equality — because SGP26's own expectation (count reaches exactly '2' after the third call) is
+# defined relative to the per-session counter SGP25's second call is required to leave untouched:
+# neutralising the comparison so a repeat is never deduped makes call 2 spend the budget it should
+# not, which is what SGP25 pins directly, and that same extra spend is what pushes SGP26's count
+# baseline from '2' to '3', one call later in the same chained session. A mutation that instead
+# broke only "a genuinely different failure still differentiates" (tried: freezing `sig` to a
+# constant so content stops mattering) turned SGP26 red without touching SGP25, but reached SGP28
+# too — SGP28 depends on that exact same differentiation, in a fresh session, for its own two
+# distinct failures — which is worse: an entanglement the brief did not name, crossing out of the
+# {SGP25,SGP26} group the brief scoped it to. The sig/prev mutation below stays inside that group
+# and nowhere else (confirmed: SGP27/28/29/30 all stayed green under it). SGP25 and SGP26 declare
+# the SAME needle/replacement below on purpose — each independently validated to turn its own id
+# red when run alone — not one plant offered in place of two (rule 2/ADR-0086).
+#
+# SGP29's mutation hardcodes the FILE PERSISTED VALUE the timeout branch writes on every timeout
+# to a constant "1", leaving the IN-MEMORY `tcount` variable's own increment untouched — which is
+# why SGP13's and SGP14's cap-reaching checks (both read the in-memory value inside the SAME
+# invocation that decides whether the cap was hit) stay green under this mutation, and only SGP29
+# — which reads the value back from the FILE on the NEXT, separate invocation — goes red. An
+# earlier candidate (freezing the increment itself, the same needle SGP14 already carries) also
+# fires SGP29, but collaterally reopens SGP13 and SGP14 too; the file-write mutation below is the
+# narrower one and was kept for that reason.
+#
+# SGP30's mutation is an INSERTION (the `\n` escape — ADR-0108's documented limit, now used):
+# stop-gate.sh reads nothing outside `.claude/` today, so no existing line can be neutralised to
+# redden SGP30 — a subject has to be added. The inserted line reads exactly the path SGP30's own
+# decoy fixture writes (`$ROOT/docs/manifests/decoy.manifest.yml`) and exits without blocking when
+# it is present, simulating the not-yet-built #273 behaviour SGP30 exists to keep out. No other
+# assertion in this file ever creates that path, so the insertion is inert everywhere else —
+# confirmed against the full run, not assumed from the code alone.
+# plant: SGP25 | plugin/scripts/stop-gate.sh | if [ -n "$sig" ] && [ "$sig" = "$prev" ]; then | if [ -n "$sig" ] && false; then
+# plant: SGP26 | plugin/scripts/stop-gate.sh | if [ -n "$sig" ] && [ "$sig" = "$prev" ]; then | if [ -n "$sig" ] && false; then
+# plant: SGP27 | plugin/scripts/stop-gate.sh | rm -f "$DIRTY" "$OUT" "$CF" "$SF" 2>/dev/null || true | rm -f "$DIRTY" "$OUT" 2>/dev/null || true
+# plant: SGP28 | plugin/scripts/stop-gate.sh | if [ "$count" -ge "$N" ]; then set -- "$1 | if false; then set -- "$1
+# plant: SGP29 | plugin/scripts/stop-gate.sh | echo "$tcount" > "$CF" 2>/dev/null || true | echo "1" > "$CF" 2>/dev/null || true
+# plant: SGP30 | plugin/scripts/stop-gate.sh | TAIL=$(tail -c 600 "$OUT" 2>/dev/null); rm -f "$OUT" 2>/dev/null | [ -f "$ROOT/docs/manifests/decoy.manifest.yml" ] && exit 0\nTAIL=$(tail -c 600 "$OUT" 2>/dev/null); rm -f "$OUT" 2>/dev/null
 # -------------------------------------------------------------------------------------------
 set -u
 
@@ -1027,6 +1074,271 @@ else
 fi
 
 # =====================================================================================
+# ADR-0156 CHECKPOINT (issue #477, back-referenced per this repo's own ADR-0154) — SGP25-SGP30
+# ADDED, WRITTEN AGAINST THE SAME PRE-FIX stop-gate.sh AS EVERY SECTION ABOVE. No ADR-0156 file
+# exists yet at this checkpoint; the number is the one the dispatching issue names for the
+# design record this fix will get, and it is cited here so a future spec-coverage run over that
+# design recognises this file as already carrying its coverage (ADR-0154's own rule: a scoped
+# test file must name the feature back).
+#
+# THE DEFECT (issue #477): stop-gate.sh blocks on any non-zero test-cmd exit with no notion of a
+# declared or expected red, and its anti-loop counter (<sid>.count, cap STOP_GATE_MAX_REENTRY,
+# default 3) is written only by emit_block and the timeout branch and cleared NOWHERE — not even
+# by a green run. On a chain with structurally-red windows the sequence is block, block, block,
+# then the gate stops looking for the rest of the session, and the stand-down is announced on
+# stderr only.
+#
+# SGP25-SGP28 (obligations 1-4-through-6 of the issue) are genuinely RED at this checkpoint: today
+# every block spends the budget unconditionally regardless of whether the failing output repeats,
+# a green run never touches the counter file, and the final block's JSON `reason` never says the
+# gate is disarming. SGP29 and SGP30 (obligations 7 and 8) are declared FORWARD GUARDS, expected
+# GREEN both now and after the fix lands, and are reported as such at their own sites rather than
+# assumed RED (the same "coincidence-green candidate" discipline SGP02-05/SGP10 already use
+# above): SGP29 pins that the TIMEOUT branch keeps spending its budget unconditionally (ADR-0137
+# D5's deliberate choice — a timeout has no output to compare, so signature-dedup must not reach
+# it), and SGP30 pins that the hook still reads nothing outside $ROOT/.claude/ — no manifest, no
+# chain artifact; #477's fourth question (a shared expected-red set) stays with #273, unbuilt
+# here.
+#
+# THE COUNTER FILE IS READ DIRECTLY, EXISTENCE BEFORE VALUE (CLAUDE.md rule 7): emit_block's own
+# idiom already treats a missing/non-numeric count file as zero, so a test that inferred "did not
+# increment" from a MISSING file would be satisfied by the same idiom it is trying to catch a
+# regression in. Every assertion below checks `[ -f "$CF" ]` before trusting what it read.
+#
+# NO SECOND FIXTURE RIG: every assertion below is built ONLY from gate_new_proj/gate_run (Task 1)
+# and gate_set_cmd (Task 4), plus one small helper in the same idiom as gate_stub_timeout/mdcall.
+gate_set_switchable_cmd() {  # ADR-0156 helper — one TOFU-approved command whose OUTPUT and EXIT
+  # CODE are read from two files under $RIG_PROJ/.claude/ at RUN TIME, so the SAME approved
+  # command can produce a different observable failure, or succeed, across repeated gate_run
+  # calls without re-approving anything (a changed test-cmd needs a fresh TOFU approval, which
+  # is not what obligations 1-6 are about — they are about the SAME command failing differently).
+  OUTF="$RIG_PROJ/.claude/sgp-out"
+  RCF="$RIG_PROJ/.claude/sgp-rc"
+  QOUTF=$(printf '%q' "$OUTF")
+  QRCF=$(printf '%q' "$RCF")
+  gate_set_cmd "cat $QOUTF 2>/dev/null; RC=\$(cat $QRCF 2>/dev/null); case \"\$RC\" in ''|*[!0-9]*) RC=1;; esac; exit \"\$RC\""
+}
+gate_set_out() { printf '%s' "$1" > "$RIG_PROJ/.claude/sgp-out"; }
+gate_set_rc()  { printf '%s' "$1" > "$RIG_PROJ/.claude/sgp-rc"; }
+
+# =====================================================================================
+# SGP25 (ADR-0156, issue #477 obligations 1-2) — a block whose failure output is IDENTICAL to
+# the one already recorded this session does not spend the anti-loop budget, and that repeat does
+# not block either (the gate exits 0 without a `"decision":"block"` payload). Chained into SGP26
+# below (same session, same three gate_run calls) exactly as the dispatch brief requires: fail(A)
+# -> block; repeat fail(A) -> observe; fail(B, different) -> observe. Chaining, rather than
+# testing this in isolation, is what keeps this genuinely a two-way pin: a mechanism that dedups
+# indiscriminately (or never dedups at all) cannot pass both SGP25 and SGP26 together.
+gate_new_proj
+gate_set_switchable_cmd
+gate_set_rc 5
+RIG_PATHS="$RIG_PROJ/src/thing.py"
+CF25="$RIG_STATE/$RIG_SID.count"
+
+gate_set_out "SGP25-FAILURE-SIGNATURE-A"
+gate_run
+E1_25=0; [ -f "$CF25" ] && E1_25=1
+V1_25=""; [ "$E1_25" -eq 1 ] && V1_25=$(cat "$CF25" 2>/dev/null)
+B1_25=0; case "$RIG_OUT" in *'"decision":"block'*) B1_25=1;; esac
+
+gate_run   # SAME output/rc as above; gate_run itself re-arms the marker unconditionally
+E2_25=0; [ -f "$CF25" ] && E2_25=1
+V2_25=""; [ "$E2_25" -eq 1 ] && V2_25=$(cat "$CF25" 2>/dev/null)
+B2_25=0; case "$RIG_OUT" in *'"decision":"block'*) B2_25=1;; esac
+RC2_25="$RIG_RC"
+
+if [ "$E1_25" -eq 1 ] && [ "$V1_25" = "1" ] && [ "$B1_25" -eq 1 ] \
+   && [ "$E2_25" -eq 1 ] && [ "$V2_25" = "1" ] && [ "$B2_25" -eq 0 ] && [ "$RC2_25" -eq 0 ]; then
+  ok "SGP25"
+else
+  bad "SGP25 (1st block: exists=$E1_25 count='$V1_25' want 1, blocked=$B1_25 want 1; SAME-output repeat: exists=$E2_25 count='$V2_25' want unchanged '1', blocked=$B2_25 want 0, rc=$RC2_25 want 0, out='$RIG_OUT')"
+fi
+
+# =====================================================================================
+# SGP26 (ADR-0156, issue #477 obligation 3) — continuing the SAME session as SGP25 (no
+# gate_new_proj here, on purpose): a THIRD invocation whose failure output DIFFERS from the one
+# already recorded DOES block and DOES spend the budget. This is the assertion that stops
+# obligation 1 from becoming a bypass: expected count is 2, not 3 — a correct implementation
+# spent the budget exactly twice across three invocations (call 1 and call 3; call 2 was the
+# dedup skip SGP25 pins). 3 is what pre-fix (no dedup at all) produces.
+gate_set_out "SGP26-FAILURE-SIGNATURE-B-DIFFERENT"
+gate_run
+E3_26=0; [ -f "$CF25" ] && E3_26=1
+V3_26=""; [ "$E3_26" -eq 1 ] && V3_26=$(cat "$CF25" 2>/dev/null)
+B3_26=0; case "$RIG_OUT" in *'"decision":"block'*) B3_26=1;; esac
+
+if [ "$E3_26" -eq 1 ] && [ "$V3_26" = "2" ] && [ "$B3_26" -eq 1 ]; then
+  ok "SGP26"
+else
+  bad "SGP26 (DIFFERENT-output call after the SGP25 pair: exists=$E3_26 count='$V3_26' want '2', blocked=$B3_26 want 1, out='$RIG_OUT')"
+fi
+
+# =====================================================================================
+# SGP27 (ADR-0156, issue #477 obligation 4) — a green run (test-cmd exits 0) clears BOTH the
+# anti-loop counter and the recorded failure signature, so a verified tree refreshes the whole
+# budget rather than carrying forward a count (or a dedup memory) from before the tree went
+# green. Proven two ways in one chained session: directly, by reading <sid>.count right after the
+# green run (absent, or explicitly "0" — either representation satisfies "cleared"); and
+# behaviourally, by re-failing with the EXACT SAME output that was already blocked once before
+# the green run — if the signature had survived, this would be silently deduped exactly like
+# SGP25's repeat, which is the wrong answer here: the tree went green in between, so this is a NEW
+# failure, not a repeat of the old one.
+gate_new_proj
+gate_set_switchable_cmd
+RIG_PATHS="$RIG_PROJ/src/thing.py"
+CF27="$RIG_STATE/$RIG_SID.count"
+
+gate_set_rc 1
+gate_set_out "SGP27-FAILURE-BEFORE-GREEN"
+gate_run
+PRE_E27=0; [ -f "$CF27" ] && PRE_E27=1
+PRE_V27=""; [ "$PRE_E27" -eq 1 ] && PRE_V27=$(cat "$CF27" 2>/dev/null)
+PRE_B27=0; case "$RIG_OUT" in *'"decision":"block'*) PRE_B27=1;; esac
+
+gate_set_rc 0
+gate_run
+GREEN_CF_OK27=1
+if [ -f "$CF27" ]; then
+  GVAL27=$(cat "$CF27" 2>/dev/null)
+  case "$GVAL27" in ''|0) ;; *) GREEN_CF_OK27=0;; esac
+fi
+
+gate_set_rc 1
+gate_set_out "SGP27-FAILURE-BEFORE-GREEN"   # byte-identical to the pre-green failure
+gate_run
+POST_E27=0; [ -f "$CF27" ] && POST_E27=1
+POST_V27=""; [ "$POST_E27" -eq 1 ] && POST_V27=$(cat "$CF27" 2>/dev/null)
+POST_B27=0; case "$RIG_OUT" in *'"decision":"block'*) POST_B27=1;; esac
+
+if [ "$PRE_E27" -eq 1 ] && [ "$PRE_V27" = "1" ] && [ "$PRE_B27" -eq 1 ] \
+   && [ "$GREEN_CF_OK27" -eq 1 ] \
+   && [ "$POST_E27" -eq 1 ] && [ "$POST_V27" = "1" ] && [ "$POST_B27" -eq 1 ]; then
+  ok "SGP27"
+else
+  bad "SGP27 (before-green: exists=$PRE_E27 count='$PRE_V27' want 1, blocked=$PRE_B27 want 1; after-green counter cleared=$GREEN_CF_OK27 want 1 (val='${GVAL27:-<absent>}'); SAME output post-green: exists=$POST_E27 count='$POST_V27' want fresh '1', blocked=$POST_B27 want 1, out='$RIG_OUT')"
+fi
+
+# =====================================================================================
+# SGP28 (ADR-0156, issue #477 obligations 5-6) — when the per-session cap IS reached, the
+# stand-down is announced through the channel the operator actually reads: the block `reason`
+# field emit_block puts on STDOUT as JSON, not stderr alone. The FINAL block (the one whose
+# increment lands the counter exactly ON the cap) must itself say the gate is disarming for the
+# rest of the session — waiting for a SUBSEQUENT turn to say so on stderr, which is all pre-fix
+# does today (and even then with the word "unblocked", never "disarm"), leaves an operator who
+# only reads the block reason with no way to know the gate just spent its last try. Folded with
+# obligation 6 in the SAME id, same session: a FURTHER turn after the cap must still exit 0
+# without blocking, exactly as today — obligation 5 must not turn the stand-down into a permanent
+# block. Two DISTINCT failure outputs across the two budget-spending calls (never the same one
+# twice) so this id's result cannot be entangled with SGP25-27's dedup mechanism: two genuinely
+# different failures must always spend the budget, whatever the dedup rule turns out to be.
+gate_new_proj
+gate_set_switchable_cmd
+RIG_PATHS="$RIG_PROJ/src/thing.py"
+RIG_ENV="STOP_GATE_MAX_REENTRY=2"
+CF28="$RIG_STATE/$RIG_SID.count"
+
+gate_set_rc 1
+gate_set_out "SGP28-FAILURE-1-OF-2"
+gate_run
+FIRST_B28=0; case "$RIG_OUT" in *'"decision":"block'*) FIRST_B28=1;; esac
+
+gate_set_out "SGP28-FAILURE-2-OF-2-DIFFERENT"
+gate_run
+CAP_E28=0; [ -f "$CF28" ] && CAP_E28=1
+CAP_V28=""; [ "$CAP_E28" -eq 1 ] && CAP_V28=$(cat "$CF28" 2>/dev/null)
+CAP_B28=0; case "$RIG_OUT" in *'"decision":"block'*) CAP_B28=1;; esac
+CAP_DISARM28=0; case "$RIG_OUT" in *[Dd]isarm*) CAP_DISARM28=1;; esac
+CAP_OUT28="$RIG_OUT"
+
+gate_set_out "SGP28-FAILURE-3-AFTER-CAP"
+gate_run
+AFTER_B28=0; case "$RIG_OUT" in *'"decision":"block'*) AFTER_B28=1;; esac
+AFTER_RC28="$RIG_RC"
+
+if [ "$FIRST_B28" -eq 1 ] && [ "$CAP_E28" -eq 1 ] && [ "$CAP_V28" = "2" ] && [ "$CAP_B28" -eq 1 ] \
+   && [ "$CAP_DISARM28" -eq 1 ] && [ "$AFTER_B28" -eq 0 ] && [ "$AFTER_RC28" -eq 0 ]; then
+  ok "SGP28"
+else
+  bad "SGP28 (1st block=$FIRST_B28 want 1; at-cap: exists=$CAP_E28 count='$CAP_V28' want 2, blocked=$CAP_B28 want 1, reason-names-disarm=$CAP_DISARM28 want 1 (out='$CAP_OUT28'); after-cap turn: blocked=$AFTER_B28 want 0, rc=$AFTER_RC28 want 0, out='$RIG_OUT')"
+fi
+
+# =====================================================================================
+# SGP29 (ADR-0156, issue #477 obligation 7) — FORWARD GUARD, declared GREEN ON ARRIVAL at this
+# checkpoint (no fix exists yet) and expected to STAY green once the dedup fix lands: ADR-0137
+# D5 deliberately made a timeout spend the SAME per-session counter a block spends, and
+# signature-dedup (SGP25-27, above) must not reach the timeout branch at all, because a timeout
+# has no captured output to compare against a recorded signature. Two consecutive timeouts of
+# the identical sleeping command (nothing distinguishes them, on purpose — this is the case a
+# naive "compare to the last recorded thing" implementation could wrongly treat as a duplicate)
+# must both spend the budget: count goes 1, then 2, never staying at 1. If this ever goes RED
+# after a fix lands, the fix reached further than ADR-0137 D5 authorized — that is a real
+# regression, not a checkpoint artifact to special-case away.
+gate_new_proj
+gate_set_cmd "sleep 3"
+RIG_ENV="STOP_GATE_TEST_TIMEOUT=1 STOP_GATE_MAX_REENTRY=5"
+CF29="$RIG_STATE/$RIG_SID.count"
+
+gate_run
+E1_29=0; [ -f "$CF29" ] && E1_29=1
+V1_29=""; [ "$E1_29" -eq 1 ] && V1_29=$(cat "$CF29" 2>/dev/null)
+
+gate_run
+E2_29=0; [ -f "$CF29" ] && E2_29=1
+V2_29=""; [ "$E2_29" -eq 1 ] && V2_29=$(cat "$CF29" 2>/dev/null)
+
+if [ "$E1_29" -eq 1 ] && [ "$V1_29" = "1" ] && [ "$E2_29" -eq 1 ] && [ "$V2_29" = "2" ]; then
+  ok "SGP29 (forward guard, green at this checkpoint by design — see header)"
+else
+  bad "SGP29 (two consecutive timeouts, want count 1 then 2 — got '$V1_29' then '$V2_29', exists=$E1_29/$E2_29)"
+fi
+
+# =====================================================================================
+# SGP30 (ADR-0156, issue #477 obligation 8) — FORWARD GUARD, declared GREEN ON ARRIVAL and
+# expected to stay green once the dedup fix lands: the hook still reads only $ROOT/.claude/ (plus
+# the state dir this rig already redirects) — no manifest, no chain artifact. #477's fourth
+# question, a shared expected-red set both a checkpoint and this hook could read, stays with #273
+# and is NOT built here. Behavioural, not textual: a decoy manifest is placed at a path a
+# chain-aware reader would plausibly consult (docs/manifests/, this repository's own real
+# location for one) and DECLARES the exact failure as already-expected. Two otherwise-identical
+# sessions, one with the decoy present, one without, must produce the IDENTICAL block decision and
+# spend the SAME budget — any divergence means something started reading it.
+gate_new_proj
+gate_set_switchable_cmd
+gate_set_rc 3
+gate_set_out "SGP30-DECOY-CONTROL"
+RIG_PATHS="$RIG_PROJ/src/thing.py"
+gate_run
+CTRL_B30=0; case "$RIG_OUT" in *'"decision":"block'*) CTRL_B30=1;; esac
+CTRL_CF30="$RIG_STATE/$RIG_SID.count"
+CTRL_E30=0; [ -f "$CTRL_CF30" ] && CTRL_E30=1
+CTRL_V30=""; [ "$CTRL_E30" -eq 1 ] && CTRL_V30=$(cat "$CTRL_CF30" 2>/dev/null)
+
+gate_new_proj
+gate_set_switchable_cmd
+gate_set_rc 3
+gate_set_out "SGP30-DECOY-CONTROL"
+mkdir -p "$RIG_PROJ/docs/manifests"
+cat > "$RIG_PROJ/docs/manifests/decoy.manifest.yml" <<EOF
+current_step: step_5_implementation
+expected_red:
+  - "SGP30-DECOY-CONTROL"
+status: in_progress
+EOF
+RIG_PATHS="$RIG_PROJ/src/thing.py"
+gate_run
+DECOY_B30=0; case "$RIG_OUT" in *'"decision":"block'*) DECOY_B30=1;; esac
+DECOY_CF30="$RIG_STATE/$RIG_SID.count"
+DECOY_E30=0; [ -f "$DECOY_CF30" ] && DECOY_E30=1
+DECOY_V30=""; [ "$DECOY_E30" -eq 1 ] && DECOY_V30=$(cat "$DECOY_CF30" 2>/dev/null)
+
+if [ "$CTRL_B30" -eq 1 ] && [ "$CTRL_E30" -eq 1 ] && [ "$CTRL_V30" = "1" ] \
+   && [ "$DECOY_B30" -eq 1 ] && [ "$DECOY_E30" -eq 1 ] && [ "$DECOY_V30" = "1" ]; then
+  ok "SGP30 (forward guard, green at this checkpoint by design — see header)"
+else
+  bad "SGP30 (no decoy: blocked=$CTRL_B30 count='$CTRL_V30'; with docs/manifests/ decoy declaring this exact failure pre-expected: blocked=$DECOY_B30 count='$DECOY_V30' — both must be blocked=1 count='1')"
+fi
+
+# =====================================================================================
 # SGPZ1 — VACUITY GUARD ONLY (ADR-0124: a floor absorbs its own plant, so this line pins
 # nothing about any individual assertion — per-assertion pinning is Task 7's plants, not this
 # line's job). This only guards against the whole file silently losing assertions, e.g. a
@@ -1037,11 +1349,12 @@ fi
 # and SGP17 land in the SKIP bucket rather than PASS/FAIL whenever $REPO/.git is not a real
 # directory (a plant-check.sh sandbox, or a git worktree — see the header's TASK 6 CHECKPOINT
 # paragraph), and without counting SKIP the floor would need slack that absorbs exactly the plant
-# Task 7 cannot write for either of them. 25 assertions are declared in this file (SGP01-14,
-# SGP15-17, SGP18, the R-06 GAP CLOSURE block's SGP19-24, SGPZ1); every one always lands in PASS,
-# FAIL or SKIP, so FLOOR=24 keeps one point of slack, matching this file's own original ratio
-# (18 of 19, raised 2026-08-14 from 18/19 when SGP19-SGP24 were added).
-FLOOR=24
+# Task 7 cannot write for either of them. 31 assertions are declared in this file (SGP01-14,
+# SGP15-17, SGP18, the R-06 GAP CLOSURE block's SGP19-24, the ADR-0156 block's SGP25-30, SGPZ1);
+# every one always lands in PASS, FAIL or SKIP, so FLOOR=30 keeps one point of slack, matching
+# this file's own original ratio (18 of 19, raised 2026-08-14 from 18/19 when SGP19-SGP24 were
+# added, raised again here when SGP25-SGP30 were added).
+FLOOR=30
 TOTAL=$((PASS + FAIL + SKIP))
 if [ "$TOTAL" -ge "$FLOOR" ]; then
   ok "SGPZ1"

@@ -4421,3 +4421,43 @@ Key architectural decisions:
   Tightening them would be an in-place assertion edit, invisible to every gate here (ADR-0148).
 
 Detail: `docs/architecture/ADR-0155-compiled-language-tester-batch.md`.
+
+## Decisions from the stop-gate distinct-failure budget chain (ADR-0156)
+
+`stop-gate.sh`'s anti-loop budget stops counting invocations and starts counting findings. Touched:
+`staging/plugin/scripts/stop-gate.sh` only, plus six behavioural assertions and their plants in
+ADR-0137's own harness.
+
+Key architectural decisions:
+
+- **The counter was written in two places and removed in none.** `$CF` is incremented inside
+  `emit_block` and again on the timeout path; the green path cleared the dirty marker and the output
+  file and left the counter alone. A session that reached the cap was disarmed *permanently*, and a
+  later green run did not restore it.
+- **5 of 16 sessions that ever blocked had reached the cap**, distributed `10 × 1`, `1 × 2`,
+  `5 × 3`. The shape is the argument: a session that blocks once is a real red, seen and fixed; the
+  five at the cap are the structurally red windows every tester-before-coder batch creates, which
+  spent the whole budget on repeats and then guarded nothing for the rest of the session.
+- **The budget is spent by distinct failures.** A failure whose output hashes to the signature
+  already recorded spends nothing and does not block — the operator has read it. A different one
+  still blocks and still spends, and that pairing is what stops the first half from being a bypass:
+  a real regression has a different signature by definition. The gate became louder about new
+  information and silent about old.
+- **The signature is the OUTPUT, never the exit code.** A suite failing two different assertions
+  exits `1` both times, so keying on the code would dedupe two findings into one and silently drop
+  the second — a false negative in the direction the gate exists to prevent.
+- **A green run now clears the counter and the signature**, so a verified tree refreshes the budget.
+- **The stand-down moved into the `reason`.** This file's own comment on the timeout path already
+  said why stderr is not enough — *a guard that stops guarding silently is this repository's
+  signature failure* — while the block path stood down just as quietly.
+- **The hook still learns nothing about the chain.** It reads only `$ROOT/.claude/`. #477's fourth
+  question, a declared expected-red set both this hook and the Step 5 checkpoint could read, stays
+  with #273: building it here is the one change that would make a project-owned hook depend on the
+  chain's shape. A forward guard drives two identical sessions, one carrying a decoy manifest that
+  declares the failure as expected, and requires the verdicts to match.
+- **Two assertions are not isolable and it is recorded rather than smoothed.** `SGP25` and `SGP26`
+  move together under any single-line mutation, because the count `SGP26` expects is defined against
+  the same counter `SGP25` requires to stay untouched. The alternative mutation that separates them
+  reaches `SGP28` instead — a worse entanglement, and one nobody had named.
+
+Detail: `docs/architecture/ADR-0156-stop-gate-distinct-failure-budget.md`.

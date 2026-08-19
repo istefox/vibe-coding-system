@@ -38,17 +38,60 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 
 DIRTY="$DIR/$SID.dirty"
 CF="$DIR/$SID.count"
+# ADR-0156 D1 — the signature of the LAST failure this session blocked on. The budget is spent by
+# DISTINCT failures, not by repeats: three blocks on one failing assertion are one piece of
+# information, not three (issue #477). Measured before this existed: 5 of 16 sessions that ever
+# blocked reached the cap and stood down for the rest of the session, every one of them on repeats
+# of a failure the operator had already read.
+SF="$DIR/$SID.sig"
 [ ! -f "$DIRTY" ] && exit 0
 
 emit_block() {  # $1 = reason text; $2 = test output to append to reason (optional)
   local count=0
   [ -f "$CF" ] && count=$(cat "$CF" 2>/dev/null || echo 0)
   case "$count" in ''|*[!0-9]*) count=0;; esac
+
+  # ADR-0156 D1/D2 — a repeat of the failure already reported spends nothing AND says nothing.
+  # The pairing is what keeps D1 from being a bypass: a DIFFERENT failure — which is what a real
+  # regression is, by definition — hashes differently, so it still blocks and still spends. The
+  # gate becomes louder about new information and silent about old, the opposite of today.
+  #
+  # Hashed from the OUTPUT, never the exit code (ADR-0156 A4): a suite failing two different
+  # assertions exits 1 both times, so keying on the code would dedupe two findings into one and
+  # silently drop the second — a false negative in the direction this gate exists to prevent.
+  #
+  # A failure whose output varies run to run (a timestamp, a temp path, a seed) reads as new every
+  # time and spends the budget exactly as it does today. That is the SAFE degradation direction —
+  # never quieter than the old behaviour — and it is a stated limit, not a defect to rediscover.
+  local sig="" prev=""
+  if [ -n "${2:-}" ]; then
+    printf '%s' "$2" > "$DIR/.$SID.sigin" 2>/dev/null \
+      && sig=$(sha256_of "$DIR/.$SID.sigin") || sig=""
+    rm -f "$DIR/.$SID.sigin" 2>/dev/null
+  fi
+  [ -f "$SF" ] && prev=$(cat "$SF" 2>/dev/null || true)
+  if [ -n "$sig" ] && [ "$sig" = "$prev" ]; then
+    echo "stop-gate: identical failure to the last block this session — already reported, budget not spent (ADR-0156 D1/D2). A different failure still blocks." >&2
+    exit 0
+  fi
+
   if [ "$count" -ge "$N" ]; then
     echo "stop-gate: anti-loop guardrail active — unblocked after $N entries. Verify manually." >&2
     exit 0
   fi
-  echo $((count + 1)) > "$CF" 2>/dev/null || true
+  count=$((count + 1))
+  echo "$count" > "$CF" 2>/dev/null || true
+  [ -n "$sig" ] && { printf '%s' "$sig" > "$SF" 2>/dev/null || true; }
+
+  # ADR-0156 D5 — at the cap the stand-down is announced in the REASON, the channel an operator
+  # actually reads, not on stderr alone. This file's own timeout-path comment already says why:
+  # a guard that stops guarding silently is this repository's signature failure. The block path
+  # stood down just as quietly until #477.
+  if [ "$count" -ge "$N" ]; then
+    set -- "$1
+stop-gate: this is the FINAL block of this session. The anti-loop guardrail is now disarmed — further turns will not be checked (cap STOP_GATE_MAX_REENTRY=$N, ADR-0156 D5). Verify manually from here." "${2:-}"
+  fi
+
   if [ -n "${2:-}" ]; then
     # Deliver test output inside reason (root-level field only — hookSpecificOutput is not
     # valid for Stop events and causes JSON validation errors in Claude Code).
@@ -234,7 +277,11 @@ if [ "$RC" -eq 125 ] || [ "$RC" -eq 126 ] || [ "$RC" -eq 127 ]; then
   rm -f "$OUT" 2>/dev/null; exit 0
 fi
 if [ "$RC" -eq 0 ]; then
-  rm -f "$DIRTY" "$OUT" 2>/dev/null || true
+  # ADR-0156 D3 — a verified tree refreshes the budget. Before this, $CF was written in two places
+  # (here-adjacent emit_block, and the timeout branch) and removed in NONE, so a session that
+  # reached the cap stayed disarmed permanently, even after the condition that disarmed it was
+  # gone. The signature goes with it: after a green run the next failure is new information again.
+  rm -f "$DIRTY" "$OUT" "$CF" "$SF" 2>/dev/null || true
   exit 0
 fi
 TAIL=$(tail -c 600 "$OUT" 2>/dev/null); rm -f "$OUT" 2>/dev/null
