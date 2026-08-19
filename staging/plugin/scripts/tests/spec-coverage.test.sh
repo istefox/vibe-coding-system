@@ -1799,6 +1799,153 @@ else
   bad "RH1: a SPEC generator no longer emits a recognised heading —$RH_MISSING (probed $RH_SEEN of 2) — every id it writes would be silently unread (issue #313)"
 fi
 
+# ==================================================================================================
+# RZ. ADR-0157 / issue #487 — the cross-feature id collision. Requirement ids restart at R-01 in every
+# SPEC, so the question "is this id mentioned in the discovered test population?" is satisfied by a
+# STRANGER'S file, and the answer arrives as UNSCOPED ("name the file in your plan") on an id that was
+# never tested. Measured in the field on a Swift project; measured again on this repository's own
+# corpus, where 12 of 24 UNSCOPED rows were foreign matches (see spec-coverage-scope-baseline.tsv's
+# 2026-08-19 accounting block).
+#
+# Every fixture below was executed against the checker BEFORE the fix and produced the OLD verdict
+# (CLAUDE.md rule 2). The plants pin the three predicates that make up the population.
+# ==================================================================================================
+mkdir -p "$TMP/rz1-tests"
+cat >"$TMP/rz1.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz1-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh.
+EOF
+cat >"$TMP/rz1-tests/alpha.test.sh" <<'EOF'
+# no id here
+# names the plan back: rz1-plan.md
+EOF
+# The foreign harness: it carries R-01 and it says whose R-01 it is.
+cat >"$TMP/rz1-tests/beta.test.sh" <<'EOF'
+# covers R-01 (issue #999)
+EOF
+# plant: RZ1 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | elif grep -qE "(^|[^A-Za-z0-9_])#[0-9][0-9]*([^0-9]|\$)" "$_f" 2>/dev/null; then | elif false; then
+run_scov --spec "$TMP/rz1.spec.md" --plan "$TMP/rz1-plan.md" --tests-root "$TMP/rz1-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNCOVERED${TAB}R-01${TAB}tests\$"; then
+  ok "RZ1 (ADR-0157 D1): R-01's only mention is in beta.test.sh, which the plan does not name and which claims ANOTHER feature (#999) — UNCOVERED	R-01	tests, exit 1. Pre-fix this exact fixture reported UNSCOPED R-01 1, whose remedy tells the author to cite a stranger's harness from their plan."
+else
+  bad "RZ1: expected exit 1 + UNCOVERED R-01 tests (a foreign-claimed mention is not this feature's coverage) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ2 — the positive twin (CLAUDE.md rule 8). Same tree, same non-named file, but now it claims THIS
+# feature: the id is in the population again and the verdict returns to UNSCOPED. Without this twin,
+# RZ1 is satisfiable by a checker that reports UNCOVERED for every out-of-scope mention.
+mkdir -p "$TMP/rz2-tests"
+cp "$TMP/rz1.spec.md" "$TMP/rz2.spec.md"
+cp "$TMP/rz1-plan.md" "$TMP/rz2-plan.md"
+cp "$TMP/rz1-tests/alpha.test.sh" "$TMP/rz2-tests/alpha.test.sh"
+sed -i.bak 's/rz1-plan\.md/rz2-plan.md/' "$TMP/rz2-tests/alpha.test.sh" && rm -f "$TMP/rz2-tests/alpha.test.sh.bak"
+# The foreign claim is deliberate: without it this file is merely UNCLAIMED, and an unclaimed file is
+# in the population anyway — so the assertion would pass with the ownership test deleted, which is a
+# plant that fires on nothing (measured: RZ2's first form was a registry NOFIRE). With #999 present,
+# membership rests on ownership alone, and ownership BEATS a foreign claim in the same file.
+cat >"$TMP/rz2-tests/beta.test.sh" <<'EOF'
+# covers R-01 — carried over from issue #999, now this feature's own harness, see rz2-plan.md
+EOF
+# plant: RZ2 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if grep -qE "$OWN_RE" "$_f" 2>/dev/null; then | if false; then
+run_scov --spec "$TMP/rz2.spec.md" --plan "$TMP/rz2-plan.md" --tests-root "$TMP/rz2-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RZ2 (positive twin of RZ1, CLAUDE.md rule 8): the same out-of-scope file, carrying BOTH a foreign #999 and this feature's plan basename -> UNSCOPED	R-01	1, exit 1. Ownership wins over a foreign claim in the same file, and the remedy is the one that fits an unlisted test of one's own"
+else
+  bad "RZ2: expected exit 1 + UNSCOPED R-01 1 (an owned but unlisted test is in the population) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ3 — half 1 wins on its own. The plan NAMES beta.test.sh, half 2 drops it (it names no feature
+# back), and it claims another feature. Membership by half 1 is unconditional, so the verdict is
+# UNSCOPED: the author is told to fix the citation in a file their own plan points at, never to write
+# a test that already exists two lines from there.
+mkdir -p "$TMP/rz3-tests"
+cat >"$TMP/rz3.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz3-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh and beta.test.sh.
+EOF
+cat >"$TMP/rz3-tests/alpha.test.sh" <<'EOF'
+# no id here
+# names the plan back: rz3-plan.md
+EOF
+cat >"$TMP/rz3-tests/beta.test.sh" <<'EOF'
+# covers R-01 (issue #999)
+EOF
+# plant: RZ3 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | printf '%s\n' "$_f" >>"$HALF1_FILES" | :
+run_scov --spec "$TMP/rz3.spec.md" --plan "$TMP/rz3-plan.md" --tests-root "$TMP/rz3-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RZ3 (ADR-0157 D1, the union's other half): a file the PLAN names is in the unscoped-question population unconditionally — even dropped by half 2 and claiming another feature, R-01 reads UNSCOPED	R-01	1, not UNCOVERED"
+else
+  bad "RZ3: expected exit 1 + UNSCOPED R-01 1 (half-1 membership is unconditional) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ4 — the false green ADR-0157 closes, and the one nobody reported. The plan names NO discovered
+# test file, so ADR-0138's SCOPE-EMPTY fallback applies; every discovered file claims another feature.
+# Falling back to the whole population credits a stranger's R-01 as COVERED, exit 0.
+mkdir -p "$TMP/rz4-tests"
+cat >"$TMP/rz4.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz4-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+No test file is named anywhere in this plan.
+EOF
+cat >"$TMP/rz4-tests/beta.test.sh" <<'EOF'
+# covers R-01 (issue #999)
+EOF
+# RZ4 and RZ4b pin two different mechanisms and their plants say which. RZ4's verdict rests on the
+# refusal branch actually REFUSING to fall back — its plant leaves the branch's own detection and
+# message intact and appends the pre-fix `cat "$TESTFILES"` inside it, so the message still names the
+# refusal while the fallback happens anyway and the false green returns. Measured (rule 2, twice):
+# a plant on the ELIF CONDITION alone was a registry NOFIRE, because disabling it routes execution
+# into the SCOPE-EMPTY else branch, whose own fallback reads $UNSCOPED_POP — empty in this fixture by
+# construction — so the verdict stays UNCOVERED regardless. A plant on the unrelated
+# `cat "$UNSCOPED_POP"` line inside that else branch was a second NOFIRE for the same reason: this
+# fixture's execution never reaches it. RZ4b's plant disables the elif condition itself, which IS the
+# right mutation for "does this state get detected at all" — a different question from RZ4's.
+# plant: RZ4 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | "$SELF" "$FOREIGN_CLAIMED_N" "$TROOT" >&2 | "$SELF" "$FOREIGN_CLAIMED_N" "$TROOT" >&2\n      cat "$TESTFILES" >"$TESTFILES_SCOPED"
+run_scov --spec "$TMP/rz4.spec.md" --plan "$TMP/rz4-plan.md" --tests-root "$TMP/rz4-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNCOVERED${TAB}R-01${TAB}tests\$"; then
+  ok "RZ4 (ADR-0157 D2): the plan names no discovered test file and every discovered file claims another feature -> the fallback REFUSES, R-01 is UNCOVERED, exit 1. Pre-fix this fixture reported COVERED, exit 0 — a false green on a stranger's requirement id."
+else
+  bad "RZ4: expected exit 1 + UNCOVERED R-01 tests (SCOPE-FOREIGN-ONLY must not fall back) — got rc=$RC out=[$OUT]"
+fi
+# plant: RZ4b | plugin/skills/concept-to-code/scripts/spec-coverage.sh | elif [ ! -s "$UNSCOPED_POP" ] && [ -s "$FOREIGN_CLAIMED" ]; then | elif false; then
+if printf '%s\n' "$ERR" | grep -q 'SCOPE-FOREIGN-ONLY'; then
+  ok "RZ4b: stderr names the refusal (SCOPE-FOREIGN-ONLY) — a guard that declines to fall back must say so (CLAUDE.md rule 4)"
+else
+  bad "RZ4b: expected SCOPE-FOREIGN-ONLY on stderr — got [$ERR]"
+fi
+if printf '%s\n' "$ERR" | grep -q 'SCOPE-EMPTY'; then
+  bad "RZ4c: stderr says SCOPE-EMPTY as well — the refusal and the fallback are two states and every existing grep -q 'SCOPE-EMPTY' would read this one as the other"
+else
+  ok "RZ4c (ADR-0157 D2): the refusal token is NOT a SCOPE-EMPTY prefix — the two states stay tellable apart by the greps already written against the shorter token"
+fi
+
+# RZ5 — the fallback itself still works, on a population that could belong to this feature. Same shape
+# as RZ4 with the discovered file claiming nobody: SCOPE-EMPTY, fallback, COVERED. This is ADR-0138's
+# behaviour, and RY7 already pins it; what RZ5 adds is that the narrowed fallback did not break it.
+mkdir -p "$TMP/rz5-tests"
+cp "$TMP/rz4.spec.md" "$TMP/rz5.spec.md"
+cp "$TMP/rz4-plan.md" "$TMP/rz5-plan.md"
+cat >"$TMP/rz5-tests/beta.test.sh" <<'EOF'
+# covers R-01
+EOF
+run_scov --spec "$TMP/rz5.spec.md" --plan "$TMP/rz5-plan.md" --tests-root "$TMP/rz5-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$" && printf '%s\n' "$ERR" | grep -q 'SCOPE-EMPTY'; then
+  ok "RZ5 (forward guard): an unclaimed discovered file still reaches the SCOPE-EMPTY fallback and still reports COVERED, exit 0 — ADR-0157 narrows the fallback population without removing the fallback"
+else
+  bad "RZ5: expected exit 0 + COVERED R-01 + SCOPE-EMPTY on stderr — got rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
