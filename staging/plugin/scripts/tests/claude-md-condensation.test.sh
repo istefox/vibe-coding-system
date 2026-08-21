@@ -35,21 +35,31 @@
 # Each line removes or inverts ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing (ADR-0108).
 #
-# DISCLOSED, NOT CHASED: CMC01-CMC07 and CMC12 read CLAUDE.md at the REPO ROOT, and plant-check.sh
-# copies only staging/ and docs/ into its sandbox (plus ADR-0116's `../docs/` hatch). A root file is
-# unplantable by construction, so those eight assertions carry no plant. This is the same limit
-# ADR-0122 recorded for .github/workflows/ and ADR-0118 for .gitignore. Do not chase it here;
-# widening the registry's sandbox is its own issue.
+# DISCLOSED, NOT CHASED: CMC01-CMC03, CMC07 and CMC12 read CLAUDE.md at the REPO ROOT and carry no
+# plant. The reason written here until ADR-0163 was that plant-check.sh copies only staging/ and
+# docs/ into its sandbox, so a root file is unplantable by construction. THAT REASON IS NO LONGER
+# TRUE and had not been for some time: build_sandbox() copies CLAUDE.md, PROJECT.md, .gitignore and
+# .github/ as well, and the comment above it records the measurement that forced it (26 harnesses
+# failing, 58 pairs RED before any mutation). The five are unplanted today because nobody has
+# planted them, which is a different sentence and a smaller one. Widening that coverage is its own
+# issue; the correction is here so the next reader does not inherit the premise this one did.
 #
-# AND THAT IS NOT THE SAME AS BEING HARMLESS. Being unplantable made those eight the reason the four
-# plants below did not fire: the file used to ABORT when CLAUDE.md was absent, which in the sandbox
-# is always, so no assertion of any kind ran. They are SKIPPED there now — see the guard below the
+# AND THAT IS NOT THE SAME AS BEING HARMLESS. The eight assertions that used to sit behind an ABORT
+# were the reason the four plants below did not fire: the file used to ABORT when CLAUDE.md was
+# absent, so no assertion of any kind ran. Five are SKIPPED there now — see the guard below the
 # variable block. An unplantable assertion must still not take the plantable ones down with it.
 #
+# CMC06 carries NO plant, and that is a property of the assertion, not an oversight: it is a
+# `>= 90` floor over 117 entries, so no single-line mutation this grammar can express takes it RED
+# (rule 10 — a floor absorbs its own plant). It is kept as a vacuity guard on the derivation and the
+# site says so; CMC05's exact equality is where a plant actually bites.
+# plant: CMC04 | ../docs/chain-decision-index.md | docs/architecture/ADR-0011-clean-public-repo-anonymize.md | docs/architecture/ADR-0011-deliberately-absent.md
+# plant: CMC05 | ../docs/chain-decision-index.md | - **ADR-0015**
 # plant: CMC08 | ../docs/chain-decisions.md | It is a historical record and is not corrected in place | It is a historical record and may be corrected in place
 # plant: CMC09 | plugin/skills/concept-to-code/SKILL.md | Append it to `<project-root>/docs/chain-decisions.md` if that file exists | Append it to CLAUDE.md if that file exists
 # plant: CMC10 | plugin/skills/concept-to-code/SKILL.md | Rules line — only when the ADR establishes a recurring invariant that is not already in | Rules line — always, appended unconditionally alongside the index line and not already in
 # plant: CMC11 | plugin/skills/concept-to-code/SKILL.md | If the count exceeds 400, prepend to the | If the count exceeds 180, prepend to the
+# plant: CMC13 | plugin/skills/concept-to-code/SKILL.md | Append it to `<project-root>/docs/chain-decision-index.md` if that | Append it to `<project-root>/CLAUDE.md.proposed` if that
 # ------------------------------------------------------------------------------------------
 
 set -u
@@ -58,6 +68,7 @@ REPO=$(cd .. && pwd)
 SKILL="plugin/skills/concept-to-code/SKILL.md"
 CMD="$REPO/CLAUDE.md"
 ARC="$REPO/docs/chain-decisions.md"
+IDX="$REPO/docs/chain-decision-index.md"
 
 PASS=0; FAIL=0; SKIP=0
 ok()   { echo "PASS: $1"; PASS=$((PASS+1)); }
@@ -86,9 +97,11 @@ has_flat() { printf '%s' "$2" | grep -qF "$(printf '%s' "$3" | tr -d '`*_' | tr 
 # must not read as a check that found nothing). CMCZ1 below counts skips into its floor, so the
 # eight cannot quietly disappear instead of being skipped.
 #
-# The sandbox is discriminated by the ABSENCE OF .git, not by the absence of CLAUDE.md. Keying on
-# CLAUDE.md itself would make a genuinely deleted CLAUDE.md in a real checkout skip the eight
-# assertions that exist to guard it — the fail-open this whole file is about.
+# Discriminated by the ABSENCE OF .git, not by the absence of CLAUDE.md. Keying on CLAUDE.md itself
+# would make a genuinely deleted CLAUDE.md in a real checkout skip the five assertions that exist to
+# guard it — the fail-open this whole file is about. Note that since build_sandbox() started copying
+# CLAUDE.md this branch is no longer reached from plant-check.sh at all (ADR-0163); it is kept as
+# the fail-safe it always was, not as a sandbox accommodation.
 CMD_PRESENT=0
 if [ -f "$CMD" ]; then
   CMD_PRESENT=1
@@ -96,14 +109,14 @@ elif [ -d "$REPO/.git" ]; then
   echo "FAIL: CLAUDE.md not found at $CMD, and this IS a real checkout (.git present)"
   exit 1
 fi
-cmd_skip() { skip "$1 — CLAUDE.md unreachable ($REPO has no .git: plant-check sandbox boundary, ADR-0136)"; }
+cmd_skip() { skip "$1 — CLAUDE.md unreachable and $REPO has no .git, so this is not a checkout (ADR-0136, ADR-0163)"; }
 
 # --- A. the condensed file's shape ---------------------------------------------------------
 
 CEILING=400
 if [ "$CMD_PRESENT" -eq 0 ]; then
   cmd_skip "CMC01"; cmd_skip "CMC07"; cmd_skip "CMC03"; cmd_skip "CMC02"
-  cmd_skip "CMC12"; cmd_skip "CMC06"; cmd_skip "CMC04"; cmd_skip "CMC05"
+  cmd_skip "CMC12"
 else
 CMD_LINES=$(wc -l < "$CMD" | tr -d ' ')
 if [ "$CMD_LINES" -le "$CEILING" ]; then
@@ -161,10 +174,21 @@ if has_flat x "$CMD_FLAT" "this list is hand-curated"; then
 else
   bad "CMC12 the Rules section does not declare that it is hand-curated — a reader would take the list as exhaustive, which nothing verifies (ADR-0136 premise 2)"
 fi
+fi   # end of the CMD_PRESENT guard opened in section A
 
 # --- C. the index, and its agreement with the archive ---------------------------------------
+# The index moved to docs/chain-decision-index.md (ADR-0163), so these three no longer read
+# CLAUDE.md and are OUTSIDE the guard above. Their subject lives under docs/, which the plant
+# sandbox copies and every real checkout has, so an absent index is a DEFECT and not an
+# environment: bad, never skip. That is rule 4 pointing the other way, and it is why this is not
+# the placement CMC08 has for the opposite reason.
 
-IDX_N=$(grep -c '^- \*\*ADR-[0-9][0-9][0-9][0-9]\*\*' "$CMD" || true); IDX_N=${IDX_N:-0}
+if [ ! -f "$IDX" ]; then
+  bad "CMC06 $IDX does not exist — the index has nowhere to live"
+  bad "CMC04 $IDX does not exist"
+  bad "CMC05 $IDX does not exist"
+else
+IDX_N=$(grep -c '^- \*\*ADR-[0-9][0-9][0-9][0-9]\*\*' "$IDX" || true); IDX_N=${IDX_N:-0}
 if [ "$IDX_N" -ge 90 ]; then
   ok "CMC06 the index population is non-vacuous ($IDX_N entries)"
 else
@@ -176,7 +200,7 @@ while IFS= read -r p; do
   [ -n "$p" ] || continue
   [ -f "$REPO/$p" ] || _i_dead="$_i_dead $p"
 done <<EOF
-$(grep '^- \*\*ADR-' "$CMD" | grep -o 'docs/architecture/[A-Za-z0-9._-]*\.md')
+$(grep '^- \*\*ADR-' "$IDX" | grep -o 'docs/architecture/[A-Za-z0-9._-]*\.md')
 EOF
 if [ -z "$_i_dead" ]; then
   ok "CMC04 all $IDX_N index entries point at an ADR file that exists"
@@ -194,7 +218,7 @@ if [ -f "$ARC" ]; then
 else
   bad "CMC05 $ARC does not exist — the narrative has nowhere to go"
 fi
-fi   # end of the CMD_PRESENT guard opened in section A
+fi   # end of the index-presence guard opened above
 
 # CMC08 reads ONLY the archive, which the sandbox does copy (ADR-0116's ../docs/ hatch), so it sits
 # OUTSIDE the CLAUDE.md guard above — that placement is what makes its plant reachable at all.
@@ -221,6 +245,12 @@ if has_flat x "$S_FLAT" "append it to <project-root>/docs/chain-decisions.md if 
   ok "CMC09 Step 3 Branch A appends the narrative block to the archive"
 else
   bad "CMC09 Step 3 Branch A does not append the block to docs/chain-decisions.md — the producer still grows CLAUDE.md by ~58 lines per feature (ADR-0136)"
+fi
+
+if has_flat x "$S_FLAT" "append it to <project-root>/docs/chain-decision-index.md if that file exists"; then
+  ok "CMC13 Step 3 sends the index line to docs/chain-decision-index.md"
+else
+  bad "CMC13 Step 3 does not append the index line to docs/chain-decision-index.md — the producer writes it back into CLAUDE.md and the condensation undoes itself one feature at a time (ADR-0163)"
 fi
 
 if has_flat x "$S_FLAT" "index line — always" \
@@ -251,10 +281,10 @@ fi
 # floor honest in both environments: an assertion that vanished is not replaced by a skip, because
 # a skip is printed by name.
 _total=$((PASS + FAIL + SKIP))
-if [ "$_total" -ge 12 ]; then
-  ok "CMCZ1 assertion-count floor ($_total >= 12; $SKIP skipped)"
+if [ "$_total" -ge 13 ]; then
+  ok "CMCZ1 assertion-count floor ($_total >= 13; $SKIP skipped)"
 else
-  bad "CMCZ1 assertion count fell to $_total (floor 12) — assertions vanished from this file"
+  bad "CMCZ1 assertion count fell to $_total (floor 13) — assertions vanished from this file"
 fi
 
 echo "PASS=$PASS FAIL=$FAIL SKIP=$SKIP"

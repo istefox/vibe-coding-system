@@ -15,8 +15,9 @@ single ADR. This file is the only home of that material.
 inside a block is a correct snapshot of the day it was written; several are stale today and that is
 what a record is. Re-derive any number from the files before citing it — never from this file.
 
-The live, always-loaded material — the recurring rules and the one-line index of what each ADR
-decided — is in `CLAUDE.md` under `## Rules` and `## Chain decision index`.
+The live, always-loaded material is the recurring rules, in `CLAUDE.md` under `## Rules`. The
+one-line index of what each ADR decided is in `docs/chain-decision-index.md`, which is looked up
+rather than loaded (ADR-0163).
 
 ---
 
@@ -4726,3 +4727,28 @@ Detail: `docs/architecture/ADR-0161-stop-gate-fingerprint-cache.md`.
   and this is it paying for itself.
 
 Detail: `docs/architecture/ADR-0162-session-context-inject-compact-lazy.md`.
+
+---
+
+## Decisions from the chain-decision-index-out-of-claude-md chain (ADR-0163)
+
+The one-line index of what each ADR decided moves out of `CLAUDE.md`: `docs/chain-decision-index.md`.
+
+Key architectural decisions:
+- **The index is lookup data, not instruction:** 117 entries, 23,751 bytes, 66.5% of `CLAUDE.md`,
+  re-created in context on the first turn after every compaction to answer a question nobody asked.
+  `## Rules` stays, because that layer is loaded on purpose.
+- **The heading stays and is load-bearing:** `CMC02` terminates its `sed` range on
+  `/^## Chain decision index$/` and `CMC03` on the next level-2 heading. Delete the heading and both
+  silently widen to end-of-file.
+- **The plan's stated reason for moving three assertions out of the guard was false:**
+  `build_sandbox()` copies `CLAUDE.md`, and has for some time. The real reason is that their subject
+  is now a file under `docs/`, present in every environment, so an absence is a defect — `bad`, not
+  `skip`. The false premise was corrected in the harness comment that carried it.
+- **The producer switches on the destination's presence:** the same switch ADR-0136 gave the
+  archive, so no project generated from this blueprint is broken. `CMC13` is what makes the producer
+  and the consumer meet, and it is planted.
+- **`CMC06` is declared unplantable with its reason:** a `>= 90` floor over 117 absorbs its own
+  plant (rule 10). `CMC05`'s exact equality is where a plant bites.
+
+Detail: `docs/architecture/ADR-0163-chain-decision-index-out-of-claude-md.md`.

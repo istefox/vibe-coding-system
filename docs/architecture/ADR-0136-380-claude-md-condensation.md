@@ -330,3 +330,19 @@ final 3,895-line size; the two numbers then belong to different moments and were
 they belonged to one. Confirming that needs the same transcript telemetry ADR-0130 used, which is
 not re-derived here. Until it is, treat **11.2k measured** as the fact and the 74,196 median as a
 figure whose decomposition is open — not as the baseline this change is scored against.
+
+## Correction 2026-08-21 — the index left `CLAUDE.md`, so D1's second bullet names a shape that no longer exists
+
+D1 above puts `## Rules` and `## Chain decision index` in `CLAUDE.md` together, and scores the
+result at 257 lines. That was correct on the day it was written and is the record of it. It is no
+longer the shape of the file: ADR-0163 moved the index to `docs/chain-decision-index.md` and left
+the heading behind with a pointer line. `CLAUDE.md` is **173 lines, 12,368 bytes**, and the index it
+used to carry is 117 entries and 23,751 bytes — two thirds of the file it was measured inside.
+
+Nothing in D1's reasoning is retracted. The split it argued for is the same split applied again one
+level down, and for the reason D2 gives: the archive was moved because a runtime behaviour that
+silently changes is not a place to keep 75,000 tokens. The index stayed because at 95 entries it
+looked like part of the instruction layer. At 117 it was measurably not: it is lookup data, read
+into every turn to answer a question nobody had asked. The Consequences' re-growth figure — 55, 55,
+49, 76, 61, 56 lines per feature — is what made the difference visible, since one index line per
+feature accumulates and one Rules line per feature does not.
