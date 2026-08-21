@@ -1737,22 +1737,23 @@ fi
 
 # ==================================================================================================
 # RY12. RED until Task 6 (Batch D) — the record: a docs/chain-decisions.md heading naming ADR-0154,
-# a CLAUDE.md chain-decision index line naming it, and a PROJECT.md row naming it. Verified
+# a docs/chain-decision-index.md line naming it, and a PROJECT.md row naming it. Verified
 # 2026-08-18: the ADR-authoring step already wrote the first two; the PROJECT.md row is Task 6's own
 # deliverable, so this assertion is red on that one leg alone until it lands.
 # ==================================================================================================
+# plant: RY12 | ../docs/chain-decision-index.md | - **ADR-0154**
 # plant: RY12 | ../docs/chain-decisions.md | ## Decisions from the spec-coverage-scope-back-reference chain (ADR-0154) | ## Decisions from the spec-coverage-scope-back-reference chain (renamed, no ADR ref)
 RY_CD="$REPO/docs/chain-decisions.md"
-RY_CLMD="$REPO/CLAUDE.md"
+RY_CLMD="$REPO/docs/chain-decision-index.md"
 RY_PROJ="$REPO/PROJECT.md"
 ry12_cd=0; ry12_cl=0; ry12_pj=0
 grep -qE '^## .*ADR-0154' "$RY_CD" 2>/dev/null && ry12_cd=1
 grep -qE '^\- \*\*ADR-0154\*\*' "$RY_CLMD" 2>/dev/null && ry12_cl=1
 grep -qF 'ADR-0154' "$RY_PROJ" 2>/dev/null && ry12_pj=1
 if [ "$ry12_cd" -eq 1 ] && [ "$ry12_cl" -eq 1 ] && [ "$ry12_pj" -eq 1 ]; then
-  ok "RY12 (R-10): the record is written — a docs/chain-decisions.md heading naming ADR-0154, a CLAUDE.md chain-decision index line naming it, and a PROJECT.md row naming it, all three present"
+  ok "RY12 (R-10): the record is written — a docs/chain-decisions.md heading naming ADR-0154, a docs/chain-decision-index.md line naming it, and a PROJECT.md row naming it, all three present"
 else
-  bad "RY12: the record is incomplete (chain-decisions.md heading=$ry12_cd, CLAUDE.md index line=$ry12_cl, PROJECT.md row=$ry12_pj) — Task 6 has not landed yet"
+  bad "RY12: the record is incomplete (chain-decisions.md heading=$ry12_cd, chain-decision-index.md line=$ry12_cl, PROJECT.md row=$ry12_pj) — Task 6 has not landed yet"
 fi
 
 # ==================================================================================================

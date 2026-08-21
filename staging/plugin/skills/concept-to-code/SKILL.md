@@ -726,10 +726,14 @@ Steps:
    Append it to `<project-root>/docs/chain-decisions.md` if that file exists. If it does not, this
    project has not adopted the split: append the block to CLAUDE.md exactly as before and skip
    step 3. The archive's presence is the switch, so no project is broken by this change.
-3. **CLAUDE.md gets one line, always, and a second line only sometimes.** Compose both into
-   `<project-root>/CLAUDE.md.proposed`:
-   - **Index line — always.** One entry appended under `## Chain decision index`, in the existing
-     form: `- **<ADR-NNNN>** — <the single thing it decided, one clause> → \`<path to the ADR>\``.
+3. **One index line, always, and a CLAUDE.md Rules line only sometimes.** The two go to different
+   files, and only the second reaches `<project-root>/CLAUDE.md.proposed`:
+   - **Index line — always.** Append it to `<project-root>/docs/chain-decision-index.md` if that
+     file exists (ADR-0163); if it does not, this project has not adopted the split, so append it
+     under `## Chain decision index` in `CLAUDE.md.proposed` exactly as before. The index file's
+     presence is the switch, the same one step 2 uses for the archive, so no project is broken by
+     this change. Either way the form is unchanged:
+     `- **<ADR-NNNN>** — <the single thing it decided, one clause> → \`<path to the ADR>\``.
      The index and the archive must stay the same size: one block appended, one index line
      appended.
    - **Rules line — only when the ADR establishes a recurring invariant that is not already in
@@ -744,7 +748,7 @@ Steps:
    every run for months because the file was 3,895 lines, and its remedy was measured at 3.0% yield
    on exactly this file and rejected by #380. A warning that always fires and points at a dead
    remedy is noise an operator learns to click past.
-5. Transition to `gate_3_project_memory_review`. Display the added lines (`diff CLAUDE.md CLAUDE.md.proposed`, plus the block appended to the archive) as text, then present Gate 3 (see §5 Gate 3 block).
+5. Transition to `gate_3_project_memory_review`. Display the added lines (`diff CLAUDE.md CLAUDE.md.proposed`, plus the block appended to the archive and the line appended to the index) as text, then present Gate 3 (see §5 Gate 3 block).
 
 ---
 
