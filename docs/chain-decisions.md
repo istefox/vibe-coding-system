@@ -4688,3 +4688,41 @@ Key architectural decisions:
   is stated as the same class of limit signature-equality already carried, not discovered later.
 
 Detail: `docs/architecture/ADR-0161-stop-gate-fingerprint-cache.md`.
+
+## Decisions from the session-context-inject compact-laziness chain (ADR-0162)
+
+- **The measurement came first and changed the target.** The session was compacting every few turns
+  and the obvious explanation — the context growing into its ceiling — is the one the data refused.
+  `compactMetadata.preTokens` read out at 140,753 once and then sixteen times between 83,898 and
+  86,906, against an `autoCompactWindow` of 300,000 that `/autocompact` confirms is read from
+  settings. The context was never filling up. What was happening is that ~50k of every
+  post-compaction context is fixed preamble, re-created on the first turn after each compaction
+  (`cache_creation_input_tokens` of 48,456 / 52,942 / 50,057 / 53,877 / 54,945 / 54,624, against
+  546–2,008 on the turns after), leaving ~35k of working room that one large tool output consumes.
+  Rule 13, and it moved the work from a settings key to a hook.
+- **The gap between the configured window and the observed threshold is left open, on purpose.** It
+  would have been easy to write a sentence explaining it. Nothing was checked that could support
+  one, so the ADR says the mechanism is not established and the fix is scoped to what *was*
+  measured. A confident explanation would have been the more useful-looking artifact and the less
+  true one.
+- **The fail-open direction is the whole decision.** Reading `source` and skipping on `compact` is
+  three lines; deciding what an unreadable payload means is the part worth an ADR. Here the costly
+  failure is a context that silently stops being delivered, so absence resolves to *inject* — the
+  inverse of ADR-0055 §D2's stop-gate case, from the same principle. Four of the six assertions pin
+  that half rather than the saving, because the saving is what a future change would notice losing
+  and the delivery is not.
+- **A withheld payload is announced, not silently dropped.** Rule 4 is usually invoked for checks —
+  "did not run" is not "found nothing". It applies identically to a saving: at `compact` the hook
+  still prints its frame and names the file's absolute path, so the content stays reachable by
+  someone who does not know the hook exists.
+- **The precedent was already on the machine, one directory over.** The `remember` plugin's `MEMORY`
+  block ships exactly this shape for its own payload and says so in the text it injects. The
+  repository's own hook, sitting in the same `SessionStart` list, did not — and the handoff block
+  was announcing "already delivered 18 times" while it happened. Reading a neighbour's solved
+  version of the problem cost less than designing one.
+- **`pairs-completeness` caught the omission the author would not have.** The new harness passed on
+  its own and would have shipped never running in CI; CI1 flagged it in the same run. That check
+  exists because of rule 8 — a check validating a list's entries is blind to what the list omits —
+  and this is it paying for itself.
+
+Detail: `docs/architecture/ADR-0162-session-context-inject-compact-lazy.md`.
