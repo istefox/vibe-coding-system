@@ -3,6 +3,61 @@
 ## Overview
 Auto-generated roadmap from issues labeled `prep` (ADR-0023).
 
+## Where this stands (2026-08-19, evening)
+
+**Measured on the day, not carried forward:** 74 open issues on GitHub, **0 of them unhomed** in this
+file, 24 phases, 48 open checkboxes against 136 closed. The reverse check #440 asked for is running
+and reporting; that is what keeps the 0 honest rather than a claim.
+
+**Phases 1–7 are closed.** Phase 5 is superseded by Phase 6 and kept for its reasoning only. Phase 8
+is the shakedown's own phase and its origin story is the section below, left at its own date.
+
+**Nine ADRs merged 2026-08-19**, in two stacked PRs (#496 carrying #497) plus #498:
+
+- **ADR-0154** (#476) the scope filter becomes a conjunction — a test file counts only when the plan
+  names it *and* it names the plan or a cited ADR back. Measured: 94 of 263 scoped files were
+  precedent citations, not coverage.
+- **ADR-0155** (#486) the tester's batch must leave the target building — tester-first assumed a
+  failing assertion still compiles, and in Swift it does not.
+- **ADR-0156** (#477) the stop gate's budget is spent by distinct failures, not repeats. 5 of 16
+  sessions that ever blocked had reached the cap and then guarded nothing.
+- **ADR-0157** (#487) a foreign feature's requirement id is not this feature's coverage. 12 of 130
+  corpus rows move; 0 COVERED rows move in either direction.
+- **ADR-0158** (#489, #479) the collapse sees the whole feature, and Step 6 stops committing.
+- **ADR-0159** (#488, #494) one build root per checkout, and the completion fact read *before* the
+  merge-back that deletes the worktree holding it.
+- **ADR-0160** (#472, #478, #386) `#` opens a macro in Swift, not a comment; a `.swift` extension is
+  not a view. Also narrows ADR-0054's CE guard with a declared, content-verified exemption.
+- **ADR-0161** (#491, #411) do not re-run a suite on a tree that has not moved.
+- **The `auto-learning` declaration** (#498) — a report that fires every run stops being read.
+
+**The lesson is the same one Phase 8 recorded, from a new direction, and that is what makes it worth
+restating.** Phase 8 came from the first run that reached Step 5 *inside this repository*. These nine
+came from a run on **a different project, in a compiled language** — the first time this system was
+exercised outside its own repo on Swift. Seven were reported from the field; **two more were found
+only while verifying the other seven against the files**, which is the argument for verifying a
+report rather than implementing it. Four phases of preventive work had not surfaced any of them,
+because a planted defect proves a guard fires and proves nothing about the chain it guards.
+
+**Two of the nine are classes this file has already named:** rule 18 (a scan satisfied by the whole
+population it searches) and rule 17 (a producer and a consumer nothing checks meet). Both were fixed
+at the mechanism rather than worked around per project, which is the only reason they will not
+return on the next foreign repo.
+
+**Open decisions, each refused or bounded on record rather than left implicit:**
+
+- **#273** — a declared expected-red set both the stop gate and the Step 5 checkpoint could read.
+  Refused: it is the one change that would make a project-owned hook depend on the chain's shape.
+  Both #477 and #486 leave a half there.
+- **#483** — `pytest.raises` is a separate assertion token from ADR-0160's `#expect`/`#require`.
+- **`.claude/test-timeout` is 600s** against a suite measured at **415s over 85 harnesses** on an
+  unloaded machine. That is 1.45x, thinner than the 2x this file has previously carried, and a
+  deliberate operator call. If a timeout reappears, re-measure before raising — the value has now
+  fallen below its own suite once, by growth rather than by error.
+
+**One standing rule, and it held today.** A checkbox is ticked in the same PR that closes its item.
+All nine rows above were ticked in the commits that closed them, not in a later docs pass.
+
 ## Where this stands (2026-07-30, evening)
 
 **Phases 1–7 are closed.** Phase 5 is superseded by Phase 6 and kept for its reasoning only.
