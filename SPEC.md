@@ -1,138 +1,158 @@
-# SPEC — spec-coverage's test-axis scope requires a test file to name the feature back
+# SPEC — Chain never regenerates a generated Xcode project (issue #470)
 
-**Topic slug:** spec-coverage-scope-back-reference
+**Topic slug:** 470-chain-never-regenerates-xcode
 
-## Objective
+## Objectives
 
-Close the path by which a foreign `R-NN` satisfies this feature's requirement-coverage gate.
+On a Swift project scaffolded by `git-repo-init` under Tuist, the concept-to-code chain runs
+`xcodebuild test` against a `.xcodeproj` that is gitignored and that nothing in the chain ever
+regenerates. Source files arriving via merge, checkout, or a worktree are not in the stale target,
+so their tests never run and every `tests_after` figure is measured against a project that does
+not reflect the current tree.
 
-ADR-0138 narrowed `spec-coverage.sh`'s test axis to the test files a plan names, so an unrelated
-harness could no longer supply a match. Measured against a real plan, the narrowing does not hold: a
-plan names other harnesses for ordinary reasons — a precedent it copies, an idiom it reuses, a
-verification step it prescribes — and each enters the scope carrying its own ids.
-
-## Context — what was measured before this was designed
-
-All figures derived 2026-08-18 from the corpus, not from an issue (rule 13).
-
-**The exposure.** On the `ADR-0153` plan, `spec-coverage.sh` reports 6 files in scope. Three are
-cited as precedents and carry seven ids of their own — `pairs-completeness.test.sh` has `R-05`,
-`R-09`; `plant-check.sh` has `R-01`, `R-05`, `R-12`; `recovery-preflight.test.sh` has `R-02`,
-`R-03` — every one inside that feature's declared `R-01 … R-24` range. Before its Task 6 landed,
-four of them reported `COVERED` while being cited nowhere in the feature's own harness.
-
-**Two designs refused on measurement.** Scoping to the files a plan's `Budget:` lines name: only 11
-of 53 plans name a test file there, so 42 would collapse to an empty scope. Requiring the id
-mention to sit in an id-mapping comment header: 87 of 893 mentions have that form and 22 of 31
-files carrying ids have none, so most genuine coverage would flip to uncovered — the same wall
-ADR-0138 hit with its own candidate, which measured 49 of 93 ids as comment-only.
-
-**The design that survived.** A scoped file must also name the feature back:
-
-```
-plans naming >= 1 discovered harness                 : 52
-  of which >= 1 named harness names the plan back    : 52
-scoped files under today's filter                    : 263
-scoped files naming the plan or one of its ADRs      : 169
-dropped from scope                                   : 94   (36%)
-ids flipping COVERED -> UNCOVERED under the new rule : 0
-```
-
-The 94 dropped are the precedent citations. Zero genuine coverage is lost on any of 52 plans.
-
-**The proxy in that zero, and how this feature closes it.** The flip measurement approximated each
-feature's declared id set by the ids its **plan** cites, not by parsing its SPEC. Regenerating
-`spec-coverage-scope-baseline.tsv` — one row per (SPEC, declared id) pair — *is* the re-derivation
-against the SPEC corpus, so the proxy is retired by this feature's own deliverable rather than
-carried forward as a caveat.
+This fix makes `detect-test-cmd.sh` regenerate a Tuist-managed Xcode project before testing it,
+detect that stack from a tracked manifest instead of the gitignored artifact it produces, and
+report an unambiguous DID-NOT-RUN state when the regenerator is unavailable — never a silent
+fall-through to a stale project.
 
 ## Scope
 
-**In:** the test axis of `spec-coverage.sh`, its scope filter, the frozen corpus baseline that
-proves the filter's behaviour, the harness that reads it, and one line in the architect's plan
-output contract.
+In scope:
+- `staging/plugin/scripts/detect-test-cmd.sh`: new detection branch for a Tuist-managed project
+  (`Project.swift`, `Tuist.swift`, or `project.yml`, tracked), emitting a `tuist generate &&`
+  regeneration prefix ahead of the `xcodebuild test` command. The existing `*.xcodeproj` glob
+  branch stays as-is and is checked only when no Tuist manifest is found (fallback for a tracked,
+  hand-maintained `.xcodeproj` with no Tuist).
+- Fix the `Package.swift` root-only check inside the same script's swift-package branch to also
+  recognize `Tuist/Package.swift`, closing the worktree-visibility gap described in the issue (a
+  worktree with `baseRef: head` has neither the gitignored `.xcodeproj` nor `.claude/test-cmd`,
+  and under Tuist the manifest lives at `Tuist/Package.swift`, not root).
+- A DID-NOT-RUN convention for the generated command itself: when the regeneration tool is absent
+  from `PATH` at test-cmd execution time, the command must exit a value distinct from both a clean
+  pass and an ordinary test failure, so `stop-gate.sh` and the chain's own gates (which already
+  distinguish DID-NOT-RUN from clean, per this repo's rule 4) read it correctly rather than as a
+  regression in the code under test.
+- Documentation: `docs/architecture/ADR-NNN-470-chain-never-regenerates-xcode.md` recording the
+  regeneration-prefix decision, the TOFU cost it imposes (an existing trusted `.claude/test-cmd`
+  is untouched — only a newly generated candidate carries the prefix and requires a fresh Gate 2b
+  approval), and which parts of this fix are enforced by an executable assertion versus documented
+  as an instruction (no Tuist install in this repo or its CI).
 
-**Out:** the plan axis, the discovery predicate for "what is a test file", the exit-code contract,
-the `(no-test: …)` waiver mechanism, `UNCOVERED`'s own semantics, and every other consumer of the
-script. This feature narrows one population; it changes no verdict's meaning.
+Out of scope:
+- Retroactively correcting or invalidating `tests_after` figures already recorded in past run
+  reports. The issue's own "Retroactive effect" section flags this as informational only — no
+  code artifact to build.
+- Migrating already-trusted `.claude/test-cmd` files on existing Tuist projects to the new prefix
+  form. Trust is per-SHA (ADR-0014/0020); an existing trusted command is left untouched by
+  `detect-test-cmd.sh`'s "already present" short-circuit (unchanged by this fix), and picking up
+  the regeneration prefix happens the next time that project's candidate is regenerated from
+  scratch and re-approved.
+- Any change to `xcodebuild` itself, to Tuist, or to `git-repo-init`'s existing `.gitignore`
+  authoring of `*.xcodeproj` (that authoring is correct on its own, per the issue).
 
 ## Stack
 
-Bash 3.2 and POSIX `awk`/`sed`/`grep`, matching the file being changed. No new dependency, no new
-helper script unless the extraction criterion (ADR-0086) is met — one consumer means one file.
+Bash 3.2-clean shell script (existing constraint on `detect-test-cmd.sh`, unchanged). No new
+runtime dependency is introduced; `tuist` is an optional tool the fix must detect the *absence* of
+correctly, not one this fix requires installing.
 
 ## Architecture
 
-The filter becomes a conjunction. A discovered test file enters the test axis when **both** hold:
+`detect-test-cmd.sh`'s stack-detection `if`/`elif` chain gains one new branch, ordered before the
+existing `*.xcodeproj` branch:
 
-1. its basename appears in the plan as a whole token — today's condition, unchanged;
-2. its own text names the plan's basename, or one of the `ADR-NNNN` ids the plan cites.
+1. **New — Tuist-managed project.** Tracked-manifest glob (`Project.swift` or `Tuist.swift` at
+   root, or `project.yml` at root) → `STACK="xcode-project-generated"`, `CMD="tuist generate &&
+   xcodebuild test -project \"<derived-project>\" -scheme \"<derived-scheme>\" -destination
+   '...' -derivedDataPath \"$PWD/.build/DerivedData\""`. The `-project`/`-scheme` values cannot be
+   derived from the manifest alone before generation runs; state in the ADR how the candidate
+   command derives them (e.g. a fixed convention documented by `git-repo-init`, or a second `tuist
+   generate --no-open` dry pass to discover the produced `.xcodeproj` name at candidate-write
+   time, never at test-run time).
+2. **Unchanged — tracked `.xcworkspace` / hand-maintained `.xcodeproj`.** Existing branches,
+   unmodified, now reached only when branch 1 does not match.
+3. **Fixed — `swift-package` branch.** `[ -f "Package.swift" ]` becomes `[ -f "Package.swift" ] ||
+   [ -f "Tuist/Package.swift" ]`, closing the worktree-visibility gap. Only a detection fix — it
+   does not change `CMD="swift test"` for that branch, since a `Tuist/Package.swift` project does
+   not need `tuist generate` for a plain `swift test` invocation the way an Xcode-project scheme
+   does.
 
-Half 2 is an OR by measurement, not by preference: harnesses in this corpus name the ADR more often
-than the plan, and requiring the plan alone was not measured and risks flips the OR does not have.
+Consumers unaffected by name: `stop-gate.sh`'s existing `CMD=$(awk …)` read of the first
+non-comment, non-blank line of `.claude/test-cmd` is unchanged — it runs whatever line
+`detect-test-cmd.sh` wrote, including the new `&&`-chained regeneration prefix, exactly as it runs
+today's single-command lines.
 
-The derivation is itself a population, so it carries a denominator guard (rule 7): a bug that made
-every file fail half 2 would collapse the scope everywhere, and the baseline would report that as
-187 changed rows rather than as a collapse.
+## Data model / state
 
-## Data model
+No persistent data model. The fields touched are:
+- `.claude/test-cmd` — one line, now optionally carrying a `tuist generate && ` prefix ahead of
+  the `xcodebuild test` invocation for a detected Tuist stack.
+- The chain manifest's `test_cmd_candidate` / TOFU trust registry (`~/.claude/state/stop-gate/trust`)
+  — unchanged in shape; a regenerated candidate's SHA differs from any prior trusted SHA for the
+  same project, which is what forces a fresh Gate 2b approval (existing mechanism, no schema
+  change).
 
-`spec-coverage-scope-baseline.tsv` keeps its shape — one row per (SPEC, declared id) pair with its
-scoped verdict. Its rows are regenerated under the new rule and the delta is recorded.
+## API / exit-code contract
 
-No manifest field is added. No new file format is introduced.
+`detect-test-cmd.sh` itself: no interface change (still `--root <dir> [--dry-run]`, still exit 0
+on success / exit 2 on bad invocation, unchanged).
 
-## API — the script's stdout and exit codes
-
-Unchanged, with one addition. `COVERED`, `UNCOVERED`, `UNSCOPED`, `DUPLICATE`, `MALFORMED`,
-`ORPHAN`, `STALE-WAIVER` keep their meanings and their exit codes.
-
-An id whose only mention now sits in a descoped file reports `UNSCOPED`, which already exists and
-already carries the right remedy — cite the id in the test file this feature actually wrote. No new
-token is needed for the common case.
-
-One state is genuinely new: the plan names one or more discovered harnesses and **none** names the
-feature back. That is neither "the plan names no test file" nor a clean scope, and it gets its own
-token and its own remedy line.
+The **generated command's own exit-code contract** is new surface this fix defines:
+- Regeneration tool present, `tuist generate` and `xcodebuild test` both run → ordinary pass/fail
+  exit code from `xcodebuild`, unchanged from today.
+- Regeneration tool (`tuist`) absent from `PATH` at run time → the command must exit a value that
+  is neither `0` nor an ordinary `xcodebuild` failure code, and that value must be documented in
+  the ADR as the project's DID-NOT-RUN convention for a generated-project test-cmd, consistent
+  with this repository's existing rule 4 ("did not run" is not "found nothing").
 
 ## UI flows
 
-None. The script is invoked by `concept-to-code` Step 5 and by its harness.
+None — this is a shell-script and chain-documentation fix with no interactive surface beyond the
+existing HITL gates (Gate 2 architect review, Gate 2b TOFU approval) already defined by
+`concept-to-code`.
 
 ## Edge cases
 
-- **A plan names harnesses, none names back** — the new token above. Does not occur in today's
-  corpus (52 of 52 resolve), and is exactly what a feature extending a shared harness would produce.
-- **A plan names no test file at all** — unchanged: today's denominator guard already answers it,
-  and the new state must not be confused with it.
-- **A harness covering two features** — names both plans or both ADRs; the OR admits it.
-- **A plan citing an ADR that no harness names** — the harness that names the plan still scopes in.
-- **An ADR id appearing in a harness for an unrelated reason** — possible, and narrower than
-  today's exposure rather than a new one: it requires the stranger to cite this feature's own ADR.
-- **The corpus grows** — the denominator guard is a floor, and a floor absorbs its own plant
-  (rule 10), so it is a vacuity guard and says so at its site; the baseline is the real evidence.
-- **`--tests-root` omitted** (placeholder or provisional test-cmd) — the whole test axis is already
-  skipped; this feature adds nothing there.
+- A project with a tracked (non-gitignored) `.xcodeproj` and no Tuist manifest at all: must
+  continue to be detected exactly as today (fallback branch, unchanged `CMD`, no regeneration
+  prefix — nothing to regenerate).
+- A project with BOTH a Tuist manifest and a `Tuist/Package.swift`: the Tuist-manifest branch
+  (new, first) wins — an `xcodebuild test` regeneration path, not a `swift test` one — since the
+  project is Xcode-project-shaped, not a plain SwiftPM library.
+- `tuist` present in `PATH` at candidate-generation time but later removed before test-cmd
+  actually runs (e.g. a different worktree/machine): the DID-NOT-RUN contract applies at *run*
+  time, independent of what was true when the candidate was written.
+- An existing, already-trusted `.claude/test-cmd` on a Tuist project predating this fix: left
+  untouched (existing "already present" short-circuit) — no forced re-approval, no forced
+  regeneration prefix, consistent with how ADR-0159's `-derivedDataPath` addition was rolled out.
+- A worktree forked with `baseRef: head` for a Tuist-managed project: after this fix,
+  `detect-test-cmd.sh`'s Tuist-manifest check finds `Project.swift`/`Tuist.swift`/`project.yml`
+  (tracked, so present in every worktree) even though `.xcodeproj` and `.claude/test-cmd` are
+  gitignored and absent from that worktree — the worktree still needs its OWN copy of a trusted
+  `.claude/test-cmd` to actually run tests, which is an existing, separate concern of how the
+  chain propagates trust into a worktree, unchanged by this fix.
 
 ## Success criteria
 
-`R-10`, `R-11` and `R-12` are documentation obligations and carried a `(no-test: …)`
-exemption when this SPEC was written. The clauses were deleted at Gate 2, on 2026-08-18,
-because the exemption reported `STALE-WAIVER` and blocked the gate before any code existed:
-`spec-coverage.test.sh` already contains those three tokens as `RC3`/`RC4` heredoc fixtures,
-so the ids are "mentioned in a scoped test file" by a fixture that has nothing to do with
-this feature. The deletion alone would turn that block into a false `COVERED`, so it is
-paired with the existence-level assertions the plan's Task 1 adds — both halves, never one.
-
-- [ ] R-01 — a discovered test file enters the test axis only when the plan names it **and** its own text names the feature back; either half alone is not enough.
-- [ ] R-02 — "names the feature back" is the plan's basename or one of the `ADR-NNNN` ids the plan cites, matched as a whole token the same way the basename already is.
-- [ ] R-03 — an id whose only mention sits in a descoped file reports `UNSCOPED`, never `COVERED`.
-- [ ] R-04 — the plan axis, the discovery predicate, the exit codes and the documentation-exemption waiver behave exactly as before; no verdict changes meaning. The clause naming that waiver is written without its literal marker form on purpose: the extractor reads the marker line-wise, so a requirement mentioning the mechanism would exempt itself from the axis it belongs to.
-- [ ] R-05 — "the plan names harnesses but none names the feature back" is a distinct reported state, told apart from "the plan names no test file", and its remedy names the one-line fix.
-- [ ] R-06 — the back-reference derivation carries a denominator guard that fails when it stops resolving across the corpus, declared at its site as a vacuity guard rather than as the primary evidence.
-- [ ] R-07 — `spec-coverage-scope-baseline.tsv` is regenerated under the new rule and every row whose verdict changes is accounted for; a `COVERED` → `UNSCOPED` flip that is not a precedent citation blocks the feature.
-- [ ] R-08 — the architect's plan output contract states that a plan names the harness it creates and that the harness names the plan or its ADR back.
-- [ ] R-09 — every new assertion is seen RED against a declared plant, and the plant registry reports it `FIRED`, never `NOFIRE`, `BADPLANT` or `VACUOUS`.
-- [ ] R-10 — the record is written: an ADR, a `docs/chain-decisions.md` block, one `CLAUDE.md` index line and a `PROJECT.md` row.
-- [ ] R-11 — the ADR records both refused designs with the measurements that refused them.
-- [ ] R-12 — the ADR states which parts of this feature are instructions rather than enforcements, naming the architect's contract line specifically.
+- [ ] R-01 — `detect-test-cmd.sh` detects a Tuist-managed project via a tracked manifest
+      (`Project.swift`, `Tuist.swift`, or `project.yml`) before falling back to the existing
+      `*.xcodeproj` glob, and this ordering is covered by a fixture-based test with no real Tuist
+      install required.
+- [ ] R-02 — for a detected Tuist-managed project, the candidate command written to
+      `.claude/test-cmd` includes a `tuist generate &&` regeneration prefix ahead of the
+      `xcodebuild test` invocation.
+- [ ] R-03 — the existing `*.xcodeproj` / `.xcworkspace` detection branches are unmodified in
+      behavior for a project with no Tuist manifest present (regression check).
+- [ ] R-04 — the `swift-package` branch's `Package.swift` check also matches `Tuist/Package.swift`,
+      closing the worktree-visibility gap named in the issue.
+- [ ] R-05 — the generated Tuist test-cmd's DID-NOT-RUN exit-code convention (regeneration tool
+      absent from `PATH` at run time) is documented in the ADR and is distinguishable, in that
+      documentation, from both a clean pass and an ordinary `xcodebuild` test failure.
+- [ ] R-06 — an existing, already-trusted `.claude/test-cmd` on a Tuist project is left untouched
+      by `detect-test-cmd.sh` (no forced rewrite, no forced re-approval) — regression check against
+      the script's current "already present" short-circuit.
+- [ ] R-07 — the ADR states which parts of this fix are pinned by an executed fixture-based assertion versus documented as instruction only (no-test: this repository has no Tuist project or Tuist binary to execute a real regeneration against).
+      The ADR must name that this repository has no Tuist install in CI or locally, so the actual
+      `tuist generate` regeneration step cannot itself be pinned by an executed assertion end to
+      end — only detection and prefix generation are.
+- [ ] R-08 — the fix does not modify `git-repo-init`'s `.gitignore` authoring of `*.xcodeproj`, `xcodebuild` itself, or Tuist (no-test: explicitly out of scope, nothing to assert against).

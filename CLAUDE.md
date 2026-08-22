@@ -81,7 +81,7 @@ and in the `.claude/` directories of target projects — not here.
 
 ## Rules
 
-Nineteen invariants this repository learned by getting them wrong, each with the one-clause reason
+Twenty invariants this repository learned by getting them wrong, each with the one-clause reason
 that makes it more than a slogan and the ADR that established it. **They are stated here once.**
 Until issue #380 they were restated across 95 narrative blocks — over two hundred times — which is
 what made this file ~75,000 tokens in every orchestrator turn.
@@ -164,6 +164,12 @@ promoted. What *is* verified is that no line was lost: see ADR-0136.
     guard. What has actually kept deletions honest is the note left behind — 3 of 3 measured drops
     carry one. Enforced for the 371 planted assertions, where `plant-check.sh` reports `NOFIRE`;
     an instruction for the other 2622 (rule 16). → ADR-0150.
+20. **An exit-code convention belongs to the consumer, not the producer.** This repo's own DID-NOT-
+    RUN convention (exit 3, rule 4) is not universal: a generated `test-cmd` line is read by
+    `stop-gate.sh`'s pre-existing, fixed exit-code map, where 3 lands in the "test failure" bucket
+    and misreports a missing tool as a regression in the code under test. Read the actual consumer's
+    contract before picking a sentinel value; do not assume this repo's own convention travels with
+    the code that emits it. → ADR-0165.
 
 ## Chain decision index
 
