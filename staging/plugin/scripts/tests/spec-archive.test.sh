@@ -169,16 +169,36 @@ if [ "$rc" -eq 1 ] && [ "${out%% *}" = "COLLISION" ] \
 else bad "SA4 expected COLLISION/1 with the archive intact, got rc=$rc out=$out"; fi
 
 # SA5 is the empty-or-unknown guard IN ITS NEW POSITION (issue #455), and the fixture is what makes
-# it mean something different from SA16: the root HOLDS a SPEC.md. That is the case where `unknown`
-# is a genuinely confused caller — a file exists and there is no slug to name its archive — and it
-# is still refused. SA16 is the same slug with no file, and is now a no-op. One guard, two inputs,
-# opposite correct answers; before the reorder both got exit 3 and one of them was the bootstrap
-# path. Like SA1, this pair is defence-in-depth: a markerless SPEC routes to brownfield and never
-# reaches this script.
+# it mean something different from SA16: the root HOLDS a SPEC.md that is NOT already archived under
+# any name. That is the case where `unknown` is a genuinely confused caller — a file exists, it is
+# not a no-op, and there is no slug to name its archive — and it is still refused. SA16 is the same
+# slug with no file, and is now a no-op. One guard, two inputs, opposite correct answers.
+#
+# CORRECTION (2026-08-22, issue #408, ADR-0164): this comment used to justify the assertion as
+# "defence-in-depth: a markerless SPEC routes to brownfield and never reaches this script" (rule 14
+# — recorded forward, not rewritten in place, since the assertion below did not change, only its
+# rationale). That premise is false: `unknown` also reaches this script whenever `OUT_SLUG` is not
+# carried forward, independently of the SPEC's own marker, and 69 of 75 archived SPECs in this
+# repository carry no marker at all. SA5 is correct only because its fixture is UNARCHIVED. SA5b
+# below is the pair that #408 was actually about — the same unknown slug, on content that IS already
+# archived — and that pair is now a no-op, not a halt.
 r=$(mk_root "$SPEC_A")
 out=$(bash "$SA" "$r" unknown 2>&1); rc=$?
-if [ "$rc" -eq 3 ]; then ok "SA5 a SPEC.md that EXISTS with an unknown slug → exit 3 (did not run), distinct from 0"
-else bad "SA5 expected exit 3 for an unknown slug with a SPEC.md present, got rc=$rc out=$out"; fi
+if [ "$rc" -eq 3 ]; then ok "SA5 a SPEC.md that EXISTS, is NOT already archived, with an unknown slug → exit 3 (did not run), distinct from 0"
+else bad "SA5 expected exit 3 for an unarchived SPEC with an unknown slug, got rc=$rc out=$out"; fi
+
+# SA5b — THE assertion issue #408 exists for. Same fixture as SA5, except the content is already
+# sitting in the archive under a DIFFERENT name — the common case (69/75 archived SPECs carry no
+# `**Topic slug:**` marker, so `spec_topic_slug=unknown` for them too). Until #408 this returned
+# exit 3, because the slug was validated before the content was ever compared.
+# plant: SA5b | plugin/skills/concept-to-code/scripts/spec-archive.sh | if [ -d "$archive_dir" ]; then | if false; then
+r=$(mk_root "$SPEC_A")
+mkdir -p "$r/docs/specs"
+printf '%s\n' "$SPEC_A" >"$r/docs/specs/already-archived-under-this-name.spec.md"
+out=$(bash "$SA" "$r" unknown 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && [ "${out%% *}" = "ALREADY" ]; then
+  ok "SA5b a SPEC.md that EXISTS and IS already archived byte-identically, unknown slug → ALREADY, exit 0 (#408)"
+else bad "SA5b expected ALREADY/0 regardless of slug for already-archived content, got rc=$rc out=$out"; fi
 
 out=$(bash "$SA" 2>&1); rc=$?
 if [ "$rc" -eq 3 ]; then ok "SA6 bad invocation → exit 3"

@@ -163,6 +163,53 @@ else
   bad "F3: expected deferred in 2 schemas, found $F3N occurrence(s)"
 fi
 
+# =====================================================================================
+# G. Issue #412 — Step 6's dispatch selection is unconditional; the Workflow path documents its
+# own unreachability rather than being deleted (ADR-0129 §D6 precedent).
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# plant: G1 | plugin/skills/concept-to-code/SKILL.md | governs Step 5's dispatch path only (issue #412, ADR-0164) | selects Step 6 too: if hook_verified = true, use Workflow dispatch path
+# plant: G2 | plugin/skills/concept-to-code/SKILL.md | **Dispatch: always the skill fallback (below).** | **Dispatch: use the skill fallback (below) when appropriate.**
+# plant: G3 | plugin/skills/concept-to-code/SKILL.md | **never `"workflow"`.** | **sometimes `"workflow"`.**
+# plant: G4 | plugin/skills/concept-to-code/SKILL.md | #### Workflow dispatch path — Step 6 review cycle (NOT SELECTED — see above, issue #412) | #### Workflow dispatch path — Step 6 review cycle (hook_verified = true)
+# =====================================================================================
+
+# G1: no hook_verified BRANCH survives in the dispatch-selection line(s) at the top of Step 6 — a
+# conditional of the shape "If `manifest.hook_verified` = ...: use ...". Scoped to the selection
+# paragraph only (before the first #### subheading). The word itself legitimately still appears
+# there, explaining that hook_verified now governs Step 5 alone (issue #412) — this checks for the
+# CONDITIONAL construct, not for the word's absence, or that explanatory sentence would fail it.
+SELECTION=$(awk '/^### Step 6 — Review cycle/{f=1} /^####/{f=0} f' "$CC_SKILL")
+if printf '%s\n' "$SELECTION" | grep -qi 'if.*hook_verified.*use\|hook_verified = true.*use\|hook_verified.*: use'; then
+  bad "G1: the Step 6 dispatch-selection paragraph still branches on hook_verified"
+else
+  ok "G1: Step 6's dispatch selection no longer branches on hook_verified (#412)"
+fi
+
+# G2: the selection paragraph states the dispatch is unconditional.
+if printf '%s\n' "$SELECTION" | grep -qi 'always'; then
+  ok "G2: the selection paragraph states the dispatch is unconditional"
+else
+  bad "G2: no statement that Step 6 always uses the skill fallback"
+fi
+
+# G3: the banner names WHY the Workflow path is not selected — the measured zero-runs fact,
+# not merely an assertion that it isn't picked. A reader deciding whether to resurrect it needs
+# the reason in front of them, not just the outcome.
+if printf '%s\n' "$SELECTION" | grep -q 'never `"workflow"`'; then
+  ok "G3: the banner cites the measured fact that no run ever took the Workflow path"
+else
+  bad "G3: the banner does not cite the measured never-taken fact"
+fi
+
+# G4: the retired heading says outright that it is not selected, so a reader landing on it via
+# search does not mistake it for a live path.
+if grep -q '^#### Workflow dispatch path — Step 6 review cycle (NOT SELECTED' "$CC_SKILL"; then
+  ok "G4: the Step 6 Workflow heading states it is not selected"
+else
+  bad "G4: the Step 6 Workflow heading no longer states NOT SELECTED"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

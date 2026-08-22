@@ -121,3 +121,14 @@ implied.
   wrongly, or rate-limited passes the gate. This catches "absent", not "wrong".
 - Instruction, not enforcement, for the declaration half: nothing makes an architect declare
   honestly or completely.
+
+**Correction (2026-08-22, issue #473, ADR-0164):** the "checked, not proven" line above was true
+only of a self-reported absent — until #473, nothing in `external-dependency-check.sh` touched the
+environment at all, so a `provisioned: true` declaration that was simply wrong (the credential was
+never created, the variable was never set) passed the gate exactly like a true one. That is a
+stronger claim than "checked, not proven" concedes: it is not proven for the reasons stated above
+(expired, scoped wrongly, rate-limited all still pass), but until #473 it was also not checked for
+the plain case of "declared true, actually absent". ADR-0164 adds a real probe for four verifiable
+`<kind>` values (`env`, `binary`, `file`, `port`); everything else — including the
+genuinely-unattainable-unattended classes this ADR's §D2 names — stays a trusted declaration,
+now reported as such (`UNVERIFIED`) rather than folded silently into a clean result.

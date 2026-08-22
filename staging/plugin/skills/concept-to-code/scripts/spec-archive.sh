@@ -55,27 +55,15 @@ esac
 spec="$root/SPEC.md"
 [ -f "$spec" ] || { echo "NOSPEC"; exit 0; }
 
-# ONLY NOW is an empty-or-`unknown` slug a defect, and that ordering is the whole of issue #455.
-#
-# `unknown` reaches this script from TWO producers, and until #455 the comment here named only one
-# of them. `gate0-detect.sh` emits `spec_topic_slug=unknown` both for a SPEC.md with no marker —
-# which routes to brownfield and never gets here — AND for a root with no SPEC.md at all, which
-# routes to GREENFIELD and is precisely what Step 1's fence runs on. So the fence's documented
-# "no-op on the genuinely-empty one" was a HALT: this guard refused before anything had looked for
-# the file, and the caller's contract on exit 3 is to stop the chain. That is the bootstrap path,
-# the one case this repository never exercises on itself because its root slot is never empty.
-#
-# The check above settles the empty root as NOSPEC. What survives to here is a SPEC.md that EXISTS
-# with no slug to name its archive — a genuinely confused caller, refused as before.
-case "$slug" in
-  ""|unknown)
-    echo "spec-archive: outgoing slug is empty or unknown — refusing to name an archive" >&2
-    exit 3 ;;
-esac
-
 archive_dir="$root/docs/specs"
 
-# Already archived? Compare by CONTENT, never by filename.
+# Already archived? Compare by CONTENT, never by filename, and do this BEFORE the slug is ever
+# examined (issue #408). Archiving a SPEC that is already sitting in the archive byte-identically
+# is a no-op REGARDLESS of what name it would have been written under — a call needs a name only
+# when it is about to WRITE, and this loop settles whether a write is needed at all. Checking the
+# slug first, as an earlier version of this script did, turned the common case (69 of 75 archived
+# SPECs carry no `**Topic slug:**` marker, so `spec_topic_slug=unknown`) into a HALT for work that
+# had already happened.
 #
 # Measured on this repository before the check was written: 41 manifests, and only 3 of their topic
 # slugs name an existing `docs/specs/<slug>.spec.md`. The archive names come from the SPEC's own
@@ -91,6 +79,22 @@ if [ -d "$archive_dir" ]; then
     fi
   done
 fi
+
+# ONLY NOW is an empty-or-`unknown` slug a defect. Nothing above matched by content, so this call
+# is genuinely about to WRITE a new archive entry, and a write needs a name.
+#
+# `unknown` reaches this script from TWO producers. `gate0-detect.sh` emits
+# `spec_topic_slug=unknown` both for a SPEC.md with no marker — which routes to brownfield and
+# would only reach here if that SPEC's content is also novel — AND for a root with no SPEC.md at
+# all, which routes to GREENFIELD and is precisely what Step 1's fence runs on; that second case
+# is already settled as NOSPEC above, before either of these checks. What survives to here is a
+# SPEC.md that EXISTS, is NOT already archived under any name, and has no slug to name its own
+# archive under — a genuinely confused caller, refused.
+case "$slug" in
+  ""|unknown)
+    echo "spec-archive: outgoing slug is empty or unknown — refusing to name an archive" >&2
+    exit 3 ;;
+esac
 
 dest="$archive_dir/$slug.spec.md"
 

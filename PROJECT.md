@@ -1704,7 +1704,7 @@ today's gap; only the reverse check keeps it closed.
 | #482 | `spec-coverage.sh`'s `rc=2` and `diff-budget-check.sh`'s `CLEAN` both make a wrong CWD indistinguishable from a passed gate. The first is a call-site defect, the second a protocol gap: the reporter's vocabulary has no token for "could not read your plan" |
 | #428 | `run-hook-tests.sh` asserts over the retired `backup-before-deploy.sh`, and no gate executes the file, so the red has gone unobserved |
 | #445 | `F4` accepts a marker mention as proof a fence was executed, and cannot tell an extractor from a grep |
-| #473 | G13 checks that the architect *wrote* `provisioned: true`, never that the dependency exists |
+| #473 | G13 checks that the architect *wrote* `provisioned: true`, never that the dependency exists. **done** — ADR-0164 D3: `<kind>` is now a dispatch key for four verifiable classes (`env`, `binary`, `file`, `port`), each probed against the real environment when the declaration says `true`; every other kind (`oauth-consent`, `vendor-account`, and anything else) stays a trusted declaration, now reported as such on stdout (`UNVERIFIED`) rather than folded silently into a clean exit. Five assertions (EI1, EI2, EI3a, EI3b, EI4 in `external-dependency-gate.test.sh`), two plants |
 | #481 | `agent-metrics.sh`'s `test_count_delta` counts test **files**, so it reports a real, computed `0` for every change to an existing harness — measured live at 250 lines and 18 assertions added |
 | #485 | ADR-0154 §D7's residual, now measured: a self-referential harness reports its own subject-under-test as coverage. Ignoring fixture-borne ids costs **0 of 169** corpus rows and removes **0 of 8** false `COVERED` — the collision rides on assertion code, not heredocs, and requiring the assertion line is ADR-0138 §A2, refused at 73 of 117. Not narrowable by filtering; only a declared citation marker on the `# plant:` precedent could work, and that is a convention across 29 files |
 
@@ -1740,7 +1740,7 @@ Addressing them separately is how they reached nine.
 
 - [ ] decide which derivation wins, and make the rest read it rather than re-derive it — the conductor's roadmap-prose slug against the SPEC's stamped `**Topic slug:**` marker  (issues #480, #465)
 - [ ] separate "foreign SPEC" from "slug disagreement" in `gate0-detect.sh`: they have opposite remedies and `spec_owned=no` collapses them  (issues #480, #454, #461)
-- [ ] `spec_topic_match` has three values and the code has two; the archive fence halts on any SPEC lacking the marker  (issues #454, #408)
+- [ ] `spec_topic_match` has three values and the code has two; the archive fence halts on any SPEC lacking the marker  (issues #454, #408). **#408's own defect is done** — ADR-0164 D1: the byte-identical archive comparison now runs before the slug is ever examined, so a markerless SPEC already archived under another name is a no-op (`ALREADY`/0), not a halt; the stamp guard is also re-anchored to column 0, matching `gate0-detect.sh`'s own extractor (closes half of #376 too). #454's broader "three values, two branches" wiring question is untouched and stays open
 - [ ] one predicate for SPEC coverage across Phase P step 3 and `project-conductor`, and a pre-flight that asserts the per-feature SPECs ADR-0022 requires actually exist  (issues #414, #463)
 - [ ] `gate0-detect.sh` detects ADRs by one naming convention, so an `adr-tools` repository reports `adr=no`  (issue #464)
 - [ ] Step 7.0b enrols a SPEC in the scope-baseline corpus and nothing bumps the baseline  (issue #460)
@@ -1763,7 +1763,7 @@ hand.
 |---|---|
 | #400 | `autopilot-disarm` clears the run scope, so a relaunch after a pause is silently unbounded — the reason `VCS-020` says *relaunch, do not resume* |
 | #401 | Phase P step 4 has no defined prep ref when every prep step skips |
-| #412 | Step 6's Workflow path re-reviews the shared checkout while Phase 3's fixes sit in unmerged worktrees |
+| #412 | Step 6's Workflow path re-reviews the shared checkout while Phase 3's fixes sit in unmerged worktrees. **done** — ADR-0164 D2: `hook_verified` now governs Step 5's dispatch selection only; Step 6 always uses the `review-triage-fix` skill fallback. The Workflow template is kept, not deleted (ADR-0129 §D6 precedent), renamed to state it is not selected and why — measured against every manifest under `docs/manifests/`, `step6_mode` has never once recorded `"workflow"`. `autopilot-build/SKILL.md` named the same retired path and is corrected the same way. Four assertions (G1-G4, `step6-effort-pin.test.sh`), four plants |
 | #415 | Phase 0 check 9's file-wide `--only` matcher aborts on issues whose number appears in a `PROJECT.md` heading |
 | #432 | `permission-mode-state.sh` returns `UNOBSERVABLE` after any `/clear` and blames the build, so Phase M refuses a correctly configured machine |
 | #470 | the chain never regenerates a generated Xcode project, so `xcodebuild` tests a stale target and `tests_after` counts it |
