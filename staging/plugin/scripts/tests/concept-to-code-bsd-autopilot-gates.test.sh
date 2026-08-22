@@ -105,6 +105,26 @@ else
   bad "A3: slug stamp command failed to run or did not write the marker"
 fi
 
+# A4 (dynamic, issue #408/#376): a SPEC whose PROSE mentions the marker mid-line, rather than
+# carrying it as a column-0 field, must still be stamped. The old `grep -q '\*\*Topic slug:\*\*'`
+# guard was file-wide and unanchored (rule 12): a SPEC documenting this very defect satisfies its
+# own explanation and is never stamped, which is what produces spec_topic_slug=unknown downstream.
+FIXTURE_DIR_A4="$TMP/a4"
+mkdir -p "$FIXTURE_DIR_A4"
+printf '# A SPEC about the stamp guard\n\nSee the **Topic slug:** marker convention.\n' > "$FIXTURE_DIR_A4/SPEC.md"
+
+RAW_A4="$(extract_slug_stamp)"
+CMD_A4="${RAW_A4//<project-root>/$FIXTURE_DIR_A4}"
+CMD_A4="${CMD_A4//<topic-slug>/test-topic-slug}"
+printf '%s\n' "$CMD_A4" > "$TMP/stamp-cmd-a4.sh"
+
+bash "$TMP/stamp-cmd-a4.sh"
+if grep -qE '^\*\*Topic slug:\*\* test-topic-slug$' "$FIXTURE_DIR_A4/SPEC.md"; then
+  ok "A4: a SPEC whose prose mentions the marker mid-line is still stamped (#408/#376)"
+else
+  bad "A4: the stamp guard's own prose mention satisfied it and the marker was never inserted"
+fi
+
 # =====================================================================================
 # Section D -- Finding 4: Gate order (step_0_init -> gate_0d_scaffolding -> path Step 1)
 # =====================================================================================

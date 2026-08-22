@@ -102,7 +102,26 @@ check_unique_ref() {
   fi
 }
 check_unique_ref "B4a" "Workflow dispatch path — Step 5 implementation (hook_verified = true)"
-check_unique_ref "B4b" "Workflow dispatch path — Step 6 review cycle (hook_verified = true)"
+
+# B4b — corrected 2026-08-22 (issue #412, ADR-0164). The Step 6 Workflow path was renamed to say
+# outright that it is not selected: `hook_verified` never chose between two Step 6 paths correctly,
+# because Phase 4's re-review has no orchestrator turn in which to merge Phase 3's worktrees back
+# first (measured: zero manifests out of 60 ever recorded step6_mode: "workflow"). autopilot-build
+# no longer names the old heading either (see its own Step 6 section) — B4b now asserts the NEW
+# heading is unique in c2c and that the retired form is gone from both files, not that the old form
+# is still named.
+NEW_B4B="Workflow dispatch path — Step 6 review cycle (NOT SELECTED — see above, issue #412)"
+_n_b4b=$(grep -c "^#### $NEW_B4B\$" "$CC")
+if [ "$_n_b4b" -eq 1 ]; then
+  ok "B4b: exactly one heading for the (not selected) Step 6 workflow path in concept-to-code"
+else
+  bad "B4b: expected exactly 1 heading \"$NEW_B4B\" in concept-to-code, found $_n_b4b"
+fi
+if grep -q "Workflow dispatch path — Step 6 review cycle (hook_verified = true)" "$AB"; then
+  bad "B4b: autopilot-build still names the retired hook_verified=true Step 6 heading"
+else
+  ok "B4b: autopilot-build no longer names the retired hook_verified=true Step 6 heading"
+fi
 
 # B5: the old ambiguous form must be gone entirely. Leaving one behind would mean a half-done
 # rename, with some references pointing at a heading that still collides.

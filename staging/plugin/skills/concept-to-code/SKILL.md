@@ -488,6 +488,14 @@ used to refuse with exit 3 — whose contract below is HALT. So the sentence abo
 bootstrap path and the bootstrap path was the one that could not get past this step. If you move
 that check in `spec-archive.sh`, you are re-breaking this claim (ADR-0152).
 
+**It is also a no-op on a SPEC.md that EXISTS but is already archived byte-identically, regardless
+of what slug it carries (issue #408, ADR-0164).** 69 of 75 archived SPECs carry no `**Topic slug:**`
+marker, so `spec_topic_slug=unknown` for them too — not only for the bootstrap case above. Until
+#408, `spec-archive.sh` checked the slug before comparing content, so an unmarked SPEC that was
+provably already archived still HALTed. The script now compares content first; the slug is examined
+only when a write is actually about to happen. Do not reorder those two checks back — that reorder
+is exactly what re-breaks this claim.
+
 <!-- fence-contract: c2c-step1-spec-archive -->
 ```bash
 # ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not under
@@ -521,8 +529,12 @@ Branch on the exit code — this is a **checker**, not a reporter:
   to prevent it. Print: `"Step 1: the outgoing SPEC cannot be archived — <path> exists with
   different content. Compare them (diff SPEC.md <path>), then move or rename one by hand and
   re-invoke."`
-- **`3`** → **HALT.** The check did not run, which is not the same as nothing to archive. Print the
-  script's stderr and the sync remedy (`bash staging/sync-to-claude.sh --apply`).
+- **`3`** → **HALT.** Print the script's stderr — it names the actual cause (`SPECARCHIVE_NOSCRIPT`,
+  a malformed slug shape, a SPEC that must be archived but has no name to archive it under, or a
+  filesystem failure) and it is never the same cause twice. Only when the fence itself printed
+  `SPECARCHIVE_NOSCRIPT` — the script is not deployed — is the remedy the sync command
+  (`bash staging/sync-to-claude.sh --apply`); every other exit-3 cause is a declined input, not a
+  missing script, and the sync remedy does not fix it (issue #408).
 
 Dispatch (unchanged):
 
@@ -541,7 +553,7 @@ Any text output here is a chain-stop bug. Proceed by running tools in sequence:
 1. Run `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-artifact.sh <manifest-path> spec <project-root>/SPEC.md`
 2. **Stamp slug marker (idempotent):** run:
    ```bash
-   grep -q '\*\*Topic slug:\*\*' "<project-root>/SPEC.md" || {
+   grep -qiE '^\*\*[[:space:]]*topic[[:space:]]+slug[[:space:]]*:\*\*' "<project-root>/SPEC.md" || {
      cp "<project-root>/SPEC.md" "<project-root>/SPEC.md.bak" &&
      awk -v slug="<topic-slug>" '
        { print }
@@ -1544,10 +1556,17 @@ Also add to the brief: Writes go under the dispatched worktree, never to an abso
 
 #### Merge-back and base-fork audit (ADR-0068 §D5, §D6, §D9)
 
-One resolution site, referenced by both dispatch paths (the Workflow stages above and below,
-Step 6's fix-agent dispatch, and the Agent-tool fallback below) — stated once, the same
-convention as `#### Pattern seed handoff` and `#### Proportional audit depth`. It runs after the
-tester's `agent()` call above returns and before Stage 2 below creates the coder's worktree.
+One resolution site, referenced by Step 5's Workflow stages above and below and by the Agent-tool
+fallback below — stated once, the same convention as `#### Pattern seed handoff` and
+`#### Proportional audit depth`. It runs after the tester's `agent()` call above returns and before
+Stage 2 below creates the coder's worktree.
+
+**Not referenced by Step 6's fix-agent dispatch (issue #412, corrected 2026-08-22).** This
+paragraph used to list it as a third call site. It never was one: Step 6's Workflow path runs
+Phase 3's fixes and Phase 4's re-review inside one continuous workflow invocation with no
+orchestrator turn between them, so this per-stage merge-back — designed to run BETWEEN two
+`agent()` calls the orchestrator dispatches separately — has nowhere to run inside it. Step 6 uses
+the skill fallback unconditionally instead (see Step 6, above).
 
 **The orchestrator commits, never the agent.** `coder.md`'s "never commits" instruction is
 untouched by this feature; this snapshot happens only after the dispatch has already returned
@@ -2687,13 +2706,25 @@ After all batches complete and controller-side verification passes, transition t
 
 Set `step5_mode: "agent_batch"` in the manifest when the fallback activates (via bash sed substitution on the additive field — NOT via Edit tool, NOT via manifest-set-flag.sh which is boolean-only). <!-- path-rule-exempt: negated -- says NOT to use this helper for the step5_mode write, describing what not to do -->
 
-### Step 6 — Review cycle (conditional on hook_verified)
+### Step 6 — Review cycle (unconditional skill fallback)
 
-**Dispatch mode selection:**
-- If `manifest.hook_verified = true`: use Workflow dispatch path (below). Set `step6_mode: "workflow"` via bash sed substitution.
-- If `manifest.hook_verified = false` or `null`: use skill fallback (below). Set `step6_mode: "skill_fallback"` via bash sed substitution.
+**Dispatch: always the skill fallback (below).** Set `step6_mode: "skill_fallback"` via bash sed
+substitution. `hook_verified` governs Step 5's dispatch path only (issue #412, ADR-0164) — it no
+longer selects between the two Step 6 paths below.
 
-#### Workflow dispatch path — Step 6 review cycle (hook_verified = true)
+**Why not the Workflow path (kept below, not deleted — ADR-0129 §D6 precedent for a mechanism whose
+unreachability is documented and measured, rather than removed):** Phase 4's re-review runs inside
+the same workflow invocation as Phase 3's parallel fix agents, and the orchestrator does not regain
+control between the two — there is no turn in which the per-agent worktrees from Phase 3 can be
+merged back into the shared checkout before Phase 4 reads it. Phase 4 therefore reviews a checkout
+containing none of Phase 3's fixes and reports every Phase 1 finding as still `remaining`, regardless
+of what was actually fixed. This is unlike Step 5's Workflow path, where the merge-back runs between
+each stage as the orchestrator's own step (`#### Merge-back and base-fork audit`, above) — Step 6
+has no analogous per-phase orchestrator turn, because Phases 1-4 are one continuous workflow.
+Measured against every manifest under `docs/manifests/`: `step6_mode` is `null` (42) or
+`"skill_fallback"` (18) — **never `"workflow"`.** No run has ever taken this path.
+
+#### Workflow dispatch path — Step 6 review cycle (NOT SELECTED — see above, issue #412)
 
 Send the following workflow prompt to the session:
 
@@ -2819,7 +2850,7 @@ After the workflow completes:
    the fix cycle, before the review is accepted.
 6. Evaluate Gate 5.05 (see §5 Gate 5.05 block).
 
-#### Skill fallback (hook_verified = false or workflow unavailable)
+#### Skill fallback (the only Step 6 dispatch path — issue #412)
 
 ```
 Use the review-triage-fix skill.
@@ -3948,16 +3979,26 @@ if [ -n "$_edep" ]; then
   _eout=$(printf '%s\n' "<architect's report text>" | bash "$_edep" 2>"$_edep_err"); _erc=$?
 fi
 ```
-`_erc = 0` → every declared dependency is `provisioned: true`, or none were declared (no Gate 2c
-line at all — this whole gate is skipped, §D5). `_erc = 1` → at least one is not provisioned;
+`_erc = 0` → every declared dependency is verified `provisioned: true` (or is a kind this gate
+cannot probe, in which case the declaration is trusted — see below), or none were declared (no
+Gate 2c line at all — this whole gate is skipped, §D5). `_erc = 1` → at least one is not
+provisioned, or is declared `provisioned: true` but a verifiable kind's probe finds it absent;
 `_eout` carries `UNMET<TAB><name><TAB><kind><TAB><state>` lines, and the stderr captured in
 `$_edep_err` names the human action required for each. `_erc = 2`, or `$_edep` empty: the gate did
 not run — proceed to the `AskUserQuestion` below anyway, noting automatic verification was
 unavailable, rather than silently treating it as clean.
 
-If `_erc = 0` (and `_edep` resolved): write `external_dependencies` into the manifest from the
-declared lines (each `provisioned: true`) and proceed directly to Gate 3 — nothing for a human to
-decide, D2's check already passed.
+**On `_erc = 0`, check `_eout` for `UNVERIFIED<TAB><name><TAB><kind><TAB>declared-true` lines before
+deciding what happens next (issue #473, ADR-0164).** These are dependencies of a kind the gate
+cannot probe (an OAuth/consent flow, a vendor account) — trusted, not verified, and that
+distinction has to reach the human:
+- `_eout` empty → every declared dependency was actually VERIFIED (or none were declared): write
+  `external_dependencies` into the manifest from the declared lines and proceed directly to Gate 3
+  — nothing for a human to decide, the gate itself confirmed the state.
+- `_eout` non-empty (one or more `UNVERIFIED` lines) → these dependencies were never checked
+  against the world, only trusted on the architect's word. Present them via `AskUserQuestion`,
+  reusing the same question shape as the `_erc = 1` case below but naming them as UNVERIFIED
+  rather than UNMET, before writing `external_dependencies` and proceeding to Gate 3.
 
 Otherwise, present via `AskUserQuestion`:
 ```

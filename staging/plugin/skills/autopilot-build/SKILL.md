@@ -462,8 +462,9 @@ On halt: skip Steps 6 and 7, jump to Phase 2 (morning report).
 
 #### Step 6 — Review + fix
 
-Same dispatch as c2c Step 6: Workflow path (`hook_verified=true`, c2c's "Workflow dispatch path — Step 6 review cycle (hook_verified = true)" block)
-or `review-triage-fix` skill fallback.
+Same dispatch as c2c Step 6 (issue #412): always c2c's `review-triage-fix` skill fallback block —
+`hook_verified` no longer selects a Workflow path here, for the same reason c2c's does not (Phase
+4's re-review has no orchestrator turn in which to merge Phase 3's per-agent worktrees back first).
 
 After fixes: re-run the approved test-cmd:
 ```bash

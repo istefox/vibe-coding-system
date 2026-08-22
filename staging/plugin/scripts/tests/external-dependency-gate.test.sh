@@ -73,8 +73,10 @@ else
 fi
 
 # ==============================================================================================
-# EB — the gate checks PRESENT-TENSE PROVISIONING STATE, not provisionability, and refuses to
-# dispatch unattended on an unmet declared dependency (§D2).
+# EB — the gate refuses to dispatch unattended on an unmet DECLARED dependency (§D2). Until
+# issue #473, "PRESENT-TENSE PROVISIONING STATE" described only the state the architect TYPED —
+# these assertions feed the gate literal strings and never touch the environment. EI below is
+# where an actual present-tense probe against real state is exercised; keep the distinction.
 # ==============================================================================================
 if [ -x "$GATE" ] || [ -f "$GATE" ]; then
   ok "EB0: external-dependency-check.sh exists (the anchor EB1-EB6 read)"
@@ -122,6 +124,57 @@ fi
 OUT2=$(bash "$GATE" --nonsense </dev/null 2>"$TMP/gerr2"); RC2=$?
 [ "$RC2" -eq 2 ] && [ -s "$TMP/gerr2" ] && ok "EB6: an unknown flag exits 2 with usage on stderr" \
   || bad "EB6: expected exit 2 + stderr, got rc=$RC2"
+
+# ==============================================================================================
+# EI — issue #473, ADR-0164. A `provisioned: true` declaration is verified for a kind the gate
+# knows how to probe, not merely trusted on the strength of the sentence. Before this feature,
+# EB1 above was the whole of what this file asserted about "true", and it never once touched the
+# environment — a declaration that lied passed every time.
+#
+# --- plants (plant-check.sh) ------------------------------------------------------------
+# plant: EI1 | plugin/scripts/external-dependency-check.sh | binary) command -v "$2" >/dev/null 2>&1 ;; | binary) true ;;
+# plant: EI4 | plugin/scripts/external-dependency-check.sh | printf 'UNVERIFIED\t%s\t%s\tdeclared-true\n' "$_name" "$_kind" >> "$TMP_UNVERIFIED" | :
+# ==============================================================================================
+
+# EI1: declared true, kind binary, naming a command that does not exist -> UNMET, declared-true-absent.
+run_gate 'EXTERNAL DEPENDENCY: DefinitelyNotARealBinary123 | binary | provisioned: true'
+if [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q "^UNMET${TAB}DefinitelyNotARealBinary123${TAB}binary${TAB}declared-true-absent\$"; then
+  ok "EI1: declared true + binary kind naming an absent command -> UNMET declared-true-absent (#473)"
+else
+  bad "EI1: expected exit 1 + UNMET .../binary/declared-true-absent — got rc=$RC out=$OUT"
+fi
+
+# EI2: declared true, kind binary, naming a command that DOES exist (git — present on every CI
+# runner and every dev machine this repo targets) -> exit 0, no UNVERIFIED line either.
+run_gate 'EXTERNAL DEPENDENCY: Git | binary | provisioned: true'
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
+  ok "EI2: declared true + binary kind naming git -> exit 0, clean (verified present, #473)"
+else
+  bad "EI2: expected exit 0 + empty stdout for a real binary — got rc=$RC out=$OUT"
+fi
+
+# EI3: declared true, kind env — unset variable is absent; set variable is present.
+run_gate 'EXTERNAL DEPENDENCY: NO_SUCH_VAR_EI3 | env | provisioned: true'
+if [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q "^UNMET${TAB}NO_SUCH_VAR_EI3${TAB}env${TAB}declared-true-absent\$"; then
+  ok "EI3a: declared true + env kind, variable unset -> UNMET declared-true-absent (#473)"
+else
+  bad "EI3a: expected exit 1 + UNMET .../env/declared-true-absent — got rc=$RC out=$OUT"
+fi
+EI3B_OUT=$(EI3B_SET_VAR=1 bash -c "printf 'EXTERNAL DEPENDENCY: EI3B_SET_VAR | env | provisioned: true' | bash '$GATE'"); EI3B_RC=$?
+if [ "$EI3B_RC" -eq 0 ] && [ -z "$EI3B_OUT" ]; then
+  ok "EI3b: declared true + env kind, variable set -> exit 0, clean (#473)"
+else
+  bad "EI3b: expected exit 0 + empty stdout for a set env var — got rc=$EI3B_RC out=$EI3B_OUT"
+fi
+
+# EI4: declared true, an unrecognised kind (the ADR-0060 §D2 unattainable class) -> exit 0 WITH
+# a visible UNVERIFIED line, never a silent pass indistinguishable from a verified one.
+run_gate 'EXTERNAL DEPENDENCY: SomeVendor | oauth-consent | provisioned: true'
+if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "^UNVERIFIED${TAB}SomeVendor${TAB}oauth-consent${TAB}declared-true\$"; then
+  ok "EI4: declared true + unverifiable kind -> exit 0 WITH a visible UNVERIFIED line (#473)"
+else
+  bad "EI4: expected exit 0 + UNVERIFIED SomeVendor line — got rc=$RC out=$OUT"
+fi
 
 # ==============================================================================================
 # EC — the per-feature skip does NOT halt the roadmap (§D3, the most important section here). A
