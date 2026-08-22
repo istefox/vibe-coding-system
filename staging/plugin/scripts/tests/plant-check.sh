@@ -274,7 +274,8 @@ if [ "${1:-}" = "--worker" ]; then
 
   # Attribution depends on the declaring harness emitting `FAIL: <id>`, and five harnesses emit
   # `FAIL <label>` with no colon (external-dependency-gate, hook-probe, hook-verify-workflow,
-  # phase1, prep — measured 2026-08-05, phase1 converted the same day). A plant declared in one of
+  # phase1, prep — measured 2026-08-05, phase1 converted the same day; prep converted 2026-08-22,
+  # issue #470, same shape). A plant declared in one of
   # those can never be seen to fire: the grep below finds nothing whether the assertion held or
   # collapsed, and the run would report "the assertion still passed with the mechanism removed" —
   # a definite verdict from a check that could not look. That is this file's own subject one level
