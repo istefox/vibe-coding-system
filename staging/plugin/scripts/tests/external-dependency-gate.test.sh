@@ -23,7 +23,7 @@ GUARD="$SCRIPTS/autopilot-guard.sh"
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf 'ok   %s\n' "$1"; }
-bad() { FAIL=$((FAIL+1)); printf 'FAIL %s\n' "$1"; }
+bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
