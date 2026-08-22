@@ -1890,6 +1890,15 @@ Sonnet 5 gaining `xhigh` is what makes the effort-over-model recommendation in s
 Override possible at individual invocation level via `CLAUDE_CODE_SUBAGENT_MODEL`.
 The session default (`effortLevel: high` in settings.json) is overridden by the sub-agent frontmatter; the env var `CLAUDE_CODE_EFFORT_LEVEL` takes precedence over everything.
 
+> **Correction (2026-08-22, VCS-033):** "`effortLevel: high` in settings.json" is stale on both
+> surfaces. The live `~/.claude/settings.json` reads `effortLevel: "medium"`; the mirror at
+> `staging/user/settings.json` still reads `"high"`, so the two have drifted and neither is what
+> this paragraph asserts. The change to `medium` on the live file coincided with the `opusplan`
+> fix (VCS-033, the `env.ANTHROPIC_CUSTOM_MODEL_OPTION` addition to that same settings.json) but
+> was not isolated as caused by it in the binary — a correlated timing, not a confirmed mechanism. Anything
+> reasoning from a configured effort value should probe the effective one on the surface it will
+> actually run on, not read this paragraph as current.
+
 ---
 
 ## 4. Global CLAUDE.md (`~/.claude/CLAUDE.md`)
