@@ -145,8 +145,10 @@ else
 fi
 
 # EI2: declared true, kind binary, naming a command that DOES exist (git — present on every CI
-# runner and every dev machine this repo targets) -> exit 0, no UNVERIFIED line either.
-run_gate 'EXTERNAL DEPENDENCY: Git | binary | provisioned: true'
+# runner and every dev machine this repo targets) -> exit 0, no UNVERIFIED line either. The NAME
+# field must be the exact, case-sensitive command name: `command -v` resolves it on Linux by an
+# exact PATH lookup, and only APFS's case-insensitive default masks a wrong case on macOS.
+run_gate 'EXTERNAL DEPENDENCY: git | binary | provisioned: true'
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
   ok "EI2: declared true + binary kind naming git -> exit 0, clean (verified present, #473)"
 else
