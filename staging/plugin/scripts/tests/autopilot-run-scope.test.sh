@@ -49,14 +49,24 @@
 #
 # plant: KB1 | plugin/scripts/autopilot-guard.sh | reason="review-triage-fix raised a BLOCKER" print_halt "$reason" fi return 0 } | reason="review-triage-fix raised a BLOCKER"; print_halt "$reason"; fi; [ -f "$sdir/token-budget" ] && print_halt "token budget exceeded"; return 0; }
 # plant: KB4 | plugin/scripts/autopilot-guard.sh | STATE_SUBDIR=".claude/autopilot-state" | STATE_SUBDIR=".claude/autopilot-state"; _plant_kb4="token-budget"
-# plant: KB5 | plugin/scripts/autopilot-disarm.sh | "$SDIR/rtf-blocker" "$SDIR/scope" | "$SDIR/rtf-blocker" "$SDIR/token-budget"
-# plant: KB6 | plugin/scripts/autopilot-disarm.sh | "$SDIR/rtf-blocker" "$SDIR/scope" | "$SDIR/rtf-blocker" "$SDIR/token-budget"
+# plant: KB5 | plugin/scripts/autopilot-disarm.sh | "$SDIR/build-status" "$SDIR/rtf-blocker" | "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/scope"
+# plant: KB6 | plugin/scripts/autopilot-disarm.sh | "$SDIR/build-status" "$SDIR/rtf-blocker" | "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/token-budget"
 #
 # KB1's needle targets the shape run_halt_checks has AFTER Task 2 deletes the token-budget block —
 # it does not exist in today's tree, so plant-check.sh cannot validate it until Task 2 lands (Task 9
 # does that validation; a mismatch there is a defect in the plant, per Task 9's own instruction, and
 # is fixed there). KB4's needle targets a line untouched by this feature (STATE_SUBDIR), on purpose,
 # so it is valid today and stays valid after Task 2 — the safer anchor of the two.
+#
+# KB5/KB6 RE-ANCHORED (issue #400, ADR-0167 §D1, Task 3). Their old needle,
+# `"$SDIR/rtf-blocker" "$SDIR/scope"`, was the adjacency in the clear loop BEFORE ADR-0167 removed
+# `scope` from it — that substring no longer exists (0 matches → BADPLANT). The new needle,
+# `"$SDIR/build-status" "$SDIR/rtf-blocker"`, is the adjacent pair immediately before it that
+# ADR-0167 left untouched (verified single-occurrence, on one line, no `\`-continuation between the
+# two tokens). Each replacement re-inserts the ONE file its own assertion depends on: KB5's adds
+# `"$SDIR/scope"` back to the loop (scope would be cleared again, falsifying "scope survives"); KB6's
+# adds `"$SDIR/token-budget"` back to the loop (token-budget would be cleared, falsifying "token-budget
+# survives" — unchanged from before this task).
 #
 # KB2/KB3 ARE REGRESSION GUARDS AND CARRY NO PLANT. Both assert mechanisms this feature does not
 # touch — build-status and rtf-blocker are byte-unchanged by ADR-0129 §D6 — so mutating either would
@@ -273,9 +283,11 @@ printf 'source=arguments\nfeatures=2\n' > "$R/.claude/autopilot-state/scope"
 printf 'limit=1\nspent=9\n' > "$R/.claude/autopilot-state/token-budget"
 OUT=$(CLAUDE_CODE_SESSION_ID=session-BBB bash "$DISARM" "$R" 2>&1); RC=$?
 
-# KB5: a scope file is cleared by the disarm — on the same terms `published` already has (ADR §D1).
-if [ "$RC" = "0" ] && [ ! -f "$R/.claude/autopilot-state/scope" ]; then
-  ok "KB5: a scope file is cleared by autopilot-disarm.sh"
+# KB5 was "a scope file is cleared by autopilot-disarm.sh" (issue #365, ADR-0129 §D1); inverted by
+# issue #400, ADR-0167 §D1. KB5: a scope file SURVIVES the disarm — on the same terms `published`
+# already does (ADR-0167 §D1): both are the run's configuration/progress, not guard conditions.
+if [ "$RC" = "0" ] && [ -f "$R/.claude/autopilot-state/scope" ]; then
+  ok "KB5: a scope file SURVIVES autopilot-disarm.sh (ADR-0167 §D1 — configuration, not a guard condition)"
 else
   bad "KB5: rc=$RC scope=$( [ -f "$R/.claude/autopilot-state/scope" ] && echo present || echo absent ) — $(printf '%s' "$OUT" | head -1)"
 fi
@@ -1163,8 +1175,13 @@ fi
 # TASK 9 SWEEP: all five needed no repair -- each still matches exactly one site against the real,
 # landed §4 text, confirmed by static match-count against autopilot/SKILL.md before accepting it.
 #
+# CORRECTION (issue #400, ADR-0167 §D1): RP2's clause is no longer "before the disarm"/"deletes
+# both" -- that pinned the pre-#400 contract, in which disarm deleted scope/published. It now
+# checks "survive the disarm call"/"check 9" (see RP2's own comment above its assertion). The other
+# four needles/clauses (RP1, RP3-RP5) are unaffected by #400 and remain as this paragraph states.
+#
 # plant: RP1 | plugin/skills/autopilot/SKILL.md | "remaining_in_roadmap" | "remaining_features"
-# plant: RP2 | plugin/skills/autopilot/SKILL.md | before the disarm | after the disarm
+# plant: RP2 | plugin/skills/autopilot/SKILL.md | survive the disarm call | leave the disarm call unresolved
 # plant: RP3 | plugin/skills/autopilot/SKILL.md | at report time | at run start
 # plant: RP4 | plugin/skills/autopilot/SKILL.md | never read by a gate | always read by a gate
 # plant: RP5 | plugin/skills/autopilot/SKILL.md | version bump | version increment
@@ -1184,15 +1201,23 @@ else
   bad "RP1: autopilot/SKILL.md §4 does not yet document the scope block's fields"
 fi
 
-# RP2: it states that published and scope are read before the disarm, which deletes both.
+# RP2 was "published and scope are read before the disarm, which deletes both" (issue #365,
+# ADR-0129 §D10); inverted by issue #400, ADR-0167 §D1 — the disarm no longer deletes either file,
+# so it now checks that §4 states both SURVIVE the disarm and names check 9 as the actual reset
+# mechanism (§D4). "surviv" is bound to a "published" occurrence within 100 chars (a scoped,
+# proximity match), not a bare whole-file grep -qi "surviv" -- that word also appears seven other
+# times in this file describing an unrelated shell-variable-scoping idiom, none near "published",
+# so an unscoped check was satisfied by those and never actually saw its own mutation invert (CI
+# caught this live: plant-shard fired PC1 "RP2 -- the assertion still passed with the mechanism
+# removed" on the first landed version of this fix).
 RP2_OK=1
-printf '%s' "$NA_FLAT" | grep -qi "published"               || RP2_OK=0
-printf '%s' "$NA_FLAT" | grep -Eqi "before (the )?disarm"    || RP2_OK=0
-printf '%s' "$NA_FLAT" | grep -qi "deletes both"              || RP2_OK=0
+printf '%s' "$NA_FLAT" | grep -qi "published"                     || RP2_OK=0
+printf '%s' "$NA_FLAT" | grep -Eqi "published.{0,100}surviv"      || RP2_OK=0
+printf '%s' "$NA_FLAT" | grep -qi "check 9"                       || RP2_OK=0
 if [ "$RP2_OK" = "1" ]; then
-  ok "RP2: autopilot/SKILL.md §4 states published and scope are read before the disarm, which deletes both"
+  ok "RP2: autopilot/SKILL.md §4 states published and scope survive the disarm, and names check 9 as the reset"
 else
-  bad "RP2: autopilot/SKILL.md §4 does not yet state the read-before-disarm ordering"
+  bad "RP2: autopilot/SKILL.md §4 does not yet state the survive-the-disarm/check-9-resets contract"
 fi
 
 # RP3: remaining_in_roadmap is defined as the count of - [ ] rows at report time.

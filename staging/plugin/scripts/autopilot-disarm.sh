@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# autopilot-disarm.sh v1.0 — clear an autopilot run's transient state after the run is over.
+# autopilot-disarm.sh v1.1 — clear an autopilot run's transient state after the run is over.
 # Issue #321 (with #323), ADR-0112. Bash 3.2 clean: no assoc array, no mapfile, no ${v^^}.
 #
 # WHY THIS EXISTS. `autopilot` creates `.claude/autopilot-state/active` in Phase 1 and removes
@@ -56,6 +56,11 @@
 # no `session_id`. That is ABSENT, not foreign and not corrupt (ADR-0076): disarm proceeds with a
 # note. Refusing would strand exactly the people this exists for — the ones whose marker predates
 # the fix.
+#
+# v1.1 (2026-08-23, issue #400, ADR-0167): `scope` and `published` leave the clear loop below — they
+# are the run's configuration and progress, not guard conditions, and disarm cannot tell a paused
+# run from a finished one. The output grows a `preserved:` block, in both terminal branches, naming
+# the surviving bound and the override to relaunch with.
 
 set -u
 
@@ -161,18 +166,13 @@ fi
 # path (it appears in no script and no SKILL.md; §3.1 said "record started_at" without saying where)
 # and it is debris either way; the canonical timestamp now lives inside the marker.
 CLEARED=""
-# `published` is the run-scoped ledger of what shipped (issue #364, ADR-0127 §D4). It is cleared
-# here with the rest of the transient set: it answers "what has THIS run published", so carrying it
-# into the next run would make the conductor skip features that never ran, which is the opposite of
-# the defect it exists to fix. The durable record of what is done stays PROJECT.md's checkboxes.
-#
-# `scope` is the run-scoped feature bound written by `autopilot` Phase 0 check 9 (issue #365,
-# ADR-0129 §D1) — `--features`/`--only`, resolved against PROJECT.md and read by the conductor at
-# every re-invocation. It is cleared here for the same reason as `published`: carrying it into the
-# next run would silently bound a run nobody bounded, the mirror of the failure `published` avoids
-# by being cleared rather than kept.
-for f in "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/scope" \
-         "$SDIR/published" "$SDIR/started-at" "$ROOT/.claude/needs-human"; do
+# `published` (issue #364, ADR-0127 §D4) and `scope` (issue #365, ADR-0129 §D1) no longer leave here
+# (issue #400, ADR-0167 §D1). This loop clears guard conditions — the files whose mere presence stops
+# a publish. It does not clear the run's configuration or its progress, because those two are not
+# conditions and disarm cannot tell a paused run from a finished one; that judgement moves to the
+# next launch (ADR-0167 §D3/§D6), never to this script.
+for f in "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" \
+         "$SDIR/started-at" "$ROOT/.claude/needs-human"; do
   [ -e "$f" ] || continue
   if rm -f "$f" 2>/dev/null; then
     CLEARED="$CLEARED
@@ -183,14 +183,53 @@ for f in "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/scope" \
   fi
 done
 
+# --- preserved -------------------------------------------------------------------------------------
+# `scope` and `published` (ADR-0167 §D1, above) are reported here instead: best-effort, and reading
+# either can never fail this disarm (ADR-0167 §D2) — an unreadable or empty bound degrades to
+# "(bound unreadable)" rather than an exit-3. This script still never exits 3 for a preserved file.
+PRESERVED=""
+if [ -e "$SDIR/scope" ]; then
+  _sf="$SDIR/scope"
+  _sbound="(bound unreadable)"
+  if [ -r "$_sf" ]; then
+    _feat=$(grep '^features=' "$_sf" 2>/dev/null | head -1 | sed 's/^features=//')
+    _only=$(grep -c '^only=' "$_sf" 2>/dev/null || true)
+    if [ -n "$_feat" ] || [ "${_only:-0}" -gt 0 ] 2>/dev/null; then
+      _sbound="(features=$_feat, only=${_only:-0} rows)"
+    fi
+  fi
+  PRESERVED="$PRESERVED
+  preserved: $STATE_SUBDIR/scope $_sbound"
+fi
+if [ -e "$SDIR/published" ]; then
+  _pf="$SDIR/published"
+  _pbound="(bound unreadable)"
+  if [ -r "$_pf" ]; then
+    _delivered=$(grep -c . "$_pf" 2>/dev/null || true)
+    if [ -n "$_delivered" ] && [ "$_delivered" -gt 0 ] 2>/dev/null; then
+      _pbound="($_delivered delivered)"
+    fi
+  fi
+  PRESERVED="$PRESERVED
+  preserved: $STATE_SUBDIR/published $_pbound"
+fi
+
 if [ -z "$CLEARED" ]; then
   echo "DISARM: NOTHING-ARMED — no marker and no halt state under $ROOT"
   [ -n "$NOTE" ] && echo "  $NOTE"
+  if [ -n "$PRESERVED" ]; then
+    printf '%s\n' "$PRESERVED" | sed '/^$/d'
+    echo "  Relaunch with no --features/--only to reuse this bound; pass either to replace it."
+  fi
   exit 0
 fi
 
 echo "DISARM: CLEARED${OWNER:+ (was armed by session $OWNER${ARMED_AT:+ at $ARMED_AT})}"
 printf '%s\n' "$CLEARED" | sed '/^$/d'
 [ -n "$NOTE" ] && echo "  $NOTE"
+if [ -n "$PRESERVED" ]; then
+  printf '%s\n' "$PRESERVED" | sed '/^$/d'
+  echo "  Relaunch with no --features/--only to reuse this bound; pass either to replace it."
+fi
 echo "  autopilot-guard is now inert for this repo. Your own pushes are unaffected by it."
 exit 0

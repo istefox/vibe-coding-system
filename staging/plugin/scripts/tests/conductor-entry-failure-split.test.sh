@@ -995,11 +995,17 @@ else
   bad "FK9: no fork point is passed to the conductor — feature N+1 forks from wherever HEAD happens to be"
 fi
 
-# plant: FK10 | plugin/scripts/autopilot-disarm.sh | "$SDIR/published" | "$SDIR/unused-published"
-if grep -qF '"$SDIR/published"' "$DISARM"; then
-  ok "FK10: the disarm clears the run ledger — carried into the next run it would skip features that never ran"
+# FK10 was "the disarm clears the run ledger" (issue #364, ADR-0127 §D4); inverted by issue #400,
+# ADR-0167 §D1 — disarm no longer clears `published`, it preserves it and reports so, and the old
+# needle `"$SDIR/published"` collided with BOTH the presence-check and the read of that same file
+# in the new preserved-reporting block (CI caught this live: plant-shard (2) reported FK10 as a
+# malformed plant, needle matched 2 times instead of 1). Re-anchored to the unique `preserved:`
+# report line, which exists nowhere else in the file.
+# plant: FK10 | plugin/scripts/autopilot-disarm.sh | preserved: $STATE_SUBDIR/published | noted: $STATE_SUBDIR/published
+if grep -qF 'preserved: $STATE_SUBDIR/published' "$DISARM"; then
+  ok "FK10: disarm PRESERVES the run ledger (published) rather than clearing it — reset, if any, is decided at the next launch, never here (ADR-0167 §D1/§D4)"
 else
-  bad "FK10: autopilot-disarm.sh does not clear published — the next run would skip every feature this one shipped"
+  bad "FK10: autopilot-disarm.sh no longer reports published as preserved — a silent regression back to clearing it would skip every feature the prior run shipped"
 fi
 
 # Z1: assertion-count floor. A floor, not an exact count: it catches an assertion that VANISHES
