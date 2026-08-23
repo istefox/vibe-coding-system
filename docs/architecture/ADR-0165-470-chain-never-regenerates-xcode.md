@@ -255,7 +255,7 @@ exit-code convention nobody can grep for is a convention that decays unobserved.
 ### D6 — `prep.test.sh` is made able to carry evidence before any evidence is put in it
 
 `prep.test.sh`'s `no()` prints `FAIL <label>`. `plant-check.sh` refuses outright to run a plant
-declared in a harness lacking a `FAIL: ` emitter, so as it stands **every assertion added to this
+declared in a harness lacking a `FAIL:` emitter, so as it stands **every assertion added to this
 file would be unplantable by construction** — CLAUDE.md rule 2 with no path to satisfying it. Its
 `-derivedDataPath` assertions already carry a written disclosure of exactly this, and pushed the
 real evidence into the worktree-isolation contract harness instead; §D7 explains why that escape
@@ -263,7 +263,7 @@ route is closed this time.
 
 `no()` is therefore converted to `echo "FAIL: $1"` and the new assertions take fixed-width ids
 (`TU01` …, floor `TU99`). Nothing parses this harness's stdout — CI branches on its exit status,
-`plant-check.sh` greps `^FAIL: ` — so the blast radius is nine output lines changing prefix. This
+`plant-check.sh` greps `^FAIL:` — so the blast radius is nine output lines changing prefix. This
 is the established direction of travel, not a new idea: `phase1` and `external-dependency-gate`
 were converted the same way, leaving three files with the old form of which this is one.
 
@@ -409,7 +409,7 @@ measurement: naming that file in the plan scopes in its 19 foreign `R-NN` tokens
 eight of this feature's ids covered before any work exists (§D7). The guarantee is re-pinned
 behaviourally in `prep.test.sh` instead, which is a stronger check than the one being declined.
 
-**A8 — add a `nof()` second reporter to `prep.test.sh` so only the new assertions emit `FAIL: `.**
+**A8 — add a `nof()` second reporter to `prep.test.sh` so only the new assertions emit `FAIL:`.**
 Rejected: it satisfies `plant-check.sh`'s file-level grep while leaving two reporters in one file
 with no guard against a future assertion picking the wrong one and becoming silently
 unattributable. Converting `no()` outright leaves no such state to get wrong, and the measured blast

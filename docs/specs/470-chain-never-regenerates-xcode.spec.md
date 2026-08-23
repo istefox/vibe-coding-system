@@ -85,7 +85,7 @@ today's single-command lines.
 ## Data model / state
 
 No persistent data model. The fields touched are:
-- `.claude/test-cmd` — one line, now optionally carrying a `tuist generate && ` prefix ahead of
+- `.claude/test-cmd` — one line, now optionally carrying a `tuist generate &&` prefix ahead of
   the `xcodebuild test` invocation for a detected Tuist stack.
 - The chain manifest's `test_cmd_candidate` / TOFU trust registry (`~/.claude/state/stop-gate/trust`)
   — unchanged in shape; a regenerated candidate's SHA differs from any prior trusted SHA for the
