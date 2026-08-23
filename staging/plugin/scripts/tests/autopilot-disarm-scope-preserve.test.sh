@@ -821,8 +821,12 @@ printf 'source=arguments\nfeatures=3\nonly=Some feature  (issue #42)\n' > "$R/.c
 RC=$(run_fence "autopilot-scope-resolve" "$NA" "$(setup_launch "$R" "preserved" "3" "" "false" "REUSABLE")")
 OUT=$(dp_out autopilot-scope-resolve)
 OUT_FLAT=$(printf '%s' "$OUT" | tr '\n' ' ' | tr -s ' ' | tr -d '`*')
+# The literal is one space, not two: OUT_FLAT's own `tr -s ' '` squeezes any run of spaces down to
+# one before this grep runs, so a two-space literal (matching the fixture's raw "Some feature  ")
+# can never match post-squeeze — the fixture's exact-text row is unaffected, only this comparison's
+# own decoration (rule 3: match a flattened, undecorated copy) needed correcting.
 if [ "$RC" = "0" ] && printf '%s' "$OUT_FLAT" | grep -qi 'preserved' \
-   && printf '%s' "$OUT_FLAT" | grep -qF 'Some feature  (issue #42)'; then
+   && printf '%s' "$OUT_FLAT" | grep -qF 'Some feature (issue #42)'; then
   ok "DP27: a preserved bound is announced -- check 9's output names the source and the bound it is about to apply"
 else
   bad "DP27: rc=$RC -- $(printf '%s' "$OUT" | head -3)"
