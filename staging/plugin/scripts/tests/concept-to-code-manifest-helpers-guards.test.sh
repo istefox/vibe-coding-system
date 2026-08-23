@@ -554,5 +554,87 @@ else
 fi
 # plant: F13 | plugin/skills/concept-to-code/SKILL.md | no arguments and no path prefix | no arguments and no path suffix
 
+# =====================================================================================
+# Section G -- gate-audit-trail-check: manifest-transition.sh must refuse a gate-advancing
+# transition whose hitl_gates entry is not "approved", instead of relying only on Invariant 9's
+# entry COUNT (which manifest-init.sh's unconditional five-slot template satisfies by
+# construction, on every chain_path, whether or not any gate was ever approved).
+# =====================================================================================
+
+mk_gate_fixture() {
+  _slug="$1"
+  _proj="$(mktemp -d "$TMP/proj-$_slug.XXXXXX")"
+  _m="$(bash "$INIT" "$_slug" "Test $_slug" "$_proj")"
+  sed -i.bak 's/^chain_path: null$/chain_path: "standard"/' "$_m"
+  printf '%s' "$_m"
+}
+
+# G1 (dynamic, genuine RED before this fix): a fresh manifest, gate 1 left at the manifest-init.sh
+# default ("pending"), must be refused when advancing gate_1_spec_review -> step_2_architecture.
+# plant: G1 | plugin/skills/concept-to-code/scripts/manifest-transition.sh | "gate_1_spec_review,step_2_architecture") _gate_num=1 ;; | "gate_1_spec_review,step_2_architecture") _gate_num=0 ;;
+G1_M="$(mk_gate_fixture g1-unapproved)"
+bash "$TRN" "$G1_M" gate_0d_scaffolding >/dev/null 2>&1
+bash "$TRN" "$G1_M" step_1_interview >/dev/null 2>&1
+bash "$TRN" "$G1_M" gate_1_spec_review >/dev/null 2>&1
+g1_out="$(bash "$TRN" "$G1_M" step_2_architecture 2>&1)"; g1_rc=$?
+if [ "$g1_rc" -ne 0 ] && printf '%s' "$g1_out" | grep -qF 'gate 1 is not approved'; then
+  ok "G1: gate_1_spec_review -> step_2_architecture is refused while gate 1 is still 'pending'"
+else
+  bad "G1: expected refusal citing 'gate 1 is not approved', got rc=$g1_rc out='$g1_out'"
+fi
+
+# G2 (dynamic): the same transition succeeds once gate 1 is recorded as approved via
+# manifest-set-gate.sh -- the sanctioned writer, not a raw sed edit.
+G2_M="$(mk_gate_fixture g2-approved)"
+bash "$TRN" "$G2_M" gate_0d_scaffolding >/dev/null 2>&1
+bash "$TRN" "$G2_M" step_1_interview >/dev/null 2>&1
+bash "$TRN" "$G2_M" gate_1_spec_review >/dev/null 2>&1
+bash "$SETGATE" "$G2_M" 1 approved >/dev/null 2>&1
+g2_rc=0
+bash "$TRN" "$G2_M" step_2_architecture >/dev/null 2>&1 || g2_rc=$?
+if [ "$g2_rc" -eq 0 ] && [ "$(grep '^current_step:' "$G2_M" | sed 's/^current_step: *//;s/"//g')" = "step_2_architecture" ]; then
+  ok "G2: gate_1_spec_review -> step_2_architecture succeeds once gate 1 is approved"
+else
+  bad "G2: expected success once gate 1 is approved, got rc=$g2_rc"
+fi
+
+# G3 (dynamic): the REJECT direction (gate says no, redo the interview) must NOT require the
+# gate to be approved -- rule 8's "run the check backwards": a guard that only ever blocks the
+# forward path but is silently inert on every other edge would be indistinguishable from one that
+# never checked direction at all.
+G3_M="$(mk_gate_fixture g3-reject-path)"
+bash "$TRN" "$G3_M" gate_0d_scaffolding >/dev/null 2>&1
+bash "$TRN" "$G3_M" step_1_interview >/dev/null 2>&1
+bash "$TRN" "$G3_M" gate_1_spec_review >/dev/null 2>&1
+g3_rc=0
+bash "$TRN" "$G3_M" step_1_interview >/dev/null 2>&1 || g3_rc=$?
+if [ "$g3_rc" -eq 0 ]; then
+  ok "G3: gate_1_spec_review -> step_1_interview (reject path) is unaffected by gate 1's 'pending' status"
+else
+  bad "G3: reject path was blocked (rc=$g3_rc) -- the gate-approval check must not cover the backward edge"
+fi
+
+# G4 (dynamic): Gate 4 (implementation_mode) has no current_step of its own (ADR-0099) -- it sits
+# inline between ready_for_implementation and step_5_implementation. The check is keyed by the
+# (from,to) PAIR for exactly this reason; G4 proves that keying actually reaches an inline gate,
+# not only the gates that own a dedicated current_step.
+G4_M="$(mk_gate_fixture g4-inline-gate)"
+for s in gate_0d_scaffolding step_1_interview gate_1_spec_review; do bash "$TRN" "$G4_M" "$s" >/dev/null 2>&1; done
+bash "$SETGATE" "$G4_M" 1 approved >/dev/null 2>&1
+bash "$TRN" "$G4_M" step_2_architecture >/dev/null 2>&1
+bash "$TRN" "$G4_M" gate_2_architecture_review >/dev/null 2>&1
+bash "$SETGATE" "$G4_M" 2 approved >/dev/null 2>&1
+bash "$TRN" "$G4_M" step_3_project_memory >/dev/null 2>&1
+bash "$TRN" "$G4_M" gate_3_project_memory_review >/dev/null 2>&1
+bash "$SETGATE" "$G4_M" 3 approved >/dev/null 2>&1
+bash "$TRN" "$G4_M" step_4_session_boundary >/dev/null 2>&1
+bash "$TRN" "$G4_M" ready_for_implementation >/dev/null 2>&1
+g4_out="$(bash "$TRN" "$G4_M" step_5_implementation 2>&1)"; g4_rc=$?
+if [ "$g4_rc" -ne 0 ] && printf '%s' "$g4_out" | grep -qF 'gate 4 is not approved'; then
+  ok "G4: the inline Gate 4 (no current_step of its own) is still enforced on ready_for_implementation -> step_5_implementation"
+else
+  bad "G4: expected refusal citing 'gate 4 is not approved' on the inline gate, got rc=$g4_rc out='$g4_out'"
+fi
+
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

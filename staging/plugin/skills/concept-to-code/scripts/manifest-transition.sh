@@ -2,7 +2,7 @@
 # concept-to-code: manifest-transition.sh — bash 3.2-clean
 # Performs a legal state machine transition on a manifest.
 # Usage: manifest-transition.sh <manifest-path> <new-current-step> [<new-status>]
-# Exit: 0 ok | 1 transition illegal | 2 manifest invalid pre-transition | 3 write error
+# Exit: 0 ok | 1 transition illegal or target gate not approved | 2 manifest invalid pre-transition | 3 write error
 set -u
 
 if [ "$#" -lt "2" ] || [ "$#" -gt "3" ]; then
@@ -126,6 +126,50 @@ else
     exit 1
   fi
   rm -f "$PAIRS"
+
+  # --- Gate-approval enforcement (issue TBD) ------------------------------------------------
+  # manifest-validate.sh's Invariant 9 only counts hitl_gates entries (manifest-init.sh writes
+  # five unconditionally, regardless of chain_path, so the count floor is satisfied by
+  # construction and never actually fires on a live chain). Nothing before this checked that the
+  # gate a transition advances past actually has status "approved" in hitl_gates — a manifest
+  # left at the manifest-init.sh default (`status: "pending"` on every gate) could be transitioned
+  # straight through every gate with no mechanical block, relying entirely on the orchestrator's
+  # own compliance with the HITL prose in SKILL.md.
+  #
+  # Scope: Standard-path forward (gate-advancing) pairs only, keyed by the exact (from,to) pair
+  # rather than by from-state alone, because Gate 4 (implementation_mode) has no current_step of
+  # its own (ADR-0099) — it sits inline between ready_for_implementation and
+  # step_5_implementation, so a from-state keyed check cannot see it. Backward/reject pairs
+  # (gate_N_*,step_back) are deliberately NOT covered: rejecting a gate does not require that gate
+  # to be approved. Express and Hybrid gates (gate_e3_verify, gate_h1_spec_review,
+  # gate_h3_verify, gate_0d_scaffolding, gate_1b/1c, gate_h1b/h1c) are also NOT covered: their
+  # correspondence to the five numbered hitl_gates entries (which manifest-init.sh always labels
+  # spec_review/architecture_review/project_memory_review/implementation_mode/
+  # review_cycle_decision, the Standard-path labels, regardless of chain_path) is not established
+  # anywhere in this repo, and asserting an unverified mapping risks blocking a live Express/
+  # Hybrid chain incorrectly. That gap is real and open, not silently assumed closed here.
+  _gate_num=""
+  case "$current_step,$new_step" in
+    "gate_1_spec_review,step_2_architecture") _gate_num=1 ;;
+    "gate_2_architecture_review,step_3_project_memory") _gate_num=2 ;;
+    "gate_3_project_memory_review,step_4_session_boundary") _gate_num=3 ;;
+    "ready_for_implementation,step_5_implementation") _gate_num=4 ;;
+    "step_6_review,step_7_commit") _gate_num=5 ;;
+    "step_6_review,completed") _gate_num=5 ;;
+  esac
+
+  if [ -n "$_gate_num" ]; then
+    _gate_status="$(awk -v g="$_gate_num" '
+      $0 ~ "^  - gate: " g "$" { ingate=1; next }
+      /^  - gate: / { ingate=0 }
+      ingate==1 && /^    status: / { sub(/^    status: *"?/,""); sub(/"[[:space:]]*$/,""); print; exit }
+    ' "$manifest")"
+    if [ "$_gate_status" != "approved" ]; then
+      echo "manifest-transition: gate $_gate_num is not approved (status='${_gate_status:-missing}') — refusing $current_step → $new_step" >&2
+      echo "  hint: run manifest-set-gate.sh $manifest $_gate_num approved [notes] after the human sign-off, then retry" >&2
+      exit 1
+    fi
+  fi
 fi
 
 # Compute fresh ISO 8601 UTC timestamp
