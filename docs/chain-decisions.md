@@ -4755,6 +4755,44 @@ Detail: `docs/architecture/ADR-0163-chain-decision-index-out-of-claude-md.md`.
 
 ---
 
+## Decisions from the 470-chain-never-regenerates-xcode chain (ADR-0165)
+
+Fixes issue #470: the chain never regenerates a gitignored Tuist/XcodeGen Xcode project, so
+`xcodebuild test` builds a stale target and every `tests_after` figure downstream is measured
+against a project that doesn't reflect the tree it claims to describe: `staging/plugin/scripts/detect-test-cmd.sh`.
+
+Key architectural decisions:
+- **New first detection branch, tracked manifest before the gitignored artifact:** `Project.swift`,
+  `Tuist.swift`, `project.yml`, or `project.yaml` are checked ahead of the existing `*.xcworkspace`/
+  `*.xcodeproj` globs — a tracked manifest is present in every worktree of every checkout, closing
+  the case where `isolation: worktree` forks a commit that never had the gitignored `.xcodeproj`.
+- **Generator chosen from which manifest is present, not from the SPEC's letter:** `project.yml`/
+  `.yaml` is XcodeGen's manifest, not Tuist's — verified from upstream docs during design, since a
+  `tuist generate` prefix on an XcodeGen project can only ever fail.
+- **Candidate command is `cd`-anchored and names `-scheme` with no `-project`:** matches
+  `git-repo-init`'s own verified recipe (`tuist generate --no-open` then `xcodebuild -scheme
+  <Name>`), read from source rather than assumed from the SPEC's draft.
+- **DID-NOT-RUN is exit 127, not this repo's usual exit 3:** the convention belongs to the
+  consumer — `stop-gate.sh`'s existing exit-code map already treats `125|126|127` as fail-open
+  with the dirty marker kept; exit 3 would land in the "Tests failed" bucket and misreport a
+  missing build tool as a regression in the code under test.
+- **ADR-0159's plant `M3` is left byte-frozen rather than widened:** the harness that could
+  legitimately carry the new candidate's assertion (`worktree-isolation-contract.test.sh`) already
+  names `ADR-0159` and carries 19 foreign `R-NN` tokens — naming its basename in this feature's
+  plan would satisfy `spec-coverage.sh`'s scope filter and falsely cover all 8 of this feature's
+  requirement ids before any code existed. The guarantee is re-pinned behaviourally in `prep.test.sh`
+  instead.
+- **A real blocker found and fixed before Step 3:** `spec-coverage.sh` only reads a `(no-test: …)`
+  marker on the `- [ ] R-NN —` opener line, not on a wrapped continuation line — both of this
+  SPEC's markers were on continuation lines and blocked the gate (`UNCOVERED`, exit 1) before any
+  implementation existed. Fixed by reflowing `SPEC.md`; the underlying blindness in
+  `spec-coverage.sh` is left as a follow-up issue rather than fixed in the same batch as the
+  measurement.
+
+Detail: `docs/architecture/ADR-0165-470-chain-never-regenerates-xcode.md`.
+
+---
+
 ## Decisions from the 460-spec-coverage-baseline-never-bumped chain (ADR-0166)
 
 Step 7.0b archives a completing chain's SPEC into `docs/specs/`, which enrols it into
