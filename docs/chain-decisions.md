@@ -4847,3 +4847,36 @@ Key architectural decisions:
   follow; the declaration assertions pin that the sentences exist, not that either is obeyed.
 
 Detail: `docs/architecture/ADR-0166-460-spec-coverage-baseline-never-bumped.md`.
+
+## Decisions from the 400-autopilot-disarm-scope-unbounded chain (ADR-0167)
+
+Fixes issue #400: `autopilot-disarm.sh` clears the whole `.claude/autopilot-state/` transient set,
+including `scope` (the resolved `--features`/`--only` bound) and `published` (delivered-count),
+so a relaunch after a pause is silently unbounded.
+
+Key architectural decisions:
+- **Disarm always preserves `scope`/`published`; the launch side judges spent-vs-live, not the
+  disarm side.** `--completing` is issued both by Phase 2 on a finished roadmap and by a human
+  pausing from the owning session — disarm structurally cannot tell them apart. The SPEC's literal
+  instruction ("stop clearing them") ships a regression on its own: a completed run would leave
+  `scope`+`published` forever, and every subsequent bare `/skill autopilot` would read `EXHAUSTED`.
+- **`conductor-scope-gate` removes `published` if and only if it writes a fresh `scope`** — this is
+  where "is the bound spent" is actually knowable, so the judgement moves there instead of into
+  disarm.
+- **`scope-file-read.sh` is a new REPORTER, never a checker** — exits 0 across all six states,
+  signals on stdout (rule 5). Its `SPENT` computation deliberately duplicates
+  `conductor-scope-gate`'s own comparison rather than being extracted (rule 6 vs ADR-0086's
+  counterweight; resolved toward keeping two copies plus a differential assertion, since the
+  shared logic lives in a fence in a skill this feature otherwise does not touch).
+- **Precedence at relaunch: explicit `--features`/`--only` arguments → preserved file → marker →
+  none.** A preserved file only outranks `.claude/autopilot.yml` when it records
+  `source=arguments` — the one case where they can legitimately disagree.
+- **A preserved `scope` file's `only=` lines hold the roadmap row's exact text, not the `--only`
+  tokens typed at launch.** Reading it back and feeding it through check 9's token resolver
+  resolves nothing and aborts the launch — reuse means use the file as it stands.
+- **`active`/`build-status` clearing is unchanged (R-03, ADR-0112 preserved exactly).**
+- **A corrupt/unreadable `scope` file fails safe at launch time** (removed rather than left to trip
+  a later gate) but **does halt** if `conductor-scope-gate` later hits an unreadable file
+  mid-run — two call sites, opposite policies on one state, both right (rule 11).
+
+Detail: `docs/architecture/ADR-0167-400-autopilot-disarm-scope-unbounded.md`.
