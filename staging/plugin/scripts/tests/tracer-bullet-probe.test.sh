@@ -43,6 +43,7 @@ SKILL_MD="$SKILL_DIR/SKILL.md"
 INIT="$SKILL_DIR/scripts/manifest-init.sh"
 VAL="$SKILL_DIR/scripts/manifest-validate.sh"
 TRN="$SKILL_DIR/scripts/manifest-transition.sh"
+SETGATE="$SKILL_DIR/scripts/manifest-set-gate.sh"
 DBC="$SKILL_DIR/scripts/diff-budget-check.sh"
 
 PASS=0; FAIL=0
@@ -91,11 +92,20 @@ current_step_of() {
 # mk_ready <slug> -- drives a fresh fixture all the way to ready_for_implementation via the
 # existing, unmodified standard-path pairs (step_0_init through step_4_session_boundary). Sets
 # FIX to the manifest path, ready for the Step-4.5-specific pairs under test.
+#
+# Gates 1-3 are approved via manifest-set-gate.sh right before the hop that crosses each one —
+# manifest-transition.sh now refuses a gate-advancing pair whose hitl_gates entry is not
+# "approved" (the gate-audit-trail-check fix), and a fixture that skips real approval is exactly
+# the unenforced state that fix closes, not a shape this helper should keep simulating.
 mk_ready() {
   mk_fixture "$1"
-  advance "$FIX" gate_0d_scaffolding step_1_interview gate_1_spec_review step_2_architecture \
-    gate_2_architecture_review step_3_project_memory gate_3_project_memory_review \
-    step_4_session_boundary ready_for_implementation
+  advance "$FIX" gate_0d_scaffolding step_1_interview gate_1_spec_review || return 1
+  bash "$SETGATE" "$FIX" 1 approved >/dev/null 2>&1 || return 1
+  advance "$FIX" step_2_architecture gate_2_architecture_review || return 1
+  bash "$SETGATE" "$FIX" 2 approved >/dev/null 2>&1 || return 1
+  advance "$FIX" step_3_project_memory gate_3_project_memory_review || return 1
+  bash "$SETGATE" "$FIX" 3 approved >/dev/null 2>&1 || return 1
+  advance "$FIX" step_4_session_boundary ready_for_implementation
 }
 
 # ==================================================================================================
@@ -163,6 +173,7 @@ fi
 mk_ready "tba7"
 if [ "$?" -eq 0 ] || [ -n "${FIX:-}" ]; then :; fi
 if [ -n "${FIX:-}" ] && [ "$(current_step_of "$FIX")" = "ready_for_implementation" ]; then
+  bash "$SETGATE" "$FIX" 4 approved >/dev/null 2>&1
   bash "$TRN" "$FIX" step_5_implementation; rc=$?
   if [ "$rc" -eq 0 ] && [ "$(current_step_of "$FIX")" = "step_5_implementation" ]; then
     ok "TBA7: skip-mode path ready_for_implementation -> step_5_implementation is legal and unmodified by this feature"
@@ -225,6 +236,7 @@ mk_ready "tbb6-abort"
 FIX_ABORT="$FIX"
 
 if [ -n "${FIX_CONT:-}" ]; then
+  bash "$SETGATE" "$FIX_CONT" 4 approved >/dev/null 2>&1
   bash "$TRN" "$FIX_CONT" step_5_implementation; rc=$?
   if [ "$rc" -eq 0 ]; then
     ok "TBB6a: red + continue-anyway -> step_5_implementation is legal (reuses the existing ready_for_implementation pair)"
@@ -340,6 +352,7 @@ fi
 # TBF4 (dynamic): green -> step_5_implementation is legal (reuses the existing pair, unmodified).
 mk_ready "tbf4-green"
 if [ -n "${FIX:-}" ]; then
+  bash "$SETGATE" "$FIX" 4 approved >/dev/null 2>&1
   bash "$TRN" "$FIX" step_5_implementation; rc=$?
   if [ "$rc" -eq 0 ]; then
     ok "TBF4: green -> step_5_implementation is legal (the existing pair, unmodified by this feature)"
