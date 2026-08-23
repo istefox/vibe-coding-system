@@ -4752,3 +4752,60 @@ Key architectural decisions:
   plant (rule 10). `CMC05`'s exact equality is where a plant bites.
 
 Detail: `docs/architecture/ADR-0163-chain-decision-index-out-of-claude-md.md`.
+
+---
+
+## Decisions from the 460-spec-coverage-baseline-never-bumped chain (ADR-0166)
+
+Step 7.0b archives a completing chain's SPEC into `docs/specs/`, which enrols it into
+`spec-coverage.test.sh`'s frozen per-item baseline population — and nothing in the chain wrote the
+matching baseline rows, so the enrolling chain's own commit left the harness red for whoever ran it
+next. Hit live twice in five days: the #447 chain on 2026-08-17, and the #470 chain reproduced it on
+2026-08-22 while this SPEC was being interviewed.
+
+Key architectural decisions:
+- **The bump lives beside `spec-coverage.sh`, not under `plugin/scripts/`:** a new
+  `spec-coverage-baseline-rows.sh` at `staging/plugin/skills/concept-to-code/scripts/`, the exact
+  deployed path the SPEC's own Definition of Done names, reached with no `pairs-zone-anomaly:`
+  declaration.
+- **Three modes, not the SPEC's two:** `--pair` (which plan the harness's own glob would resolve for
+  a SPEC), `--rows` (verdicts for one pair), `--bump` (append absent rows). `--pair` exists because
+  the chain knows its plan from `manifest.artifacts.plan` while the harness derives it by globbing —
+  two answers to *which plan belongs to this SPEC* is exactly rule 6's defect condition, and without
+  it a bump could write rows for a pair the harness will never resolve, moving the same mystery red
+  to the other direction (`RS8b`, baseline-side orphan).
+- **`--rows` forwards the checker's stderr verbatim:** `RY10`'s corpus denominator guard reads the
+  `SCOPE-NO-BACKREF` token and the `N in scope` count off `spec-coverage.sh`'s stderr, not stdout. An
+  extraction that dropped it would collapse `RY10` from 16 to 0 while every other assertion stayed
+  green until the floor tripped — the single sharpest hazard in the refactor.
+- **The exit-code contract mirrors `spec-coverage.sh`'s, and rule 20 is applied explicitly:** 0
+  success, 1 conflict, 2 invalid, 3 did-not-run. The consumers are named (the new harness, and Step
+  7.0b's own prose) precisely because this repo's own DID-NOT-RUN convention is not universal, and
+  neither named consumer is `stop-gate.sh`.
+- **Append-only, refuse on conflict, never rewrite (rule 14):** an absent row is appended; an
+  identical verdict is skipped; a different verdict fails the whole bump, writing nothing, naming the
+  SPEC, the id and both verdicts. Writes go through a temp file `mv`-ed over the baseline so a killed
+  run cannot leave a half-written corpus file.
+- **An absent baseline file is a genuine no-op — this repo's own baseline path gets its own
+  assertion instead of a comment (rule 17):** `concept-to-code` runs on arbitrary projects, so a
+  missing `--baseline` prints `BUMP-NOOP` and exits 0 rather than halting every foreign-project
+  chain. That same design makes a typo in the path silent by construction, so the harness asserts the
+  path this repo's own `SKILL.md` passes is real and plants against it.
+- **Measurement corrected the SPEC's own number forward, not in place (rule 13, rule 14):** the SPEC
+  said "16 live pairs, 16 baseline rows"; re-derivation found 16 pairs but 130 rows (106
+  `COVERED`/12 `UNCOVERED`/12 `UNSCOPED`). Zero baseline rows changed — there was no pre-existing
+  population-vs-baseline debt, only a mechanism that would go on missing every future one.
+- **Whole-corpus regeneration was rejected, not merely deferred:** rewriting every row at Step 7.0b
+  would silently re-freeze a later feature's genuine drift (a renamed test file flipping an existing
+  pair's verdict) into the baseline, which is the one outcome a frozen per-item baseline exists to
+  prevent (ADR-0138 §D5).
+- **New assertions went into a new hermetic harness, not into the 1952-line
+  `spec-coverage.test.sh`:** that file already runs the full 16-pair corpus twice per invocation and
+  carries 43 plants: ADR-0143 §D7 measured plant cost as dominated by target-file runtime, so ~18 more
+  plants there would have been the single most expensive place in the repository to add them.
+- **Two obligations stayed instructions, not enforcements (rule 16):** that the orchestrator halts
+  before invoking `commit` on a non-zero exit, and that it extends `--include` with the baseline path
+  only when the bump reported `BUMPED`. Both are prose inside Step 7.0b that a model is asked to
+  follow; the declaration assertions pin that the sentences exist, not that either is obeyed.
+
+Detail: `docs/architecture/ADR-0166-460-spec-coverage-baseline-never-bumped.md`.
