@@ -1120,9 +1120,10 @@ version bump, the block is additive):
 ```
 
 `delivered` is read from `published` (a count of its lines) and `source`/`requested` from `scope`
-— **both before the disarm**, which deletes both. This section already runs prior to the disarm
-call below; stating the dependency here matters because two files whose reader sits a few lines
-above their deleter is exactly the ordering that gets "tidied" by a later edit.
+— both survive the disarm call below (ADR-0167 §D1). This section merely runs earlier in Phase 2;
+the ordering no longer guards against a deletion, since disarm now clears guard state only, never
+these two files. Reset, when it happens, is driven by the next launch's check 9
+(`autopilot-scope-resolve`), never by disarm (§D4).
 
 This field is mechanical: the count of `- [ ]` rows in `PROJECT.md`, taken **at report time**, not
 at run start.
@@ -1135,7 +1136,7 @@ acts on, and this figure feeds a human re-deriving a turn budget — a disclosur
 decision can only add information, never remove a check. `turns_per_feature` is **never read by a
 gate**.
 
-Disarm the guard. This clears the whole transient set, not just the marker (ADR-0112): a
+Disarm the guard. This clears the guard state, not just the marker (ADR-0167 §D1; ADR-0112): a
 `build-status` left reading `RED` halts the in-script `--check` gate **regardless of the marker**,
 and a `needs-human` left behind halts every publish — so removing only `active` leaves the next
 session blocked by a file the disarm appeared to have handled.

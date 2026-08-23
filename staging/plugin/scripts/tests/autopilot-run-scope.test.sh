@@ -1175,8 +1175,13 @@ fi
 # TASK 9 SWEEP: all five needed no repair -- each still matches exactly one site against the real,
 # landed §4 text, confirmed by static match-count against autopilot/SKILL.md before accepting it.
 #
+# CORRECTION (issue #400, ADR-0167 §D1): RP2's clause is no longer "before the disarm"/"deletes
+# both" -- that pinned the pre-#400 contract, in which disarm deleted scope/published. It now
+# checks "survive the disarm call"/"check 9" (see RP2's own comment above its assertion). The other
+# four needles/clauses (RP1, RP3-RP5) are unaffected by #400 and remain as this paragraph states.
+#
 # plant: RP1 | plugin/skills/autopilot/SKILL.md | "remaining_in_roadmap" | "remaining_features"
-# plant: RP2 | plugin/skills/autopilot/SKILL.md | before the disarm | after the disarm
+# plant: RP2 | plugin/skills/autopilot/SKILL.md | survive the disarm call | do not survive the disarm call
 # plant: RP3 | plugin/skills/autopilot/SKILL.md | at report time | at run start
 # plant: RP4 | plugin/skills/autopilot/SKILL.md | never read by a gate | always read by a gate
 # plant: RP5 | plugin/skills/autopilot/SKILL.md | version bump | version increment
@@ -1196,15 +1201,18 @@ else
   bad "RP1: autopilot/SKILL.md §4 does not yet document the scope block's fields"
 fi
 
-# RP2: it states that published and scope are read before the disarm, which deletes both.
+# RP2 was "published and scope are read before the disarm, which deletes both" (issue #365,
+# ADR-0129 §D10); inverted by issue #400, ADR-0167 §D1 — the disarm no longer deletes either file,
+# so it now checks that §4 states both SURVIVE the disarm and names check 9 as the actual reset
+# mechanism (§D4).
 RP2_OK=1
 printf '%s' "$NA_FLAT" | grep -qi "published"               || RP2_OK=0
-printf '%s' "$NA_FLAT" | grep -Eqi "before (the )?disarm"    || RP2_OK=0
-printf '%s' "$NA_FLAT" | grep -qi "deletes both"              || RP2_OK=0
+printf '%s' "$NA_FLAT" | grep -qi "surviv"                   || RP2_OK=0
+printf '%s' "$NA_FLAT" | grep -qi "check 9"                  || RP2_OK=0
 if [ "$RP2_OK" = "1" ]; then
-  ok "RP2: autopilot/SKILL.md §4 states published and scope are read before the disarm, which deletes both"
+  ok "RP2: autopilot/SKILL.md §4 states published and scope survive the disarm, and names check 9 as the reset"
 else
-  bad "RP2: autopilot/SKILL.md §4 does not yet state the read-before-disarm ordering"
+  bad "RP2: autopilot/SKILL.md §4 does not yet state the survive-the-disarm/check-9-resets contract"
 fi
 
 # RP3: remaining_in_roadmap is defined as the count of - [ ] rows at report time.

@@ -4860,9 +4860,9 @@ Key architectural decisions:
   pausing from the owning session — disarm structurally cannot tell them apart. The SPEC's literal
   instruction ("stop clearing them") ships a regression on its own: a completed run would leave
   `scope`+`published` forever, and every subsequent bare `/skill autopilot` would read `EXHAUSTED`.
-- **`conductor-scope-gate` removes `published` if and only if it writes a fresh `scope`** — this is
-  where "is the bound spent" is actually knowable, so the judgement moves there instead of into
-  disarm.
+- **Check 9 (`autopilot-scope-resolve`, in `autopilot/SKILL.md`) removes `published` if and only if
+  it writes a fresh `scope`** — this is where "is the bound spent" is actually knowable, so the
+  judgement moves there instead of into disarm. `conductor-scope-gate` is read-only and unchanged.
 - **`scope-file-read.sh` is a new REPORTER, never a checker** — exits 0 across all six states,
   signals on stdout (rule 5). Its `SPENT` computation deliberately duplicates
   `conductor-scope-gate`'s own comparison rather than being extracted (rule 6 vs ADR-0086's

@@ -99,6 +99,7 @@ mk_dp_fixture() {
 # plant: DP6 | plugin/scripts/autopilot-disarm.sh | under $ROOT" [ -n "$NOTE" ] && echo "  $NOTE" if [ -n "$PRESERVED" ]; then | under $ROOT" [ -n "$NOTE" ] && echo "  $NOTE" if false; then
 # plant: DP7 | plugin/scripts/autopilot-disarm.sh | pass either to replace it." fi echo "  autopilot-guard is now inert for this repo. Your own pushes are unaffected by it." | keep both files forever." fi echo "  autopilot-guard is now inert for this repo. Your own pushes are unaffected by it."
 # plant: DP8 | plugin/scripts/autopilot-disarm.sh | _sbound="(bound unreadable)" | _sbound="(bound fine)"
+# plant: DP33 | plugin/scripts/autopilot-disarm.sh | _pbound="(bound unreadable)" | _pbound="(bound fine)"
 
 # =====================================================================================
 # DP1 (R-02, R-08) — RECOVERY path (bare form, foreign session): a preserved `scope`/`published`
@@ -226,6 +227,26 @@ else
     ok "DP8: a chmod-000 scope file still exits 0, preserved as (bound unreadable)"
   else
     bad "DP8: rc=$RC -- $(printf '%s' "$OUT" | grep -i preserved | head -1)"
+  fi
+fi
+
+# DP33 -- the symmetric case for `published`: a chmod-000 published file still leaves the disarm at
+# exit 0, printing "preserved: ... (bound unreadable)" for THAT file. Added at RTF review (2026-08-23)
+# to close a coverage gap the reviewer flagged: DP8 tests only unreadable scope, but the same
+# failure-proof code path exists for published (§4's bound-summary block handles both symmetrically
+# by inspection); nothing previously drove it. Same skip idiom as DP8/CG7.
+R=$(mk_root dp33)
+printf 'RED' > "$R/.claude/autopilot-state/build-status"
+printf 'some-feature\n' > "$R/.claude/autopilot-state/published"
+chmod 000 "$R/.claude/autopilot-state/published" 2>/dev/null
+if [ -r "$R/.claude/autopilot-state/published" ]; then
+  ok "DP33 (skipped, not asserted): this user can read a chmod-000 file, so unreadable-published is not expressible here"
+else
+  OUT=$(bash "$DISARM" "$R" 2>&1); RC=$?
+  if [ "$RC" = "0" ] && printf '%s' "$OUT" | grep -qF 'preserved: .claude/autopilot-state/published (bound unreadable)'; then
+    ok "DP33: a chmod-000 published file still exits 0, preserved as (bound unreadable)"
+  else
+    bad "DP33: rc=$RC -- $(printf '%s' "$OUT" | grep -i preserved | head -1)"
   fi
 fi
 
