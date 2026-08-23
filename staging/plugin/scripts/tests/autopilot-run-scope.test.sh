@@ -1181,7 +1181,7 @@ fi
 # four needles/clauses (RP1, RP3-RP5) are unaffected by #400 and remain as this paragraph states.
 #
 # plant: RP1 | plugin/skills/autopilot/SKILL.md | "remaining_in_roadmap" | "remaining_features"
-# plant: RP2 | plugin/skills/autopilot/SKILL.md | survive the disarm call | do not survive the disarm call
+# plant: RP2 | plugin/skills/autopilot/SKILL.md | survive the disarm call | leave the disarm call unresolved
 # plant: RP3 | plugin/skills/autopilot/SKILL.md | at report time | at run start
 # plant: RP4 | plugin/skills/autopilot/SKILL.md | never read by a gate | always read by a gate
 # plant: RP5 | plugin/skills/autopilot/SKILL.md | version bump | version increment
@@ -1204,11 +1204,16 @@ fi
 # RP2 was "published and scope are read before the disarm, which deletes both" (issue #365,
 # ADR-0129 §D10); inverted by issue #400, ADR-0167 §D1 — the disarm no longer deletes either file,
 # so it now checks that §4 states both SURVIVE the disarm and names check 9 as the actual reset
-# mechanism (§D4).
+# mechanism (§D4). "surviv" is bound to a "published" occurrence within 100 chars (a scoped,
+# proximity match), not a bare whole-file grep -qi "surviv" -- that word also appears seven other
+# times in this file describing an unrelated shell-variable-scoping idiom, none near "published",
+# so an unscoped check was satisfied by those and never actually saw its own mutation invert (CI
+# caught this live: plant-shard fired PC1 "RP2 -- the assertion still passed with the mechanism
+# removed" on the first landed version of this fix).
 RP2_OK=1
-printf '%s' "$NA_FLAT" | grep -qi "published"               || RP2_OK=0
-printf '%s' "$NA_FLAT" | grep -qi "surviv"                   || RP2_OK=0
-printf '%s' "$NA_FLAT" | grep -qi "check 9"                  || RP2_OK=0
+printf '%s' "$NA_FLAT" | grep -qi "published"                     || RP2_OK=0
+printf '%s' "$NA_FLAT" | grep -Eqi "published.{0,100}surviv"      || RP2_OK=0
+printf '%s' "$NA_FLAT" | grep -qi "check 9"                       || RP2_OK=0
 if [ "$RP2_OK" = "1" ]; then
   ok "RP2: autopilot/SKILL.md §4 states published and scope survive the disarm, and names check 9 as the reset"
 else
