@@ -4803,5 +4803,9 @@ Key architectural decisions:
   `spec-coverage.test.sh`:** that file already runs the full 16-pair corpus twice per invocation and
   carries 43 plants: ADR-0143 §D7 measured plant cost as dominated by target-file runtime, so ~18 more
   plants there would have been the single most expensive place in the repository to add them.
+- **Two obligations stayed instructions, not enforcements (rule 16):** that the orchestrator halts
+  before invoking `commit` on a non-zero exit, and that it extends `--include` with the baseline path
+  only when the bump reported `BUMPED`. Both are prose inside Step 7.0b that a model is asked to
+  follow; the declaration assertions pin that the sentences exist, not that either is obeyed.
 
 Detail: `docs/architecture/ADR-0166-460-spec-coverage-baseline-never-bumped.md`.

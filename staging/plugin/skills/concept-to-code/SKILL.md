@@ -3062,6 +3062,56 @@ bash ~/.claude/skills/concept-to-code/scripts/spec-archive.sh "<project-root>" "
 - `NOSPEC`, `COLLISION`, or exit 3 → **leave the pointer as it is** and say which. A pointer at a
   slot is today's behaviour, not a regression; a pointer at an archive that was never written is.
 
+**Step 7.0b bumps this chain's own baseline rows (issue #460, ADR-0166).** The archive above is the
+event that enrols this chain's SPEC into the frozen corpus baseline, so this is where its rows are
+written; the rows must land in **this** commit or the next unrelated author inherits the red.
+
+<!-- fence-contract: c2c-step7-baseline-bump -->
+```bash
+# ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not under
+# the host shell, which is zsh here and differs from bash on word splitting, unmatched globs and
+# `echo` escapes. `export` forwards this body's caller-bound free variables across the new process
+# boundary; a plain shell variable does not survive it. Terminator at COLUMN 0; an indented one is
+# swallowed into the here-document and destroys this fence's exit code silently.
+export ARCHIVED_SPEC PLAN ROOT CLAUDE_PLUGIN_ROOT
+bash <<'FENCE_BASH'
+# Free variables, bound by the orchestrator before this block runs:
+#   ARCHIVED_SPEC   the path spec-archive.sh reported above (ARCHIVED or ALREADY)
+#   PLAN            manifest.artifacts.plan
+#   ROOT            <project-root>
+# Two-tier resolution, copied from the Requirement-ID coverage gate above, which resolves the
+# sibling spec-coverage.sh the same way.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh" ]; then
+  _rows="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh"
+elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh" ]; then
+  _rows="$HOME/.claude/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh"
+else
+  echo "BASELINE_BUMP_NORUN noScript"
+  echo "  spec-coverage-baseline-rows.sh is not deployed. Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 3
+fi
+_baseline="$ROOT/staging/plugin/scripts/tests/spec-coverage-scope-baseline.tsv"
+# --tests-root is passed UNCONDITIONALLY, unlike the Gate 4.x call above which omits it when
+# manifest.test_cmd_placeholder or manifest.test_cmd_provisional is true (ADR-0166 §D5): the
+# baseline's rows are defined by what the harness computes, and the harness always passes it.
+_out=$(bash "$_rows" --bump --baseline "$_baseline" --spec "$ARCHIVED_SPEC" --plan "$PLAN" --tests-root "$ROOT")
+_rc=$?
+printf '%s\n' "$_out"
+exit "$_rc"
+FENCE_BASH
+```
+
+- `0` with `BUMP-NOOP: …` → proceed silently. Nothing was written.
+- `0` with `BUMPED <n> row(s)` → the baseline is modified on disk. Emit one line naming the path and
+  the count, and **add that path to the `--include` list of the `commit` invocation below**.
+- non-zero (`1` conflict, `2` invalid, `3` did not run) → **HALT. Do not invoke `commit`.** Print the
+  script's stderr verbatim and name the file a human must look at. This is deliberate: an unbumpable
+  baseline stops the chain that would have caused the drift, at the point someone can still act on it.
+
+The halt above and the `--include` extension below are **instructions, not enforcements** (rule 16):
+what is enforced is this fence's own exit code, executed by `spec-coverage-baseline-bump.test.sh`.
+
 **Step 7.0c — transition to `completed` (issue #410, ADR-0135).** Runs after 7.0b, not before:
 `manifest-set-artifact.sh` has no terminal guard, so a repoint issued after the transition would
 succeed silently and land outside the commit — the same defect one write over, in a step whose whole
@@ -3089,7 +3139,7 @@ way.
 ```
 Use the commit skill (invoke via Skill tool, not Agent tool).
 Context hint: "<topic-full-title> (ADR: <manifest.artifacts.adr>)"
-Arguments: --include <archived-spec-path>,<manifest-path>
+Arguments: --include <archived-spec-path>,<manifest-path>[,<baseline-path> — only when the bump reported BUMPED]
 ```
 
 The skill manages the HITL gate (AskUserQuestion), Conventional Commits message generation, and the PR option internally. The orchestrator does nothing after invocation: the skill closes the cycle on its own.

@@ -54,13 +54,14 @@ S7=$(grep -n '^### Step 7 — Commit' "$CC" | head -1 | cut -d: -f1)
 if [ -n "${S7:-}" ]; then ok "SC0 the Step 7 anchor resolves (line $S7)"
 else bad "SC0 the Step 7 heading was reworded; SC1 asserts nothing"; fi
 
-# Window widened 120 -> 140 (issue #489, ADR-0158): the collapse fence's own paragraph grew by the
-# sentence stating that Step 6/Gate 5.06 make no commit of their own, and the "Use the commit
-# skill" anchor moved from 127 to 127 lines past the Step 7 heading — inside the old window by
-# exactly one legitimate edit's margin. Re-measured rather than padded blindly (CLAUDE.md rule 13):
-# the actual distance is 127; 140 leaves the same ~13-line slack the original 120 gave over a
-# then-measured ~107.
-BLK=$(awk -v a="${S7:-0}" 'NR>=a && NR<a+140' "$CC")
+# Window widened 140 -> 200 (issue #460, ADR-0166): the coder task inserted a Step 7.0b bump
+# section (~50 lines) between the Step 7 heading and the "Use the commit skill" invocation, and
+# the anchor moved from 127 to 177 lines past the Step 7 heading — past the old 140 window
+# entirely. Re-measured rather than padded blindly (CLAUDE.md rule 13): the actual distance is
+# now 177; 200 leaves a ~23-line slack, comparable to the ~13-line slack the prior 140 gave over
+# a then-measured 127 (issue #489, ADR-0158), which itself widened from 120 over a then-measured
+# ~107.
+BLK=$(awk -v a="${S7:-0}" 'NR>=a && NR<a+200' "$CC")
 COLLAPSE_LINE=$(printf '%s\n' "$BLK" | grep -n 'fence-contract: c2c-step7-snapshot-collapse' | head -1 | cut -d: -f1)
 INVOKE_LINE=$(printf '%s\n' "$BLK" | grep -n 'Use the commit skill' | head -1 | cut -d: -f1)
 if [ -n "${COLLAPSE_LINE:-}" ] && [ -n "${INVOKE_LINE:-}" ] && [ "$COLLAPSE_LINE" -lt "$INVOKE_LINE" ]; then

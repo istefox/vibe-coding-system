@@ -1743,7 +1743,7 @@ Addressing them separately is how they reached nine.
 - [ ] `spec_topic_match` has three values and the code has two; the archive fence halts on any SPEC lacking the marker  (issues #454, #408). **#408's own defect is done** — ADR-0164 D1: the byte-identical archive comparison now runs before the slug is ever examined, so a markerless SPEC already archived under another name is a no-op (`ALREADY`/0), not a halt; the stamp guard is also re-anchored to column 0, matching `gate0-detect.sh`'s own extractor (closes half of #376 too). #454's broader "three values, two branches" wiring question is untouched and stays open
 - [ ] one predicate for SPEC coverage across Phase P step 3 and `project-conductor`, and a pre-flight that asserts the per-feature SPECs ADR-0022 requires actually exist  (issues #414, #463)
 - [ ] `gate0-detect.sh` detects ADRs by one naming convention, so an `adr-tools` repository reports `adr=no`  (issue #464)
-- [ ] Step 7.0b enrols a SPEC in the scope-baseline corpus and nothing bumps the baseline  (issue #460)
+- [x] Step 7.0b enrols a SPEC in the scope-baseline corpus and nothing bumps the baseline  (issue #460)  (completed: 2026-08-23 — ADR-0166. A new `spec-coverage-baseline-rows.sh`, three modes (`--pair`/`--rows`/`--bump`), extracted beside `spec-coverage.sh` and called from Step 7.0b so the enrolling chain ships its own baseline rows in the same commit. 23 `NB` assertions plus `RS0`, hermetic, in a new harness; plants declared in a later batch. Zero of the 130 existing baseline rows changed)
 
 *The workaround in use is hand-aligning the slug in the mutable root `SPEC.md` slot, one feature at a
 time. On a project where that slot is gitignored the edits are not durable and the archived copies
