@@ -264,6 +264,15 @@ read: this gate counts `published`'s lines, `conductor-published-skip` matches o
 This is a **CHECKER**: branch on its exit code. Exit 3 means the scope file exists but could not be
 read, which is not the same as no scope file at all — an unbounded run.
 
+**`scope` and `published` now survive a disarm (ADR-0167 §D4, issue #400).** `autopilot-disarm.sh`
+no longer clears either file; only the next `autopilot` launch resets them, and it does so exactly
+when it writes a fresh `scope` — a preserved bound is reused as-is, a spent one is replaced along
+with the `published` ledger it goes with. This gate's own `DID-NOT-RUN` exit 3 above **stays a
+halt** regardless: it fires *mid-run*, minutes after the launch wrote the file it is reading, where
+an unreadable `scope` is an environment fault against a bound the operator already set, not the
+ordinary "never had a bound" absence a launch tolerates. Same ABSENT/UNREADABLE state, two call
+sites, opposite policies, both right (ADR-0167 §D5, CLAUDE.md rule 11).
+
 <!-- fence-contract: conductor-scope-gate -->
 ```bash
 # ADR-0133 §D1 (issue #394): everything between the two FENCE_BASH lines runs under BASH, not under

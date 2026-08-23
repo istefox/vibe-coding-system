@@ -168,6 +168,12 @@ lines in the transcript are the authoritative record.
   bash ~/.claude/hooks/autopilot-disarm.sh "$PWD"
   ```
 
+- `scope` and `published` — the run's bound and its delivered-count ledger — **survive this disarm**
+  (ADR-0167). A bare `/skill autopilot` relaunch with no `--features`/`--only` **reuses** the
+  preserved bound where it left off; passing `--features`/`--only` on that relaunch **replaces** it
+  with a new one. The disarm's own output prints a `preserved:` line for each so you can see what it
+  kept.
+
 ---
 
 ## The guard is still armed and I cannot push
@@ -192,7 +198,7 @@ it is how `autopilot` Phase 2 clears the state of the run it is itself ending, s
 the owning session and refuses everyone else. Passing it by hand to clear somebody else's stale
 marker will be refused, and correctly — you are not that run.
 
-It clears the whole transient set, because the marker is only one of four ways to be stuck:
+It clears the guard state, because the marker is only one of four ways to be stuck:
 
 | file | what it does while present |
 | --- | --- |
@@ -200,6 +206,10 @@ It clears the whole transient set, because the marker is only one of four ways t
 | `.claude/autopilot-state/build-status` reading `RED` | halts every publish, marker or not |
 | `.claude/needs-human` | halts every publish, and prints its first line as the reason |
 | `.claude/autopilot-state/rtf-blocker` | halts every publish |
+
+`.claude/autopilot-state/scope` and `.claude/autopilot-state/published` are not in this table — they
+are not guard conditions, and this disarm no longer touches either. See "Aborting a run" above for
+what surviving means at your next relaunch.
 
 When the marker was armed by another session, the halt message names the owner, the time, and this
 command — so you should not need this page twice.

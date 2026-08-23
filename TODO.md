@@ -109,6 +109,12 @@ pointer to its `PROJECT.md` phase rather than a transcription of it.
 
 - [ ] `VCS-020` **P2** the first bounded `autopilot` run is paused BEFORE the chain, by operator choice at the session boundary. Manifest `docs/manifests/2026-08-11-a-per-file-budget-ceiling-is-parsed-and.manifest.yml` sits at `step_0_init`/`in_progress` with `autopilot: true` and classifies `ADOPTABLE`, `SPEC.md` carries #296's spec and is modified in the working tree, and the guard is disarmed. **Relaunch, do not resume**: `autopilot-disarm.sh --completing` clears the whole transient set (ADR-0112) including `.claude/autopilot-state/scope`, so the bound is gone — `/skill autopilot --features 1 --only 296`. Phase P must be skipped again for the reason in issue #399, and the fork point is `main` because Phase P's outputs are already committed there (#401). Full handoff in `.claude/context.md` <!-- src:session opened:2026-08-11 runs:2 -->
 
+  > **Correction (2026-08-23, ADR-0167):** `autopilot-disarm.sh` no longer clears
+  > `.claude/autopilot-state/scope` — the line above names a mechanism this feature retired. A bare
+  > relaunch with no `--features`/`--only` now reuses the preserved bound automatically; passing
+  > them, as shown above, still works but now **replaces** it rather than being the only way back to
+  > a bound. See `docs/architecture/ADR-0167-400-autopilot-disarm-scope-unbounded.md`.
+
 ## Backlog / To Add
 
 _none_
