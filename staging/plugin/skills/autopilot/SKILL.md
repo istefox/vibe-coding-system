@@ -141,6 +141,22 @@ else
   echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
   exit 3
 fi
+# scope-args-parse.sh above is a CHECKER: this caller branches on ITS exit code (ADR-0047 §D8).
+# scope-file-read.sh below is the OPPOSITE idiom, a REPORTER (ADR-0167 §D6): it always exits 0
+# on every state of the preserved file it was asked about and signals through a `state=...`
+# stdout line alone, never through $?. Resolved here, at the same not-deployed exit-3 cost as
+# the CHECKER above it, so a missing deployment fails the same way at the same point rather than
+# only inside the "no CLI argument" branch several lines down.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/autopilot/scripts/scope-file-read.sh" ]; then
+  _sfr="$CLAUDE_PLUGIN_ROOT/skills/autopilot/scripts/scope-file-read.sh"
+elif [ -f "$HOME/.claude/skills/autopilot/scripts/scope-file-read.sh" ]; then
+  _sfr="$HOME/.claude/skills/autopilot/scripts/scope-file-read.sh"
+else
+  echo "✗ scope: scope-file-read.sh not deployed — DID-NOT-RUN, the preserved bound was not read"
+  echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 3
+fi
 # UNQUOTED on purpose, and the split is guaranteed BY THE WRAPPER above (issue #394, ADR-0133):
 # this body runs under bash, which word-splits an unquoted expansion, so
 # `--features 2 --only 293,294` arrives as five arguments and not as one opaque word. It stays
@@ -164,6 +180,15 @@ _dry_run=$(printf '%s\n' "$_sap_out" | sed -n 's/^dry_run=//p')
 _source=none
 _features=""
 _only=""
+_scope_preserved=""
+
+# Preserved-bound probe (ADR-0167 §D3 point 2, §D6, §D7). Runs regardless of which source ends
+# up winning: an explicit CLI argument still overwrites unconditionally below, but a
+# MALFORMED/UNREADABLE preserved file has to be known about either way, since check 9's write is
+# a truncating `>` redirect that itself fails on a mode-000 existing file (§D7) -- probing once,
+# here, is what lets check 9 remove it before writing regardless of which source wins.
+_sfr_out=$(bash "$_sfr" "$_root")
+_scope_preserved=$(printf '%s\n' "$_sfr_out" | sed -n 's/^state=//p')
 
 if [ "$_has_scoping_arg" -eq 1 ]; then
   # Any scoping argument discards the marker's scope: block WHOLE (ADR-0129 A4) — no per-key
@@ -182,8 +207,24 @@ if [ "$_has_scoping_arg" -eq 1 ]; then
   _features="$_cli_features"
   _only="$_cli_only"
 else
+  if [ "$_scope_preserved" = "REUSABLE" ]; then
+    # The bound is the preserved file's own already-resolved contents (ADR-0167 §D3 point 2):
+    # its only= lines hold the roadmap row's exact TEXT (ADR-0129 §D2), not comma-separated
+    # tokens, so check 9 must not feed them back through its token resolver -- that would match
+    # nothing and abort the launch. Reuse means use the file as it stands.
+    _source=preserved
+    _sf_path="$_root/.claude/autopilot-state/scope"
+    _features=$(printf '%s\n' "$_sfr_out" | sed -n 's/^features=//p')
+    _only=$(grep '^only=' "$_sf_path" 2>/dev/null | sed 's/^only=//' | tr '\n' ';' | sed 's/;$//')
+  elif [ "$_scope_preserved" = "MALFORMED" ] || [ "$_scope_preserved" = "UNREADABLE" ]; then
+    # Warn and fall through (ADR-0167 §D6/§D7). Check 9, not this fence, does the removal: it
+    # needs to know the state either way (carried below on the SCOPE-PARSE line), and removal
+    # belongs at the point where the guard is about to be armed.
+    echo "⚠ scope: preserved file $_root/.claude/autopilot-state/scope is $_scope_preserved -- ignoring it, falling back to marker/unbounded resolution"
+  fi
+
   _marker="$_root/.claude/autopilot.yml"
-  if [ -f "$_marker" ]; then
+  if [ "$_source" != "preserved" ] && [ -f "$_marker" ]; then
     if [ ! -r "$_marker" ]; then
       echo "✗ scope: $_marker exists but is not readable — DID-NOT-RUN"
       exit 3
@@ -238,16 +279,21 @@ if [ -n "$_only" ]; then
   _line="$_line only=$_only"
 fi
 _line="$_line dry_run=$_dry_run"
+if [ -n "$_scope_preserved" ]; then
+  _line="$_line scope_preserved=$_scope_preserved"
+fi
 echo "$_line"
 echo "autopilot scope: source '$_source' is in effect (dry_run=$_dry_run)"
 exit 0
 FENCE_BASH
 ```
 
-On exit 0, the `SCOPE-PARSE:` line is authoritative; carry `source`, `features`, `only` and
-`dry_run` into Phase M. On exit 2 (bad invocation — the offending value or the malformed block is
-named in the message) or exit 3 (the check DID NOT RUN — the marker exists but could not be read),
-abort the launch: an unread scope is not a resolved one.
+On exit 0, the `SCOPE-PARSE:` line is authoritative; carry `source`, `features`, `only`, `dry_run`
+and `scope_preserved` into Phase M and check 9 (the last as check 9's own `_scope_preserved` free
+variable, §2 — the raw state `scope-file-read.sh` reported for the preserved file: `ABSENT`,
+`REUSABLE`, `SPENT`, `NOT-REUSABLE`, `MALFORMED` or `UNREADABLE`). On exit 2 (bad invocation — the
+offending value or the malformed block is named in the message) or exit 3 (the check DID NOT RUN —
+the marker exists but could not be read), abort the launch: an unread scope is not a resolved one.
 
 **`--dry-run` routing.** When `dry_run=true`, skip Phase M, Phase P and Phase 0 checks 1–8 entirely,
 run check 9's fence (`autopilot-scope-resolve`, §2) in read-only mode against the arguments this
@@ -258,6 +304,13 @@ would this run touch", and two of them make network calls a scope-only probe has
 for. **A dry run requires an existing `PROJECT.md`** — check 9 resolves tokens against the roadmap,
 and a roadmap Phase P has not yet generated cannot be dry-run; the fence exits 3 naming the file in
 that case (ADR-0129 §D8).
+
+**`source=preserved` routing (ADR-0167 §D8).** When Phase S instead resolves `source=preserved` (a
+REUSABLE preserved bound with no `--features`/`--only` argument on the command line), Phase M and
+Phase 0 run as usual, but this launch **skips Phase P** entirely — the same skip branch `--dry-run`
+above already takes. The continuation's own Phase P already ran once, and a preserved bound carries
+concrete, already-resolved roadmap rows rather than raw `--only` tokens, so §1.5 step 3 below has
+nothing to bound a fresh selection with.
 
 On pass with `dry_run=false`, fall into Phase M.
 
@@ -356,7 +409,10 @@ On pass, fall into Phase P.
 
 Runs before pre-flight, and only when the opt-in marker declares a prep source. Idempotent: each
 step skips whatever already exists. With no `prep:` block the phase is a no-op and the run behaves
-exactly as ADR-0022 (roadmap and specs must pre-exist).
+exactly as ADR-0022 (roadmap and specs must pre-exist). **Also skipped whole when Phase S resolved
+`source=preserved` (ADR-0167 §D8, §1.3 above):** the continuation this launch is resuming already
+ran Phase P once, and a preserved bound holds resolved roadmap rows, not `--only` tokens, so there
+is nothing left for this phase to select against.
 
 Read the source from `.claude/autopilot.yml`:
 ```yaml
@@ -729,15 +785,17 @@ FENCE_BASH
    # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
    # the host shell. `for _tok in $_toks` below needs the word split only bash performs on an
    # unquoted expansion — under zsh the comma-separated token list arrived as one word and a
-   # multi-token `--only` resolved nothing. `export` forwards the five free variables Phase S hands
+   # multi-token `--only` resolved nothing. `export` forwards the six free variables Phase S hands
    # over; a plain shell variable does not survive the new process boundary. The terminator sits at
    # COLUMN 0 even though this fence is indented inside a numbered list item: an indented terminator
    # is swallowed into the here-document and destroys this fence's exit code silently. Do not tidy
    # either line.
-   export _root _scope_source _scope_features _scope_only _dry_run
+   export _root _scope_source _scope_features _scope_only _dry_run _scope_preserved
    bash <<'FENCE_BASH'
-   # Free variables: _root ($PWD), and _scope_source/_scope_features/_scope_only/_dry_run from
-   # Phase S's SCOPE-PARSE line (source/features/only/dry_run). CHECKER: the caller branches on the
+   # Free variables: _root ($PWD), and _scope_source/_scope_features/_scope_only/_dry_run/
+   # _scope_preserved from Phase S's SCOPE-PARSE line (source/features/only/dry_run/
+   # scope_preserved -- ADR-0167 §D3/§D6, the last carrying scope-file-read.sh's own state token:
+   # ABSENT/REUSABLE/SPENT/NOT-REUSABLE/MALFORMED/UNREADABLE). CHECKER: the caller branches on the
    # exit code, the opposite idiom from a REPORTER, which always exits 0 and signals through stdout
    # alone (ADR-0047 §D8 — this file names no fourth call site for that mechanism, so the contrast
    # is stated generically here, as Phase S's fence already does).
@@ -749,6 +807,45 @@ FENCE_BASH
      echo "✗ scope: $_root/PROJECT.md exists but is not readable -- the check DID-NOT-RUN"
      exit 3
    fi
+
+   _sf="$_root/.claude/autopilot-state/scope"
+
+   # REUSE branch (ADR-0167 §D3 point 2, §D6 REUSABLE, R-01). Phase S already decided this is a
+   # reuse -- source=preserved only ever comes from a REUSABLE probe. Do not feed $_scope_only
+   # through the token-resolution loop below: the file's own only= lines are exact roadmap-row
+   # TEXT (ADR-0129 §D2), not comma-separated tokens, and re-resolving them matches nothing and
+   # aborts the launch. Do not rewrite $_sf. published stays untouched -- ADR-0167 §D4 resets it
+   # only when a FRESH scope is written, and this is not one.
+   if [ "$_scope_source" = "preserved" ]; then
+     _preserved_features=$(grep '^features=' "$_sf" 2>/dev/null | head -1 | sed 's/^features=//')
+     _preserved_only=$(grep '^only=' "$_sf" 2>/dev/null | sed 's/^only=//')
+     echo "SCOPE-RESOLVE: OK source=preserved (reusing $_sf, not re-resolved, not rewritten) features=$_preserved_features"
+     if [ -n "$_preserved_only" ]; then
+       printf '%s\n' "$_preserved_only" | sed 's/^/  only: /'
+     else
+       echo "  (preserved bound has no --only rows -- every roadmap row is in scope)"
+     fi
+     exit 0
+   fi
+
+   # STALE-FILE branch (ADR-0167 §D7, R-06). Phase S already probed this file and could not trust
+   # it either; a file conductor-scope-gate cannot read would exit 3 -> needs-human on the first
+   # candidate, so it is removed HERE, before the guard is armed. rm -f succeeds on a mode-000
+   # file because removal needs write permission on the DIRECTORY, not the file -- this also fixes
+   # the latent bug where the `>` redirect below silently fails on a mode-000 existing file.
+   case "$_scope_preserved" in
+     MALFORMED|UNREADABLE)
+       if [ -e "$_sf" ]; then
+         if rm -f "$_sf" 2>/dev/null; then
+           echo "⚠ scope: preserved file $_sf was $_scope_preserved -- removed, falling back to normal resolution"
+         else
+           echo "✗ scope: preserved file $_sf was $_scope_preserved and could not be removed -- DID-NOT-RUN"
+           echo "  Run: fix the permissions on $(dirname "$_sf") (or remove $_sf by hand), then relaunch"
+           exit 3
+         fi
+       fi
+       ;;
+   esac
 
    _resolved=""
 
@@ -836,7 +933,6 @@ FENCE_BASH
      exit 0
    fi
 
-   _sf="$_root/.claude/autopilot-state/scope"
    mkdir -p "$_root/.claude/autopilot-state"
    {
      echo "source=$_scope_source"
@@ -846,14 +942,21 @@ FENCE_BASH
      fi
    } > "$_sf"
    echo "scope: wrote $_sf"
+
+   # published reset (ADR-0167 §D4): remove it exactly when a FRESH scope is written here -- never
+   # on --dry-run (short-circuited above) and never on REUSE (already exited above).
+   rm -f "$_root/.claude/autopilot-state/published" 2>/dev/null
    exit 0
 FENCE_BASH
    ```
 
-   On exit 0, the scope file at `<root>/.claude/autopilot-state/scope` is written — or, under
-   `--dry-run`, only printed, matching Phase S's routing paragraph. On exit 1 the message names the
-   token(s) that did not resolve or resolved ambiguously, and no scope file is written. On exit 3 the
-   check DID NOT RUN (no readable `PROJECT.md` — distinct from exit 1's "read it, found nothing").
+   On exit 0, the scope file at `<root>/.claude/autopilot-state/scope` is written and `published` is
+   removed with it — or, under `--dry-run`, only printed, matching Phase S's routing paragraph — or,
+   under a REUSE (`source=preserved`), neither is touched at all: the preserved bound is announced
+   as-is (ADR-0167 §D3/§D4). On exit 1 the message names the token(s) that did not resolve or
+   resolved ambiguously, and no scope file is written. On exit 3 the check DID NOT RUN: either no
+   readable `PROJECT.md` (distinct from exit 1's "read it, found nothing"), or a `MALFORMED`/
+   `UNREADABLE` preserved file that could not be removed before a fresh write (ADR-0167 §D7).
 
 On all checks passing:
 ```
