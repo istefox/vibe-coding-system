@@ -138,7 +138,7 @@ Every assertion below is RED until Task 2.
       leaves the disarm at **exit 0**, printing `preserved: … (bound unreadable)`. A disarm must not
       fail on a file it is not touching.
 
-Budget: `staging/plugin/scripts/tests/autopilot-disarm-scope-preserve.test.sh` (~230 lines).
+Budget: `staging/plugin/scripts/tests/autopilot-disarm-scope-preserve.test.sh` (~230 lines)
 
 ## Task 2 — CODE: `autopilot-disarm.sh` clears guard conditions only (R-02, R-03, R-08)
 
@@ -167,7 +167,7 @@ most of it stays.
 - [ ] Bump the header version line and add the one-line changelog entry, the form every other
       version bump in this file uses.
 
-Budget: `staging/plugin/scripts/autopilot-disarm.sh` (~60 lines changed).
+Budget: `staging/plugin/scripts/autopilot-disarm.sh` (~60 lines changed)
 
 ## Task 3 — TEST: repair the three assertions and two plants that pin the old contract (R-02, R-03, R-08)
 
@@ -193,8 +193,7 @@ comment where a deleted assertion stood, naming the issue and the ADR.
       justify staying a floor. Add `D7`: no `removed:` line names `scope` or `published`.
 - [ ] Do **not** touch `Z1`'s `>= 41` floor — assertions are being added, not removed.
 
-Budget: `staging/plugin/scripts/tests/autopilot-run-scope.test.sh`,
-`staging/plugin/scripts/tests/autopilot-guard-disarm.test.sh` (~70 lines).
+Budget: `staging/plugin/scripts/tests/autopilot-run-scope.test.sh` (~40 lines), `staging/plugin/scripts/tests/autopilot-guard-disarm.test.sh` (~30 lines)
 
 ## Task 4 — TEST: the `scope-file-read.sh` reporter contract, and the differential against `conductor-scope-gate` (R-01, R-05, R-06)
 
@@ -224,7 +223,7 @@ Owner: **tester**. Extends the new harness. RED until Task 5.
       comparison; **this assertion is the entire reason that is acceptable.**
 - [ ] `DP22` — `bash -n` parses the new script.
 
-Budget: `staging/plugin/scripts/tests/autopilot-disarm-scope-preserve.test.sh` (~200 lines added).
+Budget: `staging/plugin/scripts/tests/autopilot-disarm-scope-preserve.test.sh` (~200 lines added)
 
 ## Task 5 — CODE: create `scope-file-read.sh` and wire it into deployment and CI (R-01, R-05, R-06)
 
@@ -251,8 +250,7 @@ Owner: **coder**. Turns Task 4 green.
       `pairs-completeness.test.sh` checks that list in **both directions** (rule 8) and is red
       without this.
 
-Budget: `staging/plugin/skills/autopilot/scripts/scope-file-read.sh`, `staging/sync-to-claude.sh`,
-`.github/workflows/docs-ci.yml` (~150 lines).
+Budget: `staging/plugin/skills/autopilot/scripts/scope-file-read.sh` (~100 lines), `staging/sync-to-claude.sh` (~5 lines), `.github/workflows/docs-ci.yml` (~5 lines)
 
 ## Task 6 — TEST: launch precedence, the `published` reset, the malformed path, and the consumer audit (R-01, R-04, R-05, R-06, R-07)
 
@@ -295,7 +293,7 @@ Owner: **tester**. Extends the new harness. RED until Tasks 7 and 8.
       `conductor-scope-gate`'s exit-3 stays a halt. This is the audit's landing place in the code;
       the inventory itself is ADR-0167's R-07 table.
 
-Budget: `staging/plugin/scripts/tests/autopilot-disarm-scope-preserve.test.sh` (~260 lines added).
+Budget: `staging/plugin/scripts/tests/autopilot-disarm-scope-preserve.test.sh` (~260 lines added)
 
 ## Task 7 — CODE: Phase S precedence and check 9's reuse/reset branches (R-01, R-05, R-06, R-07)
 
@@ -330,7 +328,7 @@ file and not a fence.
       Phase P, and why (the continuation's Phase P already ran; a preserved bound has rows, not
       tokens). Prose only in §1.5 — do not touch the `autopilot-prep-row-select` fence body.
 
-Budget: `staging/plugin/skills/autopilot/SKILL.md` (~180 lines).
+Budget: `staging/plugin/skills/autopilot/SKILL.md` (~180 lines)
 
 ## Task 8 — CODE: the RUNBOOK, the conductor's Step 2 prose, and the record (R-04, R-07)
 
@@ -354,8 +352,7 @@ needle is touched in `project-conductor/SKILL.md`.**
       `[x]`; `VCS-020`'s relaunch instruction now names the wrong mechanism and needs a forward
       correction (rule 14: correct forward, do not rewrite the dated entry's body).
 
-Budget: `docs/RUNBOOK-autopilot.md`, `staging/plugin/skills/project-conductor/SKILL.md`,
-`docs/chain-decisions.md`, `docs/chain-decision-index.md`, `PROJECT.md`, `TODO.md` (~120 lines).
+Budget: `docs/RUNBOOK-autopilot.md` (~40 lines), `staging/plugin/skills/project-conductor/SKILL.md` (~20 lines), `docs/chain-decisions.md` (~30 lines), `docs/chain-decision-index.md` (~1 lines), `PROJECT.md` (~5 lines), `TODO.md` (~5 lines)
 
 ## Task 9 — Verify: plants fire, the full suite is green, nothing else moved (R-03, R-07)
 
