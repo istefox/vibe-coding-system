@@ -30,11 +30,16 @@
 # plus `--check`-exits-0 check DP3 makes is true both before and after Task 2 by construction — it
 # exists to prove Task 2's loop edit does not ALSO drop a guard file by accident, exactly the role
 # `autopilot-run-scope.test.sh`'s KB2/KB3 play for their own feature ("REGRESSION GUARD, NO PLANT
-# ... their only job here is to prove the fix is not a guard that has stopped guarding at all"). No
-# `# plant:` declarations appear in this file: per this task's own instruction and this plan's
-# "Task 9 — Verify" step, plants for new `DP` assertions are declared there, once the mutation
-# targets they need exist in the post-Task-2 file; declaring one now against unmodified code would
-# be validated against a script Task 2 has not yet rewritten.
+# ... their only job here is to prove the fix is not a guard that has stopped guarding at all").
+#
+# PLANT DECLARATIONS WERE ADDED AT TASK 9 (this task's own instruction and this plan's "Task 9 —
+# Verify" step), against the post-Task-2/4/6/7/8 files, once the mutation targets existed — they sit
+# just above each DP block's first assertion, not in one single top-of-file block, so each stays
+# beside the section it pins (ADR-0077's principle: a plant travels with the file it excuses). DP3
+# carries no plant (REGRESSION GUARD, see above) and neither does DP29 (see the note beside the
+# DP23-DP32 block: its own assertion greps the whole flattened SKILL.md for bare keywords that recur
+# throughout the document for unrelated reasons, so no single-occurrence mutation can satisfy
+# plant-check.sh's exactly-one-match requirement).
 #
 # Every block below carries an id-mapping comment (`# DPn (R-xx) — ...`), naming the requirement(s)
 # from SPEC.md it addresses, per this plan's own convention.
@@ -80,6 +85,20 @@ mk_dp_fixture() {
   printf 'a reason\n' > "$_r/.claude/needs-human"
   printf '%s' "$_r"
 }
+
+# PLANT DECLARATIONS FOR DP1-DP8 (Task 9, issue #400, ADR-0167, CLAUDE.md rules 1/2). Declared here,
+# against the post-Task-2 autopilot-disarm.sh, per this file's own header note above (plants for new
+# DP assertions are declared once the mutation targets exist) and the plan's own Task 9 checklist.
+# DP3 carries NO plant, by the same precedent autopilot-run-scope.test.sh's KB2/KB3 already state in
+# their own header: it is a REGRESSION GUARD for a guard-file mechanism (ADR-0112) this feature does
+# not touch, not independent evidence about ADR-0167 itself.
+# plant: DP1 | plugin/scripts/autopilot-disarm.sh | "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" | "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/scope" "$SDIR/published"
+# plant: DP2 | plugin/scripts/autopilot-disarm.sh | "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" | "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/scope" "$SDIR/published"
+# plant: DP4 | plugin/scripts/autopilot-disarm.sh | _sbound="(features=$_feat, only=${_only:-0} rows)" | _sbound="(bound intact)"
+# plant: DP5 | plugin/scripts/autopilot-disarm.sh | "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" | "$MARKER" "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/scope" "$SDIR/published"
+# plant: DP6 | plugin/scripts/autopilot-disarm.sh | under $ROOT" [ -n "$NOTE" ] && echo "  $NOTE" if [ -n "$PRESERVED" ]; then | under $ROOT" [ -n "$NOTE" ] && echo "  $NOTE" if false; then
+# plant: DP7 | plugin/scripts/autopilot-disarm.sh | pass either to replace it." fi echo "  autopilot-guard is now inert for this repo. Your own pushes are unaffected by it." | keep both files forever." fi echo "  autopilot-guard is now inert for this repo. Your own pushes are unaffected by it."
+# plant: DP8 | plugin/scripts/autopilot-disarm.sh | _sbound="(bound unreadable)" | _sbound="(bound fine)"
 
 # =====================================================================================
 # DP1 (R-02, R-08) — RECOVERY path (bare form, foreign session): a preserved `scope`/`published`
@@ -291,6 +310,26 @@ _autopilot='$3'
 SETUP_EOF
   printf '%s' "$TMPROOT/dp-setup-cg.sh"
 }
+
+# PLANT DECLARATIONS FOR DP10-DP22 (Task 9, issue #400, ADR-0167 §D6). Declared here, against the
+# post-Task-5 scope-file-read.sh, for the same reason as the DP1-DP8 block above.
+# plant: DP10 | plugin/skills/autopilot/scripts/scope-file-read.sh | emit "ABSENT" | emit "MALFORMED"
+# plant: DP11 | plugin/skills/autopilot/scripts/scope-file-read.sh | emit "REUSABLE" | emit "SPENT"
+# plant: DP12 | plugin/skills/autopilot/scripts/scope-file-read.sh | emit "SPENT" | emit "REUSABLE"
+# plant: DP13a | plugin/skills/autopilot/scripts/scope-file-read.sh | [ "$_source" = "arguments" ] || emit "NOT-REUSABLE" | [ "$_source" = "arguments" ] || emit "MALFORMED"
+# plant: DP13b | plugin/skills/autopilot/scripts/scope-file-read.sh | [ "$_source" = "arguments" ] || emit "NOT-REUSABLE" | [ "$_source" = "arguments" ] || emit "MALFORMED"
+# plant: DP14 | plugin/skills/autopilot/scripts/scope-file-read.sh | *) emit "MALFORMED" ;; | *) emit "NOT-REUSABLE" ;;
+# plant: DP15 | plugin/skills/autopilot/scripts/scope-file-read.sh | [ -r "$_sf" ] || emit "UNREADABLE" | [ -r "$_sf" ] || emit "MALFORMED"
+# plant: DP16 | plugin/skills/autopilot/scripts/scope-file-read.sh | exit 0 } | exit 1 }
+# plant: DP17 | plugin/skills/autopilot/scripts/scope-file-read.sh | [ -e "$_sf" ] || emit "ABSENT" | [ -e "$_sf" ] || exit 0
+# plant: DP18 | plugin/skills/autopilot/scripts/scope-file-read.sh | exit 2 | exit 3
+# plant: DP19a | plugin/skills/autopilot/scripts/scope-file-read.sh | emit "REUSABLE" | emit "SPENT"
+# plant: DP19b | plugin/skills/autopilot/scripts/scope-file-read.sh | [ "$_delivered" -ge "$_features" ] && _exhausted=1 | [ "$_delivered" -gt "$_features" ] && _exhausted=1
+# plant: DP19c | plugin/skills/autopilot/scripts/scope-file-read.sh | emit "SPENT" | emit "REUSABLE"
+# plant: DP20a | plugin/skills/autopilot/scripts/scope-file-read.sh | [ "$_delivered" -ge "$_only_count" ] && _exhausted=1 | [ "$_delivered" -gt "$_only_count" ] && _exhausted=1
+# plant: DP20b | plugin/skills/autopilot/scripts/scope-file-read.sh | emit "REUSABLE" | emit "SPENT"
+# plant: DP21 | plugin/skills/autopilot/scripts/scope-file-read.sh | [ "$_delivered" -ge "$_features" ] && _exhausted=1 | [ "$_delivered" -gt "$_features" ] && _exhausted=1
+# plant: DP22 | plugin/skills/autopilot/scripts/scope-file-read.sh | set -u | set -u (
 
 # DP10 (rule 11, ADR-0076) -- ABSENT: no scope file at all.
 R=$(mk_root dp10)
@@ -645,6 +684,33 @@ _scope_preserved='$6'
 SETUP_EOF
   printf '%s' "$TMPROOT/dp-setup-launch.sh"
 }
+
+# PLANT DECLARATIONS FOR DP23-DP32 (Task 9, issue #400, ADR-0167 §D3/§D4/§D6/§D7/§D9). Declared here,
+# against the post-Task-7/Task-8 autopilot/SKILL.md, RUNBOOK-autopilot.md and project-conductor/
+# SKILL.md, for the same reason as the two blocks above. DP29 carries NO plant: its own assertion
+# greps the WHOLE flattened SKILL.md for three bare keywords ('source=preserved', 'skip', 'phase p')
+# rather than a scoped section (unlike DP30-DP32's own extract_between), and each keyword recurs
+# elsewhere in this ~1200-line file for reasons unrelated to this feature (6, 35 and 26 times
+# respectively, measured 2026-08-23) -- no single-occurrence content mutation can make the assertion
+# see all of them absent at once, and plant-check.sh requires a needle to match exactly once. This is
+# a gap in the assertion's own scoping, reported rather than hidden behind a plant that would not
+# fire (rule 2, ADR-0090).
+# plant: DP23a | plugin/skills/autopilot/SKILL.md | if [ "$_has_scoping_arg" -eq 1 ]; then | if [ "$_has_scoping_arg" -eq 1 ] && [ "$_scope_preserved" != "REUSABLE" ]; then
+# plant: DP23b | plugin/skills/autopilot/SKILL.md | if [ "$_scope_preserved" = "REUSABLE" ]; then | if [ "$_scope_preserved" = "SPENT" ]; then
+# plant: DP23c | plugin/skills/autopilot/SKILL.md | _source=marker | _source=broken
+# plant: DP23d | plugin/skills/autopilot/SKILL.md | _source=none | _source=fallback
+# plant: DP24a | plugin/skills/autopilot/SKILL.md | case "$_scope_preserved" in MALFORMED|UNREADABLE) | case "$_scope_preserved" in NEVER-MATCHES)
+# plant: DP24b | plugin/skills/autopilot/SKILL.md | case "$_scope_preserved" in MALFORMED|UNREADABLE) | case "$_scope_preserved" in NEVER-MATCHES)
+# plant: DP24c | plugin/skills/autopilot/SKILL.md | case "$_scope_preserved" in MALFORMED|UNREADABLE) | case "$_scope_preserved" in NEVER-MATCHES)
+# plant: DP25 | plugin/skills/autopilot/SKILL.md | elif [ "$_scope_preserved" = "MALFORMED" ] || [ "$_scope_preserved" = "UNREADABLE" ]; then # Warn and fall through (ADR-0167 §D6/§D7). Check 9, not this fence, does the removal: it # needs to know the state either way (carried below on the SCOPE-PARSE line), and removal # belongs at the point where the guard is about to be armed. echo "⚠ scope: preserved file $_root/.claude/autopilot-state/scope is $_scope_preserved -- ignoring it, falling back to marker/unbounded resolution" | elif true; then echo "⚠ scope: preserved file is malformed -- ignoring it, falling back to marker/unbounded resolution"
+# plant: DP26a | plugin/skills/autopilot/SKILL.md | rm -f "$_root/.claude/autopilot-state/published" 2>/dev/null | true
+# plant: DP26b | plugin/skills/autopilot/SKILL.md | echo "SCOPE-RESOLVE: OK source=preserved (reusing $_sf, not re-resolved, not rewritten) features=$_preserved_features" | echo "SCOPE-RESOLVE: OK source=preserved (reusing $_sf, not re-resolved, not rewritten) features=$_preserved_features"\nrm -f "$_root/.claude/autopilot-state/published" 2>/dev/null
+# plant: DP26c | plugin/skills/autopilot/SKILL.md | if [ "$_dry_run" = "true" ]; then | if [ "$_dry_run" = "bogus" ]; then
+# plant: DP27 | plugin/skills/autopilot/SKILL.md | source=preserved (reusing $_sf, not re-resolved, not rewritten) | source=OK (reusing $_sf, not re-resolved, not rewritten)
+# plant: DP28 | plugin/skills/autopilot/SKILL.md | } > "$_sf" | } >> "$_sf"
+# plant: DP30 | ../docs/RUNBOOK-autopilot.md | survive this disarm | are cleared by this disarm
+# plant: DP31 | ../docs/RUNBOOK-autopilot.md | four ways to be stuck | five ways to be stuck
+# plant: DP32 | plugin/skills/project-conductor/SKILL.md | now survive a disarm | now persist through a disarm
 
 # DP23 (R-05) -- precedence: explicit argument -> preserved bound -> marker -> none (ADR-0167 §D3).
 # Four sub-cases, one per path.
