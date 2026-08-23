@@ -49,14 +49,24 @@
 #
 # plant: KB1 | plugin/scripts/autopilot-guard.sh | reason="review-triage-fix raised a BLOCKER" print_halt "$reason" fi return 0 } | reason="review-triage-fix raised a BLOCKER"; print_halt "$reason"; fi; [ -f "$sdir/token-budget" ] && print_halt "token budget exceeded"; return 0; }
 # plant: KB4 | plugin/scripts/autopilot-guard.sh | STATE_SUBDIR=".claude/autopilot-state" | STATE_SUBDIR=".claude/autopilot-state"; _plant_kb4="token-budget"
-# plant: KB5 | plugin/scripts/autopilot-disarm.sh | "$SDIR/rtf-blocker" "$SDIR/scope" | "$SDIR/rtf-blocker" "$SDIR/token-budget"
-# plant: KB6 | plugin/scripts/autopilot-disarm.sh | "$SDIR/rtf-blocker" "$SDIR/scope" | "$SDIR/rtf-blocker" "$SDIR/token-budget"
+# plant: KB5 | plugin/scripts/autopilot-disarm.sh | "$SDIR/build-status" "$SDIR/rtf-blocker" | "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/scope"
+# plant: KB6 | plugin/scripts/autopilot-disarm.sh | "$SDIR/build-status" "$SDIR/rtf-blocker" | "$SDIR/build-status" "$SDIR/rtf-blocker" "$SDIR/token-budget"
 #
 # KB1's needle targets the shape run_halt_checks has AFTER Task 2 deletes the token-budget block —
 # it does not exist in today's tree, so plant-check.sh cannot validate it until Task 2 lands (Task 9
 # does that validation; a mismatch there is a defect in the plant, per Task 9's own instruction, and
 # is fixed there). KB4's needle targets a line untouched by this feature (STATE_SUBDIR), on purpose,
 # so it is valid today and stays valid after Task 2 — the safer anchor of the two.
+#
+# KB5/KB6 RE-ANCHORED (issue #400, ADR-0167 §D1, Task 3). Their old needle,
+# `"$SDIR/rtf-blocker" "$SDIR/scope"`, was the adjacency in the clear loop BEFORE ADR-0167 removed
+# `scope` from it — that substring no longer exists (0 matches → BADPLANT). The new needle,
+# `"$SDIR/build-status" "$SDIR/rtf-blocker"`, is the adjacent pair immediately before it that
+# ADR-0167 left untouched (verified single-occurrence, on one line, no `\`-continuation between the
+# two tokens). Each replacement re-inserts the ONE file its own assertion depends on: KB5's adds
+# `"$SDIR/scope"` back to the loop (scope would be cleared again, falsifying "scope survives"); KB6's
+# adds `"$SDIR/token-budget"` back to the loop (token-budget would be cleared, falsifying "token-budget
+# survives" — unchanged from before this task).
 #
 # KB2/KB3 ARE REGRESSION GUARDS AND CARRY NO PLANT. Both assert mechanisms this feature does not
 # touch — build-status and rtf-blocker are byte-unchanged by ADR-0129 §D6 — so mutating either would
@@ -273,9 +283,11 @@ printf 'source=arguments\nfeatures=2\n' > "$R/.claude/autopilot-state/scope"
 printf 'limit=1\nspent=9\n' > "$R/.claude/autopilot-state/token-budget"
 OUT=$(CLAUDE_CODE_SESSION_ID=session-BBB bash "$DISARM" "$R" 2>&1); RC=$?
 
-# KB5: a scope file is cleared by the disarm — on the same terms `published` already has (ADR §D1).
-if [ "$RC" = "0" ] && [ ! -f "$R/.claude/autopilot-state/scope" ]; then
-  ok "KB5: a scope file is cleared by autopilot-disarm.sh"
+# KB5 was "a scope file is cleared by autopilot-disarm.sh" (issue #365, ADR-0129 §D1); inverted by
+# issue #400, ADR-0167 §D1. KB5: a scope file SURVIVES the disarm — on the same terms `published`
+# already does (ADR-0167 §D1): both are the run's configuration/progress, not guard conditions.
+if [ "$RC" = "0" ] && [ -f "$R/.claude/autopilot-state/scope" ]; then
+  ok "KB5: a scope file SURVIVES autopilot-disarm.sh (ADR-0167 §D1 — configuration, not a guard condition)"
 else
   bad "KB5: rc=$RC scope=$( [ -f "$R/.claude/autopilot-state/scope" ] && echo present || echo absent ) — $(printf '%s' "$OUT" | head -1)"
 fi

@@ -341,25 +341,52 @@ R=$(mk_root d1); arm "$R" "session-AAA"
 printf 'RED'          > "$R/.claude/autopilot-state/build-status"
 printf 'blocker\n'    > "$R/.claude/autopilot-state/rtf-blocker"
 printf 'source=arguments\nfeatures=1\n' > "$R/.claude/autopilot-state/scope"
+printf 'a-feature-slug\n' > "$R/.claude/autopilot-state/published"
 printf '2026-07-31T21:03:40Z' > "$R/.claude/autopilot-state/started-at"
 printf 'a reason\n'   > "$R/.claude/needs-human"
 OUT=$(CLAUDE_CODE_SESSION_ID=session-BBB bash "$DISARM" "$R" 2>&1); RC=$?
+
+# D1's presence loop dropped `scope` (issue #400, ADR-0167 §D1): scope left the clear loop, so
+# asserting its absence here would pin the superseded contract. The mirror claim — scope AND
+# published SURVIVE — is D6, immediately below.
 LEFT=""
-for f in active build-status rtf-blocker scope started-at; do
+for f in active build-status rtf-blocker started-at; do
   [ -e "$R/.claude/autopilot-state/$f" ] && LEFT="$LEFT $f"
 done
 [ -e "$R/.claude/needs-human" ] && LEFT="$LEFT needs-human"
 if [ "$RC" = "0" ] && [ -z "$LEFT" ]; then
-  ok "D1: the whole transient set is cleared, not just the marker"
+  ok "D1: the whole guard set is cleared, not just the marker"
 else
   bad "D1: rc=$RC still present:$LEFT"
 fi
 
-# D2: and each removal is NAMED. A disarm that silently removes six files is one nobody can audit.
-if [ "$(printf '%s\n' "$OUT" | grep -c 'removed:')" -ge 6 ]; then
-  ok "D2: every removed file is reported by name"
+# D6 (ADR-0167 §D1): scope and published survive the disarm — they are the run's configuration and
+# progress, not guard conditions, and disarm cannot tell a paused run from a finished one.
+if [ -f "$R/.claude/autopilot-state/scope" ] && [ -f "$R/.claude/autopilot-state/published" ]; then
+  ok "D6: scope and published survive the disarm (ADR-0167 §D1)"
 else
-  bad "D2: only $(printf '%s\n' "$OUT" | grep -c 'removed:') removals reported"
+  bad "D6: scope=$( [ -f "$R/.claude/autopilot-state/scope" ] && echo present || echo absent ) published=$( [ -f "$R/.claude/autopilot-state/published" ] && echo present || echo absent )"
+fi
+
+# D2: and each removal is NAMED. A disarm that silently removes files is one nobody can audit. Was
+# ">= 6" (issue #321/#365, ADR-0112) when the clear loop cleared all six of active/build-status/
+# rtf-blocker/scope/started-at/needs-human; now an EXACT 5 (issue #400, ADR-0167 §D1) — scope (and
+# published) left the loop, and this fully controlled fixture has no slack to justify staying a floor
+# (rule 10: a floor absorbs its own plant).
+if [ "$(printf '%s\n' "$OUT" | grep -c 'removed:')" -eq 5 ]; then
+  ok "D2: every removed file is reported by name (exactly 5 — the guard set only)"
+else
+  bad "D2: $(printf '%s\n' "$OUT" | grep -c 'removed:') removals reported, expected exactly 5"
+fi
+
+# D7 (rule 8's reverse direction; rule 12's own-text caution): no `removed:` LINE names scope or
+# published. Both legitimately appear on `preserved:` lines now (ADR-0167 §D2), so a naive
+# whole-output grep would be satisfied by those instead of proving anything about `removed:`.
+REMOVED_LINES=$(printf '%s\n' "$OUT" | grep -E '^[[:space:]]*removed:')
+if ! printf '%s\n' "$REMOVED_LINES" | grep -qE 'scope|published'; then
+  ok "D7: no removed: line names scope or published"
+else
+  bad "D7: a removed: line names scope or published — $(printf '%s\n' "$REMOVED_LINES" | grep -E 'scope|published' | head -1)"
 fi
 
 # D3: the point of D1 — after the disarm, the guard's own --check gate passes. Before ADR-0112 a
