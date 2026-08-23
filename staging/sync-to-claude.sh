@@ -150,6 +150,7 @@ plugin/scripts/required-checks-audit.sh|hooks/required-checks-audit.sh
 plugin/scripts/set-branch-protection.sh|hooks/set-branch-protection.sh
 plugin/skills/autopilot/SKILL.md|skills/autopilot/SKILL.md
 plugin/skills/autopilot/scripts/scope-args-parse.sh|skills/autopilot/scripts/scope-args-parse.sh
+plugin/skills/autopilot/scripts/scope-file-read.sh|skills/autopilot/scripts/scope-file-read.sh
 plugin/skills/autopilot/scripts/prep-row-select.sh|skills/autopilot/scripts/prep-row-select.sh
 plugin/skills/autopilot/tests/run-tests.sh|skills/autopilot/tests/run-tests.sh
 plugin/scripts/tests/phase1.test.sh|hooks/tests/phase1.test.sh
