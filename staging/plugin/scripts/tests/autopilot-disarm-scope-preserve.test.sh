@@ -570,18 +570,354 @@ else
 fi
 
 # =====================================================================================
-# Z1 -- assertion-count floor (ADR-0083 §D3). A FLOOR, not equality: this file grows across Task 4
-# (DP10-DP22, done here) and Task 6 (DP23-DP32, not yet written), per the header. 8 was Task 1's own
-# contribution; Task 4 adds 17 more (DP10-DP15 x7 incl. DP13a/DP13b, DP16, DP17, DP18, DP19a-c x3,
-# DP20a-b x2, DP21, DP22), so the floor rises to 25 here rather than staying pinned at 8 (rule 10).
-# NO PLANT: the floor's inversion is a whole assertion block silently ceasing to run, a structural
-# deletion, not a one-line needle->replacement content mutation -- said here rather than omitted,
-# per this task's own instruction.
-_z1_total=$((PASS + FAIL))
-if [ "$_z1_total" -ge 25 ]; then
-  ok "Z1: assertion-count floor ($_z1_total >= 25)"
+# DP23-DP32 (Task 6, issue #400, ADR-0167 §D3/§D4/§D5/§D6/§D7/§D8/§D9,
+# R-01/R-04/R-05/R-06/R-07). Drive the TWO EXISTING fences from issue #365 --
+# autopilot-scope-args (Phase S) and autopilot-scope-resolve (Phase 0 check 9) -- through the same
+# run_fence/extract_fence/fence_body machinery DP10-DP22 above already stood up, this time against
+# staging/plugin/skills/autopilot/SKILL.md itself: both fences already exist there (issue #365);
+# Task 7 is what teaches them the precedence and reuse/reset branches this section pins. RED until
+# Task 7 (fences) and Task 8 (RUNBOOK/conductor prose) land -- confirmed by running this file
+# before either lands (rule 13's discipline). A few sub-cases below (DP23a/c/d, DP25, DP26c, DP28)
+# are already true today by construction -- ADR-0167 §D3/§D4's own words for several of them -- and
+# are called out as such rather than silently left to look red.
+#
+# ASSUMPTION, flagged rather than silently assumed (Task 7's own plan text: "add _scope_preserved
+# (or whatever Phase S emits) to the export line"): DP24/DP26/DP27/DP28 bind a SIXTH free variable
+# to check 9's fence, _scope_preserved, carrying the same state token scope-file-read.sh's own
+# state= line produces (REUSABLE/SPENT/NOT-REUSABLE/MALFORMED/UNREADABLE/ABSENT), paired with a
+# _scope_source value of "preserved" for the reuse branch (ADR-0167 §D3 point 2). If Task 7's coder
+# names or shapes either differently, these assertions need re-anchoring at Task 9's
+# plant-verification sweep -- the exact discipline autopilot-run-scope.test.sh's own RS1-RS10
+# header already records for its own needles ("TASK 9 SWEEP").
+
+NA="$SKILLS/autopilot/SKILL.md"
+PLUGIN_ROOT=$(cd "$SKILLS/.." && pwd)
+STAGING=$(cd "$SCRIPTS/../.." && pwd)
+REPO=$(cd "$STAGING/.." && pwd)
+RUNBOOK="$REPO/docs/RUNBOOK-autopilot.md"
+
+dp_out() { cat "$TMPROOT/dp-out-$1" 2>/dev/null; }
+
+# extract_between <file> <start-regex> <end-regex> -- lines strictly between the first line
+# matching <start-regex> and the next line matching <end-regex> (both exclusive). Scopes a prose
+# assertion to the section it targets, never the whole file (rule 12 -- a needle must belong to the
+# mechanism it asserts about, and to nothing else; "scope" and "published" both appear elsewhere in
+# the RUNBOOK, in unrelated sentences).
+extract_between() {
+  awk -v s="$2" -v e="$3" '
+    $0 ~ s { found=1; next }
+    found && $0 ~ e { exit }
+    found { print }
+  ' "$1"
+}
+
+# setup_dp23 <root> <args> -- binds Phase S's two free variables, the same shape
+# autopilot-run-scope.test.sh's own setup_ar (section AR) uses.
+setup_dp23() {
+  cat >"$TMPROOT/dp-setup-args.sh" <<SETUP_EOF
+_root='$1'
+_args='$2'
+CLAUDE_PLUGIN_ROOT='$PLUGIN_ROOT'
+SETUP_EOF
+  printf '%s' "$TMPROOT/dp-setup-args.sh"
+}
+
+# mk_dp_launch_root <name> -- a scratch root for check 9 (autopilot-scope-resolve), which requires
+# a readable PROJECT.md to not exit 3 on that check alone. One roadmap row, issue #42, matching
+# every fixture below that needs a token to resolve.
+mk_dp_launch_root() {
+  _r="$TMPROOT/$1"
+  mkdir -p "$_r/.claude/autopilot-state"
+  printf -- '- [ ] Some feature  (issue #42)\n' > "$_r/PROJECT.md"
+  printf '%s' "$_r"
+}
+
+# setup_launch <root> <source> <features> <only> <dry_run> <preserved> -- binds check 9's five
+# existing free variables (RS section's own setup_rs shape) plus the assumed sixth, above.
+setup_launch() {
+  cat >"$TMPROOT/dp-setup-launch.sh" <<SETUP_EOF
+_root='$1'
+_scope_source='$2'
+_scope_features='$3'
+_scope_only='$4'
+_dry_run='$5'
+_scope_preserved='$6'
+SETUP_EOF
+  printf '%s' "$TMPROOT/dp-setup-launch.sh"
+}
+
+# DP23 (R-05) -- precedence: explicit argument -> preserved bound -> marker -> none (ADR-0167 §D3).
+# Four sub-cases, one per path.
+
+# DP23a: a REUSABLE file on disk, --features 2 on the command line -> source=arguments still wins.
+# Already true today by construction (D3 point 1) -- pinned, not built, here.
+R=$(mk_root dp23a)
+printf 'source=arguments\nfeatures=1\n' > "$R/.claude/autopilot-state/scope"
+RC=$(run_fence "autopilot-scope-args" "$NA" "$(setup_dp23 "$R" "--features 2")")
+OUT=$(dp_out autopilot-scope-args)
+if [ "$RC" = "0" ] && printf '%s' "$OUT" | grep -q 'source=arguments' && printf '%s' "$OUT" | grep -q 'features=2'; then
+  ok "DP23a: an explicit --features still wins over a REUSABLE preserved file (source=arguments, already true today)"
 else
-  bad "Z1: only $_z1_total assertions ran -- floor is 25; a section stopped running, not merely failing"
+  bad "DP23a: rc=$RC -- $(printf '%s' "$OUT" | head -2)"
+fi
+
+# DP23b: the same REUSABLE file, no argument -> source=preserved. The new branch; expected RED.
+R=$(mk_root dp23b)
+printf 'source=arguments\nfeatures=3\n' > "$R/.claude/autopilot-state/scope"
+RC=$(run_fence "autopilot-scope-args" "$NA" "$(setup_dp23 "$R" "")")
+OUT=$(dp_out autopilot-scope-args)
+if [ "$RC" = "0" ] && printf '%s' "$OUT" | grep -q 'source=preserved'; then
+  ok "DP23b: no argument, a REUSABLE preserved file on disk -> source=preserved"
+else
+  bad "DP23b: rc=$RC -- $(printf '%s' "$OUT" | head -2)"
+fi
+
+# DP23c: no argument, no file, a scope: marker -> source=marker. Already true today (unchanged
+# branch); pinned so DP23b's new insertion cannot silently swallow it.
+R=$(mk_root dp23c)
+printf 'scope:\n  features: 3\n' > "$R/.claude/autopilot.yml"
+RC=$(run_fence "autopilot-scope-args" "$NA" "$(setup_dp23 "$R" "")")
+OUT=$(dp_out autopilot-scope-args)
+if [ "$RC" = "0" ] && printf '%s' "$OUT" | grep -q 'source=marker'; then
+  ok "DP23c: no argument, no preserved file, a scope: marker -> source=marker (already true today)"
+else
+  bad "DP23c: rc=$RC -- $(printf '%s' "$OUT" | head -2)"
+fi
+
+# DP23d: none of the three -> source=none. Already true today (unchanged branch).
+R=$(mk_root dp23d)
+RC=$(run_fence "autopilot-scope-args" "$NA" "$(setup_dp23 "$R" "")")
+OUT=$(dp_out autopilot-scope-args)
+if [ "$RC" = "0" ] && printf '%s' "$OUT" | grep -q 'source=none'; then
+  ok "DP23d: no argument, no preserved file, no marker -> source=none (already true today)"
+else
+  bad "DP23d: rc=$RC -- $(printf '%s' "$OUT" | head -2)"
+fi
+
+# DP24 (R-06, rule 4) -- the malformed/unreadable path at check 9 (see ASSUMPTION note above).
+# DP24a is the proceed-anyway warning; DP24b is the refusal when removal itself is impossible;
+# DP24c checks the two are VISIBLY different answers (rule 4: DID-NOT-RUN is not found-nothing).
+
+# DP24a: a MALFORMED scope file is removed (its content does not survive), the run proceeds
+# unbounded (a fresh source=none is written), and the output warns, naming the file.
+R=$(mk_dp_launch_root dp24a)
+SF_A="$R/.claude/autopilot-state/scope"
+printf 'garbage, no source line\n' > "$SF_A"
+RC_A=$(run_fence "autopilot-scope-resolve" "$NA" "$(setup_launch "$R" "none" "" "" "false" "MALFORMED")")
+OUT_A=$(dp_out autopilot-scope-resolve)
+if [ "$RC_A" = "0" ] && [ -f "$SF_A" ] && grep -qF 'source=none' "$SF_A" \
+   && ! grep -qF 'garbage' "$SF_A" \
+   && printf '%s' "$OUT_A" | grep -qi 'malformed' \
+   && printf '%s' "$OUT_A" | grep -qF "$SF_A"; then
+  ok "DP24a: a MALFORMED scope file is removed, the run proceeds unbounded, and the output warns, naming the file"
+else
+  bad "DP24a: rc=$RC_A -- $(printf '%s' "$OUT_A" | head -2)"
+fi
+
+# DP24b: removal made impossible (the containing directory chmod 555'd -- the established
+# unwritable-directory idiom, concept-to-code-manifest-helpers-guards.test.sh's own
+# assert_unwritable_exit4) -> exit 3, naming both the file and the manual remedy. Probed first, the
+# same idiom DP8/DP15/AR9 already use for chmod-000-readable: some users (commonly root) can still
+# remove a file inside a 555 directory, and there this state is not expressible.
+R=$(mk_dp_launch_root dp24b)
+SFDIR="$R/.claude/autopilot-state"
+SF_B="$SFDIR/scope"
+printf 'garbage, no source line\n' > "$SF_B"
+_probe="$SFDIR/dp24-probe"
+printf 'x' > "$_probe"
+chmod 555 "$SFDIR"
+if rm -f "$_probe" 2>/dev/null; then
+  chmod 755 "$SFDIR"
+  ok "DP24b (skipped, not asserted): this user can remove a file inside a chmod 555 directory, so the removal-refusal state is not expressible here"
+  DP24B_SKIPPED=1
+else
+  RC_B=$(run_fence "autopilot-scope-resolve" "$NA" "$(setup_launch "$R" "none" "" "" "false" "MALFORMED")")
+  OUT_B=$(dp_out autopilot-scope-resolve)
+  chmod 755 "$SFDIR"
+  rm -f "$_probe" 2>/dev/null
+  DP24B_SKIPPED=0
+  if [ "$RC_B" = "3" ] && printf '%s' "$OUT_B" | grep -qF "$SF_B" \
+     && printf '%s' "$OUT_B" | grep -qi 'DID-NOT-RUN' && printf '%s' "$OUT_B" | grep -qi 'run:'; then
+    ok "DP24b: removal made impossible -> exit 3, message names the file and the manual remedy"
+  else
+    bad "DP24b: rc=$RC_B -- $(printf '%s' "$OUT_B" | head -2)"
+  fi
+fi
+
+# DP24c (rule 4) -- DID-NOT-RUN (DP24b) and found-nothing (DP24a) are visibly different answers:
+# distinct exit codes AND distinct messages. Skipped alongside DP24b when this user can remove a
+# file inside a 555 directory -- there is no second message to compare against.
+if [ "$DP24B_SKIPPED" = "1" ]; then
+  ok "DP24c (skipped, not asserted): DP24b's refusal state is not expressible for this user"
+else
+  if [ "$RC_A" != "$RC_B" ] && [ "$OUT_A" != "$OUT_B" ]; then
+    ok "DP24c: DID-NOT-RUN (rc=$RC_B) and found-nothing (rc=$RC_A) are visibly different answers"
+  else
+    bad "DP24c: rc_a=$RC_A rc_b=$RC_B -- messages identical or exit codes equal"
+  fi
+fi
+
+# DP25 (R-06) -- an ABSENT scope file (and no marker) produces NO warning at all: the ordinary
+# never-had-a-bound case. Already true today by construction (no scope-file read exists yet), so
+# this is a REGRESSION GUARD here, not a red assertion -- it must stay true once Task 7 lands.
+R=$(mk_root dp25)
+RC=$(run_fence "autopilot-scope-args" "$NA" "$(setup_dp23 "$R" "")")
+OUT=$(dp_out autopilot-scope-args)
+if [ "$RC" = "0" ] && ! printf '%s' "$OUT" | grep -qi 'malformed\|unreadable\|cannot be read\|could not be read'; then
+  ok "DP25: an absent scope file produces no warning at all (regression guard -- already true today, must stay true)"
+else
+  bad "DP25: rc=$RC -- $(printf '%s' "$OUT" | head -2)"
+fi
+
+# DP26 (R-05, ADR-0167 §D4) -- the published reset, both directions, plus --dry-run.
+
+# DP26a: a fresh write (no preserved bound reused) clears published.
+R=$(mk_dp_launch_root dp26a)
+printf 'source=marker\nfeatures=1\n' > "$R/.claude/autopilot-state/scope"
+printf 'some-feature\n' > "$R/.claude/autopilot-state/published"
+RC=$(run_fence "autopilot-scope-resolve" "$NA" "$(setup_launch "$R" "none" "" "" "false" "NOT-REUSABLE")")
+OUT=$(dp_out autopilot-scope-resolve)
+if [ "$RC" = "0" ] && [ ! -f "$R/.claude/autopilot-state/published" ]; then
+  ok "DP26a: check 9 removes published exactly when it writes a fresh scope"
+else
+  bad "DP26a: rc=$RC published=$( [ -f "$R/.claude/autopilot-state/published" ] && echo present || echo absent ) -- $(printf '%s' "$OUT" | head -2)"
+fi
+
+# DP26b: reusing a preserved bound (REUSABLE) leaves published untouched.
+R=$(mk_dp_launch_root dp26b)
+printf 'source=arguments\nfeatures=3\nonly=Some feature  (issue #42)\n' > "$R/.claude/autopilot-state/scope"
+printf 'some-feature\n' > "$R/.claude/autopilot-state/published"
+cp "$R/.claude/autopilot-state/published" "$TMPROOT/dp26b-published-before"
+RC=$(run_fence "autopilot-scope-resolve" "$NA" "$(setup_launch "$R" "preserved" "3" "" "false" "REUSABLE")")
+OUT=$(dp_out autopilot-scope-resolve)
+if [ "$RC" = "0" ] && [ -f "$R/.claude/autopilot-state/published" ] \
+   && cmp -s "$TMPROOT/dp26b-published-before" "$R/.claude/autopilot-state/published"; then
+  ok "DP26b: reusing a preserved bound (REUSABLE) leaves published untouched"
+else
+  bad "DP26b: rc=$RC -- $(printf '%s' "$OUT" | head -2)"
+fi
+
+# DP26c: --dry-run removes nothing and writes nothing (neither scope nor published). Already true
+# today by construction (dry-run has always short-circuited before any write) -- pinned here.
+R=$(mk_dp_launch_root dp26c)
+printf 'source=arguments\nfeatures=1\nonly=Some feature  (issue #42)\n' > "$R/.claude/autopilot-state/scope"
+printf 'some-feature\n' > "$R/.claude/autopilot-state/published"
+cp "$R/.claude/autopilot-state/scope" "$TMPROOT/dp26c-scope-before"
+cp "$R/.claude/autopilot-state/published" "$TMPROOT/dp26c-published-before"
+RC=$(run_fence "autopilot-scope-resolve" "$NA" "$(setup_launch "$R" "arguments" "1" "42" "true" "REUSABLE")")
+OUT=$(dp_out autopilot-scope-resolve)
+if [ "$RC" = "0" ] \
+   && cmp -s "$TMPROOT/dp26c-scope-before" "$R/.claude/autopilot-state/scope" \
+   && cmp -s "$TMPROOT/dp26c-published-before" "$R/.claude/autopilot-state/published"; then
+  ok "DP26c: --dry-run removes nothing and writes nothing (already true today)"
+else
+  bad "DP26c: rc=$RC -- $(printf '%s' "$OUT" | head -2)"
+fi
+
+# DP27 (R-01) -- a preserved bound is announced: check 9's output names the source and the bound it
+# is about to apply. Matched flattened, undecorated (rule 3).
+R=$(mk_dp_launch_root dp27)
+printf 'source=arguments\nfeatures=3\nonly=Some feature  (issue #42)\n' > "$R/.claude/autopilot-state/scope"
+RC=$(run_fence "autopilot-scope-resolve" "$NA" "$(setup_launch "$R" "preserved" "3" "" "false" "REUSABLE")")
+OUT=$(dp_out autopilot-scope-resolve)
+OUT_FLAT=$(printf '%s' "$OUT" | tr '\n' ' ' | tr -s ' ' | tr -d '`*')
+if [ "$RC" = "0" ] && printf '%s' "$OUT_FLAT" | grep -qi 'preserved' \
+   && printf '%s' "$OUT_FLAT" | grep -qF 'Some feature  (issue #42)'; then
+  ok "DP27: a preserved bound is announced -- check 9's output names the source and the bound it is about to apply"
+else
+  bad "DP27: rc=$RC -- $(printf '%s' "$OUT" | head -3)"
+fi
+
+# DP28 (R-05) -- an explicit --features overwrites: after the fence, the scope file contains the
+# new bound and NO line of the old one -- never merged, never appended. Already true today by
+# construction (check 9's write has always been a truncating redirect); this pins it rather than
+# building it (ADR-0167 §D3 point 1).
+R=$(mk_dp_launch_root dp28)
+printf 'source=arguments\nfeatures=1\nonly=An old row  (issue #1)\n' > "$R/.claude/autopilot-state/scope"
+RC=$(run_fence "autopilot-scope-resolve" "$NA" "$(setup_launch "$R" "arguments" "1" "42" "false" "")")
+OUT=$(dp_out autopilot-scope-resolve)
+SF="$R/.claude/autopilot-state/scope"
+if [ "$RC" = "0" ] && [ -f "$SF" ] && grep -qF 'only=Some feature  (issue #42)' "$SF" \
+   && ! grep -qF 'only=An old row' "$SF"; then
+  ok "DP28: an explicit --features overwrites -- the scope file carries the new bound and no line of the old one (already true today)"
+else
+  bad "DP28: rc=$RC -- $(printf '%s' "$OUT" | head -2) -- $(cat "$SF" 2>/dev/null | tr '\n' ' ')"
+fi
+
+# DP29 (ADR-0167 §D8) -- source=preserved takes the Phase P skip branch. INSTRUCTION, not
+# enforcement (rule 16): this greps the ROUTING PROSE in autopilot/SKILL.md §1.3/§1.5, flattened
+# and undecorated. A green result here is NOT proof the model actually skips Phase P at runtime --
+# it is proof the instruction telling it to exists.
+NA_FLAT=$(tr '\n' ' ' < "$NA" | tr -s ' ' | tr -d '`*')
+if printf '%s' "$NA_FLAT" | grep -qi 'source=preserved' \
+   && printf '%s' "$NA_FLAT" | grep -qi 'skip' \
+   && printf '%s' "$NA_FLAT" | grep -qi 'phase p'; then
+  ok "DP29 (INSTRUCTION, not enforcement, rule 16 -- not proof the model skips Phase P at runtime): autopilot/SKILL.md's routing prose states source=preserved skips Phase P"
+else
+  bad "DP29: no source=preserved / skip Phase P sentence found in autopilot/SKILL.md"
+fi
+
+# DP30 (R-04) -- the RUNBOOK's Aborting a run section states all three facts. Reached via the one
+# .. prefix plant-check.sh allows, the same hatch autopilot-run-scope.test.sh's TU section uses,
+# since this file lives outside staging/. Scoped to the section itself (rule 12) -- "scope" and
+# "published" both appear elsewhere in the RUNBOOK, in unrelated sentences.
+RUNBOOK_ABORT_FLAT=$(extract_between "$RUNBOOK" '^## Aborting a run' '^## ' | tr '\n' ' ' | tr -s ' ' | tr -d '`*')
+DP30_OK=1
+printf '%s' "$RUNBOOK_ABORT_FLAT" | grep -qi 'scope' || DP30_OK=0
+printf '%s' "$RUNBOOK_ABORT_FLAT" | grep -qi 'published' || DP30_OK=0
+printf '%s' "$RUNBOOK_ABORT_FLAT" | grep -qi 'survive' || DP30_OK=0
+printf '%s' "$RUNBOOK_ABORT_FLAT" | grep -qi 'reuse' || DP30_OK=0
+printf '%s' "$RUNBOOK_ABORT_FLAT" | grep -qi -- '--features' || DP30_OK=0
+if [ "$DP30_OK" = "1" ]; then
+  ok "DP30: the RUNBOOK's Aborting a run section states scope/published survive, a bare relaunch reuses the bound, and --features/--only overrides it"
+else
+  bad "DP30: the RUNBOOK's Aborting a run section is missing one or more of: survive / reuse / --features override"
+fi
+
+# DP31 (R-04) -- LOCAL REGRESSION GUARD for this feature's own edit to this section, NOT
+# independent evidence: autopilot-run-scope.test.sh's KB8 already pins "four ways to be stuck" and
+# the four-row table independently. This assertion exists because Task 8 touches the sentence
+# immediately above the table (ADR-0167 §D9) and must not disturb the phrase or the row count while
+# doing so.
+RUNBOOK_ARMED=$(extract_between "$RUNBOOK" '^## The guard is still armed and I cannot push' '^## ')
+RUNBOOK_ARMED_FLAT=$(printf '%s' "$RUNBOOK_ARMED" | tr '\n' ' ' | tr -s ' ' | tr -d '`*')
+TABLE_ROWS=$(printf '%s\n' "$RUNBOOK_ARMED" | grep -c '^| `\.claude/')
+if printf '%s' "$RUNBOOK_ARMED_FLAT" | grep -qi 'four ways to be stuck' && [ "$TABLE_ROWS" = "4" ]; then
+  ok "DP31 (local regression guard, not independent evidence -- see comment): the guard-is-still-armed section still says four ways to be stuck and still has its four-row table"
+else
+  bad "DP31: table_rows=$TABLE_ROWS -- the phrase or the table row count changed"
+fi
+
+# DP32 (R-07) -- the consumer audit's landing place: project-conductor/SKILL.md's Step 2 prose,
+# above the conductor-scope-gate fence, names the preserved-file lifecycle and states why this
+# gate's exit-3 stays a halt (ADR-0167 §D5, rule 11 -- two call sites, opposite policies on the
+# same ABSENT/UNREADABLE state, both right).
+PC_STEP2_FLAT=$(extract_between "$PC" '^### Step 2 ' 'fence-contract: conductor-scope-gate' | tr '\n' ' ' | tr -s ' ' | tr -d '`*')
+DP32_OK=1
+printf '%s' "$PC_STEP2_FLAT" | grep -qi 'disarm' || DP32_OK=0
+printf '%s' "$PC_STEP2_FLAT" | grep -qi 'survive' || DP32_OK=0
+printf '%s' "$PC_STEP2_FLAT" | grep -qi 'launch' || DP32_OK=0
+printf '%s' "$PC_STEP2_FLAT" | grep -qi 'halt' || DP32_OK=0
+if [ "$DP32_OK" = "1" ]; then
+  ok "DP32: project-conductor/SKILL.md Step 2's prose names the preserved-file lifecycle and states why conductor-scope-gate's exit-3 stays a halt"
+else
+  bad "DP32: Step 2's prose above conductor-scope-gate is missing one or more of: disarm / survive / launch / halt reasoning"
+fi
+
+# =====================================================================================
+# Z1 -- assertion-count floor (ADR-0083 §D3). A FLOOR, not equality: this file grows across Task 4
+# (DP10-DP22) and Task 6 (DP23-DP32, done here), per the header. 8 was Task 1's own contribution;
+# Task 4 added 17 more (DP10-DP15 x7 incl. DP13a/DP13b, DP16, DP17, DP18, DP19a-c x3, DP20a-b x2,
+# DP21, DP22), reaching 25; Task 6 adds 17 more (DP23a-d x4, DP24a-c x3, DP25, DP26a-c x3, DP27,
+# DP28, DP29, DP30, DP31, DP32), so the floor rises to 42 here rather than staying pinned at 25
+# (rule 10). NO PLANT: the floor's inversion is a whole assertion block silently ceasing to run, a
+# structural deletion, not a one-line needle->replacement content mutation -- said here rather than
+# omitted, per this task's own instruction.
+_z1_total=$((PASS + FAIL))
+if [ "$_z1_total" -ge 42 ]; then
+  ok "Z1: assertion-count floor ($_z1_total >= 42)"
+else
+  bad "Z1: only $_z1_total assertions ran -- floor is 42; a section stopped running, not merely failing"
 fi
 
 echo "----"
