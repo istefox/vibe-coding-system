@@ -230,6 +230,7 @@ plugin/skills/concept-to-code/scripts/spec-normalize-ids.sh|skills/concept-to-co
 plugin/skills/concept-to-code/scripts/plan-tasks.sh|skills/concept-to-code/scripts/plan-tasks.sh
 plugin/skills/concept-to-code/scripts/repo-rel-path.sh|skills/concept-to-code/scripts/repo-rel-path.sh
 plugin/skills/concept-to-code/scripts/spec-coverage.sh|skills/concept-to-code/scripts/spec-coverage.sh
+plugin/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh|skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh
 plugin/skills/concept-to-code/tests/agent-notes-roundtrip.sh|skills/concept-to-code/tests/agent-notes-roundtrip.sh
 plugin/skills/concept-to-code/tests/run-tests.sh|skills/concept-to-code/tests/run-tests.sh
 plugin/skills/concept-to-code/tests/smoke-e2e.sh|skills/concept-to-code/tests/smoke-e2e.sh

@@ -1196,6 +1196,14 @@ fi
 # RS7-RS10. Issue #312 / ADR-0138 D5 — R-03 proven by a frozen per-item baseline over the corpus,
 # plus the derivation's own denominator guards (RS9) and the silent-path forward guard (RS10).
 #
+# Issue #460 / ADR-0166-460-spec-coverage-baseline-never-bumped.md /
+# 2026-08-22-460-spec-coverage-baseline-never-bumped.md (Task 3) — the per-spec plan resolution
+# (RS_PAIRS) and the per-pair verdict derivation (RS_LIVE) below now call
+# spec-coverage-baseline-rows.sh's --pair and --rows instead of re-deriving the same two answers a
+# second time (CLAUDE.md rule 6). Nothing else moved: the corpus sweep, spec_declares_ids, the
+# RS_SELF_PLAN exclusion, and every assertion from RS7 through RS10 below (predicates, floors,
+# message text) are byte-identical to before this task.
+#
 # The (spec, plan) population is derived by issue-number prefix: first try a plan filename naming
 # the number, then fall back to the slug-only plan filename the corpus also uses for several Phase
 # 11 issues (e.g. 2026-08-02-rtf-s-gitignore-glob-and-this-repo-s-own.md for issue #287 carries no
@@ -1208,6 +1216,17 @@ fi
 # (CLAUDE.md rule 13) — measured 2026-08-14: including the in-flight pair gives 16 pairs / 120 ids;
 # excluding it gives the ADR's own measured 15 pairs / 117 ids, confirmed empirically.
 # ==================================================================================================
+ROWS="$STAGING/plugin/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh"
+# RS0 has no plant: it is an EXISTENCE check (a path is a file and is readable), the same
+# unplantable-by-class shape PT1/PT2 (prep.test.sh) and AIJ2 (accessibility-i18n.test.sh) already
+# document — there is no text substitution that turns `[ -f "$ROWS" ] && [ -r "$ROWS" ]` false
+# without literally deleting the file, which is outside what a plant declaration can express
+# (issue #460, ADR-0166).
+if [ -f "$ROWS" ] && [ -r "$ROWS" ]; then
+  ok "RS0: spec-coverage-baseline-rows.sh exists and is readable — RS7/RS8a/RS8b/RS9 below read live rows through it"
+else
+  bad "RS0: spec-coverage-baseline-rows.sh not found at $ROWS — RS7/RS8a/RS8b/RS9 below assert nothing"
+fi
 # plant: RS7 | plugin/scripts/tests/spec-coverage-scope-baseline.tsv | 176-worktree-isolation-contract.spec.md R-01 COVERED | 176-worktree-isolation-contract.spec.md	R-01	UNSCOPED	testable	planted mismatch — proves RS7 compares each row exactly, not merely a count
 BASELINE="$SCRIPTS/tests/spec-coverage-scope-baseline.tsv"
 RS_SELF_PLAN="$REPO/docs/superpowers/plans/2026-08-14-spec-coverage-measures-citation-not-impl.md"
@@ -1217,17 +1236,10 @@ for _spec in "$REPO"/docs/specs/*.spec.md; do
   [ -f "$_spec" ] || continue
   _bn=$(basename "$_spec")
   spec_declares_ids "$_spec" || continue
-  _rest=${_bn#*-}
-  _slug=${_rest%.spec.md}
-  _n=${_bn%%-*}
-  case "$_n" in ''|*[!0-9]*) _n="" ;; esac
-  _plan=""
-  if [ -n "$_n" ]; then
-    _plan=$(ls "$REPO"/docs/superpowers/plans/????-??-??-"${_n}"-*.md 2>/dev/null | head -1)
-  fi
-  if [ -z "$_plan" ]; then
-    _plan=$(ls "$REPO"/docs/superpowers/plans/????-??-??-"${_slug}".md 2>/dev/null | head -1)
-  fi
+  # issue #460 / ADR-0166 Task 3 (§D2): the two-glob (issue-number, then slug) plan resolution that
+  # used to live inline here moved verbatim into spec-coverage-baseline-rows.sh's --pair — this loop
+  # now calls it instead of re-deriving the same answer a second time (CLAUDE.md rule 6).
+  _plan=$(bash "$ROWS" --pair --spec "$_spec" --plans-dir "$REPO/docs/superpowers/plans")
   [ -n "$_plan" ] && [ -f "$_plan" ] || continue
   [ "$_plan" = "$RS_SELF_PLAN" ] && continue
   printf '%s\t%s\t%s\n' "$_bn" "$_spec" "$_plan" >>"$RS_PAIRS"
@@ -1246,22 +1258,21 @@ RS_LIVE="$TMP/rs-live.tsv"; : >"$RS_LIVE"
 RS_SCOPE="$TMP/rs-scope.tsv"; : >"$RS_SCOPE"
 while IFS="$TAB" read -r _bn _spec _plan; do
   [ -n "$_bn" ] || continue
-  _list=$(bash "$SCOV" --spec "$_spec" --plan "$_plan" --list 2>/dev/null)
-  [ -n "$_list" ] || continue
-  _run=$(bash "$SCOV" --spec "$_spec" --plan "$_plan" --tests-root "$REPO" 2>"$TMP/rs-live-err.txt")
+  # issue #460 / ADR-0166 Task 3 (§D3): the --list + --tests-root pair of calls and the per-id
+  # COVERED/UNSCOPED classification that used to live inline here moved into
+  # spec-coverage-baseline-rows.sh's --rows. One call now produces the same rows, and
+  # --tests-root's own stderr still reaches $TMP/rs-live-err.txt unredirected, so
+  # _errtxt/_no_backref/_scope_n/RS_SCOPE below read the identical bytes they read before this moved
+  # (CLAUDE.md rule 6: extract only when two copies giving different answers would be a defect).
+  _rows=$(bash "$ROWS" --rows --spec "$_spec" --plan "$_plan" --tests-root "$REPO" 2>"$TMP/rs-live-err.txt")
+  [ -n "$_rows" ] || continue
   _errtxt=$(cat "$TMP/rs-live-err.txt" 2>/dev/null)
   _no_backref=0
   printf '%s\n' "$_errtxt" | grep -q 'SCOPE-NO-BACKREF' && _no_backref=1
   _scope_n=$(printf '%s\n' "$_errtxt" | grep -oE '[0-9]+ in scope' | awk '{print $1}')
   [ -n "$_scope_n" ] || _scope_n=0
   printf '%s\t%s\t%s\n' "$_bn" "$_no_backref" "$_scope_n" >>"$RS_SCOPE"
-  printf '%s\n' "$_list" | while IFS="$TAB" read -r _id _txt; do
-    [ -n "$_id" ] || continue
-    _verdict="UNCOVERED"
-    printf '%s\n' "$_run" | grep -q "^COVERED${TAB}${_id}\$" && _verdict="COVERED"
-    printf '%s\n' "$_run" | grep -q "^UNSCOPED${TAB}${_id}${TAB}" && _verdict="UNSCOPED"
-    printf '%s\t%s\t%s\n' "$_bn" "$_id" "$_verdict" >>"$RS_LIVE"
-  done
+  printf '%s\n' "$_rows" >>"$RS_LIVE"
 done <"$RS_PAIRS"
 
 RS_PAIR_N=$(wc -l <"$RS_PAIRS" 2>/dev/null | tr -d ' '); RS_PAIR_N=${RS_PAIR_N:-0}

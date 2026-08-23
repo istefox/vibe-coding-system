@@ -16,18 +16,29 @@
 # in-flight chain is not a completed corpus member. For every resolved (spec, plan) pair, every
 # declared id's verdict is read straight off `spec-coverage.sh --spec <spec> --plan <plan>
 # --tests-root <repo-root>`'s own stdout — COVERED / UNSCOPED / UNCOVERED — never re-interpreted.
-# The exact derivation lives in staging/plugin/scripts/tests/spec-coverage.test.sh, section RS7-RS8
-# (RS_PAIRS / RS_LIVE) — that shell IS the regeneration procedure; this file's rows must equal its
-# output byte-for-byte or RS7/RS8a/RS8b fail on the specific diverging row.
+# Since ADR-0166 (issue #460), the regeneration procedure for a SINGLE pair is
+# staging/plugin/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh's --rows mode — that
+# script IS the per-pair derivation, reading verdicts straight off spec-coverage.sh's own stdout and
+# never re-interpreting them. spec-coverage.test.sh's RS7-RS10 block (RS_PAIRS / RS_LIVE) is the
+# loop AROUND it that sweeps the whole corpus and compares every row against this file; this file's
+# rows must equal that sweep's output byte-for-byte or RS7/RS8a/RS8b fail on the specific diverging
+# row.
 #
-# WHEN TO REGENERATE. Whenever a concept-to-code chain completes and its SPEC+plan pair becomes the
-# 16th (or Nth) member of the corpus above, RS8b goes RED on that new pair's rows (a live verdict
-# with no baseline counterpart). Re-run the RS7/RS8 derivation block against the current repo state,
-# diff the result against this file, and append/update rows for the new pair only — never rewrite a
-# row for a SPEC whose chain was already complete and frozen here (CLAUDE.md rule 14: a historical
-# record is corrected forward, not in place). A row can also change if a later feature adds or
-# renames a test file that shifts an existing pair's scope; that is a real drift signal and RS7
-# reporting it red is the mechanism working, not a false alarm to silence by re-freezing blindly.
+# WHEN TO REGENERATE. Since ADR-0166 (issue #460), a completing concept-to-code chain bumps its own
+# rows into this file at Step 7.0b (SKILL.md's `fence-contract: c2c-step7-baseline-bump` fence), so
+# RS8b's "a live verdict with no baseline counterpart" red is no longer the ordinary way a new pair
+# joins this corpus — the enrolling chain's own commit already carries the rows. The manual
+# procedure below now applies only to the two cases the chain does not cover: a pair no chain
+# enrolled (a hand-placed SPEC with no concept-to-code chain behind it), and a genuine drift signal
+# (a later feature adding or renaming a test file that shifts an ALREADY-frozen pair's scope — RS7
+# reporting that red is the mechanism working, not a false alarm to silence by re-freezing blindly).
+# For either case, the same script the chain uses gives an operator two commands, never a hand-edit:
+# `spec-coverage-baseline-rows.sh --rows --spec <spec> --plan <plan> --tests-root <repo-root>`
+# prints a pair's current rows without writing anything; `--bump --baseline <this file> --spec
+# <spec> --plan <plan> --tests-root <repo-root>` appends the rows absent from this file and refuses
+# (exit 1, nothing written) when a computed row disagrees with an existing frozen one — never
+# rewrite a row for a SPEC whose chain was already complete and frozen here (CLAUDE.md rule 14: a
+# historical record is corrected forward, not in place).
 #
 # MEASURED 2026-08-14 (re-derive, do not trust this comment per CLAUDE.md rule 13): 15 (spec, plan)
 # pairs, 117 declared ids, 93 COVERED, 24 UNSCOPED (20 classed testable, 4 classed
@@ -87,6 +98,23 @@
 # The three rows already classed not-test-assertable (222/R-10, 404/R-14, 410/R-17) KEEP that class
 # and their original reason; the ADR-0157 note is appended to it rather than replacing it. Their
 # verdict token moved for the reason above, not because the classification was wrong.
+#
+# 2026-08-22 — ADR-0166-460-spec-coverage-baseline-never-bumped.md (issue #460). WHAT MOVED: the
+# derivation, not the rows. spec-coverage.test.sh's RS_PAIRS/RS_LIVE loops (Task 3) now call
+# spec-coverage-baseline-rows.sh's --pair and --rows instead of re-deriving the same two answers a
+# second time inline, and a completing concept-to-code chain now bumps its own rows into this file
+# at Step 7.0b (Task 5) instead of leaving an unattributable RS8b red for the next unrelated author
+# to inherit and diagnose from this header alone.
+#
+# RE-DERIVED STATE, same day, through the new call path (CLAUDE.md rule 13 — do not trust this
+# comment, re-derive it): 16 (spec, plan) pairs, 130 declared ids, 130 baseline rows — 106 COVERED,
+# 12 UNCOVERED, 12 UNSCOPED. RS7 (the frozen per-row comparison) reports ZERO divergence; RS8a and
+# RS8b report ZERO orphans in either direction (verified by hand: the plant that mutates
+# 176-worktree-isolation-contract.spec.md's R-01 row still turns RS7 red through the new call path).
+# 0 OF 130 ROWS CHANGED — no verdict, class or reason column moved, and no row was added or removed.
+# See ADR-0166 §M1 for the correction to SPEC.md's R-08 parenthetical ("16 live pairs, 16 baseline
+# rows"), which understated the row count by an order of magnitude: 16 is the pair count, not the
+# row count.
 #
 # NO ARCHIVED SPEC IS EDITED FOR THIS FILE (CLAUDE.md rule 14, ADR-0138 §D5). Retro-fitting
 # `(no-test: ...)` into the 4 completed SPECs behind the not-test-assertable rows below would
@@ -251,3 +279,11 @@
 470-chain-never-regenerates-xcode.spec.md	R-06	COVERED
 470-chain-never-regenerates-xcode.spec.md	R-07	COVERED
 470-chain-never-regenerates-xcode.spec.md	R-08	COVERED
+460-spec-coverage-baseline-never-bumped.spec.md	R-01	COVERED
+460-spec-coverage-baseline-never-bumped.spec.md	R-02	COVERED
+460-spec-coverage-baseline-never-bumped.spec.md	R-03	COVERED
+460-spec-coverage-baseline-never-bumped.spec.md	R-04	COVERED
+460-spec-coverage-baseline-never-bumped.spec.md	R-05	COVERED
+460-spec-coverage-baseline-never-bumped.spec.md	R-06	COVERED
+460-spec-coverage-baseline-never-bumped.spec.md	R-07	COVERED
+460-spec-coverage-baseline-never-bumped.spec.md	R-08	COVERED
