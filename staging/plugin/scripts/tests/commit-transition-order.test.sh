@@ -502,7 +502,14 @@ run_outcome_fence() {
   _rof_body=$(extract_fence_ct) || return 1
   [ -n "$_rof_body" ] || return 1
   printf '%s\n' "$_rof_body" | sed "s|<manifest-path>|$1|g" >"$TMP/outcome-run.sh"
-  bash "$TMP/outcome-run.sh" >"$TMP/outcome-out" 2>"$TMP/outcome-err"
+  # ADR-0168 §D10 repair: after the fence resolves to commit-outcome-check.sh it does a two-tier
+  # script lookup, CLAUDE_PLUGIN_ROOT first then $HOME/.claude, exactly like every other
+  # concept-to-code helper. Without this export the harness would either fail on an undeployed
+  # machine (COMMIT_OUTCOME_NORUN noScript on every fixture) or, on a deployed one, silently
+  # exercise $HOME/.claude instead of staging/ — contradicting this file's own "no $HOME
+  # dependency" header claim. Same idiom as spec-coverage-baseline-bump.test.sh's NB16.
+  ( export CLAUDE_PLUGIN_ROOT="$STAGING/plugin"
+    bash "$TMP/outcome-run.sh" >"$TMP/outcome-out" 2>"$TMP/outcome-err" )
   echo "$?" >"$TMP/outcome-rc"
   return 0
 }
