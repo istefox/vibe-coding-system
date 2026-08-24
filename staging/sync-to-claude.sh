@@ -203,6 +203,7 @@ plugin/scripts/reset-gate-counter.sh|hooks/reset-gate-counter.sh
 plugin/scripts/usage-daily-hint.sh|hooks/usage-daily-hint.sh
 plugin/scripts/usage-report.py|scripts/usage-report.py
 plugin/scripts/precompact-guard.sh|hooks/precompact-guard.sh
+plugin/scripts/commit-outcome-backstop.sh|hooks/commit-outcome-backstop.sh
 plugin/scripts/context-occupancy.sh|hooks/context-occupancy.sh
 plugin/scripts/migrate-trust-paths.sh|hooks/migrate-trust-paths.sh
 plugin/scripts/tests/db-backup-guardrail.sh|hooks/tests/db-backup-guardrail.sh
@@ -324,7 +325,7 @@ done
 
 # Preserve executable bit on the shell helpers.
 if [ "$APPLY" -eq 1 ]; then
-  chmod +x "$DEST/hooks/precompact-guard.sh" "$DEST/hooks/autopilot-guard.sh" "$DEST/hooks/publish-feature.sh" "$DEST/hooks/test-write-scope.sh" \
+  chmod +x "$DEST/hooks/precompact-guard.sh" "$DEST/hooks/commit-outcome-backstop.sh" "$DEST/hooks/autopilot-guard.sh" "$DEST/hooks/publish-feature.sh" "$DEST/hooks/test-write-scope.sh" \
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
     "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
