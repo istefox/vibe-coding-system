@@ -93,6 +93,21 @@
 #
 # CO10 is a DATA plant against the staged REFERENCE copy of settings.json (Task 7 adds the entry),
 # the same style CO6 above already uses against sync-to-claude.sh's PAIRS line.
+#
+# --- RTF plants (CO19-CO20) --------------------------------------------------------------------
+#
+# Two arms of the hook's classification `case` shipped with no assertion of their own: the exit-1
+# fallback (`COMMIT_NOT_OK`, an off-contract stdout shape) and the generic non-0/1/3 exit-code
+# fallback. Both are defensive-only, which is exactly the shape that rots unnoticed -- CO11/CO14
+# only ever drive the checker through its two contract-conforming exit-1 tokens, and nothing at all
+# drove an exit code outside {0,1,3}. Needles verified unique (grep -c -F == 1) against the live
+# commit-outcome-backstop.sh, 2026-08-24. Both plants replace the arm with a WELL-FORMED but
+# differently-classifying one rather than deleting it, so the hook still parses and the assertion
+# fails on the classification it reads back, not on a syntax error (which would fail every CO id at
+# once and prove nothing about these two).
+#
+# plant: CO19 | plugin/scripts/commit-outcome-backstop.sh | *) _verdict="COMMIT_NOT_OK"; _reason="unqualified checker output: ${_flat:-(empty)}" ;; | *) _verdict="COMMIT_UNCOMMITTED" ;;
+# plant: CO20 | plugin/scripts/commit-outcome-backstop.sh | *) _verdict="COMMIT_OUTCOME_NORUN"; _reason="checker exited $_rc: ${_flat:-(empty)}" ;; | *) _verdict="COMMIT_OK" ;;
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -947,6 +962,123 @@ else
 fi
 
 # ===========================================================================
+# CO19/CO20 shared fixture machinery — a FAKE checker, the same CLAUDE_PLUGIN_ROOT-override technique
+# CO15(d) uses to make the checker unresolvable, run in the opposite direction: here the override tree
+# DOES carry a commit-outcome-check.sh, so tier 1 resolves and the hook runs a script whose exit code
+# and stdout this harness chooses. That is the only way to reach the two off-contract arms of the
+# classification `case` — the real checker cannot produce them by construction (it only ever exits
+# 0/1/3, and only ever with COMMIT_UNCOMMITTED/COMMIT_NONTERMINAL on the exit-1 path), which is
+# precisely why those arms had no assertion until now.
+#
+# mk_stub_checker <plugin-root> <exit-code> <printf-format> -- writes the stub at the exact path the
+# hook's tier-1 resolution reads.
+mk_stub_checker() {
+  mkdir -p "$1/skills/concept-to-code/scripts"
+  {
+    printf '#!/bin/bash\n'
+    printf 'printf %s\n' "'$3'"
+    printf 'exit %s\n' "$2"
+  } >"$1/skills/concept-to-code/scripts/commit-outcome-check.sh"
+}
+
+# ===========================================================================
+# CO19 (R-06, rule 4 in the other direction) — the checker exits 1 but its stdout's first token is
+# neither COMMIT_UNCOMMITTED nor COMMIT_NONTERMINAL. The check RAN and said not-OK, so the hook must
+# neither fold it into NORUN (that would read an executed failure as a did-not-run) nor guess it into
+# one of the two real qualifiers (that would invent a cause): the documented behaviour is the
+# COMMIT_NOT_OK bucket carrying the raw stdout as its reason. The stub's stdout deliberately embeds a
+# TAB and a NEWLINE, so this assertion also pins the `_flat` flattening: an audit log that gained a
+# second line, or whose 4th field shifted, would mean a checker can forge audit records.
+# ===========================================================================
+CO19_FAIL=""
+if [ -n "$BASE_MANIFEST" ]; then
+  ROOT_CO19=$(make_root_co co19)
+  MANIFEST_CO19="$ROOT_CO19/docs/manifests/2026-08-24-co19-offcontract.manifest.yml"
+  mk_manifest_at "$MANIFEST_CO19" "$ROOT_CO19" step_7_commit in_progress
+  PROOT_CO19="$TMP/co19-plugin"
+  mk_stub_checker "$PROOT_CO19" 1 'GARBLED_TOKEN\tqualifier\nsecond line\n'
+  DIR_CO19="$TMP/state-co19"
+  PAYLOAD_CO19=$(payload_co "Skill" "commit" "$ROOT_CO19" "sess-co19")
+  run_hook "$PAYLOAD_CO19" "$DIR_CO19" "$PROOT_CO19"
+  RC_CO19=$(cat "$TMP/hook-rc"); OUT_CO19=$(cat "$TMP/hook-out")
+  [ "$RC_CO19" -eq 0 ] || CO19_FAIL="$CO19_FAIL
+  exit=$RC_CO19 (expected 0)"
+  printf '%s' "$OUT_CO19" | grep -q 'COMMIT_NOT_OK' || CO19_FAIL="$CO19_FAIL
+  stdout does not report COMMIT_NOT_OK: $OUT_CO19"
+  printf '%s' "$OUT_CO19" | grep -qF "$MANIFEST_CO19" || CO19_FAIL="$CO19_FAIL
+  stdout does not name the manifest path $MANIFEST_CO19: $OUT_CO19"
+  LOG_CO19="$DIR_CO19/audit.log"
+  if [ -f "$LOG_CO19" ]; then
+    _n=$(grep -c . "$LOG_CO19" 2>/dev/null || true)
+    [ "$_n" -eq 1 ] || CO19_FAIL="$CO19_FAIL
+  audit log has $_n lines (expected exactly 1) -- the stub's tab/newline forged extra records: $(cat "$LOG_CO19")"
+    [ "$(audit_field4 "$LOG_CO19")" = "COMMIT_NOT_OK" ] || CO19_FAIL="$CO19_FAIL
+  audit log's 4th field is '$(audit_field4 "$LOG_CO19")' (expected 'COMMIT_NOT_OK')"
+    grep -q 'unqualified checker output' "$LOG_CO19" || CO19_FAIL="$CO19_FAIL
+  audit log's reason does not carry the raw stdout as 'unqualified checker output': $(cat "$LOG_CO19")"
+    grep -qi 'NORUN' "$LOG_CO19" && CO19_FAIL="$CO19_FAIL
+  audit log wrongly reads NORUN -- an executed check that said not-OK must not be folded into did-not-run: $(cat "$LOG_CO19")"
+  else
+    CO19_FAIL="$CO19_FAIL
+  no audit.log written at all"
+  fi
+else
+  CO19_FAIL="no base manifest available -- see CO18"
+fi
+if [ -z "$CO19_FAIL" ]; then
+  ok "CO19 (R-06) checker exits 1 with an unrecognised first token -> COMMIT_NOT_OK, raw stdout as reason, exactly one audit line"
+else
+  bad "CO19 (R-06) failed:$CO19_FAIL"
+fi
+
+# ===========================================================================
+# CO20 (R-06, rule 4) — the checker exits with a code outside its own {0,1,3} contract (here 42:
+# a crashed, half-deployed or wrong script). The hook cannot know what happened, so the honest
+# classification is COMMIT_OUTCOME_NORUN with the offending exit code named in the reason — NOT
+# COMMIT_OK, which is the failure mode that matters: a checker that dies would otherwise read as a
+# healthy commit. The exit code must appear in the reason, because NORUN alone does not distinguish
+# this from the noScript path CO16 already covers.
+# ===========================================================================
+CO20_FAIL=""
+if [ -n "$BASE_MANIFEST" ]; then
+  ROOT_CO20=$(make_root_co co20)
+  MANIFEST_CO20="$ROOT_CO20/docs/manifests/2026-08-24-co20-badexit.manifest.yml"
+  mk_manifest_at "$MANIFEST_CO20" "$ROOT_CO20" step_7_commit in_progress
+  PROOT_CO20="$TMP/co20-plugin"
+  mk_stub_checker "$PROOT_CO20" 42 'checker blew up\n'
+  DIR_CO20="$TMP/state-co20"
+  PAYLOAD_CO20=$(payload_co "Skill" "commit" "$ROOT_CO20" "sess-co20")
+  run_hook "$PAYLOAD_CO20" "$DIR_CO20" "$PROOT_CO20"
+  RC_CO20=$(cat "$TMP/hook-rc"); OUT_CO20=$(cat "$TMP/hook-out")
+  [ "$RC_CO20" -eq 0 ] || CO20_FAIL="$CO20_FAIL
+  exit=$RC_CO20 (expected 0)"
+  printf '%s' "$OUT_CO20" | grep -q 'COMMIT_OUTCOME_NORUN' || CO20_FAIL="$CO20_FAIL
+  stdout does not report COMMIT_OUTCOME_NORUN: $OUT_CO20"
+  printf '%s' "$OUT_CO20" | grep -q 'checker exited 42' || CO20_FAIL="$CO20_FAIL
+  stdout does not name the offending exit code ('checker exited 42'): $OUT_CO20"
+  LOG_CO20="$DIR_CO20/audit.log"
+  if [ -f "$LOG_CO20" ]; then
+    _n=$(grep -c . "$LOG_CO20" 2>/dev/null || true)
+    [ "$_n" -eq 1 ] || CO20_FAIL="$CO20_FAIL
+  audit log has $_n lines (expected exactly 1)"
+    [ "$(audit_field4 "$LOG_CO20")" = "COMMIT_OUTCOME_NORUN" ] || CO20_FAIL="$CO20_FAIL
+  audit log's 4th field is '$(audit_field4 "$LOG_CO20")' (expected 'COMMIT_OUTCOME_NORUN')"
+    grep -q 'checker exited 42' "$LOG_CO20" || CO20_FAIL="$CO20_FAIL
+  audit log's reason does not name the offending exit code: $(cat "$LOG_CO20")"
+  else
+    CO20_FAIL="$CO20_FAIL
+  no audit.log written at all"
+  fi
+else
+  CO20_FAIL="no base manifest available -- see CO18"
+fi
+if [ -z "$CO20_FAIL" ]; then
+  ok "CO20 (R-06) checker exits 42 (outside its 0/1/3 contract) -> COMMIT_OUTCOME_NORUN naming the exit code, never COMMIT_OK"
+else
+  bad "CO20 (R-06) failed:$CO20_FAIL"
+fi
+
+# ===========================================================================
 # CO-CI — this harness's own name is in .github/workflows/docs-ci.yml's shell-tests loop list (the
 # self-registration convention every recent harness here follows; Task 6 adds the entry, so this
 # assertion is RED until then). NO PLANT DECLARED, and that is the reason rather than an oversight:
@@ -970,10 +1102,10 @@ fi
 # corpus carries one either).
 # ===========================================================================
 _co_total=$((PASS + FAIL))
-if [ "$_co_total" -ge 19 ]; then
-  ok "COZ1 assertion-count floor ($_co_total >= 19)"
+if [ "$_co_total" -ge 22 ]; then
+  ok "COZ1 assertion-count floor ($_co_total >= 22)"
 else
-  bad "COZ1 assertion count fell to $_co_total (floor 19) -- assertions vanished from this file"
+  bad "COZ1 assertion count fell to $_co_total (floor 22) -- assertions vanished from this file"
 fi
 
 echo
