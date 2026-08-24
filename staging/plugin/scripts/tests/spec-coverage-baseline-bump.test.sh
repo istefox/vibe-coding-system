@@ -245,6 +245,22 @@ else
   bad "NB7c: expected empty stdout, exit 0 — got rc=$RC out=[$OUT]"
 fi
 
+# NB7d (VCS-034) — an ISSUE-LESS SPEC (no numeric prefix at all) must resolve via the FULL
+# basename as the fallback slug, not a mutilated one with the first hyphen segment stripped.
+# Pre-fix (verified against the unfixed script before this line existed): the fallback stripped
+# "sample" unconditionally, built the slug "issueless-thing", and the pair resolved to nothing —
+# the SPEC left the RS_PAIRS corpus silently.
+# plant: NB7d | plugin/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh | _p_rest=$_p_bn | _p_rest=${_p_bn#*-}
+touch "$TMP/sample-issueless-thing.spec.md"
+mkdir -p "$TMP/nb7d-plans"
+touch "$TMP/nb7d-plans/2026-08-24-sample-issueless-thing.md"
+run_rows --pair --spec "$TMP/sample-issueless-thing.spec.md" --plans-dir "$TMP/nb7d-plans"
+if [ "$RC" -eq 0 ] && [ "$OUT" = "$TMP/nb7d-plans/2026-08-24-sample-issueless-thing.md" ]; then
+  ok "NB7d (--pair, VCS-034): an issue-less SPEC's basename is used WHOLE as the fallback slug, not mutilated by an unconditional first-segment strip"
+else
+  bad "NB7d: expected $TMP/nb7d-plans/2026-08-24-sample-issueless-thing.md on stdout, exit 0 — got rc=$RC out=[$OUT]"
+fi
+
 # ==================================================================================================
 # NB8-NB14 (R-01, R-03, R-04, R-06) — --bump --baseline <file> --spec <spec> --plan <plan>
 # --tests-root <root>.
