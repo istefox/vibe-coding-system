@@ -1,143 +1,181 @@
-# SPEC — autopilot-disarm clears the run scope, so a relaunch after a pause is silently unbounded
+# SPEC — PostToolUse backstop hook for Step 7.1 commit-outcome verification
 
-**Topic slug:** 400-autopilot-disarm-scope-unbounded
+**Topic slug:** commit-outcome-backstop-hook
 
 ## Objective
 
-`autopilot-disarm.sh` clears the whole transient guard-state set — `active`, `build-status`, and
-`scope` — as one operation. `active` and `build-status` are genuinely transient guard markers
-(ADR-0112): a build left `RED` must halt `--check` regardless of the marker, so clearing them on
-disarm is correct. `scope` is different: it holds the run's *configuration* (the resolved
-`--features`/`--only` bound), not a guard condition, and ADR-0129 placed it in the same directory
-after ADR-0112 had already defined "disarm clears everything in this directory" — without anyone
-revisiting whether that rule should still apply to the new file.
+`concept-to-code`'s Step 7.1 classifies what the `commit` skill actually did (`COMMIT_OK` /
+`COMMIT_UNCOMMITTED` / `COMMIT_NONTERMINAL` / `COMMIT_OUTCOME_NORUN`) by reading the manifest on
+disk. This check exists only as a `SKILL.md` prose instruction with no structural enforcement:
+nothing prevents the orchestrator from skipping it, especially deep into a long chain run where
+thousands of prior instructions have already been processed.
 
-The consequence: a human pauses a bounded autopilot run, disarms it (correctly, to stop safely),
-then relaunches with `/skill autopilot`. Nothing — not the disarm output, not the RUNBOOK's
-"Aborting a run" section, not the skill itself — tells them the bound is gone. The relaunch runs
-unbounded over the entire pending roadmap.
+Precedent: Adnota repo PR #36 (2026-08-23) — a chain's Step 7 snapshot-collapse staged the manifest
+before a follow-up write (SPEC archive repoint + `completed` transition) landed, and that write was
+never re-staged before the commit. The merged manifest read `current_step: step_7_commit`,
+`status: in_progress` instead of `completed`/`completed`. The feature shipped correct; only the
+manifest bookkeeping was stale — exactly the `COMMIT_NONTERMINAL` condition Step 7.1 exists to
+catch, uncaught because Step 7.1 is prose, not a mechanical check.
 
-This SPEC fixes that by moving `scope` (and `published`, which has the same exposure — it counts
-delivered progress, not a guard condition) out of the set the disarm clears, so a relaunch reuses
-the same bound by construction, with no message to read and no step to remember.
+This matters beyond bookkeeping hygiene: if `COMMIT_NONTERMINAL`/`COMMIT_UNCOMMITTED` goes
+unnoticed, the chain proceeds anyway to post-commit push, a `PROJECT.md` update marking the
+feature `[x]` completed, and a cost snapshot. `project-conductor` and `autopilot` read `PROJECT.md`
+checkboxes to decide what to work on next, so a false-positive "completed" checkbox can make an
+unattended run skip real work believing it is already done.
+
+Objective: give Step 7.1's classification a stateless, mechanical backstop that fires independently
+of whether the orchestrator remembered to run the inline check, without introducing a second,
+divergent copy of the classification logic.
 
 ## Scope
 
 **In scope:**
-- `autopilot-disarm.sh`: stop clearing `scope` and `published`; update its printed output to
-  reflect what it actually does (`removed:` only for `active`/`build-status`; a new line stating
-  `scope` and `published` are preserved, naming the bound and the file paths).
-- The consumer(s) of `scope` at launch time (the entry point(s) that read `--features`/`--only` and
-  the file — at minimum Phase 0 check 9 and `conductor-scope-gate`, per the issue's own "what to
-  measure" list): confirm/implement that an explicit `--features`/`--only` argument at relaunch
-  always overrides a surviving `scope` file, and that a relaunch with no argument reuses the
-  surviving file as the bound.
-- Corrupt/unreadable `scope` file handling at read time: fail-safe to unbounded, with an explicit
-  warning — never a silent unbounded run, never a halt.
-- RUNBOOK "Aborting a run" section: state plainly that `scope` (and `published`) survive disarm,
-  and how to override them (pass `--features`/`--only` again).
-- ADR recording the decision: `scope`/`published` move out of the transient set, `active`/
-  `build-status` keep the current whole-clear behaviour unchanged (R-03), and the reasoning for
-  treating configuration/progress data differently from guard state.
+- Extracting the existing inline classification fence (`c2c-step7-commit-outcome`,
+  `~/.claude/skills/concept-to-code/SKILL.md`, the `COMMIT_OK`/`COMMIT_UNCOMMITTED ...`/
+  `COMMIT_NONTERMINAL ...`/`COMMIT_OUTCOME_NORUN <reason>` contract) into a shared script,
+  `~/.claude/skills/concept-to-code/scripts/commit-outcome-check.sh`, with the identical
+  stdout/exit-code contract (exit 0/1/3).
+- Rewriting Step 7.1 in `SKILL.md` to call that script instead of inlining the heredoc. No fallback
+  to the old inline logic: if the script is not deployed, Step 7.1 reports `DID-NOT-RUN` (the
+  existing pattern this file already uses elsewhere for an unresolved helper), never a second
+  copy of the classification.
+- A new `PostToolUse` hook, `~/.claude/hooks/commit-outcome-backstop.sh`, registered in
+  `~/.claude/settings.json` with `"matcher": "Skill"`. It fires on every `Skill` tool call
+  (Claude Code's hook matcher filters on tool name only — verified against current hook docs, no
+  skill-name-level filtering exists at the matcher or `if`-field level) and no-ops immediately
+  unless `tool_input.skill == "commit"`.
+- On a `commit` invocation, the hook scans `docs/manifests/*.manifest.yml` under the project root
+  (resolved from the hook's `cwd` field) for manifests with `mtime` within the last 24 hours,
+  filters to `status: completed` or `current_step: completed`, and runs
+  `commit-outcome-check.sh` against each. Any `COMMIT_UNCOMMITTED` or `COMMIT_NONTERMINAL`
+  result is surfaced as hook output (visible in the transcript) AND appended to an audit log at
+  `~/.claude/state/commit-outcome-backstop/audit.log`, one line per check, same shape as
+  `precompact-guard.sh`'s own audit log (timestamp, session id, decision, reason).
+- Report-only, never blocking: the hook exits 0 unconditionally. A `PostToolUse` hook can inject
+  text but cannot replay Step 7.1's richer stop/no-rollback messaging (ADR-0078 references, exact
+  remediation steps) — that messaging stays exclusively in `SKILL.md`.
+- Global scope: the hook is vendored from this repo to `~/.claude/hooks/` like every other hook
+  here, and applies to every project's manifests under `concept-to-code`, not only this repo's own.
+- A dedicated test fixture reconstructing the Adnota PR #36 manifest state
+  (`current_step: step_7_commit`, `status: in_progress`) and asserting the hook's classification
+  surfaces it as `COMMIT_NONTERMINAL`.
+- Fail-open on every error path (missing manifest directory, unreadable manifest, `jq` absent,
+  unwritable audit-log directory): the same convention every other hook in this repo already
+  follows. An error in the backstop must never itself block or crash the tool call it observes.
 
 **Out of scope:**
-- Any change to `active`/`build-status` semantics or to when a build-status `RED` halts a
-  `--check` — ADR-0112's behaviour for those two files is preserved exactly (R-03).
-- A dedicated `--clear-scope` command — explicit `--features`/`--only` at relaunch is the
-  overwrite mechanism; no new command surface.
-- Migrating `scope`/`published` to a new directory — they stay at their current paths inside
-  `.claude/autopilot-state/`; only `autopilot-disarm.sh`'s clear list changes.
-- Any other file in `.claude/autopilot-state/` not named above.
+- Any blocking behavior. This hook never halts a commit, a chain, or a session — Step 7.1's own
+  richer stop/no-rollback contract remains the only halting mechanism.
+- Fixing the Adnota incident itself, or any other already-merged stale manifest. This SPEC covers
+  detection going forward, not remediation of past occurrences.
+- Extending the classification contract (`COMMIT_OK`/`COMMIT_UNCOMMITTED`/`COMMIT_NONTERMINAL`/
+  `COMMIT_OUTCOME_NORUN`) itself. The extraction must be behavior-preserving.
+- Any change to how or when `commit`'s own Step 4 HITL gate operates. This backstop runs strictly
+  after `commit` has already returned.
+- Filtering by skill name at the hook-matcher level. Verified unsupported by current Claude Code
+  hook documentation; the internal `tool_input.skill` check is the only available mechanism, not a
+  gap to close later.
 
 ## Stack
 
-Bash 3.2-clean (macOS default `/bin/bash`), consistent with every other script in
-`staging/plugin/scripts/`. No new language or runtime dependency.
+Bash 3.2-clean (macOS default `/bin/bash`), same conventions as every other script and hook in this
+repo: no associative arrays, no `mapfile`, no process substitution. `jq` for JSON parsing of the
+hook's stdin payload (same dependency `precompact-guard.sh` already has). No new runtime
+dependency introduced.
 
 ## Architecture
 
-- `autopilot-disarm.sh` currently treats `.claude/autopilot-state/` as one undifferentiated
-  transient set and removes every file in it. This SPEC introduces a second category inside the
-  same directory: **configuration/progress files** (`scope`, `published`) that disarm does not
-  touch, versus **guard-state files** (`active`, `build-status`) that it still clears
-  unconditionally.
-- The disarm output changes shape: it still lists `removed:` entries for the guard-state files,
-  and adds a `preserved:` block naming each surviving file and, for `scope`, the bound it encodes
-  (e.g. `preserved: .claude/autopilot-state/scope (--features 458,398,482)`).
-- At relaunch, the entry point that resolves the effective bound reads: explicit
-  `--features`/`--only` on the command line (if given) → wins outright, overwriting the file.
-  Otherwise → read the surviving `scope` file, if present and parseable, as the bound. Otherwise
-  (file absent, or present but unreadable/malformed) → unbounded, with a warning printed in the
-  malformed case only (an absent file is the ordinary "never had a bound" case and needs no
-  warning).
-- `published` follows the file-preservation rule but has no read-time consumer logic to change
-  beyond "disarm no longer deletes it" — it is a counter, not a bound, and this SPEC does not add
-  new behaviour around it beyond ceasing to clear it.
+Three new/changed pieces, one shared contract:
+
+1. **`~/.claude/skills/concept-to-code/scripts/commit-outcome-check.sh <manifest-path>`** — pure
+   function of one manifest file to one classification. Same logic currently inlined in
+   `SKILL.md`'s `c2c-step7-commit-outcome` fence: read `current_step`/`status` from the manifest,
+   check `git status --porcelain` on the manifest's own directory, emit exactly one of
+   `COMMIT_OK` (exit 0) / `COMMIT_UNCOMMITTED untracked|modified` (exit 1) /
+   `COMMIT_NONTERMINAL current_step|status` (exit 1) / `COMMIT_OUTCOME_NORUN <reason>` (exit 3).
+
+2. **`~/.claude/hooks/commit-outcome-backstop.sh`** — the `PostToolUse` hook. Reads stdin JSON
+   (`tool_input.skill`, `cwd`, `session_id`), no-ops (exit 0, silent) unless
+   `tool_input.skill == "commit"`. On a `commit` match: resolve the project root by walking up from
+   `cwd` looking for `docs/manifests/` (same walk-up pattern `precompact-guard.sh` already uses),
+   enumerate `docs/manifests/*.manifest.yml` with `mtime` in the last 24 hours, filter to
+   `status: completed` or `current_step: completed`, run `commit-outcome-check.sh` against each,
+   and for every non-`COMMIT_OK` result print a report line and append an audit-log entry. Always
+   exits 0.
+
+3. **`SKILL.md` Step 7.1**, rewritten to invoke `commit-outcome-check.sh` instead of the inline
+   fence, with the same branch table (`COMMIT_OK` → proceed; `COMMIT_UNCOMMITTED ...`/
+   `COMMIT_NONTERMINAL ...` → stop and report, no rollback since `completed` is absorbing;
+   `COMMIT_OUTCOME_NORUN`/exit 3 → report did-not-run) preserved verbatim.
+
+Registration: `~/.claude/settings.json`, `PostToolUse` block, `{"matcher": "Skill", "hooks": [{"type": "command", "command": "\"$HOME\"/.claude/hooks/commit-outcome-backstop.sh"}]}` — same shape as the
+existing `Edit|Write` entries.
 
 ## Data model
 
-No new files. Existing `.claude/autopilot-state/scope` and `.claude/autopilot-state/published`
-keep their current format; only their lifecycle (what deletes them) changes.
+No new persistent data structures beyond:
+- The audit log: `~/.claude/state/commit-outcome-backstop/audit.log`, tab-separated
+  `timestamp<TAB>session_id<TAB>manifest_path<TAB>classification<TAB>reason`, append-only, same
+  shape as `precompact-guard.sh`'s `audit.log`.
 
-## API / CLI surface
+No change to the manifest schema itself.
 
-- `autopilot-disarm.sh`: same invocation, changed output text, changed set of files removed.
-- The autopilot launch path (skill / entry script covering Phase 0 check 9 and
-  `conductor-scope-gate`): unchanged CLI surface (`--features`, `--only` unchanged); changed
-  internal precedence — explicit arg overrides file, absent arg reads file if present and valid.
+## API / interfaces
 
-## UI flows
+`commit-outcome-check.sh` is the shared contract both `SKILL.md` Step 7.1 and the new hook call.
+Its stdout/exit-code shape is the interface both sides depend on and must not change independently
+of each other — the entire point of the extraction is that there is exactly one definition of
+"what does this manifest's outcome classify as."
 
-N/A — CLI/skill only, no graphical UI. The "flow" is: pause → disarm → (read disarm output,
-optional) → relaunch with or without `--features`/`--only`.
+## UI / flows
+
+No user-facing UI. The only observable surface is:
+- Hook output appended to the transcript after a `commit` skill call, when a stale/non-terminal
+  manifest is found (rare — only fires on a bug this backstop exists to catch).
+- The audit log, for a human or a future automated check to inspect after the fact.
 
 ## Edge cases
 
-- **First-ever run, no `scope` file exists at all:** unchanged — unbounded, no warning (today's
-  behaviour when there is genuinely nothing to bound to).
-- **`scope` file survives disarm, relaunch passes no `--features`/`--only`:** reuse the file's
-  bound. Not silent — the launch path states which bound it is applying (from the preserved
-  file), so the operator can see what they are about to run without having read the disarm output
-  earlier.
-- **`scope` file survives disarm, relaunch passes `--features`/`--only` explicitly:** the explicit
-  argument wins; the file is overwritten with the new bound.
-- **`scope` file present but corrupted/unreadable at relaunch:** fail-safe to unbounded, with an
-  explicit warning naming the file and stating it could not be read — never a silent unbounded
-  run and never a halt (issue's own R-01 wording: a bound loss must always be announced, whichever
-  form it takes).
-- **`published` present:** disarm preserves it unconditionally; no read-time branching added.
-- **A run that was never bounded (no `--features`/`--only` at the original launch) gets
-  disarmed:** no `scope` file exists to preserve; behaviour is unchanged (still nothing to
-  preserve, still unbounded on relaunch, exactly as today).
+- **Manifest directory absent** (no `docs/manifests/` anywhere up from `cwd`) → hook no-ops
+  silently, exit 0. Not an error: most `commit` invocations are not inside a `concept-to-code`
+  project at all.
+- **`jq` missing** → fail open, exit 0, log `"jq missing"` to the audit log (same convention as
+  `precompact-guard.sh`).
+- **Manifest directory unwritable, or audit-log directory uncreatable** → fail open; report to
+  stdout only, skip the audit-log write.
+- **No manifest within the 24h window** → exit 0, no output, nothing logged. This is the
+  overwhelmingly common case and must produce zero transcript noise.
+- **`commit-outcome-check.sh` itself unresolved** (not deployed) → the hook reports this once per
+  invocation as a distinct condition, not silently as "no stale manifest found" — an unrun check is
+  not a clean result.
+- **`commit` invoked with `--include`/`--branch`/`--autopilot`/`--no-pr` flags** → irrelevant to
+  this backstop; it classifies whatever manifests it finds regardless of how `commit` was
+  parameterized.
 
 ## Success criteria
 
-- [ ] R-01 — a disarm that clears a bound says so, naming the bound it cleared and the exact
-      relaunch command that restores it. (Satisfied by construction under R-02's chosen fork:
-      `scope` is no longer cleared, so there is no bound-loss to announce in the normal case; the
-      disarm output instead states which bound is *preserved*. The corrupted-file edge case still
-      needs an explicit, visible warning at relaunch time — that is where "a bound was lost" can
-      still genuinely happen.)
-- [ ] R-02 — `scope` (and `published`, same exposure) move out of the transient set that
-      `autopilot-disarm.sh` clears; the reason is recorded in the ADR: they are run
-      configuration/progress data, not guard state, and `active`/`build-status` are the ones
-      ADR-0112 defined the whole-clear behaviour for.
-- [ ] R-03 — `autopilot-disarm.sh`'s clearing of `active` and `build-status` is byte-for-byte
-      unchanged: same files removed, same output lines for those two, same
-      `--check`-halts-on-RED behaviour from ADR-0112. This must not become a partial disarm of
-      those two.
-- [ ] R-04 — the RUNBOOK's "Aborting a run" section states plainly, after this fix, that `scope`
-      (and `published`) survive disarm, that a relaunch with no `--features`/`--only` reuses the
-      preserved bound, and that passing `--features`/`--only` again overrides it.
-- [ ] R-05 — an explicit `--features`/`--only` argument at relaunch always overwrites a surviving
-      `scope` file with the new bound; never merges, never appends.
-- [ ] R-06 — a corrupted or unreadable `scope` file at relaunch fails safe to an unbounded run
-      with an explicit, visible warning naming the file — never a silent unbounded run, never a
-      halt.
-- [ ] R-07 — every consumer of `scope` in the codebase is accounted for (at minimum Phase 0 check
-      9 and `conductor-scope-gate`, per the issue's own "what to measure" list); each either reads
-      the preserved-file/explicit-arg precedence correctly or is confirmed out of scope with a
-      one-line reason. (no-test: this is a codebase inventory/audit step verified by reading the
-      implementation, not something a single assertion can check)
-- [ ] R-08 — the disarm output for a run that had a bound no longer prints `removed:` for
-      `scope`/`published`; it prints `preserved: <path> (<bound>)` for each instead.
+- [ ] R-01 — `commit-outcome-check.sh` exists and, given a manifest, emits the identical
+      classification (`COMMIT_OK`/`COMMIT_UNCOMMITTED ...`/`COMMIT_NONTERMINAL ...`/
+      `COMMIT_OUTCOME_NORUN ...`) and exit code the current inline `SKILL.md` fence would have
+      produced for the same manifest state, for at least one fixture per classification.
+- [ ] R-02 — `SKILL.md` Step 7.1 is rewritten to call `commit-outcome-check.sh` and no longer
+      contains the inline `c2c-step7-commit-outcome` classification logic duplicated a second time.
+- [ ] R-03 — `commit-outcome-backstop.sh` exists, is registered in `~/.claude/settings.json` under
+      `PostToolUse` with `"matcher": "Skill"`, and no-ops (exit 0, no output) when
+      `tool_input.skill` is not `"commit"`.
+- [ ] R-04 — Given a fixture manifest reproducing the Adnota PR #36 state
+      (`current_step: step_7_commit`, `status: in_progress`, `mtime` within 24h) and a `commit`
+      skill invocation, the hook's output classifies it as `COMMIT_NONTERMINAL current_step` and
+      appends one matching entry to the audit log.
+- [ ] R-05 — A manifest with `mtime` older than 24 hours is never scanned, even if it is
+      `status: completed` and has an uncommitted manifest file.
+- [ ] R-06 — The hook exits 0 in every tested error path (missing `docs/manifests/`, missing `jq`,
+      unwritable audit-log directory, unresolved `commit-outcome-check.sh`) — it never blocks or
+      crashes the `commit` tool call it observes.
+- [ ] R-07 — The hook resolves the project root from the `cwd` field of its own stdin payload, not
+      from any hardcoded or session-global path, so it works correctly for any project running
+      `concept-to-code`, not only this repo (no-test: this is validated by the deployment/vendoring
+      convention this repo already uses for every other hook, not by a project-specific test).
+- [ ] R-08 — Documentation: `docs/proposal-c4-commit-outcome-hook.md`'s content is superseded by
+      the ADR this chain produces; the proposal file itself is removed or clearly marked superseded
+      once the ADR exists (no-test: a documentation-state check, not a behavior the harness runs).
