@@ -70,7 +70,18 @@
 # run is what actually confirms them; a NOFIRE there means the NEEDLE needs correcting to match what
 # Task 6 actually wrote, never the plant's expected verdict (rule 2).
 #
-# plant: CO9 | plugin/scripts/commit-outcome-backstop.sh | grep -q '"skill"[[:space:]]*:[[:space:]]*"commit"' | grep -q '.'
+# plant: CO9b | plugin/scripts/commit-outcome-backstop.sh | grep -q '"skill"[[:space:]]*:[[:space:]]*"commit"' | grep -q '.'
+#
+# CORRECTION (2026-08-24, measured NOFIRE against the declaration above when it targeted CO9 itself).
+# CO9's own checks (exit 0/empty stdout/no audit.log, real PATH, jq present) are unconditionally
+# satisfied by the SECOND, authoritative check further down the hook (`[ "$TOOL_NAME" = "Skill" ] &&
+# [ "$SKILL" = "commit" ] || exit 0`) regardless of whether the grep pre-filter above it exists at
+# all -- deleting the pre-filter is invisible to CO9 as written, so its plant pinned nothing (rule 2).
+# The pre-filter's only externally observable effect is which side of `command -v jq` a non-"commit"
+# call exits on, which shows up only when jq is ALSO unavailable -- exactly CO9b below (companion
+# assertion, same PATH-shadow technique CO15(b) uses). CO9 itself keeps no plant of its own now, the
+# same "no single-line mutation of this file reaches it" shape CO-CI and COZ1 already document below.
+#
 # plant: CO10 | user/settings.json | "command": "\"$HOME\"/.claude/hooks/commit-outcome-backstop.sh" | "command": "\"$HOME\"/.claude/hooks/commit-outcome-backstop-DISABLED.sh"
 # plant: CO11 | plugin/scripts/commit-outcome-backstop.sh | completed|step_7_commit|step_e4_commit|step_h5_commit) return 0 ;; | completed|step_e4_commit|step_h5_commit) return 0 ;;
 # plant: CO12 | plugin/scripts/commit-outcome-backstop.sh | -name '*.manifest.yml' -mtime -1 | -name '*.manifest.yml' -mtime -36500
@@ -531,6 +542,44 @@ if [ -z "$CO9_FAIL" ]; then
   ok "CO9 (R-03) skill=interview-driver -> exit 0, empty stdout, no audit file at all"
 else
   bad "CO9 (R-03) failed:$CO9_FAIL"
+fi
+
+# ===========================================================================
+# CO9b (R-03) -- companion to CO9, isolated to the ONE thing the pre-filter (ADR-0168 §D7 step 2)
+# actually does that the SECOND, authoritative skill check further down the hook does not also do:
+# exit BEFORE `command -v jq` is ever reached. CO9 alone cannot see the pre-filter deleted (NOFIRE,
+# see the CORRECTION note above the CO9b plant declaration) because CO9 runs with a real PATH (jq
+# present), so the authoritative check catches skill != "commit" on its own regardless of the
+# pre-filter. Here jq is ALSO made unavailable (PATH shadow, CO15(b)'s own technique: every OTHER
+# interpreter this hook needs is symlinked from its real, `command -v`-resolved path into a fresh
+# stub dir -- never a blank PATH, per the VAR=value cmd trap). With the pre-filter intact, the grep
+# fails to match "commit" and the hook exits at line ~57 before `command -v jq` ever runs, so no
+# audit.log is written at all. With the pre-filter deleted (CO9b's plant), the hook falls through to
+# `command -v jq`, finds it absent, and writes a "jq missing" audit line before exiting -- observable,
+# and exactly what the grep pre-filter is supposed to prevent for a non-"commit" call.
+# ===========================================================================
+STUBDIR_CO9B="$TMP/nobin-co9b"; mkdir -p "$STUBDIR_CO9B"
+for _b in bash cat printf mkdir grep sed awk basename dirname date mv rm mktemp env find head cut; do
+  _p=$(command -v "$_b" 2>/dev/null) && ln -sf "$_p" "$STUBDIR_CO9B/$(basename "$_p")" 2>/dev/null
+done
+ROOT_CO9B=$(make_root_co co9b)
+DIR_CO9B="$TMP/state-co9b"
+PAYLOAD_CO9B=$(payload_co "Skill" "interview-driver" "$ROOT_CO9B" "sess-co9b")
+run_hook "$PAYLOAD_CO9B" "$DIR_CO9B" "$STAGING/plugin" "PATH=$STUBDIR_CO9B"
+RC_CO9B=$(cat "$TMP/hook-rc"); OUT_CO9B=$(cat "$TMP/hook-out")
+CO9B_FAIL=""
+[ "$RC_CO9B" -eq 0 ] || CO9B_FAIL="$CO9B_FAIL
+  exit=$RC_CO9B (expected 0)"
+[ -z "$OUT_CO9B" ] || CO9B_FAIL="$CO9B_FAIL
+  stdout not empty: $OUT_CO9B"
+if [ -f "$DIR_CO9B/audit.log" ]; then
+  CO9B_FAIL="$CO9B_FAIL
+  audit.log was created although skill != commit (jq absent too) -- contents: $(cat "$DIR_CO9B/audit.log")"
+fi
+if [ -z "$CO9B_FAIL" ]; then
+  ok "CO9b (R-03) skill != commit AND jq absent -> pre-filter short-circuits before 'command -v jq' is ever reached, no audit.log written"
+else
+  bad "CO9b (R-03) failed:$CO9B_FAIL"
 fi
 
 # ===========================================================================
