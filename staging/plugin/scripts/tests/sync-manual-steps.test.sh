@@ -353,11 +353,21 @@ esac
 # EXISTING notices (sync-to-claude.sh lines 397/414/432/453/475, confirmed 2026-08-24), so it would
 # match H1's "no" fixture vacuously today, before Task 7 lands, for a reason that has nothing to do
 # with commit-outcome-backstop (rule 1/12: a needle must belong to the mechanism it asserts about
-# and to nothing else). The hook's own filename is not boilerplate — confirmed ZERO occurrences in
-# sync-to-claude.sh today (grep -c "commit-outcome-backstop") and confirmed sync-to-claude.sh never
-# echoes settings.json content back into its dry-run stdout, so a match can only come from Task 7's
-# own new notice text, which must name the hook to tell the operator what entry to add.
-COMMIT_OUTCOME_MARK="commit-outcome-backstop"
+# and to nothing else).
+# NOT the bare hook filename "commit-outcome-backstop" either — corrected 2026-08-24 after the
+# coder flagged the same rule-1/12 collision from an angle this file had not measured: Task 7's own
+# PAIRS entry (sync-to-claude.sh line 206) vendors plugin/scripts/commit-outcome-backstop.sh into
+# hooks/commit-outcome-backstop.sh, and the PAIRS-vendoring dry-run loop unconditionally prints
+# "== NEW: hooks/commit-outcome-backstop.sh" for any fixture $HOME lacking a pre-deployed copy —
+# every H fixture below, since build_home never places that file on disk. A bare-filename needle
+# therefore matches that unrelated listing line regardless of whether the seventh MANUAL STEP
+# notice fires, so H2/H3 could pass or fail for the wrong reason. Match notice-specific text
+# instead, the same idiom the six marks above use ("alongside the ... entry"): confirmed this exact
+# phrase occurs exactly once in sync-to-claude.sh (grep -c), inside Task 7's own NOTE block and
+# nowhere else — not in the PAIRS loop, not in any other notice. Cut before "heartbeat": the NOTE
+# block wraps its parenthetical across a line break ("agentwake\nheartbeat entries)"), and a mark
+# containing a literal space where the source has a newline never matches the captured stdout.
+COMMIT_OUTCOME_MARK="alongside the chain-memory-capture / agentwake"
 
 # H1: not wired (the plain "no" fixture, same on/off shape the six existing marks use) -> fires.
 OUT=$(run_sync "$(build_home h1 no no)")
