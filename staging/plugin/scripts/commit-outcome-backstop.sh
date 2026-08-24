@@ -156,13 +156,13 @@ fi
 while IFS= read -r _m; do
   [ -f "$_m" ] || continue
   _out=$(bash "$CHECKER" "$_m" 2>/dev/null)
-  _token=$(printf '%s' "$_out" | awk '{print $1}')
+  _verdict=$(printf '%s' "$_out" | awk '{print $1}')
   _reason=$(printf '%s' "$_out" | awk '{ $1=""; sub(/^ /,""); print }')
-  [ -z "$_token" ] && _token="COMMIT_OUTCOME_NORUN"
+  [ -z "$_verdict" ] && _verdict="COMMIT_OUTCOME_NORUN"
   [ -z "$_reason" ] && _reason="-"
-  log_audit "$SID" "$_m" "$_token" "$_reason"
-  if [ "$_token" != "COMMIT_OK" ]; then
-    printf 'commit-outcome-backstop: %s -> %s %s (see concept-to-code SKILL.md Step 7.1)\n' "$_m" "$_token" "$_reason"
+  log_audit "$SID" "$_m" "$_verdict" "$_reason"
+  if [ "$_verdict" != "COMMIT_OK" ]; then
+    printf 'commit-outcome-backstop: %s -> %s %s (see concept-to-code SKILL.md Step 7.1)\n' "$_m" "$_verdict" "$_reason"
   fi
 done <"$_kept"
 rm -f "$_kept" 2>/dev/null || true
