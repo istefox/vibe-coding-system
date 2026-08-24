@@ -153,12 +153,38 @@ fi
 # expected outcome of a healthy commit). Anything else -> one stdout report line (manifest path,
 # token, a pointer to Step 7.1 — never restating Step 7.1's own remediation, ADR-0168 §D4) plus one
 # audit line, per manifest.
+#
+# commit-outcome-check.sh is a CHECKER, and this is its call site (rule 5, ADR-0168 §D4, and the
+# checker's own header): the CLASSIFICATION IS DRIVEN BY ITS EXIT CODE — 0 COMMIT_OK, 1 not-OK,
+# 3 did-not-run — never by whether its stdout happens to start with a matching prefix. Its stdout is
+# read for two things only, both of them human-readable text: the qualifier that distinguishes
+# UNCOMMITTED from NONTERMINAL within the single exit-1 bucket, and the trailing reason string. A
+# checker whose stdout is mangled or empty still classifies correctly here; one whose exit code and
+# stdout disagree is classified by the exit code, which is the authority. The other caller (the
+# `c2c-step7-commit-outcome` fence in SKILL.md) does the same thing in its own idiom: `bash "$_check"
+# <manifest>; exit $?`.
 while IFS= read -r _m; do
   [ -f "$_m" ] || continue
-  _out=$(bash "$CHECKER" "$_m" 2>/dev/null)
-  _verdict=$(printf '%s' "$_out" | awk '{print $1}')
+  _out=$(bash "$CHECKER" "$_m" 2>/dev/null); _rc=$?
+  # Flattened copy, for the two off-contract paths below that quote the raw stdout into what must
+  # stay ONE tab-separated audit line: a checker printing a newline or a tab must not forge a second
+  # record or shift the fields of this one.
+  _flat=$(printf '%s' "$_out" | tr '\n\t' '  ')
+  _token=$(printf '%s' "$_out" | awk '{print $1}')
   _reason=$(printf '%s' "$_out" | awk '{ $1=""; sub(/^ /,""); print }')
-  [ -z "$_verdict" ] && _verdict="COMMIT_OUTCOME_NORUN"
+  case "$_rc" in
+    0) _verdict="COMMIT_OK" ;;
+    1) case "$_token" in
+         COMMIT_UNCOMMITTED|COMMIT_NONTERMINAL) _verdict="$_token" ;;
+         # Exit 1 with an unreadable qualifier: the check RAN and said not-OK, so it must not be
+         # folded into NORUN (rule 4, in the other direction) and must not be guessed into one of the
+         # two real qualifiers either — that would invent a cause. Report the bucket, carry the raw
+         # stdout as the reason.
+         *) _verdict="COMMIT_NOT_OK"; _reason="unqualified checker output: ${_flat:-(empty)}" ;;
+       esac ;;
+    3) _verdict="COMMIT_OUTCOME_NORUN" ;;
+    *) _verdict="COMMIT_OUTCOME_NORUN"; _reason="checker exited $_rc: ${_flat:-(empty)}" ;;
+  esac
   [ -z "$_reason" ] && _reason="-"
   log_audit "$SID" "$_m" "$_verdict" "$_reason"
   if [ "$_verdict" != "COMMIT_OK" ]; then
