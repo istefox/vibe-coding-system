@@ -58,7 +58,7 @@
 # verifiable TODAY, unlike CO9-CO17 below. Both needles verified unique (grep -c == 1) against the
 # live file, 2026-08-24.
 #
-# plant: CO7 | plugin/skills/concept-to-code/SKILL.md | bash "$_check" "<manifest-path>" | git -C "$(dirname "<manifest-path>")" status --porcelain -- "$(basename "<manifest-path>")"
+# plant: CO7 | plugin/skills/concept-to-code/SKILL.md | bash "$_check" "<manifest-path>" | git status --porcelain -- "<manifest-path>"
 # plant: CO8 | plugin/skills/concept-to-code/SKILL.md | _check="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/commit-outcome-check.sh" | _check="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/commit-outcome-check-WRONG.sh"
 #
 # CO9-CO17 target staging/plugin/scripts/commit-outcome-backstop.sh, which Task 6 creates. Unlike
