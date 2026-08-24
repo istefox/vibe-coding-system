@@ -1,5 +1,8 @@
 # Proposal C4 — PostToolUse backstop hook for Step 7.1 (commit outcome)
 
+> **Superseded by ADR-0168** (docs/architecture/ADR-0168-commit-outcome-backstop-hook.md) — kept for
+> provenance; the ADR is authoritative.
+
 Status: proposal, not yet implemented. Written 2026-08-23 after a live incident in the Adnota
 project. Target for implementation: this repo (vibe-coding-system), since `concept-to-code`'s
 `SKILL.md` and the hook layer live here, not in the consuming project.

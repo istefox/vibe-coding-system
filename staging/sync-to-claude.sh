@@ -477,6 +477,26 @@ deployed but never invoked, and the session-preservation half of this feature do
 NOTE
 fi
 
+if ! grep -q 'commit-outcome-backstop' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this PostToolUse entry to ~/.claude/settings.json (alongside the chain-memory-capture / agentwake
+heartbeat entries):
+
+  { "matcher": "Skill",
+    "hooks": [ { "type": "command", "command": "\"$HOME\"/.claude/hooks/commit-outcome-backstop.sh" } ] }
+
+commit-outcome-backstop (2026-08-23-commit-outcome-backstop-hook, ADR-0168) reads Step 7.1's
+classification of a manifest's commit outcome a second time, independent of the orchestrator
+following the SKILL.md instruction to run it. It is report-only — it never blocks — and inert
+outside a project with docs/manifests/: a manifest more than 24h old, or not sitting at a
+commit-stage current_step, never triggers a report. Until this entry exists the hook is deployed
+but never invoked.
+NOTE
+fi
+
 # baseRef: gated on the parsed JSON value, not a key-presence grep — a present-but-wrong value
 # ("fresh") must fire exactly like an absent key, so a grep for the key name alone would silently
 # pass the case that matters most (ADR-0068 §D1, issue #176). Fail-safe direction is to print: a
