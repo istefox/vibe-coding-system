@@ -466,6 +466,34 @@ fi
 [ -n "$OWN_NUM" ] && OWN_KEYS="${OWN_KEYS}|#${OWN_NUM}"
 OWN_RE="(^|[^A-Za-z0-9_])(${OWN_KEYS})([^A-Za-z0-9_]|\$)"
 
+# --- VCS-035 — a NEGATIVE, LINE-granular filter inside grep_boundary_test() below. The file-level
+# scope classification above ($OWN_RE, $FOREIGN_CLAIMED, $TESTFILES_UNCLAIMED) is UNCHANGED — a file
+# is still admitted to scope as a WHOLE (ADR-0138/0154/0157). What changes is which MATCHING LINE
+# inside an in-scope file may be read as coverage of THIS feature's R-NN: a file that legitimately
+# belongs to this feature can still carry an isolated comment about a DIFFERENT feature (its own
+# issue number, or, for an issue-less feature, its own ADR — measured 2026-08-24: 63% of discovered
+# test files cite more than one feature's `#<n>`).
+#
+# Token of claim on a line: "#<n>" (the same marker used for file-level classification above) OR
+# "ADR-NNNN" — an issue-less feature has no "#<n>" to sign a line with, and its only possible
+# signature in a comment is its own ADR.
+CLAIM_LINE_RE='(^|[^A-Za-z0-9_])(#[0-9][0-9]*|ADR-[0-9][0-9][0-9][0-9])([^0-9]|$)'
+
+# Own-key set, EXTENDED, for the line filter ONLY: on top of $OWN_KEYS (plan basename, #<issue>),
+# also every ADR-NNNN THIS FEATURE'S OWN PLAN cites ($BACKREF_ADRS_UNIQ, already computed above for
+# $BACKREF_RE). Deliberately a SEPARATE variable from $OWN_RE: $OWN_RE governs the file-level
+# classification above and must NOT be widened there — measured (comment above $OWN_KEYS) that an
+# ADR-based key set there would admit 39-61 files per feature instead of 1-11. $OWN_LINE_RE is
+# consumed ONLY by grep_boundary_test() below.
+OWN_LINE_KEYS="$OWN_KEYS"
+if [ -s "$BACKREF_ADRS_UNIQ" ]; then
+  while IFS= read -r _own_adr; do
+    [ -n "$_own_adr" ] || continue
+    OWN_LINE_KEYS="${OWN_LINE_KEYS}|${_own_adr}"
+  done <"$BACKREF_ADRS_UNIQ"
+fi
+OWN_LINE_RE="(^|[^A-Za-z0-9_])(${OWN_LINE_KEYS})([^A-Za-z0-9_]|\$)"
+
 # --- scope filter (ADR-0138 §D1-§D3, issue #312; ADR-0154 §D1 narrows it further): the test axis is
 # narrowed to the test files the PLAN itself names, not the whole discovered population above.
 #
@@ -634,10 +662,25 @@ HALF2_DROPPED_N=$(count_re . "$HALF2_DROPPED")
 OWNED_N=$(count_re . "$TESTFILES_OWNED")
 UNSCOPED_POP_N=$(count_re . "$UNSCOPED_POP")
 
+# A file is admitted to scope as a WHOLE (ADR-0138/0154) but a single R-NN token inside it is not
+# automatically this feature's (VCS-035). A matching LINE that carries a foreign claim token
+# ($CLAIM_LINE_RE — "#<n>" or "ADR-NNNN") and does NOT carry an own-key ($OWN_LINE_RE) on that same
+# line is not coverage — it is another feature's requirement id, quoted inside a file that happens
+# to belong to this one too. A line carrying BOTH (the RZ2 shape: "carried over from issue #999, now
+# this feature's own harness, see <plan-basename>") is KEPT: ownership beats a foreign claim at line
+# granularity exactly as it already does at file granularity. A line carrying NO claim token at all
+# is KEPT unconditionally — the ordinary case, 864 of 972 R-NN mentions in this repo (measured
+# 2026-08-24), which is why a same-line-STRICT design (require an own-key on every covering line)
+# was rejected: it would have discarded that majority.
 grep_boundary_test() {
   _id="$1"
   [ -s "$TESTFILES_SCOPED" ] || return 1
-  tr '\n' '\0' <"$TESTFILES_SCOPED" | xargs -0 grep -qE "(^|[^A-Za-z0-9_])${_id}([^0-9]|\$)" 2>/dev/null
+  _gbt_lines=$(tr '\n' '\0' <"$TESTFILES_SCOPED" \
+    | xargs -0 grep -hE "(^|[^A-Za-z0-9_])${_id}([^0-9]|\$)" 2>/dev/null)
+  [ -n "$_gbt_lines" ] || return 1
+  printf '%s\n' "$_gbt_lines" | grep -vE "$CLAIM_LINE_RE" | grep -q '[^[:space:]]' && return 0
+  printf '%s\n' "$_gbt_lines" | grep -E "$CLAIM_LINE_RE" | grep -qE "$OWN_LINE_RE" && return 0
+  return 1
 }
 
 # The unscoped counterpart — reads $UNSCOPED_POP, the half-1 ∪ owned union built above: every
@@ -650,6 +693,14 @@ grep_boundary_test() {
 # of half-true name a later reader trusts. Both halves of the answer now come from files that claim
 # this feature, so the two verdicts finally mean what their remedies say — UNSCOPED "this feature has
 # a test for it, name the file in your plan", UNCOVERED "no test of this feature mentions it".
+#
+# VCS-035 — deliberately NOT given the line filter grep_boundary_test() above carries. Two reasons.
+# First, membership: RZ3 pins that half-1 (the plan names the file) is UNCONDITIONAL — filtering
+# here would drop a file from $UNSCOPED_POP for a line-level reason, which changes MEMBERSHIP, not
+# just a verdict, and breaks that guarantee. Second, harm: this helper only decides UNSCOPED vs.
+# UNCOVERED, and both already mean "not proven" — there is no false-COVERED here to correct, so
+# filtering buys no correctness on the axis VCS-035 exists to fix, only a smaller blast radius to
+# manage for no gain.
 grep_boundary_test_claimed() {
   _id="$1"
   [ -s "$UNSCOPED_POP" ] || return 1
