@@ -189,7 +189,7 @@ holds no in-scope manifest at all:
 
 ```text
 <ISO-8601-Z>\t<session_id>\t<manifest-path>\t<classification>\t<reason>
-2026-08-23T19:41:07Z	abc123	-	CLEAN	no in-scope manifest in the 24h window under /Users/…
+2026-08-23T19:41:07Z\tabc123\t-\tCLEAN\tno in-scope manifest in the 24h window under /Users/…
 ```
 
 **Stdout remains empty on the clean path.** The SPEC's "zero transcript noise" requirement is
