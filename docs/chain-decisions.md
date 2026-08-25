@@ -4905,3 +4905,37 @@ Key architectural decisions:
   `sync-to-claude.sh` prints a gated MANUAL STEP notice; it does not write the file itself.
 
 Detail: `docs/architecture/ADR-0168-commit-outcome-backstop-hook.md`.
+
+## Decisions from the issue-less SPEC coverage and line-granular claim fix (ADR-0169)
+
+Two bugs in `spec-coverage.sh` / `spec-coverage-baseline-rows.sh`, both surfaced by
+`commit-outcome-backstop-hook` (PR #509), an issue-less feature: `do_pair()` could not resolve an
+issue-less SPEC's fallback slug (VCS-034), and file-level claim classification let one feature's
+stray `R-NN` mention launder into another feature's coverage (VCS-035).
+
+Key architectural decisions:
+- **`do_pair()`'s fallback-slug stripping becomes conditional.** The unconditional
+  `_p_rest=${_p_bn#*-}` now only strips the first hyphen segment when the digit check confirms it
+  really is the issue-number prefix; an issue-less SPEC's fallback slug is its whole basename,
+  unmutilated. Rolled out in two commits (code fix, then `--bump`) so the corpus growth it enables
+  is measured and attributable, not an unmeasured side effect (a prior single-commit attempt,
+  `ba1cba6`, was reverted for exactly that reason).
+- **A line-granular NEGATIVE filter, added inside `grep_boundary_test()` only** — `OWN_RE`'s
+  file-level classification (ADR-0157) is untouched. A new `OWN_LINE_RE` recognizes `ADR-NNNN` as
+  a claim token in addition to `#<n>`, but only at line granularity: a line carrying a foreign
+  claim and no own-key is discarded, a line carrying both or neither is kept. Measured against the
+  full frozen corpus before shipping: 0 verdict flips across 154 rows, 19 pairs.
+- **The naive extension (recognizing `ADR-NNNN` without widening the own-key set) was measured and
+  rejected** — it would have marked 108 of 972 `R-NN` lines as claim-bearing (up from 32), 76 of
+  them a feature legitimately citing its own ADR, the exact failure this fix exists to close,
+  inverted.
+- **`grep_boundary_test_claimed()` stays deliberately unfiltered** — filtering it would make
+  `UNSCOPED_POP` membership depend on a line-level reason, breaking `RZ3`'s pinned unconditional
+  half-1 guarantee, for no correctness gain (`UNSCOPED` and `UNCOVERED` both already mean "not
+  proven").
+
+Filed as ADR-0168 on 2026-08-25, one day after `ADR-0168-commit-outcome-backstop-hook.md`
+(2026-08-24, PR #509) had already taken that number — a collision found by `project-tasks`' own
+scan, not by either PR's review (`VCS-040`). Renumbered to ADR-0169 on discovery.
+
+Detail: `docs/architecture/ADR-0169-spec-coverage-issue-less-and-line-granularity.md`.

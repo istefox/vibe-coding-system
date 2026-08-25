@@ -1,4 +1,4 @@
-# ADR-0168 — an issue-less SPEC resolves, and a claimed file's own R-NN is not every feature's
+# ADR-0169 — an issue-less SPEC resolves, and a claimed file's own R-NN is not every feature's
 
 - **Topic slug:** `spec-coverage-issue-less-and-line-granularity`
 - **Issue:** none — found while implementing `commit-outcome-backstop-hook` (PR #509), itself an
@@ -167,3 +167,9 @@ rule 14's per-row accounting).
 - `TODO.md` — `VCS-034`, `VCS-035`
 - Reverted attempt: commit `ba1cba6` on `feat/commit-outcome-backstop-hook` (PR #509) — VCS-034
   fixed alone, unmeasured blast radius, reverted
+
+> **Correction (2026-08-25, VCS-040):** filed as ADR-0168 on 2026-08-25, one day after
+> `ADR-0168-commit-outcome-backstop-hook.md` (2026-08-24, PR #509) had already taken that number —
+> a collision found by `project-tasks`' scan, not by either PR's review. Renumbered to ADR-0169;
+> the filename and title above carry the corrected number, this note is the only place the
+> original mistaken number is recorded.
