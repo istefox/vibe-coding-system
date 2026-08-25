@@ -125,7 +125,17 @@ do_pair() {
   _p_bn=$(basename "$_p_spec")
   _p_n=${_p_bn%%-*}
   case "$_p_n" in ''|*[!0-9]*) _p_n="" ;; esac
-  _p_rest=${_p_bn#*-}
+  # VCS-034: the first hyphen-separated segment is stripped ONLY when it was actually the numeric
+  # issue-number prefix. An issue-less SPEC (e.g. spec-coverage-scope-back-reference.spec.md) has
+  # no such segment — _p_n is cleared above — and stripping "spec" anyway built the mutilated
+  # fallback slug "coverage-scope-back-reference", which the glob below can never match against
+  # the real plan (…-spec-coverage-scope-back-reference.md). The pair then resolved to nothing and
+  # the SPEC left the RS_PAIRS corpus silently (spec-coverage.test.sh's own skip-on-empty).
+  if [ -n "$_p_n" ]; then
+    _p_rest=${_p_bn#*-}
+  else
+    _p_rest=$_p_bn
+  fi
   _p_slug=${_p_rest%.spec.md}
   _p_plan=""
   if [ -n "$_p_n" ]; then
