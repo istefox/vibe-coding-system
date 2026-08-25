@@ -183,6 +183,7 @@ plugin/scripts/agent-write-scope.sh|hooks/agent-write-scope.sh
 plugin/scripts/agent-command-scope.sh|hooks/agent-command-scope.sh
 plugin/scripts/test-write-scope.sh|hooks/test-write-scope.sh
 plugin/scripts/db-backup-guardrail.sh|hooks/db-backup-guardrail.sh
+plugin/scripts/worktree-git-guardrail.sh|hooks/worktree-git-guardrail.sh
 plugin/scripts/approve-test-cmd.sh|hooks/approve-test-cmd.sh
 plugin/scripts/approve-acceptance-cmd.sh|hooks/approve-acceptance-cmd.sh
 plugin/scripts/acceptance-run.sh|hooks/acceptance-run.sh

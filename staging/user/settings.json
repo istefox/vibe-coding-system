@@ -2,6 +2,7 @@
   "env": {
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50",
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1",
     "ENABLE_CLAUDEAI_MCP_SERVERS": "false"
   },
   "attribution": {
@@ -216,6 +217,15 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/autopilot-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/worktree-git-guardrail.sh"
           }
         ]
       }
