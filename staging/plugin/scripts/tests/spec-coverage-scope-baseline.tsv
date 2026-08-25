@@ -116,6 +116,26 @@
 # rows"), which understated the row count by an order of magnitude: 16 is the pair count, not the
 # row count.
 #
+# 2026-08-24 — CORPUS GROWTH (VCS-034, do_pair()'s issue-less SPEC resolution bug). do_pair()'s
+# fallback slug stripped the first hyphen segment of a SPEC's basename UNCONDITIONALLY, even when
+# that segment was not the numeric issue prefix. An issue-less SPEC built a mutilated fallback
+# slug that never matched its real plan, so the pair silently never resolved and the SPEC never
+# entered RS_PAIRS. Fixed in do_pair() (spec-coverage-baseline-rows.sh) to strip only when the
+# first segment is actually numeric. Two previously-excluded issue-less SPECs now resolve and
+# their rows are appended below via --bump (pure append, verified: `git diff -U0` shows 0 removed
+# or modified lines).
+#
+# PER-PAIR ACCOUNTING (re-derived via --rows before bumping, CLAUDE.md rule 13):
+#   spec-coverage-scope-back-reference.spec.md — 12 rows, all COVERED (R-01..R-12).
+#   project-tasks-vendored-bilateral-ledger.spec.md — 24 rows, 21 COVERED, 3 UNCOVERED
+#     (R-16, R-17, R-21).
+# RE-DERIVED STATE, same day: 21 (spec, plan) pairs, 190 baseline rows (154 + 36). NO EXISTING ROW
+# WAS TOUCHED — every new row is a pure append from --bump, never hand-written. The two new
+# UNCOVERED rows below carry only the 3-column form --bump/--rows always writes (verdict, no
+# class/reason) — RS7/RS8 read only the first 3 columns (spec, id, verdict), so this is
+# functionally complete; the class/reason columns on older rows are hand-added documentation from
+# earlier manual freezes, not a requirement of the format.
+#
 # NO ARCHIVED SPEC IS EDITED FOR THIS FILE (CLAUDE.md rule 14, ADR-0138 §D5). Retro-fitting
 # `(no-test: ...)` into the 4 completed SPECs behind the not-test-assertable rows below would
 # correct a historical record in place. This file is a new record ABOUT that corpus, written
@@ -323,3 +343,39 @@
 400-autopilot-disarm-scope-unbounded.spec.md	R-06	COVERED
 400-autopilot-disarm-scope-unbounded.spec.md	R-07	COVERED
 400-autopilot-disarm-scope-unbounded.spec.md	R-08	COVERED
+spec-coverage-scope-back-reference.spec.md	R-01	COVERED
+spec-coverage-scope-back-reference.spec.md	R-02	COVERED
+spec-coverage-scope-back-reference.spec.md	R-03	COVERED
+spec-coverage-scope-back-reference.spec.md	R-04	COVERED
+spec-coverage-scope-back-reference.spec.md	R-05	COVERED
+spec-coverage-scope-back-reference.spec.md	R-06	COVERED
+spec-coverage-scope-back-reference.spec.md	R-07	COVERED
+spec-coverage-scope-back-reference.spec.md	R-08	COVERED
+spec-coverage-scope-back-reference.spec.md	R-09	COVERED
+spec-coverage-scope-back-reference.spec.md	R-10	COVERED
+spec-coverage-scope-back-reference.spec.md	R-11	COVERED
+spec-coverage-scope-back-reference.spec.md	R-12	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-01	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-02	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-03	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-04	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-05	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-06	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-07	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-08	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-09	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-10	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-11	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-12	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-13	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-14	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-15	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-16	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-17	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-18	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-19	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-20	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-21	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-22	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-23	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-24	COVERED

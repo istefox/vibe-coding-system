@@ -1910,8 +1910,15 @@ cat >"$TMP/rz4-plan.md" <<'EOF'
 ### Task 1 — do thing (R-01)
 No test file is named anywhere in this plan.
 EOF
+# VCS-035: the file-level claim (#999, for FOREIGN_CLAIMED classification) and the R-01 mention are
+# on SEPARATE lines on purpose. If R-01's own line carried "#999" too, the VCS-035 line filter added
+# below would independently discard it, making RZ4's own plant (which bypasses SCOPE-FOREIGN-ONLY,
+# not the line filter) fire on nothing — a defense-in-depth interaction, not a bug, but it would
+# silently stop pinning what RZ4 exists to pin (measured: this exact split was needed to keep RZ4's
+# plant live once VCS-035 landed).
 cat >"$TMP/rz4-tests/beta.test.sh" <<'EOF'
-# covers R-01 (issue #999)
+# issue #999
+# covers R-01
 EOF
 # RZ4 and RZ4b pin two different mechanisms and their plants say which. RZ4's verdict rests on the
 # refusal branch actually REFUSING to fall back — its plant leaves the branch's own detection and
@@ -1956,6 +1963,135 @@ if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$" && p
   ok "RZ5 (forward guard): an unclaimed discovered file still reaches the SCOPE-EMPTY fallback and still reports COVERED, exit 0 — ADR-0157 narrows the fallback population without removing the fallback"
 else
   bad "RZ5: expected exit 0 + COVERED R-01 + SCOPE-EMPTY on stderr — got rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
+# ==================================================================================================
+# RZ6-RZ10 — VCS-035, the LINE-granular gap the file-level classification above (RZ1-RZ5) does not
+# close: a file legitimately IN SCOPE for this feature can still carry an isolated comment about a
+# DIFFERENT feature, and the old checker read any R-NN token anywhere in an in-scope file as this
+# feature's coverage. Measured on the real corpus (2026-08-24): 63% of discovered test files cite
+# more than one feature's `#<n>`, so this is the norm, not an edge case.
+# ==================================================================================================
+
+# RZ6 — a matching line carries a FOREIGN claim token (#999) and no own-key on that same line, in a
+# file otherwise in scope (it names the plan back). Pre-fix (verified against the unfixed checker):
+# this exact fixture reported COVERED, exit 0 — a false green on a stranger's requirement id living
+# two lines from this feature's own citation.
+mkdir -p "$TMP/rz6-tests"
+cat >"$TMP/rz6.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz6-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh.
+EOF
+cat >"$TMP/rz6-tests/alpha.test.sh" <<'EOF'
+# names the plan back: rz6-plan.md
+# covers R-01 — this belongs to issue #999, not this feature
+EOF
+# plant: RZ6 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | grep -qE "$OWN_LINE_RE" && return 0 | grep -qE "." && return 0
+run_scov --spec "$TMP/rz6.spec.md" --plan "$TMP/rz6-plan.md" --tests-root "$TMP/rz6-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RZ6 (VCS-035): a matching line carrying a foreign claim (#999) and no own-key on that line is not coverage -> UNSCOPED	R-01	1, exit 1. Pre-fix this exact fixture reported COVERED, exit 0."
+else
+  bad "RZ6: expected exit 1 + UNSCOPED R-01 1 (a foreign-claimed LINE inside an in-scope file is not this feature's coverage) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ7 — positive twin (CLAUDE.md rule 8, same shape as RZ2 but at line granularity): the SAME foreign
+# #999 claim, but the own-key (the plan's own basename) sits on the SAME line. Ownership wins over a
+# foreign claim at line granularity exactly as it already does at file granularity (RZ2).
+mkdir -p "$TMP/rz7-tests"
+cat >"$TMP/rz7.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz7-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh.
+EOF
+cat >"$TMP/rz7-tests/alpha.test.sh" <<'EOF'
+# covers R-01 — carried over from issue #999, now this feature's own harness, see rz7-plan.md
+EOF
+# plant: RZ7 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | grep -qE "$OWN_LINE_RE" && return 0 | grep -qE "NEVERMATCH_RZ7" && return 0
+run_scov --spec "$TMP/rz7.spec.md" --plan "$TMP/rz7-plan.md" --tests-root "$TMP/rz7-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
+  ok "RZ7 (positive twin of RZ6, CLAUDE.md rule 8): a line carrying BOTH a foreign claim and this feature's own-key -> COVERED, exit 0. Without this twin, RZ6 is satisfiable by a filter that discards every claim-bearing line regardless of ownership."
+else
+  bad "RZ7: expected exit 0 + COVERED R-01 (own-key on the same line as the foreign claim beats it) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ8 — non-regression guard: a matching line with NO claim token at all (the ordinary case, 864 of
+# 972 R-NN mentions in this repo) is kept unconditionally. This is the assertion a same-line-STRICT
+# design (require an own-key on every covering line) would have failed.
+mkdir -p "$TMP/rz8-tests"
+cat >"$TMP/rz8.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz8-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh.
+EOF
+cat >"$TMP/rz8-tests/alpha.test.sh" <<'EOF'
+# names the plan back: rz8-plan.md
+# covers R-01
+EOF
+run_scov --spec "$TMP/rz8.spec.md" --plan "$TMP/rz8-plan.md" --tests-root "$TMP/rz8-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
+  ok "RZ8 (forward guard): a matching line with no claim token at all is kept unconditionally — the ordinary case a same-line-strict design would have broken"
+else
+  bad "RZ8: expected exit 0 + COVERED R-01 (an unclaimed line is always coverage) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ9 — the case that actually motivated VCS-035: an issue-less feature has no "#<n>" to sign a line
+# with, so its only possible signature in a comment is its own ADR. A matching line citing an ADR the
+# PLAN UNDER TEST does not cite, and no own-key otherwise, is a foreign claim by another means. Pre-fix
+# (verified): this exact fixture reported COVERED, exit 0.
+mkdir -p "$TMP/rz9-tests"
+cat >"$TMP/rz9.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz9-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh. See ADR-1001 for background.
+EOF
+cat >"$TMP/rz9-tests/alpha.test.sh" <<'EOF'
+# names the plan back: rz9-plan.md
+# covers R-01 — see ADR-2002 for the original design
+EOF
+# plant: RZ9 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | CLAIM_LINE_RE='(^|[^A-Za-z0-9_])(#[0-9][0-9]*|ADR-[0-9][0-9][0-9][0-9])([^0-9]|$)' | CLAIM_LINE_RE='(^|[^A-Za-z0-9_])(#[0-9][0-9]*)([^0-9]|$)'
+run_scov --spec "$TMP/rz9.spec.md" --plan "$TMP/rz9-plan.md" --tests-root "$TMP/rz9-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RZ9 (VCS-035, the motivating case): a line citing an ADR the plan under test does NOT cite, and no own-key otherwise, is a foreign claim -> UNSCOPED	R-01	1, exit 1. Pre-fix this exact fixture reported COVERED, exit 0 — the false green an issue-less feature's stray ADR mention produces in another feature's coverage."
+else
+  bad "RZ9: expected exit 1 + UNSCOPED R-01 1 (a foreign ADR claim on the line is not this feature's coverage) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ10 — positive twin of RZ9 (CLAUDE.md rule 8): the SAME ADR, but this feature's OWN plan cites it.
+# Verifies the extension does not break a feature that legitimately cites its own ADR — the failure
+# mode of the naive "any ADR-NNNN is a foreign claim" design that was measured and rejected (76 of 972
+# R-NN mentions in the repo carry the file's own ADR with no other own-key on the line).
+mkdir -p "$TMP/rz10-tests"
+cat >"$TMP/rz10.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz10-plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh. See ADR-3003 for background.
+EOF
+cat >"$TMP/rz10-tests/alpha.test.sh" <<'EOF'
+# names the plan back: rz10-plan.md
+# covers R-01 — see ADR-3003 for the original design
+EOF
+# plant: RZ10 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | OWN_LINE_KEYS="${OWN_LINE_KEYS}|${_own_adr}" | :
+run_scov --spec "$TMP/rz10.spec.md" --plan "$TMP/rz10-plan.md" --tests-root "$TMP/rz10-tests"
+if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
+  ok "RZ10 (positive twin of RZ9, CLAUDE.md rule 8): a line citing an ADR THIS feature's own plan also cites -> COVERED, exit 0. Without this twin, RZ9 is satisfiable by a filter that discards every ADR-bearing line regardless of ownership — the rejected naive design."
+else
+  bad "RZ10: expected exit 0 + COVERED R-01 (own-plan ADR citation on the line beats the generic ADR filter) — got rc=$RC out=[$OUT]"
 fi
 
 echo "----"
