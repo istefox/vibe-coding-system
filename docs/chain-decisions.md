@@ -4880,3 +4880,28 @@ Key architectural decisions:
   mid-run — two call sites, opposite policies on one state, both right (rule 11).
 
 Detail: `docs/architecture/ADR-0167-400-autopilot-disarm-scope-unbounded.md`.
+
+## Decisions from the PostToolUse backstop hook for Step 7.1 commit-outcome verification chain (ADR-0168)
+
+Report-only `PostToolUse` hook that gives Step 7.1's commit-outcome classification (rule 16: an
+instruction is not an enforcement) a second, mechanical caller: `~/.claude/skills/concept-to-code/scripts/commit-outcome-check.sh`.
+
+Key architectural decisions:
+- **The classification is extracted once, called from two places.** `SKILL.md` Step 7.1's inline
+  fence and the new hook both call `commit-outcome-check.sh` (rule 6: extract only when two copies
+  giving different answers would be a defect — here they would).
+- **The population is mtime window AND commit-stage-or-terminal `current_step`, not the SPEC's
+  narrower two disjuncts.** The SPEC's own R-04 fixture (`current_step: step_7_commit`, `status:
+  in_progress`) would fail its own filter as literally written; the ADR widens it to also match
+  each chain path's commit-stage state, read from `manifest-transition.sh`'s own graph.
+- **A `CLEAN` audit-log line is written on every matched invocation, even when nothing stale is
+  found.** Stdout stays silent (zero transcript noise). Without this, a correctly-firing hook is
+  indistinguishable on disk from a hook the matcher never fires for — the exact failure already
+  shipped once as `nightly-guard.sh` (ADR-0127).
+- **The `Skill` hook matcher is undocumented and may not fire.** Shipped as specified anyway (the
+  SPEC requires `"matcher": "Skill"`), with the hook re-checking `tool_name` itself so the fallback
+  (`.*` matcher, filtering inside the hook) is a one-line settings change, not a correctness change.
+- **`~/.claude/settings.json` registration is a machine-local, human-edited step, never vendored** —
+  `sync-to-claude.sh` prints a gated MANUAL STEP notice; it does not write the file itself.
+
+Detail: `docs/architecture/ADR-0168-commit-outcome-backstop-hook.md`.

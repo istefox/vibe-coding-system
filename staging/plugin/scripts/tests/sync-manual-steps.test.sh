@@ -51,8 +51,11 @@ BASEREF_MARK="worktree forks from the default branch and the chain's Step 5 pre-
 # all-clear assertion breaks the moment sync-to-claude.sh's new notice exists (this caught
 # ADR-0049 too — see the comment on issue #87 above). worktree.baseRef (issue #176, ADR-0068
 # Task 5) is the same kind of contract change: the "yes" fixture's settings.json must also carry
-# "worktree":{"baseRef":"head"}, or A3 breaks the moment the baseRef notice exists. Whoever adds
-# the next notice: extend build_home's "yes" fixture to represent it as wired too, or A3 rots
+# "worktree":{"baseRef":"head"}, or A3 breaks the moment the baseRef notice exists.
+# commit-outcome-backstop (2026-08-23-commit-outcome-backstop-hook, ADR-0168 Task 7, R-03) is the
+# same kind of contract change again: the "yes" fixture must also carry a PostToolUse/Skill entry
+# naming commit-outcome-backstop.sh, or A3 breaks the moment that seventh notice exists. Whoever
+# adds the next notice: extend build_home's "yes" fixture to represent it as wired too, or A3 rots
 # again.
 
 # build_home <name> <wired:yes|no|nofile> <retired:yes|no> — returns the fixture HOME path.
@@ -60,7 +63,7 @@ BASEREF_MARK="worktree forks from the default branch and the chain's Step 5 pre-
 build_home() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   case "$2" in
-    yes) printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
+    yes) printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     no)  printf '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     nofile) : ;;
   esac
@@ -87,7 +90,7 @@ build_home_br() {
     correct) _wt='"worktree":{"baseRef":"head"},' ;;
   esac
   case "$2" in
-    yes) _hooks='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}' ;;
+    yes) _hooks='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}' ;;
     no)  _hooks='{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}' ;;
   esac
   printf '{%s"hooks":%s}\n' "$_wt" "$_hooks" > "$_h/.claude/settings.json"
@@ -338,6 +341,64 @@ OUT=$(run_sync "$(build_home_skills g2 commit agent-design)")
 case "$OUT" in
   *"$REPORT_MARK"*) bad "G2: report block appeared although every deployed skill is vendored or declared" ;;
   *) ok "G2: report block absent when every deployed skill is vendored or declared" ;;
+esac
+
+# =====================================================================================
+# H. commit-outcome-backstop MANUAL STEP notice (2026-08-23-commit-outcome-backstop-hook,
+# ADR-0168 Task 7, R-03). Gated on `grep -q 'commit-outcome-backstop' "$DEST/settings.json"` per
+# the plan's own Task 7 bullet. RED until Task 7 adds the seventh MANUAL STEP block to
+# sync-to-claude.sh — this section documents the CONTRACT the coder must satisfy; the assertions
+# below are not weakened to pass early, per this file's own subject.
+# NOT "deployed but never invoked" -- that exact phrase is already boilerplate shared by several
+# EXISTING notices (sync-to-claude.sh lines 397/414/432/453/475, confirmed 2026-08-24), so it would
+# match H1's "no" fixture vacuously today, before Task 7 lands, for a reason that has nothing to do
+# with commit-outcome-backstop (rule 1/12: a needle must belong to the mechanism it asserts about
+# and to nothing else).
+# NOT the bare hook filename "commit-outcome-backstop" either — corrected 2026-08-24 after the
+# coder flagged the same rule-1/12 collision from an angle this file had not measured: Task 7's own
+# PAIRS entry (sync-to-claude.sh line 206) vendors plugin/scripts/commit-outcome-backstop.sh into
+# hooks/commit-outcome-backstop.sh, and the PAIRS-vendoring dry-run loop unconditionally prints
+# "== NEW: hooks/commit-outcome-backstop.sh" for any fixture $HOME lacking a pre-deployed copy —
+# every H fixture below, since build_home never places that file on disk. A bare-filename needle
+# therefore matches that unrelated listing line regardless of whether the seventh MANUAL STEP
+# notice fires, so H2/H3 could pass or fail for the wrong reason. Match notice-specific text
+# instead, the same idiom the six marks above use ("alongside the ... entry"): confirmed this exact
+# phrase occurs exactly once in sync-to-claude.sh (grep -c), inside Task 7's own NOTE block and
+# nowhere else — not in the PAIRS loop, not in any other notice. Cut before "heartbeat": the NOTE
+# block wraps its parenthetical across a line break ("agentwake\nheartbeat entries)"), and a mark
+# containing a literal space where the source has a newline never matches the captured stdout.
+COMMIT_OUTCOME_MARK="alongside the chain-memory-capture / agentwake"
+
+# H1: not wired (the plain "no" fixture, same on/off shape the six existing marks use) -> fires.
+OUT=$(run_sync "$(build_home h1 no no)")
+case "$OUT" in
+  *"$COMMIT_OUTCOME_MARK"*) ok "H1: commit-outcome-backstop notice printed when unwired" ;;
+  *) bad "H1: commit-outcome-backstop notice did not print for an unwired settings.json" ;;
+esac
+
+# H2: wired (the "yes" fixture, now extended above to include the Skill/commit-outcome-backstop.sh
+# entry) -> suppressed.
+OUT=$(run_sync "$(build_home h2 yes no)")
+case "$OUT" in
+  *"$COMMIT_OUTCOME_MARK"*) bad "H2: commit-outcome-backstop notice printed although the yes fixture wires it" ;;
+  *) ok "H2: commit-outcome-backstop notice suppressed once wired" ;;
+esac
+
+# H3: independence, both directions at once — a fixture wiring ONLY commit-outcome-backstop.
+# Wiring it must suppress its OWN notice (mirrors H2, E5, E8, E10's "own notice suppressed once
+# wired" shape) while leaving the unrelated autopilot-guard notice firing (mirrors E1, E6, E11's
+# "an unrelated hook being wired does not mute this one" shape) — proving neither direction
+# couples to the other.
+_h="$TMP/h3"; mkdir -p "$_h/.claude/hooks"
+printf '{"hooks":{"PostToolUse":[{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+OUT=$(run_sync "$_h")
+case "$OUT" in
+  *"$COMMIT_OUTCOME_MARK"*) bad "H3: commit-outcome-backstop notice printed although this fixture wires it" ;;
+  *) ok "H3: commit-outcome-backstop notice suppressed when wired alone" ;;
+esac
+case "$OUT" in
+  *"$WIRING_MARK"*) ok "H3b: the unrelated autopilot-guard notice still fires — wiring commit-outcome-backstop alone does not mute it" ;;
+  *) bad "H3b: autopilot-guard notice muted by an unrelated hook (commit-outcome-backstop) being wired" ;;
 esac
 
 echo "----"

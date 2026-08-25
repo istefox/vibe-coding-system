@@ -144,6 +144,15 @@
             "timeout": 1
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME\"/.claude/hooks/commit-outcome-backstop.sh"
+          }
+        ]
       }
     ],
     "PreToolUse": [

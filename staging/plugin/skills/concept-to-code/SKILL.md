@@ -3151,28 +3151,34 @@ machine-readable outcome, and an agent's self-report is not a gate (ADR-0047 §A
 commit" and "declined" are told apart the same way — not by asking what happened, but by whether
 the manifest is committed.
 
+The classification itself is extracted into a standalone script, `commit-outcome-check.sh`, the
+single definition shared with the `commit-outcome-backstop` `PostToolUse` hook (ADR-0168 §D1 —
+that hook is added by a later task, this fence is just its other caller).
+
 <!-- fence-contract: c2c-step7-commit-outcome -->
 ```bash
 # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
-# the host shell. No `export` prologue — this body reads only the substituted `<manifest-path>`
-# placeholder, no caller-bound variable crosses the process boundary. Terminator at COLUMN 0; an
-# indented one is swallowed into the here-document and destroys this fence's exit code silently,
-# and this fence's whole contract is its exit code (ADR-0135 §D3).
+# the host shell. `export` forwards CLAUDE_PLUGIN_ROOT, this body's only caller-bound free
+# variable, across the new process boundary; a plain shell variable does not survive it. Terminator
+# at COLUMN 0; an indented one is swallowed into the here-document and destroys this fence's exit
+# code silently, and this fence's whole contract is its exit code (ADR-0135 §D3).
+export CLAUDE_PLUGIN_ROOT
 bash <<'FENCE_BASH'
-_m="<manifest-path>"
-[ -f "$_m" ] || { echo "COMMIT_OUTCOME_NORUN noManifest"; exit 3; }
-_d=$(dirname "$_m")
-git -C "$_d" rev-parse --git-dir >/dev/null 2>&1 || { echo "COMMIT_OUTCOME_NORUN noRepo"; exit 3; }
-_cs=$(grep '^current_step:' "$_m" | head -1 | sed -e 's/^current_step:[[:space:]]*//' -e 's/^"//' -e 's/"[[:space:]]*$//')
-_st=$(grep '^status:' "$_m" | head -1 | sed -e 's/^status:[[:space:]]*//' -e 's/^"//' -e 's/"[[:space:]]*$//')
-if [ "$_cs" != "completed" ]; then echo "COMMIT_NONTERMINAL current_step"; exit 1; fi
-if [ "$_st" != "completed" ]; then echo "COMMIT_NONTERMINAL status"; exit 1; fi
-_gs=$(git -C "$_d" status --porcelain -- "$(basename "$_m")")
-if [ -z "$_gs" ]; then echo "COMMIT_OK"; exit 0; fi
-case "$_gs" in
-  '??'*) echo "COMMIT_UNCOMMITTED untracked"; exit 1 ;;
-  *)     echo "COMMIT_UNCOMMITTED modified";  exit 1 ;;
-esac
+# Two-tier resolution, copied from the Requirement-ID coverage gate above, which resolves the
+# sibling spec-coverage.sh the same way. The classification itself lives only in
+# commit-outcome-check.sh (ADR-0168 §D1, §D3) — no inline fallback copy.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+   && [ -f "$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/commit-outcome-check.sh" ]; then
+  _check="$CLAUDE_PLUGIN_ROOT/skills/concept-to-code/scripts/commit-outcome-check.sh"
+elif [ -f "$HOME/.claude/skills/concept-to-code/scripts/commit-outcome-check.sh" ]; then
+  _check="$HOME/.claude/skills/concept-to-code/scripts/commit-outcome-check.sh"
+else
+  echo "COMMIT_OUTCOME_NORUN noScript"
+  echo "  commit-outcome-check.sh is not deployed. Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 3
+fi
+bash "$_check" "<manifest-path>"
+exit $?
 FENCE_BASH
 ```
 

@@ -142,6 +142,34 @@
 # forward; `no-test:` (ADR-0138 §D4) governs SPECs written from now on, this baseline governs the
 # ones already written and closed.
 #
+# 2026-08-24 — CORRECTION (VCS-035, PR #509, feat/commit-outcome-backstop-hook). PR #509 added a
+# new test file, commit-outcome-backstop.test.sh, for an issue-less feature (no #<n> to claim with —
+# the same gap VCS-034 names in do_pair()). Its R-01..R-10-ish assertion labels reuse this
+# baseline's own R-NN vocabulary and are UNCLAIMED (no #<n> token), the same population ADR-0138
+# always allowed a stranger's mention to sit in — rule 18's disclosed limitation, not a new defect.
+#
+# TWO ROWS FLIP CLEANLY, matching ADR-0157's own established direction (a stricter remedy, no
+# coverage gained or lost): 222/R-07 and 404/R-04 move UNCOVERED -> UNSCOPED, because the new
+# unclaimed file's mention re-joins the unscoped-question population alongside the pre-existing
+# foreign-claimed one — exactly ADR-0138's original state for an unclaimed mention.
+#
+# ONE ROW DOES NOT FLIP, ON PURPOSE: 222/R-03 computes live as COVERED, but this is a false
+# positive and is NOT accepted here. sync-manual-steps.test.sh is a pre-existing file already IN
+# SCOPE for #222 (its plan names it, it names the plan back); PR #509 added an unrelated R-03
+# mention to that SAME file for the commit-outcome-backstop feature. Scope-matching in
+# spec-coverage.sh is FILE-granular, not per-mention, so the stray token is misread as covering
+# #222's R-03. Freezing COVERED here would launder a wrong verdict into another feature's
+# permanent record (CLAUDE.md rule 14) — left UNSCOPED instead, its true state, which means RS7
+# is EXPECTED to keep reporting exactly this one row as diverging (live COVERED vs. frozen
+# UNSCOPED) until the file-granularity gap itself is fixed (tracked under VCS-034/VCS-035, not
+# fixed in PR #509 — the earlier attempt at the do_pair() half of this surfaced a much wider
+# blast radius and was reverted, commit ba1cba6).
+#
+# PER-ROW ACCOUNTING (all three divergent rows, of 154 live pairs — RS7's own count):
+#   222-vendor-deployed-only-skills  R-03 (left UNSCOPED, live diverges as COVERED — not corrected)
+#   222-vendor-deployed-only-skills  R-07 (UNCOVERED -> UNSCOPED)
+#   404-stop-gate-trigger-granularity  R-04 (UNCOVERED -> UNSCOPED)
+#
 # COLUMN FORMAT.
 #   COVERED row:   <spec-basename><TAB><R-NN><TAB>COVERED
 #   UNSCOPED row:  <spec-basename><TAB><R-NN><TAB>UNSCOPED<TAB><class><TAB><reason>
@@ -182,11 +210,11 @@
 176-worktree-isolation-contract.spec.md	R-19	COVERED
 222-vendor-deployed-only-skills.spec.md	R-01	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
 222-vendor-deployed-only-skills.spec.md	R-02	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
-222-vendor-deployed-only-skills.spec.md	R-03	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
+222-vendor-deployed-only-skills.spec.md	R-03	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | VCS-035 (PR #509, 2026-08-24): DELIBERATELY NOT corrected to match the live COVERED verdict — that live verdict is a false positive. sync-manual-steps.test.sh is already IN SCOPE for #222 (names its plan, is named back) and PR #509 added an unrelated R-03 mention for a different feature to that same file; scope-matching is file-granular, not per-mention, so the stray token reads as this feature's coverage. RS7 is EXPECTED to report this one row as diverging until the file-granularity gap (VCS-035) is actually fixed — accepting COVERED here would freeze a wrong verdict into the corpus
 222-vendor-deployed-only-skills.spec.md	R-04	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
 222-vendor-deployed-only-skills.spec.md	R-05	COVERED
 222-vendor-deployed-only-skills.spec.md	R-06	COVERED
-222-vendor-deployed-only-skills.spec.md	R-07	UNCOVERED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+222-vendor-deployed-only-skills.spec.md	R-07	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | VCS-035 (PR #509, 2026-08-24): the verdict token moves back UNCOVERED -> UNSCOPED — PR #509 added commit-outcome-backstop.test.sh, a new UNCLAIMED file (claims no feature) mentioning R-07 for a different requirement's numbering; the unscoped-question population now has an unclaimed mention again alongside the pre-existing foreign one, which is ADR-0138's original state, not a fix
 222-vendor-deployed-only-skills.spec.md	R-08	UNCOVERED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
 222-vendor-deployed-only-skills.spec.md	R-09	COVERED
 222-vendor-deployed-only-skills.spec.md	R-10	UNCOVERED	not-test-assertable	a process step: staging/sync-to-claude.sh --apply is run and the subsequent dry run reports zero drift, nothing executable in a test file to assert | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
@@ -250,7 +278,7 @@
 404-stop-gate-trigger-granularity.spec.md	R-01	COVERED
 404-stop-gate-trigger-granularity.spec.md	R-02	COVERED
 404-stop-gate-trigger-granularity.spec.md	R-03	COVERED
-404-stop-gate-trigger-granularity.spec.md	R-04	UNCOVERED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+404-stop-gate-trigger-granularity.spec.md	R-04	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | VCS-035 (PR #509, 2026-08-24): the verdict token moves back UNCOVERED -> UNSCOPED — PR #509 added commit-outcome-backstop.test.sh, a new UNCLAIMED file (claims no feature) mentioning R-04 for a different requirement's numbering; the unscoped-question population now has an unclaimed mention again alongside the pre-existing foreign one, which is ADR-0138's original state, not a fix
 404-stop-gate-trigger-granularity.spec.md	R-05	COVERED
 404-stop-gate-trigger-granularity.spec.md	R-06	COVERED
 404-stop-gate-trigger-granularity.spec.md	R-07	COVERED
@@ -351,3 +379,11 @@ project-tasks-vendored-bilateral-ledger.spec.md	R-21	UNCOVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-22	COVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-23	COVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-24	COVERED
+commit-outcome-backstop-hook.spec.md	R-01	COVERED
+commit-outcome-backstop-hook.spec.md	R-02	COVERED
+commit-outcome-backstop-hook.spec.md	R-03	COVERED
+commit-outcome-backstop-hook.spec.md	R-04	COVERED
+commit-outcome-backstop-hook.spec.md	R-05	COVERED
+commit-outcome-backstop-hook.spec.md	R-06	COVERED
+commit-outcome-backstop-hook.spec.md	R-07	COVERED
+commit-outcome-backstop-hook.spec.md	R-08	COVERED

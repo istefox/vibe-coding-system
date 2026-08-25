@@ -203,6 +203,7 @@ plugin/scripts/reset-gate-counter.sh|hooks/reset-gate-counter.sh
 plugin/scripts/usage-daily-hint.sh|hooks/usage-daily-hint.sh
 plugin/scripts/usage-report.py|scripts/usage-report.py
 plugin/scripts/precompact-guard.sh|hooks/precompact-guard.sh
+plugin/scripts/commit-outcome-backstop.sh|hooks/commit-outcome-backstop.sh
 plugin/scripts/context-occupancy.sh|hooks/context-occupancy.sh
 plugin/scripts/migrate-trust-paths.sh|hooks/migrate-trust-paths.sh
 plugin/scripts/tests/db-backup-guardrail.sh|hooks/tests/db-backup-guardrail.sh
@@ -211,6 +212,7 @@ plugin/scripts/tests/run-hook-tests.sh|hooks/tests/run-hook-tests.sh
 plugin/skills/concept-to-code/SKILL.md|skills/concept-to-code/SKILL.md
 plugin/skills/concept-to-code/scripts/agent-metrics.sh|skills/concept-to-code/scripts/agent-metrics.sh
 plugin/skills/concept-to-code/scripts/agent-notes-harvest.sh|skills/concept-to-code/scripts/agent-notes-harvest.sh
+plugin/skills/concept-to-code/scripts/commit-outcome-check.sh|skills/concept-to-code/scripts/commit-outcome-check.sh
 plugin/skills/concept-to-code/scripts/detect-macos.sh|skills/concept-to-code/scripts/detect-macos.sh
 plugin/skills/concept-to-code/scripts/ui-file-detect.sh|skills/concept-to-code/scripts/ui-file-detect.sh
 plugin/skills/concept-to-code/scripts/diff-budget-check.sh|skills/concept-to-code/scripts/diff-budget-check.sh
@@ -323,7 +325,7 @@ done
 
 # Preserve executable bit on the shell helpers.
 if [ "$APPLY" -eq 1 ]; then
-  chmod +x "$DEST/hooks/precompact-guard.sh" "$DEST/hooks/autopilot-guard.sh" "$DEST/hooks/publish-feature.sh" "$DEST/hooks/test-write-scope.sh" \
+  chmod +x "$DEST/hooks/precompact-guard.sh" "$DEST/hooks/commit-outcome-backstop.sh" "$DEST/hooks/autopilot-guard.sh" "$DEST/hooks/publish-feature.sh" "$DEST/hooks/test-write-scope.sh" \
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
     "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
@@ -472,6 +474,26 @@ PreCompact in the same cycle always proceeds, regardless of manifest state (§D2
 refusal would strand the session instead of protecting it, since PreCompact fires because the
 context window is already full). Fails open on every error. Until this entry exists the hook is
 deployed but never invoked, and the session-preservation half of this feature does nothing.
+NOTE
+fi
+
+if ! grep -q 'commit-outcome-backstop' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this PostToolUse entry to ~/.claude/settings.json (alongside the chain-memory-capture / agentwake
+heartbeat entries):
+
+  { "matcher": "Skill",
+    "hooks": [ { "type": "command", "command": "\"$HOME\"/.claude/hooks/commit-outcome-backstop.sh" } ] }
+
+commit-outcome-backstop (2026-08-23-commit-outcome-backstop-hook, ADR-0168) reads Step 7.1's
+classification of a manifest's commit outcome a second time, independent of the orchestrator
+following the SKILL.md instruction to run it. It is report-only — it never blocks — and inert
+outside a project with docs/manifests/: a manifest more than 24h old, or not sitting at a
+commit-stage current_step, never triggers a report. Until this entry exists the hook is deployed
+but never invoked.
 NOTE
 fi
 
