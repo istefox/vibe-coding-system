@@ -478,6 +478,27 @@ deployed but never invoked, and the session-preservation half of this feature do
 NOTE
 fi
 
+if ! grep -q 'usage-daily-hint' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this Stop entry to ~/.claude/settings.json (alongside the stop-gate entry):
+
+  { "hooks": [ { "type": "command", "command": "\"$HOME\"/.claude/hooks/usage-daily-hint.sh" } ] }
+
+usage-daily-hint (issue #112, ADR-0058 §D4) is the measurement half of the context-occupancy
+feature: it reports approximate context-window occupancy (via context-occupancy.sh) plus the daily
+usage diff, through additionalContext, and never emits a decision field — it cannot block, unlike
+stop-gate.sh which shares this event. Occupancy is reported, never gated (§D4: it correlates with
+instruction-following degradation but does not determine it, so a threshold gate would be a
+heuristic deciding to block, the exact shape ADR-0051/0053/0054 already rejected). Until this entry
+exists the hook is deployed but never invoked, and occupancy is never observable to a human or a
+later gate — precompact-guard.sh (above) still protects mid-flight chain state either way; only the
+reporting half is silent.
+NOTE
+fi
+
 if ! grep -q 'commit-outcome-backstop' "$DEST/settings.json" 2>/dev/null; then
   MANUAL=1
   cat <<'NOTE'
