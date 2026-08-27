@@ -38,6 +38,7 @@ ARCH_MARK="alongside the write-scope-enforce entry"
 CMD_MARK="alongside the agent-write-scope entry"
 TEST_MARK="alongside the agent-command-scope entry"
 PRECOMPACT_MARK="PreCompact is not currently in the hooks block"
+USAGE_HINT_MARK="usage-daily-hint (issue #112, ADR-0058"
 RETIRED_MARK="MANUAL STEP: retired hook cleanup"
 CLEAR_MARK="no manual steps outstanding"
 BASEREF_MARK="worktree forks from the default branch and the chain's Step 5 pre-flight will refuse to dispatch"
@@ -63,7 +64,7 @@ BASEREF_MARK="worktree forks from the default branch and the chain's Step 5 pre-
 build_home() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   case "$2" in
-    yes) printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
+    yes) printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     no)  printf '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
     nofile) : ;;
   esac
@@ -90,7 +91,7 @@ build_home_br() {
     correct) _wt='"worktree":{"baseRef":"head"},' ;;
   esac
   case "$2" in
-    yes) _hooks='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}' ;;
+    yes) _hooks='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}]}' ;;
     no)  _hooks='{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}' ;;
   esac
   printf '{%s"hooks":%s}\n' "$_wt" "$_hooks" > "$_h/.claude/settings.json"
@@ -237,6 +238,32 @@ esac
 case "$OUT9" in
   *"$WIRING_MARK"*) ok "E11: wiring PreCompact does not suppress the autopilot-guard notice" ;;
   *) bad "E11: autopilot-guard notice muted by an unrelated event key being wired" ;;
+esac
+
+# E12: usage-daily-hint (issue #112, ADR-0058 D4) fires independently too — it is Stop, a
+# different event key again, and shares the fixture's default settings.json (no Stop entry at
+# all) with none of the notices above.
+case "$OUT" in
+  *"$USAGE_HINT_MARK"*) ok "E12: usage-daily-hint notice fires independently too (issue #112, ADR-0058 D4)" ;;
+  *) bad "E12: usage-daily-hint notice suppressed although Stop/usage-daily-hint is not wired" ;;
+esac
+
+# E13: the reverse direction — wiring Stop/usage-daily-hint must suppress its own reminder while
+# leaving the PreToolUse/PreCompact notices alone.
+_h="$TMP/e12"; mkdir -p "$_h/.claude/hooks"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+OUT12=$(run_sync "$_h")
+case "$OUT12" in
+  *"$USAGE_HINT_MARK"*) bad "E13: usage-daily-hint notice printed although it IS wired" ;;
+  *) ok "E13: usage-daily-hint notice suppressed once wired" ;;
+esac
+case "$OUT12" in
+  *"$WIRING_MARK"*) ok "E14: wiring Stop/usage-daily-hint does not suppress the autopilot-guard notice" ;;
+  *) bad "E14: autopilot-guard notice muted by an unrelated event key being wired" ;;
+esac
+case "$OUT12" in
+  *"$PRECOMPACT_MARK"*) ok "E14b: wiring Stop/usage-daily-hint does not suppress the precompact-guard notice" ;;
+  *) bad "E14b: precompact-guard notice muted by an unrelated event key being wired" ;;
 esac
 
 

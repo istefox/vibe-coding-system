@@ -211,6 +211,105 @@ else
   bad "4d: target-without-verb still fires (rc=$rc4d out='$OUT4D')"
 fi
 
+# =====================================================================================
+# Test 5 (ADR-0170): chain-memory-capture.sh's write gate. Each hermetic case gets its own
+# isolated $TMP subtree (HOME + cwd), mirroring Test 2's pattern. Real bug measured: 44 of 68
+# live chain-history files carried a manifest reference that never resolved (unexpanded $PWD,
+# a bare glob, a leaked /tmp path) and the hook wrote a permanent all-"?" record anyway.
+
+# plant: 5a | plugin/scripts/chain-memory-capture.sh | [ -r "$MANIFEST" ] || exit 0 | true
+# Test 5a — manifest referenced in the command does not exist: no chain-history file, no
+# MEMORY.md write. This is the dominant real case (44/68).
+CM5A_CWD="$TMP/cm5a/cwd"; CM5A_HOME="$TMP/cm5a/home"
+mkdir -p "$CM5A_CWD"
+ENC5A=$(printf '%s' "$CM5A_CWD" | tr '/' '-')
+MEMDIR5A="$CM5A_HOME/.claude/projects/$ENC5A/memory"
+mkdir -p "$MEMDIR5A"
+MANIFEST5A="$CM5A_CWD/docs/manifests/2026-08-27-5a-missing.manifest.yml"   # never created
+TP5A="$CM5A_HOME/.claude/projects/$ENC5A/sess5a.jsonl"; mkdir -p "$(dirname "$TP5A")"; touch "$TP5A"
+PAYLOAD5A=$(printf '{"transcript_path":"%s","cwd":"%s","tool_input":{"command":"bash manifest-transition.sh %s step_e2_execute"},"tool_response":{"exit_code":0}}' \
+  "$TP5A" "$CM5A_CWD" "$MANIFEST5A")
+printf '%s' "$PAYLOAD5A" | HOME="$CM5A_HOME" bash "$SCRIPTS/chain-memory-capture.sh" >"$TMP/o5a" 2>&1
+if [ ! -f "$MEMDIR5A/chain-history/5a-missing.md" ] && [ ! -f "$MEMDIR5A/MEMORY.md" ]; then
+  ok "5a: unreadable manifest -> no chain-history file, no MEMORY.md write"
+else
+  bad "5a: wrote despite an unreadable manifest (hist=$([ -f "$MEMDIR5A/chain-history/5a-missing.md" ] && echo yes || echo no) mem=$([ -f "$MEMDIR5A/MEMORY.md" ] && echo yes || echo no))"
+fi
+
+# plant: 5b | plugin/scripts/chain-memory-capture.sh | *[!A-Za-z0-9._-]*) exit 0 ;; | *[!A-Za-z0-9._-]*) : ;;
+# Test 5b — the manifest's derived slug carries a glob/shell metacharacter (an unexpanded
+# `$(date +%Y-%m-%d)-$SLUG` token, in this fixture). Even though the file is readable and
+# well-formed, the slug itself is untrustworthy: no write.
+CM5B_CWD="$TMP/cm5b/cwd"; CM5B_HOME="$TMP/cm5b/home"
+mkdir -p "$CM5B_CWD/docs/manifests"
+ENC5B=$(printf '%s' "$CM5B_CWD" | tr '/' '-')
+MEMDIR5B="$CM5B_HOME/.claude/projects/$ENC5B/memory"
+mkdir -p "$MEMDIR5B"
+MANIFEST5B="$CM5B_CWD/docs/manifests/"'+%Y-%m-%d)-$SLUG.manifest.yml'
+cat > "$MANIFEST5B" <<'EOF'
+current_step: step_e2_execute
+status: in_progress
+chain_path: standard
+EOF
+TP5B="$CM5B_HOME/.claude/projects/$ENC5B/sess5b.jsonl"; mkdir -p "$(dirname "$TP5B")"; touch "$TP5B"
+PAYLOAD5B=$(printf '{"transcript_path":"%s","cwd":"%s","tool_input":{"command":"bash manifest-transition.sh %s step_e2_execute"},"tool_response":{"exit_code":0}}' \
+  "$TP5B" "$CM5B_CWD" "$MANIFEST5B")
+printf '%s' "$PAYLOAD5B" | HOME="$CM5B_HOME" bash "$SCRIPTS/chain-memory-capture.sh" >"$TMP/o5b" 2>&1
+if [ ! -d "$MEMDIR5B/chain-history" ] && [ ! -f "$MEMDIR5B/MEMORY.md" ]; then
+  ok "5b: slug with a glob/shell metacharacter -> no write"
+else
+  bad "5b: wrote despite an unsanitized slug (hist_dir=$([ -d "$MEMDIR5B/chain-history" ] && echo present || echo absent) mem=$([ -f "$MEMDIR5B/MEMORY.md" ] && echo yes || echo no))"
+fi
+
+# plant: 5c | plugin/scripts/chain-memory-capture.sh | "$CWD_FIELD"/*) : ;; *) exit 0 ;; | "$CWD_FIELD"/*) : ;;\n    *) : ;;
+# Test 5c — the manifest is readable and well-named, but resolves outside the payload's own
+# `cwd` (a leaked absolute path into a scratch dir, e.g. a test harness running inside a real
+# session): no write, even though gates A and B alone would let it through.
+CM5C_CWD="$TMP/cm5c/cwd"; CM5C_HOME="$TMP/cm5c/home"; CM5C_OUTSIDE="$TMP/cm5c/outside"
+mkdir -p "$CM5C_CWD" "$CM5C_OUTSIDE/docs/manifests"
+ENC5C=$(printf '%s' "$CM5C_CWD" | tr '/' '-')
+MEMDIR5C="$CM5C_HOME/.claude/projects/$ENC5C/memory"
+mkdir -p "$MEMDIR5C"
+MANIFEST5C="$CM5C_OUTSIDE/docs/manifests/2026-08-27-5c-outside.manifest.yml"
+cat > "$MANIFEST5C" <<'EOF'
+current_step: step_e2_execute
+status: in_progress
+chain_path: standard
+EOF
+TP5C="$CM5C_HOME/.claude/projects/$ENC5C/sess5c.jsonl"; mkdir -p "$(dirname "$TP5C")"; touch "$TP5C"
+PAYLOAD5C=$(printf '{"transcript_path":"%s","cwd":"%s","tool_input":{"command":"bash manifest-transition.sh %s step_e2_execute"},"tool_response":{"exit_code":0}}' \
+  "$TP5C" "$CM5C_CWD" "$MANIFEST5C")
+printf '%s' "$PAYLOAD5C" | HOME="$CM5C_HOME" bash "$SCRIPTS/chain-memory-capture.sh" >"$TMP/o5c" 2>&1
+if [ ! -f "$MEMDIR5C/chain-history/5c-outside.md" ] && [ ! -f "$MEMDIR5C/MEMORY.md" ]; then
+  ok "5c: manifest outside the payload cwd -> no write"
+else
+  bad "5c: wrote despite a manifest resolving outside cwd (hist=$([ -f "$MEMDIR5C/chain-history/5c-outside.md" ] && echo yes || echo no) mem=$([ -f "$MEMDIR5C/MEMORY.md" ] && echo yes || echo no))"
+fi
+
+# Test 5d — vacuity guard: a legitimate event (readable manifest, sane slug, inside cwd) still
+# writes. Without this, a gate that rejects everything would pass 5a-5c for the wrong reason.
+CM5D_CWD="$TMP/cm5d/cwd"; CM5D_HOME="$TMP/cm5d/home"
+mkdir -p "$CM5D_CWD/docs/manifests"
+ENC5D=$(printf '%s' "$CM5D_CWD" | tr '/' '-')
+MEMDIR5D="$CM5D_HOME/.claude/projects/$ENC5D/memory"
+mkdir -p "$MEMDIR5D"
+MANIFEST5D="$CM5D_CWD/docs/manifests/2026-08-27-5d-legit.manifest.yml"
+cat > "$MANIFEST5D" <<'EOF'
+current_step: step_e2_execute
+status: in_progress
+chain_path: standard
+next_action: run tests
+EOF
+TP5D="$CM5D_HOME/.claude/projects/$ENC5D/sess5d.jsonl"; mkdir -p "$(dirname "$TP5D")"; touch "$TP5D"
+PAYLOAD5D=$(printf '{"transcript_path":"%s","cwd":"%s","tool_input":{"command":"bash manifest-transition.sh %s step_e2_execute"},"tool_response":{"exit_code":0}}' \
+  "$TP5D" "$CM5D_CWD" "$MANIFEST5D")
+printf '%s' "$PAYLOAD5D" | HOME="$CM5D_HOME" bash "$SCRIPTS/chain-memory-capture.sh" >"$TMP/o5d" 2>&1
+if [ -f "$MEMDIR5D/chain-history/5d-legit.md" ] && grep -q 'current_step: step_e2_execute' "$MEMDIR5D/chain-history/5d-legit.md" && [ -f "$MEMDIR5D/MEMORY.md" ]; then
+  ok "5d: legitimate readable/sane/in-cwd manifest still writes [vacuity guard]"
+else
+  bad "5d: a legitimate event was rejected (hist=$([ -f "$MEMDIR5D/chain-history/5d-legit.md" ] && echo yes || echo no) mem=$([ -f "$MEMDIR5D/MEMORY.md" ] && echo yes || echo no) out=$(cat "$TMP/o5d"))"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -gt 0 ] && exit 1 || exit 0

@@ -42,6 +42,45 @@ MANIFEST_BASE=$(basename "$MANIFEST")
 SLUG=$(printf '%s' "$MANIFEST_BASE" | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}-//; s/\.manifest\.yml$//')
 [ -z "$SLUG" ] && exit 0
 
+# --- 3a. Write gate (ADR-0170) — refuse before any file is touched -------------
+# A STATE OF FACT record whose fields are all "?" is not "no information": it is permanent
+# noise in MEMORY.md, a file injected into the model's context at every SessionStart. So this
+# hook ABORTS on an untrustworthy manifest reference rather than degrading to "?" fields and
+# writing anyway (issue: 44 of 68 chain-history files carried an unexpanded `$PWD/...` or a
+# literal glob as their `manifest:` field, each pinned in Active chains forever because a "?"
+# status is never terminal and MEMORY.md's cleanup only matches an exact slug, never a
+# malformed one). Both checks below `exit 0` on failure — same best-effort posture as the rest
+# of this file, never disturb the Bash tool flow.
+#
+# Gate A — slug must be a plain filename component: reject anything holding a shell/glob
+# metacharacter or whitespace. Kills an unexpanded `$SLUG`/`$(date ...)` token and a bare `*`
+# or `????-??-??` glob that passed through a failed expansion.
+case "$SLUG" in
+  *[!A-Za-z0-9._-]*) exit 0 ;;
+esac
+
+# Gate B — the manifest must actually be readable. Kills every `$PWD`-prefixed or otherwise
+# unresolved path (the dominant real case measured above) instead of degrading every field to
+# "?" the way the old code at step 6 did.
+[ -r "$MANIFEST" ] || exit 0
+
+# Gate C — when the payload exposes `cwd`, the manifest must resolve under it. Kills a leaked
+# absolute path into a test-harness scratch dir (e.g. /tmp/...) that happens to be readable and
+# well-named. Degrades (no-op) when `cwd` is absent rather than reject, so a runtime that omits
+# the field does not silently lose legitimate events — Gates A and B alone already cover the
+# measured majority of the corruption.
+CWD_FIELD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+if [ -n "$CWD_FIELD" ]; then
+  case "$MANIFEST" in
+    /*) ABS_MANIFEST="$MANIFEST" ;;
+    *) ABS_MANIFEST="$CWD_FIELD/$MANIFEST" ;;
+  esac
+  case "$ABS_MANIFEST" in
+    "$CWD_FIELD"/*) : ;;
+    *) exit 0 ;;
+  esac
+fi
+
 # --- 4. Resolve the native memory dir for THIS project (scope-safe) ------------
 # Robust: derive from dirname(transcript_path) — never re-encode $PWD (ADR-0012
 # D2 / encoding fragility). The transcript lives under

@@ -4939,3 +4939,39 @@ Filed as ADR-0168 on 2026-08-25, one day after `ADR-0168-commit-outcome-backstop
 scan, not by either PR's review (`VCS-040`). Renumbered to ADR-0169 on discovery.
 
 Detail: `docs/architecture/ADR-0169-spec-coverage-issue-less-and-line-granularity.md`.
+
+## Decisions from the chain-memory write gate and the occupancy Stop-hint wiring gap (ADR-0170)
+
+An audit of the anti-context-rot memory system, run against the live `~/.claude/` deployment
+rather than the staged source, found two defects next to `precompact-guard.sh` (ADR-0058), which
+was working correctly: `usage-daily-hint.sh` (the occupancy `Stop` hint required by ADR-0058 §D4)
+was never wired into `Stop` in either the staged or the live `settings.json`, and
+`chain-memory-capture.sh` had been writing permanent all-`"?"` `STATE OF FACT` records into
+`MEMORY.md`'s `### Active chains` block — a section injected into every SessionStart — for every
+manifest reference that failed to resolve.
+
+Key architectural decisions:
+- **`chain-memory-capture.sh` gains a three-gate write refusal, placed immediately after the slug
+  is derived and before any file is touched.** Gate A rejects a slug carrying any character
+  outside a plain filename component (`case "$SLUG" in *[!A-Za-z0-9._-]*) exit 0 ;; esac`) — kills
+  an unexpanded `$VAR`/`$(date ...)` token or a bare glob. Gate B requires the manifest to be
+  readable (`[ -r "$MANIFEST" ] || exit 0`), replacing the old degrade-to-`"?"` branch — measured
+  as the dominant real case, 44 of 68 live `chain-history/` files. Gate C requires the manifest to
+  resolve under the payload's `cwd` when that field is present, and degrades to a no-op when it is
+  absent rather than reject.
+- **Abort, not degrade, is the actual decision.** A `"?"` STATE OF FACT record is not "no
+  information" — it is a permanent, indistinguishable-from-real line in a file the model reads at
+  every SessionStart. The old degrade-on-unreadable branch was the direct cause of the corruption:
+  a `"?"` status is never terminal, so the record is never archived, and `MEMORY.md`'s own cleanup
+  only matches an *exact* slug, never a malformed one.
+- **The 44 pre-existing orphaned `chain-history/` files are left on disk, not deleted** — some
+  carry a real event log for a real, completed feature predating this gate, and the directory is
+  read on-demand via `/memory`, never auto-loaded. Only `MEMORY.md`'s 61 corrupted pointers were
+  removed, restoring `### Active chains` to the hook's own empty-state convention.
+- **`usage-daily-hint.sh` is wired to `Stop`** in `staging/user/settings.json` and directly in the
+  live `~/.claude/settings.json` (excluded from automated deploy by design, which is exactly the
+  gap that let the omission stand undetected). A MANUAL-STEP notice was added to
+  `sync-to-claude.sh`, modelled on the existing `precompact-guard` block, so a future re-deploy
+  that drops this wiring is reported instead of silent.
+
+Detail: `docs/architecture/ADR-0170-chain-memory-write-gate.md`.
