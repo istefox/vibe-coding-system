@@ -1,7 +1,7 @@
-<!-- project-tasks: prefix=VCS lastId=40 -->
+<!-- project-tasks: prefix=VCS lastId=41 -->
 # PROJECT TASKS
 
-Updated: 2026-08-26 · Open: 16 (P1: 0) · GitHub issues: 70
+Updated: 2026-08-27 · Open: 17 (P1: 0) · GitHub issues: 70
 
 This ledger is **bilateral**: every open GitHub issue appears in the `GitHub Issues` section,
 regenerated from `gh` on each run, and the sections below it hold what has no issue number yet.
@@ -114,6 +114,7 @@ pointer to its `PROJECT.md` phase rather than a transcription of it.
 ## Backlog / To Add
 
 - [ ] `VCS-038` **P3** CC 2.1.220-2.1.245 shipped features not yet evaluated for adoption here: `promptCacheTtl`/`subagentPromptCacheTtl` settings (2.1.243) would formalize in `settings.json` what `~/.claude/rules/tools.md` currently states only from empirical observation of the 1h cache window; `subagent_type: "fork"` now inherits conversation and prompt cache by default and non-teammate dispatch runs in the background by default in interactive sessions (2.1.232); the 200-subagent-per-session cap is removed (2.1.224), relevant to long `autopilot`/`project-conductor` runs; per-subagent model and effort-level are now visible in `/tasks` (2.1.243), useful for debugging the per-agent model-routing pins (sec. 3.9); `notify_when_idle` on cross-session `SendMessage` (2.1.236) could automate the "fresh session ready" half of Gate 4's `/clear`+resume flow (`~/.claude/skills/concept-to-code/SKILL.md:4285-4310`) <!-- src:session opened:2026-08-25 -->
+- [ ] `VCS-041` **P3** Hooking the `InstructionsLoaded` verification (ADR-0171, proposed) to the concept-to-code chain's `[FRESH SESSION]` boundary automatically — e.g. a check that blocks advancing past Gate 4 if a recent `auto-learning` correction does not show up as loaded — is out of scope for the base proposal. It touches the skill's existing gate and needs a new transition pair in the manifest state machine, not just the observability hook itself. Recorded as a possible follow-up, not started <!-- src:session opened:2026-08-27 -->
 ## Blocked / Decisions Needed
 
 _none_
