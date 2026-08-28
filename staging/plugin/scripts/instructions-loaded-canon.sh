@@ -29,10 +29,16 @@ _il_canon() {
   esac
 }
 
-# Portable stat/hash helpers: BSD form first (macOS is this repo's primary target), GNU fallback
-# (the harness also runs on Linux CI).
-_fmtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || printf ''; }
-_fsize()  { stat -f %z "$1" 2>/dev/null || stat -c %s "$1" 2>/dev/null || printf ''; }
+# Portable stat/hash helpers: GNU form (`-c`) tried first, BSD form (`-f`) as fallback. This order
+# is required, not cosmetic: GNU `stat -f` means "report on the FILESYSTEM", not the file, and it
+# EXITS 0 while printing an unrelated multi-line block instead of a number — the `||` fallback
+# never fires, and a size/mtime consumer downstream gets garbage instead of an integer. BSD's
+# `stat -c` fails cleanly (exit 1, "illegal option") on macOS, so trying `-c` first is safe on both
+# platforms; trying `-f` first is silently wrong on Linux (confirmed in CI, PR #515, 2026-08-28:
+# `_fsize` returned a `df`-style block, and every assertion consuming it either mis-parsed as
+# `0` or fed the block into `date` as a bogus epoch).
+_fmtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || printf ''; }
+_fsize()  { stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || printf ''; }
 _fsha()   { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
 
 _iso_of_epoch() {
