@@ -30,6 +30,7 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)              # staging/plugin/scripts
 STAGING=$(cd "$SCRIPTS/../.." && pwd)                    # staging/
 SKILL_DIR="$STAGING/plugin/skills/concept-to-code"
 SKILL_MD="$SKILL_DIR/SKILL.md"
+HITL_REF="$SKILL_DIR/references/hitl-gates.md"
 INIT="$SKILL_DIR/scripts/manifest-init.sh"
 VAL="$SKILL_DIR/scripts/manifest-validate.sh"
 TRN="$SKILL_DIR/scripts/manifest-transition.sh"
@@ -193,7 +194,8 @@ else
 fi
 
 # B2 (static, genuine RED now): the TRUSTED/NOT_TRUSTED probe must be present.
-if grep -qF 'NOT_TRUSTED → autopilot must never establish trust unattended' "$SKILL_MD"; then
+# VCS-048/ADR-0175: Gate 2b moved into references/hitl-gates.md.
+if grep -qF 'NOT_TRUSTED → autopilot must never establish trust unattended' "$HITL_REF"; then
   ok "B2: Gate 2b autopilot bracket probes pre-existing trust (TRUSTED/NOT_TRUSTED)"
 else
   bad "B2: Gate 2b autopilot bracket does not yet probe pre-existing trust"
@@ -339,16 +341,20 @@ CONDUCTOR_MD="$STAGING/plugin/skills/project-conductor/SKILL.md"
 # recorded instances of an assertion failing on correct text because of decoration).
 # STRUCTURAL markers stay line-based below: a marker split across two lines is a marker the
 # derivation cannot see, and flattening would hide exactly the defect being guarded.
+# VCS-048/ADR-0175: ## 5. HITL gates moved into references/hitl-gates.md — flatten both files,
+# not just SKILL.md (population-glob coupling).
 FLAT_SKILL="$TMP/skill-flat.txt"
-tr '\n' ' ' < "$SKILL_MD" | tr -s ' ' | tr -d '`*' | tr '[:upper:]' '[:lower:]' > "$FLAT_SKILL"
+cat "$SKILL_MD" "$HITL_REF" 2>/dev/null | tr '\n' ' ' | tr -s ' ' | tr -d '`*' | tr '[:upper:]' '[:lower:]' > "$FLAT_SKILL"
 FLAT_COND="$TMP/cond-flat.txt"
 tr '\n' ' ' < "$CONDUCTOR_MD" | tr -s ' ' | tr -d '`*' | tr '[:upper:]' '[:lower:]' > "$FLAT_COND"
 
 flat_has() { grep -qF "$1" "$FLAT_SKILL"; }
 
 # gate_block <gate-id>: the SS5 text from this gate's heading to the next gate heading.
+# VCS-048/ADR-0175: ## 5. HITL gates moved into references/hitl-gates.md; the reference file's
+# body IS the block, so no awk range is needed any more.
 GATES_TXT="$TMP/gates.txt"
-awk '/^## 5\. HITL gates/{f=1} /^## 6\. Coexistence invariants/{f=0} f' "$SKILL_MD" > "$GATES_TXT"
+cp "$HITL_REF" "$GATES_TXT" 2>/dev/null
 gate_ids() {
   grep -E '^\*\*Gate [0-9A-Za-z.]+ *[—-]' "$GATES_TXT" \
     | sed -E 's/^\*\*Gate ([0-9A-Za-z.]+) *[—-].*/\1/'
@@ -387,7 +393,7 @@ if [ -n "$G0_MARKER" ]; then
 # appears five times in this one marker line (the option label, the value, the "only standard is
 # unattended-safe" argument), so mutating any single occurrence leaves the others and the plant
 # does not fire. Seen here, on the first plant-check run.
-# plant: G1 | plugin/skills/concept-to-code/SKILL.md | Set `chain_path: standard`, emit | Set `chain_path: hybrid`, emit
+# plant: G1 | plugin/skills/concept-to-code/references/hitl-gates.md | Set `chain_path: standard`, emit | Set `chain_path: hybrid`, emit
   if printf '%s\n' "$G0_MARKER" | grep -qF 'chain_path: standard'; then
     ok "G1: Gate 0's autopilot marker sets chain_path: standard"
   else
@@ -401,7 +407,7 @@ fi
 # which invokes interview-driver UNCONDITIONALLY (unlike standard Step 1, it has no brownfield
 # skip), and express reaches plan mode. Only standard is unattended-safe, which is what the
 # [auto] option's own label already said ("brownfield only").
-# plant: G1b | plugin/skills/concept-to-code/SKILL.md | It is NOT the auto-detect vote | It is exactly the auto-detect vote
+# plant: G1b | plugin/skills/concept-to-code/references/hitl-gates.md | It is NOT the auto-detect vote | It is exactly the auto-detect vote
 if flat_has 'it is not the auto-detect vote'; then
   ok "G1b: Gate 0's default states it is not the auto-detect vote, with the reason"
 else
@@ -418,7 +424,7 @@ for _g in $GATE_IDS; do
 done
 # The plant must remove the MARKER, not reword the reason: replacing prose inside an exemption
 # leaves the exemption standing and G2 keeps passing. The mechanism is the marker (rule 12).
-# plant: G2 | plugin/skills/concept-to-code/SKILL.md | <!-- autopilot-gate-exempt: raises no AskUserQuestion at all | <!-- note: raises no AskUserQuestion at all
+# plant: G2 | plugin/skills/concept-to-code/references/hitl-gates.md | <!-- autopilot-gate-exempt: raises no AskUserQuestion at all | <!-- note: raises no AskUserQuestion at all
 if [ -z "$G2_MISSING" ]; then
   ok "G2: all $GATE_N SS5 gates carry an autopilot marker or a declared exemption"
 else
@@ -438,7 +444,7 @@ done
 # to REINTRODUCE the banned thing rather than remove something (ADR-0112 -- five of fifteen
 # plants there did not fire for exactly this reason). Here that means bolting an exemption onto
 # a gate that already has a marker, on one line, since a replacement cannot contain a newline.
-# plant: G2b | plugin/skills/concept-to-code/SKILL.md | "Gate 1b: autopilot — skip brainstorm ✓"]** | "Gate 1b: autopilot — skip brainstorm ✓"]** <!-- autopilot-gate-exempt: a deliberately stale waiver planted to prove G2b runs backwards -->
+# plant: G2b | plugin/skills/concept-to-code/references/hitl-gates.md | "Gate 1b: autopilot — skip brainstorm ✓"]** | "Gate 1b: autopilot — skip brainstorm ✓"]** <!-- autopilot-gate-exempt: a deliberately stale waiver planted to prove G2b runs backwards -->
 if [ -z "$G2B_STALE" ]; then
   ok "G2b: no gate carries both a marker and an exemption (no stale waiver)"
 else
@@ -466,7 +472,7 @@ while IFS= read -r _line; do
   _reason=$(printf '%s' "$_line" | sed -E 's/.*<!-- autopilot-gate-exempt:[[:space:]]*//; s/[[:space:]]*-->.*//')
   [ "${#_reason}" -ge 40 ] || G2C_SHORT="$G2C_SHORT [${_reason}]"
 done < "$G2C_DECLS"
-# plant: G2c | plugin/skills/concept-to-code/SKILL.md | a container heading only — sub-gates 2a, 2b and 2c are what actually prompt, and each carries its own autopilot default | too short
+# plant: G2c | plugin/skills/concept-to-code/references/hitl-gates.md | a container heading only — sub-gates 2a, 2b and 2c are what actually prompt, and each carries its own autopilot default | too short
 if [ "$G2C_N" -eq 0 ]; then
   bad "G2c: no autopilot-gate-exempt declaration found -- G2/G2b are vacuous on the waiver side"
 elif [ -z "$G2C_SHORT" ]; then
@@ -477,7 +483,7 @@ fi
 
 # G3 (static): the contract paragraph must name BOTH marker spellings, or the class guard
 # above is enforcing a rule the contract does not state.
-# plant: G3 | plugin/skills/concept-to-code/SKILL.md | **[Autopilot bypass: ...]** — the gate is skipped outright | **[Autopilot skip]** — the gate is skipped outright
+# plant: G3 | plugin/skills/concept-to-code/references/hitl-gates.md | **[Autopilot bypass: ...]** — the gate is skipped outright | **[Autopilot skip]** — the gate is skipped outright
 if flat_has '[autopilot default: ...]' && flat_has '[autopilot bypass: ...]'; then
   ok "G3: the SS5 autopilot contract names both marker spellings"
 else
@@ -491,7 +497,7 @@ fi
 # contains the literal `**[Autopilot bypass:` while documenting the form, so a whole-file grep
 # stays green after the marker is renamed at the one site that matters. Rule 12, caught by the
 # plant below rather than by reading.
-# plant: G3b | plugin/skills/concept-to-code/SKILL.md | **[Autopilot bypass: if `manifest.autopilot = true`, skip AskUserQuestion entirely | **[Autopilot default: if `manifest.autopilot = true`, skip AskUserQuestion entirely
+# plant: G3b | plugin/skills/concept-to-code/references/hitl-gates.md | **[Autopilot bypass: if `manifest.autopilot = true`, skip AskUserQuestion entirely | **[Autopilot default: if `manifest.autopilot = true`, skip AskUserQuestion entirely
 if gate_block "4" | grep -qF '**[Autopilot bypass:' \
   && grep -qF 'Autopilot bypass' "$SCRIPTS/tests/recovery-preflight.test.sh"; then
   ok "G3b: Gate 4's '**[Autopilot bypass' marker is intact (recovery-preflight RH4/RI1 extract on it)"
@@ -667,8 +673,8 @@ fi
 # check used to live inside the [auto] option, where the fast path and the unattended caller
 # both bypass it; two copies of one safety question is the worst available shape, because they
 # can disagree about whether the gate fires (ADR-0086's criterion, applied).
-# plant: G10 | plugin/skills/concept-to-code/SKILL.md | **The SPEC.md pre-flight is not here.** | **Autopilot requires an existing SPEC.md (brownfield).**
-G10_N=$(grep -cF 'Autopilot requires an existing SPEC.md' "$SKILL_MD" || true)
+# plant: G10 | plugin/skills/concept-to-code/references/hitl-gates.md | **The SPEC.md pre-flight is not here.** | **Autopilot requires an existing SPEC.md (brownfield).**
+G10_N=$(grep -cF 'Autopilot requires an existing SPEC.md' "$SKILL_MD" "$HITL_REF" 2>/dev/null | awk -F: '{s+=$2} END{print s+0}')
 if [ "$G10_N" -eq 0 ]; then
   ok "G10: the [auto] option's inline SPEC pre-flight is gone (one check, at step 7b)"
 else
@@ -677,7 +683,7 @@ fi
 
 # G10b: the [auto] option's description must stop claiming the failure surfaces at Gate 1. It
 # aborts at Gate 0's own step, and on a greenfield route Gate 1 is a different gate entirely.
-# plant: G10b | plugin/skills/concept-to-code/SKILL.md | if absent the routing pre-flight at §2 step 7b aborts the chain | if absent the chain errors at Gate 1
+# plant: G10b | plugin/skills/concept-to-code/references/hitl-gates.md | if absent the routing pre-flight at §2 step 7b aborts the chain | if absent the chain errors at Gate 1
 if flat_has 'if absent the chain errors at gate 1'; then
   bad "G10b: the [auto] option still claims a missing SPEC 'errors at Gate 1'"
 else

@@ -16,6 +16,8 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 CC_SKILL="$STAGING/plugin/skills/concept-to-code/SKILL.md"
 STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
+# VCS-048/ADR-0175: ## 5. HITL gates (Gate 0 through Gate 5.6) moved into references/hitl-gates.md.
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 ADR="$REPO/docs/architecture/ADR-0066-120-accessibility-i18n.md"
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
 CIYML="$REPO/.github/workflows/ci.yml"
@@ -42,10 +44,10 @@ fi
 # "## Suspicious-output check" section, so assertions can't be satisfied by unrelated text
 # living elsewhere in this ~2900-line file.
 G505="$TMP/gate505.txt"
-awk '/^\*\*Gate 5\.05 /{f=1} f && /^\*\*Gate 5\.06 /{exit} f' "$CC_SKILL" > "$G505" 2>/dev/null
+awk '/^\*\*Gate 5\.05 /{f=1} f && /^\*\*Gate 5\.06 /{exit} f' "$HITL_REF" > "$G505" 2>/dev/null
 
 if [ -s "$G505" ]; then
-  ok "AI0c: Gate 5.05 block extracted from $CC_SKILL — every AIB/AIC/AID/AIE/AIF assertion below reads this range"
+  ok "AI0c: Gate 5.05 block extracted from $HITL_REF — every AIB/AIC/AID/AIE/AIF assertion below reads this range"
 else
   bad "AI0c: could not extract a Gate 5.05 block — every AIB/AIC/AID/AIE/AIF assertion below is meaningless"
 fi
@@ -64,7 +66,7 @@ UIDET="$STAGING/plugin/skills/concept-to-code/scripts/ui-file-detect.sh"
 # extension grep (measured — a registry NOFIRE on the first draft, rule 1/12).
 # The needle avoids embedding a literal " | " — the declaration line itself is split on " | ", so a
 # needle containing a shell pipe with spaces on both sides would fragment into extra fields.
-# plant: AIJ1 | plugin/skills/concept-to-code/SKILL.md | bash ~/.claude/skills/concept-to-code/scripts/ui-file-detect.sh | grep -E '\.(swift|html|css|tsx|jsx|vue)$'
+# plant: AIJ1 | plugin/skills/concept-to-code/references/hitl-gates.md | bash ~/.claude/skills/concept-to-code/scripts/ui-file-detect.sh | grep -E '\.(swift|html|css|tsx|jsx|vue)$'
 if printf '%s\n' "$(cat "$G505" 2>/dev/null)" | grep -qF 'bash ~/.claude/skills/concept-to-code/scripts/ui-file-detect.sh'; then
   ok "AIJ1: the Gate 5.05 trigger invokes ui-file-detect.sh, not a bare extension grep"
 else
@@ -310,13 +312,16 @@ else
   bad "AIG1: no explicit finding-vs-metric classification found for accessibility_i18n_findings"
 fi
 
-if grep -q 'stays six arrays, not seven' "$CC_SKILL"; then
+# VCS-048/ADR-0175: AIG2 is negative-shaped (rule 8/18 — a negative check must scan the whole
+# population, not just the file the content used to live in), so it reads across all three files
+# the SKILL.md body is now split across.
+if cat "$CC_SKILL" "$STEP5_REF" "$HITL_REF" 2>/dev/null | grep -q 'stays six arrays, not seven'; then
   bad "AIG2: the stale 'stays six arrays, not seven' sentence is still present verbatim — it no longer holds now that a seventh finding array exists"
 else
   ok "AIG2: the stale 'stays six arrays, not seven' sentence was updated, not left behind"
 fi
 
-if grep -q 'seventh advisory-schema finding array' "$CC_SKILL"; then
+if grep -q 'seventh advisory-schema finding array' "$HITL_REF"; then
   ok "AIG3: the Gate 5 roll-up block acknowledges the seventh advisory-schema finding array"
 else
   bad "AIG3: the Gate 5 roll-up block does not acknowledge a seventh advisory-schema finding array"
@@ -325,7 +330,7 @@ fi
 # AIG4: the exclusion from the six-array Gate 5 roll-up must be explained as structural (Gate
 # 5.05 runs after Gate 5's AskUserQuestion already rendered), not semantic like task_metrics's —
 # these are different reasons and conflating them would misrepresent both.
-if grep -qi 'structural, not semantic' "$CC_SKILL"; then
+if grep -qi 'structural, not semantic' "$HITL_REF"; then
   ok "AIG4: SKILL.md distinguishes accessibility_i18n_findings' structural exclusion from task_metrics' semantic one"
 else
   bad "AIG4: no structural-vs-semantic distinction found for the roll-up exclusion"

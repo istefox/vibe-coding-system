@@ -5182,4 +5182,67 @@ Key architectural decisions:
   PC1–PC5b clean, PASS=631 FAIL=0; `pairs-completeness.test.sh` 322/322;
   `fence-contract-coverage.test.sh` 67/67; byte-identical diff against the pre-move body empty.
 
+## Decisions from HITL gates extraction out of concept-to-code/SKILL.md (ADR-0175)
+
+Closed the second and last of `VCS-042`'s two blocks (the first, Step 5, closed under ADR-0174).
+`## 5. HITL gates` (old lines 1780–2948, 1,169 lines, 23% of the post-ADR-0174 file) moved
+byte-identically into `references/hitl-gates.md`. `SKILL.md` drops from 3,042 to 1,877 lines — a
+75.6% reduction from the pre-`VCS-042` 4,729-line original across both extractions.
+
+Key architectural decisions:
+- **Full `## 5. HITL gates`, not a partial sub-block** (D1). Same reasoning as ADR-0174 D1: no
+  internal sub-heading structure separates cleanly, and the section is referenced by name as a
+  whole from §4's dispatch templates throughout.
+- **ADR-0174's three mechanical re-point patterns, reused without modification** (D2). Dominant
+  shape this time was simple repoint of an entire Gate block wholesale (Gate 0, Gate 2, Gate 2b,
+  Gate 4, Gate 4.0, the Gate 4.5/5 heading anchors, "Gate approval recording"); five files reused
+  D3's population-glob widening; four files carried the heading-anchored awk-range extraction the
+  preflight tool flagged directly, fixed the same way ADR-0174 preferred (drop the range, read the
+  reference file directly).
+- **Rule 8/18's negative-shaped-check widening confirmed on two independently-discovered
+  instances** (D3). `gate5-state-removal.test.sh`'s GR5 (a removed-state forward guard) needed
+  widening from `$CC`-only to `$CC "$HITL_REF"`, matching ADR-0174's own AIG2 precedent exactly.
+  A second, structurally different instance surfaced only by running `plant-check.sh` to
+  completion, not by inspection: `concept-to-code-bsd-autopilot-gates.test.sh`'s G10 (a
+  consolidated-string ban) had the identical `$SKILL_MD`-only blind spot — PC1 caught it directly
+  ("the assertion still passed with the mechanism removed") because the plant's mutated text
+  landed in `$HITL_REF`, invisible to a grep that never looked there. Two structurally different
+  assertions hitting the same blind spot confirms this is a property of the coupling class, not a
+  one-off — and that `plant-check.sh` itself, not just re-point review, is what actually catches
+  it.
+- **A second merged-view-splice instance, confirming ADR-0174 D4 generalizes** (D4).
+  `commit-transition-order.test.sh`'s `order_check()` classifies by nearest-preceding-manifest-
+  write **by absolute line number within one file** — genuinely positional, so neither a repoint
+  nor a plain concatenation fixes it. Built `$C2C_MERGED` via the same splice-at-heading `awk`
+  technique ADR-0174 D4 introduced for `worktree-isolation-contract.test.sh`, at an
+  independently-discovered second site with a structurally different classifier.
+- **New pattern: split-invocation-and-sum, for a real multi-caller checker** (D5).
+  `path-rule-check.sh` is production code taking exactly one file per invocation by design (a
+  future caller may point it at a different skill's `SKILL.md`). Concatenating files before
+  passing them in would corrupt its line-number-based `FINDING` output. Fixed by invoking it
+  separately against `$SKILL_MD`, `$STEP5_REF`, `$HITL_REF` and requiring all three clean (exact-
+  match checks) or summing each run's `occurrences=` count (`>=N` floor checks) — extending
+  ADR-0174's own F2 precedent, which already ran the checker twice, one file further.
+- **A same-file cross-reference check turned boundary-straddling** (D6).
+  `cross-reference-form.test.sh`'s C1/C2 assert an anchor phrase and its definition both appear
+  exactly twice in the *same file*; the move put the definition in `$HITL_REF` while the mention
+  stayed in `$CC`. Fixed via plain concatenation (not splice — the logic is occurrence-count, not
+  positional) into a merged file passed as both arguments.
+- **A `skill-extraction-preflight.sh` false-positive class, not previously documented** (D7).
+  Re-running the tool post-move with the pre-move line range reported one apparent in-range plant
+  (`batch-boundary-precedence.test.sh`'s CB4) that, verified directly, actually lived in an
+  unrelated section (`## 7. Failure handling`) that shifted upward into the numeric window the
+  move vacated. The tool matches on absolute line position, not section membership — a post-move
+  "0 in-range" reading requires verifying every raw hit individually, not trusting the count.
+- The pre-move research table (16 plants / 4 awk-sites / ~11 files) undercounted the real blast
+  radius by nearly 2x: 19 files broke, found only by running the full suite, not by trusting the
+  preflight tool's inventory — it cannot see whole-file greps, population-glob builders, or
+  positional cross-file classifiers.
+- Full verification: local suite (91 files) 0 failures; `plant-check.sh` 623/623 plant
+  declarations fired, PASS=631 FAIL=0, PC1–PC5b clean (two rounds of real findings fixed first —
+  G10 via PC1, this section's own absence via PC5 — both self-consistently resolved before the
+  clean run);
+  `pairs-completeness.test.sh` 324/324; `fence-contract-coverage.test.sh` 67/67; byte-identical
+  diff against the pre-move body empty. Detail: `docs/architecture/ADR-0175-hitl-gates-extraction-boundary-straddling.md`.
+
 Detail: `docs/architecture/ADR-0174-step5-extraction-population-glob-coupling.md`.

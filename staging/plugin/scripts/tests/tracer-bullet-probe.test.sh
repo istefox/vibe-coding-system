@@ -40,6 +40,7 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)                    # staging/
 REPO=$(cd "$STAGING/.." && pwd)
 SKILL_DIR="$STAGING/plugin/skills/concept-to-code"
 SKILL_MD="$SKILL_DIR/SKILL.md"
+HITL_REF="$SKILL_DIR/references/hitl-gates.md"
 STEP5_REF="$SKILL_DIR/references/step5-implementation.md"
 INIT="$SKILL_DIR/scripts/manifest-init.sh"
 VAL="$SKILL_DIR/scripts/manifest-validate.sh"
@@ -127,9 +128,11 @@ fi
 STEP45_LINE=$(grep -n '^### Step 4.5 —' "$SKILL_MD" | head -1 | cut -d: -f1)
 STEP3_LINE=$(grep -n '^### Step 3 —' "$SKILL_MD" | head -1 | cut -d: -f1)
 STEP5_LINE=$(grep -n '^### Step 5 —' "$SKILL_MD" | head -1 | cut -d: -f1)
-GATE45_LINE=$(grep -n '^\*\*Gate 4\.5 —' "$SKILL_MD" | head -1 | cut -d: -f1)
-GATE4_LINE=$(grep -n '^\*\*Gate 4 —' "$SKILL_MD" | head -1 | cut -d: -f1)
-GATE5_LINE=$(grep -n '^\*\*Gate 5 —' "$SKILL_MD" | head -1 | cut -d: -f1)
+# VCS-048/ADR-0175: ## 5. HITL gates (the Gate 4/4.5/5 headings) moved into
+# references/hitl-gates.md — its own doc-order is checked there, separately from §4's.
+GATE45_LINE=$(grep -n '^\*\*Gate 4\.5 —' "$HITL_REF" | head -1 | cut -d: -f1)
+GATE4_LINE=$(grep -n '^\*\*Gate 4 —' "$HITL_REF" | head -1 | cut -d: -f1)
+GATE5_LINE=$(grep -n '^\*\*Gate 5 —' "$HITL_REF" | head -1 | cut -d: -f1)
 if [ -n "$STEP45_LINE" ] && [ -n "$STEP3_LINE" ] && [ -n "$STEP5_LINE" ] \
    && [ "$STEP45_LINE" -gt "$STEP3_LINE" ] && [ "$STEP45_LINE" -lt "$STEP5_LINE" ] \
    && [ -n "$GATE45_LINE" ] && [ -n "$GATE4_LINE" ] && [ -n "$GATE5_LINE" ] \
@@ -195,8 +198,10 @@ else
   bad "TBB1: Step 4.5 does not name all three verdicts"
 fi
 
+# VCS-048/ADR-0175: ## 5. HITL gates moved into references/hitl-gates.md; the reference file's
+# body IS the block, so no awk range is needed any more.
 GATES_TXT="$TMP/gates.txt"
-awk '/^## 5\. HITL gates/{f=1} /^## 6\. Coexistence invariants/{f=0} f' "$SKILL_MD" >"$GATES_TXT"
+cp "$HITL_REF" "$GATES_TXT" 2>/dev/null
 
 if grep -qF 'Gate 4.5' "$GATES_TXT"; then
   ok "TBB2: a 'Gate 4.5' block exists in the HITL gates section"
@@ -205,7 +210,7 @@ else
 fi
 
 GATE45_TXT="$TMP/gate45.txt"
-awk '/^\*\*Gate 4\.5 —/{f=1} /^\*\*Gate 5 —/{f=0} f' "$SKILL_MD" >"$GATE45_TXT"
+awk '/^\*\*Gate 4\.5 —/{f=1} /^\*\*Gate 5 —/{f=0} f' "$HITL_REF" >"$GATE45_TXT"
 
 if [ -s "$GATE45_TXT" ] && grep -qi 'continue anyway' "$GATE45_TXT" \
    && grep -qi 'reduce scope' "$GATE45_TXT" \

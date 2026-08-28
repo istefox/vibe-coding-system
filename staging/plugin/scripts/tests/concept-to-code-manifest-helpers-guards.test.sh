@@ -25,6 +25,7 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)                    # staging/
 SKILL_DIR="$STAGING/plugin/skills/concept-to-code"
 SKILL_MD="$SKILL_DIR/SKILL.md"
 STEP5_REF="$SKILL_DIR/references/step5-implementation.md"
+HITL_REF="$SKILL_DIR/references/hitl-gates.md"
 INIT="$SKILL_DIR/scripts/manifest-init.sh"
 VAL="$SKILL_DIR/scripts/manifest-validate.sh"
 SETART="$SKILL_DIR/scripts/manifest-set-artifact.sh"
@@ -214,7 +215,7 @@ fi
 
 # D4 (static, genuine RED now): SKILL.md:1175 site, absolute-prefixed. Expected now (RED): no
 # match.
-if grep -qF '`[y]` → set `manifest.anonymize = true` (via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed.' "$SKILL_MD"; then
+if grep -qF '`[y]` → set `manifest.anonymize = true` (via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`); proceed.' "$HITL_REF"; then
   ok "D4: SKILL.md:1175 site uses the absolute PATH RULE prefix"
 else
   bad "D4: SKILL.md:1175 site still uses a bare/relative manifest-set-flag.sh path"
@@ -222,7 +223,7 @@ fi
 
 # D5 (static, genuine RED now): SKILL.md:1352 site, absolute-prefixed. Expected now (RED): no
 # match.
-if grep -qF '`[yes]` → `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`; proceed.' "$SKILL_MD"; then
+if grep -qF '`[yes]` → `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> anonymize true`; proceed.' "$HITL_REF"; then
   ok "D5: SKILL.md:1352 site uses the absolute PATH RULE prefix"
 else
   bad "D5: SKILL.md:1352 site still uses a bare/relative manifest-set-flag.sh path"
@@ -369,27 +370,41 @@ fi
 # declares the six prose occurrences; until then this stays red with findings=16, and that is
 # this task's declared deliverable (ADR-0101 case 1), not a defect to fix here.
 #
-# VCS-047/ADR-0174: path-rule-check.sh only scans the ONE file passed as its first argument, and
-# Step 5's content (including the F2 plant's needle) now lives in
-# references/step5-implementation.md, not in $SKILL_MD. Scan both, separately (the checker takes
-# one file per invocation, not a list) — a violation in either is a real F2 finding.
+# VCS-047/ADR-0174 + VCS-048/ADR-0175: path-rule-check.sh only scans the ONE file passed as its
+# first argument, and Step 5's and ## 5. HITL gates' content now live in
+# references/step5-implementation.md and references/hitl-gates.md, not in $SKILL_MD. Scan all
+# three, separately (the checker takes one file per invocation, not a list) — a violation in any
+# is a real F2 finding.
 f2_out="$(bash "$PRC" "$SKILL_MD" "$SKILL_DIR/scripts" 2>/dev/null)"
 f2_rc=$?
 f2_ref_out="$(bash "$PRC" "$SKILL_DIR/references/step5-implementation.md" "$SKILL_DIR/scripts" 2>/dev/null)"
 f2_ref_rc=$?
-if [ "$f2_rc" -eq 0 ] && [ -z "$f2_out" ] && [ "$f2_ref_rc" -eq 0 ] && [ -z "$f2_ref_out" ]; then
-  ok "F2: the real SKILL.md and references/step5-implementation.md are clean under path-rule-check.sh (exit 0, empty stdout)"
+f2_hitl_out="$(bash "$PRC" "$SKILL_DIR/references/hitl-gates.md" "$SKILL_DIR/scripts" 2>/dev/null)"
+f2_hitl_rc=$?
+if [ "$f2_rc" -eq 0 ] && [ -z "$f2_out" ] && [ "$f2_ref_rc" -eq 0 ] && [ -z "$f2_ref_out" ] \
+  && [ "$f2_hitl_rc" -eq 0 ] && [ -z "$f2_hitl_out" ]; then
+  ok "F2: the real SKILL.md, references/step5-implementation.md and references/hitl-gates.md are clean under path-rule-check.sh (exit 0, empty stdout)"
 else
-  bad "F2: SKILL.md and/or references/step5-implementation.md are not yet clean under path-rule-check.sh (rc=$f2_rc, ref_rc=$f2_ref_rc) -- EXPECTED RED until Task 4"
+  bad "F2: SKILL.md and/or references/step5-implementation.md and/or references/hitl-gates.md are not yet clean under path-rule-check.sh (rc=$f2_rc, ref_rc=$f2_ref_rc, hitl_rc=$f2_hitl_rc) -- EXPECTED RED until Task 4"
 fi
 # plant: F2 | plugin/skills/concept-to-code/references/step5-implementation.md | hook_verified = false` via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh` and take the Agent-tool fallback. | hook_verified = false` via `manifest-set-flag.sh` and take the Agent-tool fallback.
 
 # F4/F5 (dynamic, count guards on the DENOMINATOR, not the matches -- ADR-0085): read the
 # stderr summary from a run against the real corpus. An empty derivation must not silently
 # read as full coverage.
+#
+# VCS-048/ADR-0175: occurrences now split across three files (SKILL.md, step5-implementation.md,
+# hitl-gates.md) since path-rule-check.sh scans one file per invocation -- sum across all three,
+# same reasoning as F2's split check above. f_helpers is a per-directory derivation (constant
+# across invocations), read once from the SKILL_MD run.
 f45_err="$(bash "$PRC" "$SKILL_MD" "$SKILL_DIR/scripts" 2>&1 >/dev/null)"
 f_helpers="$(printf '%s\n' "$f45_err" | grep -o 'helpers=[0-9]*' | head -1 | cut -d= -f2)"
-f_occurrences="$(printf '%s\n' "$f45_err" | grep -o 'occurrences=[0-9]*' | head -1 | cut -d= -f2)"
+f_occ_skill="$(printf '%s\n' "$f45_err" | grep -o 'occurrences=[0-9]*' | head -1 | cut -d= -f2)"
+f45_step5_err="$(bash "$PRC" "$SKILL_DIR/references/step5-implementation.md" "$SKILL_DIR/scripts" 2>&1 >/dev/null)"
+f_occ_step5="$(printf '%s\n' "$f45_step5_err" | grep -o 'occurrences=[0-9]*' | head -1 | cut -d= -f2)"
+f45_hitl_err="$(bash "$PRC" "$SKILL_DIR/references/hitl-gates.md" "$SKILL_DIR/scripts" 2>&1 >/dev/null)"
+f_occ_hitl="$(printf '%s\n' "$f45_hitl_err" | grep -o 'occurrences=[0-9]*' | head -1 | cut -d= -f2)"
+f_occurrences="$(( ${f_occ_skill:-0} + ${f_occ_step5:-0} + ${f_occ_hitl:-0} ))"
 
 if [ -n "$f_helpers" ] && [ "$f_helpers" -ge 7 ]; then
   ok "F4: helper derivation is >= 7 (got $f_helpers)"

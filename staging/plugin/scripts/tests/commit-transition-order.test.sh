@@ -163,6 +163,7 @@ set -u
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 C2C="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
@@ -172,6 +173,26 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 [ -f "$C2C" ] || { echo "FATAL: missing $C2C"; exit 1; }
+[ -f "$HITL_REF" ] || { echo "FATAL: missing $HITL_REF"; exit 1; }
+
+# VCS-048/ADR-0175: ## 5. HITL gates moved into references/hitl-gates.md. order_check() reads a
+# single file positionally (nearest-preceding-write by line number), so Gate 4.0's commit
+# invocation, its preceding manifest write and its commit-order-exempt waiver — all now living in
+# HITL_REF — need to be spliced back into the heading's old position (merged-view-splice,
+# ADR-0174 D4) for the LIVE derivation to see the same population it saw before the move.
+C2C_MERGED="$TMP/c2c_merged.md"
+awk -v reffile="$HITL_REF" '
+  /^## 5\. HITL gates/ {
+    print
+    while ((getline line < reffile) > 0) print line
+    close(reffile)
+    skip=1
+    next
+  }
+  skip && /^## 6\. Coexistence invariants/ { skip=0 }
+  skip { next }
+  { print }
+' "$C2C" > "$C2C_MERGED"
 
 # ---------------------------------------------------------------------------
 # The three predicates, as functions over an ARGUMENT file — never hardcoded to $C2C — so
@@ -227,7 +248,7 @@ order_check() {
 # Live derivation, once, snapshotted — later fixture calls to order_check() overwrite OC_*, and the
 # LIVE_* copies are what CTO01/CTO02/CTO04/CTO05 read.
 # ===========================================================================
-order_check "$C2C"
+order_check "$C2C_MERGED"
 LIVE_CN=$OC_CN; LIVE_WN=$OC_WN; LIVE_TN=$OC_TN
 LIVE_N=$OC_N;   LIVE_OK=$OC_OK; LIVE_BAD=$OC_BAD; LIVE_WHY=$OC_WHY
 
@@ -253,10 +274,10 @@ fi
 # clean bill of health (ADR-0081 ZA4). RED until Task 2 adds Gate 4.0's waiver — EXEMPT_N is 0 today.
 # ===========================================================================
 EXEMPT_LINES="$TMP/exempt.txt"
-grep -n 'commit-order-exempt:' "$C2C" | cut -d: -f1 | sort -n >"$EXEMPT_LINES" 2>/dev/null || : >"$EXEMPT_LINES"
+grep -n 'commit-order-exempt:' "$C2C_MERGED" | cut -d: -f1 | sort -n >"$EXEMPT_LINES" 2>/dev/null || : >"$EXEMPT_LINES"
 EXEMPT_N=$(wc -l <"$EXEMPT_LINES" | tr -d ' ')
 
-derive_commit_lines "$C2C" >"$TMP/live_commit.txt"
+derive_commit_lines "$C2C_MERGED" >"$TMP/live_commit.txt"
 
 _waiver_bad=""
 while IFS= read -r _en; do
@@ -266,7 +287,7 @@ while IFS= read -r _en; do
   line $_en: exemption marker is not on a recognised commit-invocation line"
     continue
   fi
-  _ewline=$(sed -n "${_en}p" "$C2C")
+  _ewline=$(sed -n "${_en}p" "$C2C_MERGED")
   _ereason=$(printf '%s' "$_ewline" | sed 's/.*commit-order-exempt:[[:space:]]*//; s/-->.*//')
   if [ "${#_ereason}" -lt 40 ]; then
     _waiver_bad="$_waiver_bad

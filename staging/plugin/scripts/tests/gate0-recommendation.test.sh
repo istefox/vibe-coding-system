@@ -36,13 +36,14 @@
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
 # plant: N5 | plugin/skills/concept-to-code/scripts/gate0-detect.sh | echo "repo_file_count=$file_count" | echo "file_estimate=$file_count"
-# plant: N1 | plugin/skills/concept-to-code/SKILL.md | Auto-detect suggests: [<path>] | Recommended: [<path>]
-# plant: N3 | plugin/skills/concept-to-code/SKILL.md | The orchestrator's recommendation wins | Pick one
+# plant: N1 | plugin/skills/concept-to-code/references/hitl-gates.md | Auto-detect suggests: [<path>] | Recommended: [<path>]
+# plant: N3 | plugin/skills/concept-to-code/references/hitl-gates.md | The orchestrator's recommendation wins | Pick one
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 G0="$STAGING/plugin/skills/concept-to-code/scripts/gate0-detect.sh"
 LEGACY="$STAGING/plugin/skills/concept-to-code/tests/run-tests.sh"
 
@@ -54,17 +55,19 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 [ -f "$CC" ] || { echo "FATAL: missing $CC"; exit 1; }
+[ -f "$HITL_REF" ] || { echo "FATAL: missing $HITL_REF"; exit 1; }
 [ -f "$G0" ] || { echo "FATAL: missing $G0"; exit 1; }
 
 # --- Gate 0 block, anchored on headings, never line numbers (rule 3) -------------------------
-N_A=$(grep -n '^\*\*Gate 0 — Chain routing' "$CC" | head -1 | cut -d: -f1)
-N_B=$(grep -n '^\*\*Gate 0b — Anonymous mode' "$CC" | head -1 | cut -d: -f1)
+# VCS-048/ADR-0175: ## 5. HITL gates (including Gate 0/0b) moved into references/hitl-gates.md.
+N_A=$(grep -n '^\*\*Gate 0 — Chain routing' "$HITL_REF" | head -1 | cut -d: -f1)
+N_B=$(grep -n '^\*\*Gate 0b — Anonymous mode' "$HITL_REF" | head -1 | cut -d: -f1)
 if [ -n "${N_A:-}" ] && [ -n "${N_B:-}" ] && [ "$N_B" -gt "$N_A" ]; then
   ok "N0 Gate 0 block anchors resolve ($N_A..$N_B)"
 else
   bad "N0 Gate 0 block anchors did not resolve — a heading was reworded, and every prose assertion below is vacuous"
 fi
-BLOCK=$(awk -v a="${N_A:-0}" -v b="${N_B:-0}" 'NR>=a && NR<b' "$CC")
+BLOCK=$(awk -v a="${N_A:-0}" -v b="${N_B:-0}" 'NR>=a && NR<b' "$HITL_REF")
 BLOCK_N=$(printf '%s\n' "$BLOCK" | grep -c .)
 if [ "$BLOCK_N" -ge 30 ]; then ok "N0b the extracted block is non-vacuous ($BLOCK_N lines)"
 else bad "N0b the Gate 0 block extracted $BLOCK_N lines (expected >= 30)"; fi

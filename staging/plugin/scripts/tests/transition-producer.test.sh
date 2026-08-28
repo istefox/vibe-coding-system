@@ -46,6 +46,7 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)
 SKILLS="$STAGING/plugin/skills"
 C2C="$SKILLS/concept-to-code/SKILL.md"
 STEP5_REF="$SKILLS/concept-to-code/references/step5-implementation.md"
+HITL_REF="$SKILLS/concept-to-code/references/hitl-gates.md"
 TRANS="$SKILLS/concept-to-code/scripts/manifest-transition.sh"
 
 PASS=0; FAIL=0
@@ -98,6 +99,9 @@ done
 # physically moved into references/step5-implementation.md. Add it, or every producer inside old
 # Step 5 silently vanishes from the population and its targets read as producerless.
 [ -f "$STEP5_REF" ] && cat "$STEP5_REF" >>"$PROD"
+# VCS-048/ADR-0175: ## 5. HITL gates physically moved into references/hitl-gates.md, same reason
+# and same fix as Step 5 above — its gate-transition producers would otherwise vanish silently.
+[ -f "$HITL_REF" ] && cat "$HITL_REF" >>"$PROD"
 PROD_N=$(wc -l <"$PROD" | tr -d ' ')
 
 # ---------------------------------------------------------------------------

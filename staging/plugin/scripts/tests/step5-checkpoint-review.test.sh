@@ -9,6 +9,7 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 CC_SKILL="$STAGING/plugin/skills/concept-to-code/SKILL.md"
 STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 CC_SCRIPTS="$STAGING/plugin/skills/concept-to-code/scripts"
 INIT="$CC_SCRIPTS/manifest-init.sh"
 VALIDATE="$CC_SCRIPTS/manifest-validate.sh"
@@ -163,7 +164,9 @@ fi
 # an assertion that breaks on a reflow is a guard that fails for the wrong reason (the line-wrap
 # cousin of rule 3 — do not anchor on layout).
 CC_FLAT="$TMP/cc-flat.txt"
-tr '\n' ' ' < "$CC_SKILL" | tr -s ' ' > "$CC_FLAT"
+# VCS-048/ADR-0175: ## 5. HITL gates (the Gate 5 render text E5/E8 check) moved into
+# references/hitl-gates.md — flatten both files, not just SKILL.md.
+cat "$CC_SKILL" "$HITL_REF" 2>/dev/null | tr '\n' ' ' | tr -s ' ' > "$CC_FLAT"
 has() { grep -qF "$1" "$CC_FLAT"; }
 
 # ==================================================================================================

@@ -30,22 +30,25 @@
 # --- plants (plant-check.sh) ------------------------------------------------------------
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
-# plant: G7 | plugin/skills/concept-to-code/SKILL.md | It does not change coder isolation | It gives the cleanest coder context
+# plant: G7 | plugin/skills/concept-to-code/references/hitl-gates.md | It does not change coder isolation | It gives the cleanest coder context
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 [ -f "$CC" ] || { echo "FATAL: missing $CC"; exit 1; }
+[ -f "$HITL_REF" ] || { echo "FATAL: missing $HITL_REF"; exit 1; }
 
 # --- the Gate 4 block, anchored on headings, never on line numbers (rule 3) ------------------
-G_A=$(grep -n '^\*\*Gate 4 — Session boundary (BLOCKING)\*\*' "$CC" | head -1 | cut -d: -f1)
-G_B=$(grep -n '^\*\*Gate 4\.5 — Tracer-bullet red decision' "$CC" | head -1 | cut -d: -f1)
+# VCS-048/ADR-0175: ## 5. HITL gates moved into references/hitl-gates.md.
+G_A=$(grep -n '^\*\*Gate 4 — Session boundary (BLOCKING)\*\*' "$HITL_REF" | head -1 | cut -d: -f1)
+G_B=$(grep -n '^\*\*Gate 4\.5 — Tracer-bullet red decision' "$HITL_REF" | head -1 | cut -d: -f1)
 
 if [ -n "${G_A:-}" ] && [ -n "${G_B:-}" ] && [ "$G_B" -gt "$G_A" ]; then
   ok "G0 Gate 4 block anchors resolve ($G_A..$G_B)"
@@ -53,7 +56,7 @@ else
   bad "G0 Gate 4 block anchors did not resolve — a heading was reworded, and every assertion below is vacuous"
 fi
 
-BLOCK=$(awk -v a="${G_A:-0}" -v b="${G_B:-0}" 'NR>=a && NR<b' "$CC")
+BLOCK=$(awk -v a="${G_A:-0}" -v b="${G_B:-0}" 'NR>=a && NR<b' "$HITL_REF")
 BLOCK_N=$(printf '%s\n' "$BLOCK" | grep -c .)
 if [ "$BLOCK_N" -ge 60 ]; then ok "G0b the extracted block is non-vacuous ($BLOCK_N lines)"
 else bad "G0b the Gate 4 block extracted $BLOCK_N lines (expected >= 60) — extraction is broken"; fi

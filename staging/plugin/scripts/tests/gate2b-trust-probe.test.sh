@@ -28,12 +28,13 @@
 # --- plants (plant-check.sh) ------------------------------------------------------------
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
-# plant: G2B3 | plugin/skills/concept-to-code/SKILL.md | already trusted, SHA unchanged | awaiting approval
+# plant: G2B3 | plugin/skills/concept-to-code/references/hitl-gates.md | already trusted, SHA unchanged | awaiting approval
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
@@ -43,16 +44,17 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 [ -f "$CC" ] || { echo "FATAL: missing $CC"; exit 1; }
+[ -f "$HITL_REF" ] || { echo "FATAL: missing $HITL_REF"; exit 1; }
 
 # --- the Gate 2b block, anchored on headings (rule 3) ----------------------------------------
-A=$(grep -n '^\*\*Gate 2b — Test-cmd TOFU' "$CC" | head -1 | cut -d: -f1)
-B=$(grep -n '^\*\*Gate 2c — External dependencies' "$CC" | head -1 | cut -d: -f1)
+A=$(grep -n '^\*\*Gate 2b — Test-cmd TOFU' "$HITL_REF" | head -1 | cut -d: -f1)
+B=$(grep -n '^\*\*Gate 2c — External dependencies' "$HITL_REF" | head -1 | cut -d: -f1)
 if [ -n "${A:-}" ] && [ -n "${B:-}" ] && [ "$B" -gt "$A" ]; then
   ok "G2B0 Gate 2b block anchors resolve ($A..$B)"
 else
   bad "G2B0 Gate 2b anchors did not resolve — a heading was reworded, and every assertion below is vacuous"
 fi
-BLOCK=$(awk -v a="${A:-0}" -v b="${B:-0}" 'NR>=a && NR<b' "$CC")
+BLOCK=$(awk -v a="${A:-0}" -v b="${B:-0}" 'NR>=a && NR<b' "$HITL_REF")
 BLOCK_N=$(printf '%s\n' "$BLOCK" | grep -c .)
 if [ "$BLOCK_N" -ge 40 ]; then ok "G2B0b the extracted block is non-vacuous ($BLOCK_N lines)"
 else bad "G2B0b the Gate 2b block extracted $BLOCK_N lines (expected >= 40)"; fi
@@ -134,7 +136,7 @@ FBODY="$TMP/probe.sh"
 awk '/fence-contract: c2c-gate2b-trust-probe -->/{m=1; next}
      m && /^```bash$/{f=1; next}
      f && /^```$/{exit}
-     f{print}' "$CC" >"$FBODY"
+     f{print}' "$HITL_REF" >"$FBODY"
 
 if [ -s "$FBODY" ] && grep -q 'stop-gate/trust' "$FBODY"; then
   ok "G2B8 the probe extracts as a declared fence-contract: c2c-gate2b-trust-probe -->"
