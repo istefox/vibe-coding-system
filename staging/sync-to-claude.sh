@@ -205,6 +205,9 @@ plugin/scripts/usage-daily-hint.sh|hooks/usage-daily-hint.sh
 plugin/scripts/usage-report.py|scripts/usage-report.py
 plugin/scripts/precompact-guard.sh|hooks/precompact-guard.sh
 plugin/scripts/commit-outcome-backstop.sh|hooks/commit-outcome-backstop.sh
+plugin/scripts/instructions-loaded-canon.sh|hooks/instructions-loaded-canon.sh
+plugin/scripts/instructions-loaded-log.sh|hooks/instructions-loaded-log.sh
+plugin/scripts/instructions-loaded-verify.sh|hooks/instructions-loaded-verify.sh
 plugin/scripts/context-occupancy.sh|hooks/context-occupancy.sh
 plugin/scripts/migrate-trust-paths.sh|hooks/migrate-trust-paths.sh
 plugin/scripts/tests/db-backup-guardrail.sh|hooks/tests/db-backup-guardrail.sh
@@ -516,6 +519,27 @@ following the SKILL.md instruction to run it. It is report-only — it never blo
 outside a project with docs/manifests/: a manifest more than 24h old, or not sitting at a
 commit-stage current_step, never triggers a report. Until this entry exists the hook is deployed
 but never invoked.
+NOTE
+fi
+
+if ! grep -q 'InstructionsLoaded' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this InstructionsLoaded entry to ~/.claude/settings.json's top-level "hooks" object:
+
+  "InstructionsLoaded": [
+    { "matcher": "session_start|nested_traversal|path_glob_match|include|compact",
+      "hooks": [ { "type": "command", "command": "\"$HOME\"/.claude/hooks/instructions-loaded-log.sh" } ] }
+  ]
+
+instructions-loaded-log (ADR-0171) records one JSONL line per instruction file loaded into a
+session's context, so a later query (instructions-loaded-verify.sh) can measure whether a specific
+correction actually landed instead of trusting Claude Code's documented loading behaviour on faith.
+Observational only — the event's own exit code is ignored by Claude Code, so this hook has no
+decision to make even in principle. Until this entry exists the hook is deployed but never invoked,
+and instructions-loaded-verify.sh has nothing to read.
 NOTE
 fi
 

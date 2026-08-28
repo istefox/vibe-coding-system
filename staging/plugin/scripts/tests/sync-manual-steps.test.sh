@@ -42,30 +42,34 @@ USAGE_HINT_MARK="usage-daily-hint (issue #112, ADR-0058"
 RETIRED_MARK="MANUAL STEP: retired hook cleanup"
 CLEAR_MARK="no manual steps outstanding"
 BASEREF_MARK="worktree forks from the default branch and the chain's Step 5 pre-flight will refuse to dispatch"
+INSTRUCTIONS_LOADED_MARK="has nothing to read"
 
 # Two wiring notices now share the "MANUAL STEP: hook wiring" heading (autopilot-guard and, since
 # issue #87, write-scope-enforce), so the marks above discriminate on each notice's own body.
 # Matching the shared heading would make the two indistinguishable.
 #
-# precompact-guard (issue #112, ADR-0058) is a CONTRACT CHANGE to this file, not just an addition:
-# the "yes" fixture below enumerates every wired hook and must include PreCompact too, or A3's
-# all-clear assertion breaks the moment sync-to-claude.sh's new notice exists (this caught
-# ADR-0049 too — see the comment on issue #87 above). worktree.baseRef (issue #176, ADR-0068
-# Task 5) is the same kind of contract change: the "yes" fixture's settings.json must also carry
-# "worktree":{"baseRef":"head"}, or A3 breaks the moment the baseRef notice exists.
-# commit-outcome-backstop (2026-08-23-commit-outcome-backstop-hook, ADR-0168 Task 7, R-03) is the
-# same kind of contract change again: the "yes" fixture must also carry a PostToolUse/Skill entry
-# naming commit-outcome-backstop.sh, or A3 breaks the moment that seventh notice exists. Whoever
-# adds the next notice: extend build_home's "yes" fixture to represent it as wired too, or A3 rots
-# again.
+# WIRED_HOOKS / UNWIRED_HOOKS below are the SINGLE definition of "what does a settings.json hooks
+# block look like with nothing outstanding" / "with nothing wired at all". Every notice that is a
+# CONTRACT CHANGE to this file (precompact-guard/ADR-0058, worktree.baseRef/ADR-0068,
+# commit-outcome-backstop/ADR-0168, usage-daily-hint/ADR-0170, and whichever is next) must be
+# reflected here, in the one place, or A3's all-clear assertion breaks the moment the new notice
+# exists. Before this was extracted, the same JSON blob was inlined three times (build_home,
+# build_home_br, build_home_skills), and one of the three copies — build_home_skills — had
+# already drifted two hooks behind the other two by the time this was noticed: its comment
+# claimed to reuse "build_home's fully-wired settings.json" while actually carrying its own,
+# stale copy. A single source makes that drift structurally impossible instead of forbidden by a
+# comment (rule 6: two copies answering ONE question — "is this hooks block fully wired?" — is
+# the defect, not a design choice).
+WIRED_HOOKS='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}],"InstructionsLoaded":[{"matcher":"session_start|nested_traversal|path_glob_match|include|compact","hooks":[{"type":"command","command":"\"$HOME\"/.claude/hooks/instructions-loaded-log.sh"}]}]}'
+UNWIRED_HOOKS='{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}'
 
 # build_home <name> <wired:yes|no|nofile> <retired:yes|no> — returns the fixture HOME path.
 # "wired: yes" means every wired hook is present, i.e. genuinely nothing outstanding.
 build_home() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   case "$2" in
-    yes) printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
-    no)  printf '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}}\n' > "$_h/.claude/settings.json" ;;
+    yes) printf '{"worktree":{"baseRef":"head"},"hooks":%s}\n' "$WIRED_HOOKS" > "$_h/.claude/settings.json" ;;
+    no)  printf '{"hooks":%s}\n' "$UNWIRED_HOOKS" > "$_h/.claude/settings.json" ;;
     nofile) : ;;
   esac
   [ "$3" = "yes" ] && printf '#!/bin/bash\n# retired one-shot backup\n' > "$_h/.claude/hooks/backup-before-deploy.sh"
@@ -76,9 +80,9 @@ run_sync() { HOME="$1" bash "$SYNC" 2>&1; }
 
 # build_home_br <name> <hooks:yes|no|nofile> <baseref:absent|wrong|correct> — returns the fixture
 # HOME path. Independent of build_home's fixture shape because the baseRef notice is gated on a
-# JSON value, not a hook-name substring; "hooks" here reuses "yes"/"no"'s exact JSON blobs from
-# build_home so the six existing notices behave identically to sections A-E while $3 varies only
-# the "worktree" key. "nofile" (no settings.json at all) ignores $3.
+# JSON value, not a hook-name substring; "hooks" here reuses WIRED_HOOKS/UNWIRED_HOOKS, the same
+# single source build_home draws from, so every existing notice behaves identically to sections
+# A-E while $3 varies only the "worktree" key. "nofile" (no settings.json at all) ignores $3.
 build_home_br() {
   _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks"
   if [ "$2" = "nofile" ]; then
@@ -91,8 +95,8 @@ build_home_br() {
     correct) _wt='"worktree":{"baseRef":"head"},' ;;
   esac
   case "$2" in
-    yes) _hooks='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}]}' ;;
-    no)  _hooks='{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}' ;;
+    yes) _hooks="$WIRED_HOOKS" ;;
+    no)  _hooks="$UNWIRED_HOOKS" ;;
   esac
   printf '{%s"hooks":%s}\n' "$_wt" "$_hooks" > "$_h/.claude/settings.json"
   printf '%s' "$_h"
@@ -334,14 +338,14 @@ esac
 # code. Pinned by the orchestrator so the tester and coder agree on the exact heading:
 REPORT_MARK="-- REPORT: deployed skill(s) neither vendored nor declared --"
 
-# build_home_skills <name> <skill-dir-names...> — returns the fixture HOME path. Reuses build_home's
-# fully-wired "yes" settings.json (every hook wired, baseRef correct) so the six existing MANUAL
-# STEP notices stay silent and cannot interfere with the new assertions; adds a $HOME/.claude/
-# skills/ directory populated with one empty directory per name given.
+# build_home_skills <name> <skill-dir-names...> — returns the fixture HOME path. Reuses
+# WIRED_HOOKS, the same single source build_home draws from, so the existing MANUAL STEP notices
+# stay silent and cannot interfere with the new assertions; adds a $HOME/.claude/skills/ directory
+# populated with one empty directory per name given.
 build_home_skills() {
   _n="$1"; shift
   _h="$TMP/$_n"; mkdir -p "$_h/.claude/hooks" "$_h/.claude/skills"
-  printf '{"worktree":{"baseRef":"head"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+  printf '{"worktree":{"baseRef":"head"},"hooks":%s}\n' "$WIRED_HOOKS" > "$_h/.claude/settings.json"
   for _s in "$@"; do
     mkdir -p "$_h/.claude/skills/$_s"
   done
@@ -426,6 +430,41 @@ esac
 case "$OUT" in
   *"$WIRING_MARK"*) ok "H3b: the unrelated autopilot-guard notice still fires — wiring commit-outcome-backstop alone does not mute it" ;;
   *) bad "H3b: autopilot-guard notice muted by an unrelated hook (commit-outcome-backstop) being wired" ;;
+esac
+
+# I. InstructionsLoaded MANUAL STEP notice (ADR-0171). Gated on
+# `grep -q 'InstructionsLoaded' "$DEST/settings.json"`, same shape as the six hook-name marks
+# above. INSTRUCTIONS_LOADED_MARK is "has nothing to read" (the closing sentence of the notice's
+# own body, confirmed to occur exactly once in sync-to-claude.sh) rather than the bare hook
+# filename or the shared "top-level \"hooks\" object" phrase — that phrase already appears in the
+# precompact-guard notice (sync-to-claude.sh:468), so it would match regardless of whether THIS
+# notice fires (rule 1/12 again, the same collision H's own comment already found once).
+
+# I1: not wired -> fires.
+OUT=$(run_sync "$(build_home i1 no no)")
+case "$OUT" in
+  *"$INSTRUCTIONS_LOADED_MARK"*) ok "I1: InstructionsLoaded notice printed when unwired" ;;
+  *) bad "I1: InstructionsLoaded notice did not print for an unwired settings.json" ;;
+esac
+
+# I2: wired (the "yes" fixture, now extended above to include the InstructionsLoaded entry) -> suppressed.
+OUT=$(run_sync "$(build_home i2 yes no)")
+case "$OUT" in
+  *"$INSTRUCTIONS_LOADED_MARK"*) bad "I2: InstructionsLoaded notice printed although the yes fixture wires it" ;;
+  *) ok "I2: InstructionsLoaded notice suppressed once wired" ;;
+esac
+
+# I3: independence, both directions — a fixture wiring ONLY InstructionsLoaded.
+_i="$TMP/i3"; mkdir -p "$_i/.claude/hooks"
+printf '{"hooks":{"InstructionsLoaded":[{"matcher":"session_start","hooks":[{"type":"command","command":"bash ~/.claude/hooks/instructions-loaded-log.sh"}]}]}}\n' > "$_i/.claude/settings.json"
+OUT=$(run_sync "$_i")
+case "$OUT" in
+  *"$INSTRUCTIONS_LOADED_MARK"*) bad "I3: InstructionsLoaded notice printed although this fixture wires it" ;;
+  *) ok "I3: InstructionsLoaded notice suppressed when wired alone" ;;
+esac
+case "$OUT" in
+  *"$WIRING_MARK"*) ok "I3b: the unrelated autopilot-guard notice still fires — wiring InstructionsLoaded alone does not mute it" ;;
+  *) bad "I3b: autopilot-guard notice muted by an unrelated hook (InstructionsLoaded) being wired" ;;
 esac
 
 echo "----"
