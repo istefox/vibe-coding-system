@@ -5070,3 +5070,56 @@ Key architectural decisions:
   written guidance, citing `impeccable` as the scale proof and both traps this ADR closes.
 
 Detail: `docs/architecture/ADR-0172-concept-to-code-skill-split-pilot.md`.
+
+## Decisions from skill-extraction preflight tool + blind-guard hardening (ADR-0173)
+
+Asked to reconsider whether `VCS-042` (the `concept-to-code/SKILL.md` split) is worth pursuing at
+all after ADR-0172's reverted pilot, measuring first changed the answer's shape (repo rule 13).
+Byte-share measurement, not a line-count guess: Step 5 is 38% of the file (~30k of ~79k estimated
+tokens), §5 HITL gates 23% — 61% combined, loaded on every invocation regardless of which of the
+state machine's 8 steps is actually reached. The benefit is real and larger than the reverted
+pilot's ~4% slice suggested.
+
+Key architectural decisions:
+- **Re-deriving the plant/anchor inventory surfaced a second coupling class distinct from
+  ADR-0172's D2.** Ten test files extract a block of `SKILL.md` with an inline `awk` range,
+  copy-pasted independently with no shared helper. Most already guard the extraction's emptiness
+  and fail loud if a heading moves. Two did not, and both wrap the block in a negative-shaped
+  assertion (`bad` if a phrase IS found, `ok` otherwise): `test-write-scope.test.sh` TL1
+  (extracted from `autopilot-build/SKILL.md`) and `step6-effort-pin.test.sh` G1
+  (`concept-to-code/SKILL.md`'s Step 6). An empty extraction from an innocent heading rename would
+  read as `ok` with nothing actually checked — rule 7's hazard landing on a negative-shaped
+  assertion, where the two states are indistinguishable without an explicit guard.
+- **Built `skill-extraction-preflight.sh`** (D1), a reporter (rule 5: always exits 0) that takes a
+  skill-relative path and line range and reports every `# plant:` declaration and `awk`-range
+  extraction coupled to it, using the same whitespace-joined needle matcher `plant-check.sh`'s
+  worker uses rather than an approximation. Validated against the reverted pilot's own range
+  (3264–3466): reproduces the sites ADR-0172's D2 found by revert (`CTO05`, `CTO14`,
+  `worktree-isolation-contract.test.sh`'s `L4`/`L8`/`L9`), plus finds 3 sites the hand research for
+  `VCS-047` had missed and corrects 1 misattribution (`TP1`, wrongly attributed to the
+  Express/Hybrid range, actually resolves inside Step 5 at line 1766) — a hand grep across ~25
+  files is exactly the derivation rule 13 says not to trust without re-measuring. Known limitation
+  stated in the tool's own output: end-anchor detection is single-line only, so a multi-line `awk`
+  program reports `<none>` for its end anchor (no false negative on the primary overlap check,
+  only on the narrower "range fully spans" case).
+- **Hardened the two true silent-pass sites** (D2): `TL0`/`G0` guard assertions added ahead of
+  `TL1`/`G1`, following the pre-existing `WC0`/`WF0` pattern already used elsewhere in the same
+  files, and the consuming assertion changed to `bad` rather than fall through to `ok` on an empty
+  extraction. Each verified RED against a planted heading rename in a scratch copy before being
+  trusted (repo rule 2). Five further sites named in the initial research
+  (`spec-coverage-baseline-bump.test.sh`'s `STEP70B`/`BUMPBLOCK`, `weakening-wiring.test.sh`'s
+  `AB_STEP5`/`AB_STEP6`/`NA_PHASE1`) turned out to already fail loud (positive-shaped conditions,
+  safe by construction) — given the same `WC0`-style guard anyway for diagnostic consistency, not
+  because a defect was found. `agent-metrics.test.sh`'s `DISPATCH_TEMPLATES` extraction turned out
+  to be dead code (extracted, never read) and was removed rather than guarded.
+- **The Step 5/§5 split itself stays deferred** (D3). This session's scope was making the suite
+  capable of validating a split, not performing one — `VCS-047`/`VCS-048` remain open, now with a
+  validated tool in hand instead of an error-prone hand grep.
+- Rejected building a shared `extract_section()` helper across the ten `awk`-range files in this
+  same pass (ADR-0086's criterion does not clearly force it, and it would mix an independent
+  refactor into a hardening-only change), and rejected proceeding straight to the Step 5/§5
+  extraction on the strength of the new byte-share number (prove the tool and the guards on a
+  small, fully-enumerable blast radius before trusting them for the highest-stakes cut in the
+  file).
+
+Detail: `docs/architecture/ADR-0173-skill-extraction-blind-guard-hardening.md`.

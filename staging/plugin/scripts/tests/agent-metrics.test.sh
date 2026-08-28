@@ -283,10 +283,7 @@ else
 fi
 
 # The tester/coder dispatch prompt templates must never ask an agent to report these four metrics.
-DISPATCH_TEMPLATES="$TMP/dispatch_templates.txt"
-awk '/^Single batch dispatch template/{f=1} /^After each batch/{f=0} f;
-     /^Tester batch dispatch template/{f=1} /^Single batch dispatch template/{f=0} f' "$CC" >"$DISPATCH_TEMPLATES" 2>/dev/null
-# also scan the whole Step 5 section's ``` prompt blocks broadly, since this is the cheapest
+# Scan the whole Step 5 section's ``` prompt blocks broadly, since this is the cheapest
 # reliable proxy without a fenced-block parser (matches the codebase's own extraction idiom).
 GC3_HIT=0
 for _term in "report your iteration count" "report your elapsed time" "report the deleted line count" "report the test count"; do
