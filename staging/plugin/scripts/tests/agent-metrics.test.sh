@@ -34,6 +34,7 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 AM="$STAGING/plugin/skills/concept-to-code/scripts/agent-metrics.sh"
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 NA="$STAGING/plugin/skills/autopilot/SKILL.md"
 ADR22="$REPO/docs/architecture/ADR-0022-morning-report-schema.md"
 TWS="$STAGING/plugin/scripts/test-write-scope.sh"
@@ -49,7 +50,9 @@ else
 fi
 
 STEP5="$TMP/cc_step5.txt"
-awk '/^### Step 5 —/{f=1} /^### Step 6 —/{f=0} f' "$CC" >"$STEP5"
+# The Step 5 range moved to references/step5-implementation.md (VCS-047, ADR-0174); the
+# reference file's body IS the block, so no awk range is needed any more.
+cp "$STEP5_REF" "$STEP5" 2>/dev/null
 GATES="$TMP/cc_gates.txt"
 awk '/^## 5\. HITL gates/{f=1} /^## 6\. Coexistence invariants/{f=0} f' "$CC" >"$GATES"
 
@@ -228,7 +231,9 @@ fi
 # default-to-zero exists anywhere in the new text.
 # ==================================================================================================
 TM_BLOCK="$TMP/tm_block.txt"
-awk '/^#### Task-level metrics —/{f=1} /^#### Fallback —/{f=0} f' "$CC" >"$TM_BLOCK"
+# The Step 5 range moved to references/step5-implementation.md (VCS-047, ADR-0174); this
+# sub-block lives inside it now.
+awk '/^#### Task-level metrics —/{f=1} /^#### Fallback —/{f=0} f' "$STEP5_REF" >"$TM_BLOCK"
 if [ -s "$TM_BLOCK" ]; then
   ok "GB0: the Task-level metrics block was extracted from Step 5 (non-empty)"
 else

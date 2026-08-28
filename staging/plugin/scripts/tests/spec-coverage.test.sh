@@ -573,8 +573,11 @@ spec_declares_ids "$TMP/re6-no-ids.spec.md" \
 # Step 5 extract, deliberately: the file is instructions for a model, not runnable code.
 # ==============================================================================================
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 STEP5="$TMP/c2c_step5.txt"
-awk '/^### Step 5 —/{f=1} /^### Step 6 —/{f=0} f' "$CC" >"$STEP5"
+# The Step 5 range moved to references/step5-implementation.md (VCS-047, ADR-0174); the
+# reference file's body IS the block, so no awk range is needed any more.
+cp "$STEP5_REF" "$STEP5" 2>/dev/null
 
 if [ -s "$STEP5" ]; then
   ok "RF0: Step 5 of concept-to-code/SKILL.md is extractable (the anchor every RF assertion reads)"
@@ -582,7 +585,10 @@ else
   bad "RF0: could not extract Step 5 from $CC — every RF assertion below is meaningless"
 fi
 
-RF1_N=$(grep -c '^#### Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)$' "$CC" || true)
+# VCS-047/ADR-0174: the heading itself moved into references/step5-implementation.md — a
+# whole-file uniqueness check must now count across both files, or a duplicate reintroduced in
+# either one would go undetected.
+RF1_N=$(cat "$CC" "$STEP5_REF" 2>/dev/null | grep -c '^#### Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)$' || true)
 if [ "$RF1_N" = "1" ]; then
   ok "RF1: exactly one occurrence of the Requirement-ID coverage gate heading in the whole file"
 else

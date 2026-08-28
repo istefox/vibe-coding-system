@@ -24,6 +24,7 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)              # staging/plugin/scripts
 STAGING=$(cd "$SCRIPTS/../.." && pwd)                    # staging/
 SKILL_DIR="$STAGING/plugin/skills/concept-to-code"
 SKILL_MD="$SKILL_DIR/SKILL.md"
+STEP5_REF="$SKILL_DIR/references/step5-implementation.md"
 INIT="$SKILL_DIR/scripts/manifest-init.sh"
 VAL="$SKILL_DIR/scripts/manifest-validate.sh"
 SETART="$SKILL_DIR/scripts/manifest-set-artifact.sh"
@@ -195,16 +196,17 @@ else
 fi
 
 # D2 (static, genuine RED now): SKILL.md:547 site, absolute-prefixed. Expected now (RED): no
-# match.
-if grep -qF 'exit 0 (VERIFIED)** → `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> hook_verified true`' "$SKILL_MD"; then
+# match. VCS-047/ADR-0174: this site's content physically moved into
+# references/step5-implementation.md with the rest of Step 5's body.
+if grep -qF 'exit 0 (VERIFIED)** → `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> hook_verified true`' "$STEP5_REF"; then
   ok "D2: SKILL.md:547 site uses the absolute PATH RULE prefix"
 else
   bad "D2: SKILL.md:547 site still uses a bare/relative manifest-set-flag.sh path"
 fi
 
 # D3 (static, genuine RED now): SKILL.md:549 site, absolute-prefixed. Expected now (RED): no
-# match.
-if grep -qF 'exit 1 (REFUTED)** → `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> hook_verified false`' "$SKILL_MD"; then
+# match. VCS-047/ADR-0174: same move as D2.
+if grep -qF 'exit 1 (REFUTED)** → `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> hook_verified false`' "$STEP5_REF"; then
   ok "D3: SKILL.md:549 site uses the absolute PATH RULE prefix"
 else
   bad "D3: SKILL.md:549 site still uses a bare/relative manifest-set-flag.sh path"
@@ -366,14 +368,21 @@ fi
 # path-rule-check.sh -- exit 0, empty stdout. Task 3 converts the ten call sites and Task 4
 # declares the six prose occurrences; until then this stays red with findings=16, and that is
 # this task's declared deliverable (ADR-0101 case 1), not a defect to fix here.
+#
+# VCS-047/ADR-0174: path-rule-check.sh only scans the ONE file passed as its first argument, and
+# Step 5's content (including the F2 plant's needle) now lives in
+# references/step5-implementation.md, not in $SKILL_MD. Scan both, separately (the checker takes
+# one file per invocation, not a list) — a violation in either is a real F2 finding.
 f2_out="$(bash "$PRC" "$SKILL_MD" "$SKILL_DIR/scripts" 2>/dev/null)"
 f2_rc=$?
-if [ "$f2_rc" -eq 0 ] && [ -z "$f2_out" ]; then
-  ok "F2: the real SKILL.md is clean under path-rule-check.sh (exit 0, empty stdout)"
+f2_ref_out="$(bash "$PRC" "$SKILL_DIR/references/step5-implementation.md" "$SKILL_DIR/scripts" 2>/dev/null)"
+f2_ref_rc=$?
+if [ "$f2_rc" -eq 0 ] && [ -z "$f2_out" ] && [ "$f2_ref_rc" -eq 0 ] && [ -z "$f2_ref_out" ]; then
+  ok "F2: the real SKILL.md and references/step5-implementation.md are clean under path-rule-check.sh (exit 0, empty stdout)"
 else
-  bad "F2: SKILL.md is not yet clean under path-rule-check.sh (rc=$f2_rc) -- EXPECTED RED until Task 4"
+  bad "F2: SKILL.md and/or references/step5-implementation.md are not yet clean under path-rule-check.sh (rc=$f2_rc, ref_rc=$f2_ref_rc) -- EXPECTED RED until Task 4"
 fi
-# plant: F2 | plugin/skills/concept-to-code/SKILL.md | hook_verified = false` via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh` and take the Agent-tool fallback. | hook_verified = false` via `manifest-set-flag.sh` and take the Agent-tool fallback.
+# plant: F2 | plugin/skills/concept-to-code/references/step5-implementation.md | hook_verified = false` via `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh` and take the Agent-tool fallback. | hook_verified = false` via `manifest-set-flag.sh` and take the Agent-tool fallback.
 
 # F4/F5 (dynamic, count guards on the DENOMINATOR, not the matches -- ADR-0085): read the
 # stderr summary from a run against the real corpus. An empty derivation must not silently

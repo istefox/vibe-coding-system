@@ -428,8 +428,11 @@ fi
 # also well clear of Step 6 Phase 3) — never the Step 6 Phase 3 dispatch block itself.
 # ==================================================================================================
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 STEP5="$TMP/cc_step5.txt"
-awk '/^### Step 5 —/{f=1} /^### Step 6 —/{f=0} f' "$CC" >"$STEP5"
+# The Step 5 range moved to references/step5-implementation.md (VCS-047, ADR-0174); the
+# reference file's body IS the block, so no awk range is needed any more.
+cp "$STEP5_REF" "$STEP5" 2>/dev/null
 GATES="$TMP/cc_gates.txt"
 awk '/^## 5\. HITL gates/{f=1} /^## 6\. Coexistence invariants/{f=0} f' "$CC" >"$GATES"
 

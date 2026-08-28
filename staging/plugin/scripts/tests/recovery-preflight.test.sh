@@ -83,7 +83,7 @@
 # plant: RRP4 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | { [ -n "$_t2" ] && [ "$_t2" -ef "$_top" ]; } || { printf '%s' "$TARGET"; exit 0; } | :
 # plant: RRP5 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | [ -d "$_d" ] || { printf '%s' "$TARGET"; exit 0; } | [ -d "$_d" ] || { printf 'WRONG-%s' "$TARGET"; exit 0; }
 # plant: RRP6 | plugin/skills/concept-to-code/scripts/repo-rel-path.sh | not a git repository: %s\n' "$SELF" "$TOP" >&2 exit 3 | not a git repository: %s\n' "$SELF" "$TOP" >&2; exit 0
-# plant: RRP7 | plugin/skills/concept-to-code/SKILL.md | echo "PREFLIGHT_NOHELPER" | echo "SOMETHING_ELSE"
+# plant: RRP7 | plugin/skills/concept-to-code/references/step5-implementation.md | echo "PREFLIGHT_NOHELPER" | echo "SOMETHING_ELSE"
 # RRP8 gets NO plant, declared here rather than left silent: it checks three substrings
 # ('PREFLIGHT_NOHELPER', 'PREFLIGHT_NOREPO', 'the check did not run') anywhere across the whole of
 # Step 5, and each one is independently satisfied 2-3 times over — once in the fence's own code
@@ -105,6 +105,7 @@ ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 AB="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 INIT="$STAGING/plugin/skills/concept-to-code/scripts/manifest-init.sh"
 VALIDATE="$STAGING/plugin/skills/concept-to-code/scripts/manifest-validate.sh"
@@ -123,7 +124,9 @@ else
 fi
 
 STEP5="$TMP/c2c_step5.txt"
-awk '/^### Step 5 —/{f=1} /^### Step 6 —/{f=0} f' "$CC" >"$STEP5" 2>/dev/null
+# The Step 5 range moved to references/step5-implementation.md (VCS-047, ADR-0174); the
+# reference file's body IS the block, so no awk range is needed any more.
+cp "$STEP5_REF" "$STEP5" 2>/dev/null
 if [ -s "$STEP5" ]; then
   ok "RA0b: Step 5 of concept-to-code/SKILL.md is extractable"
 else
@@ -133,7 +136,7 @@ fi
 # ==============================================================================================
 # RA. The three assertions exist in c2c Step 5 as prose anchors, at the very top of the step.
 # ==============================================================================================
-RA1_N=$(grep -c '^#### Recovery-readiness pre-flight (ADR-0050, before any dispatch)$' "$CC" 2>/dev/null || true)
+RA1_N=$(grep -c '^#### Recovery-readiness pre-flight (ADR-0050, before any dispatch)$' "$STEP5_REF" 2>/dev/null || true)
 case "$RA1_N" in ''|*[!0-9]*) RA1_N=0 ;; esac
 if [ "$RA1_N" -eq 1 ]; then
   ok "RA1: exactly one occurrence of the Recovery-readiness pre-flight heading in the whole file"
@@ -141,8 +144,8 @@ else
   bad "RA1: expected exactly 1 occurrence of the heading, found $RA1_N"
 fi
 
-PREFLIGHT_LINE=$(grep -n '^#### Recovery-readiness pre-flight (ADR-0050, before any dispatch)$' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
-DISPATCH_LINE=$(grep -n '^\*\*Dispatch mode selection:\*\*$' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+PREFLIGHT_LINE=$(grep -n '^#### Recovery-readiness pre-flight (ADR-0050, before any dispatch)$' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
+DISPATCH_LINE=$(grep -n '^\*\*Dispatch mode selection:\*\*$' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
 if [ -n "$PREFLIGHT_LINE" ] && [ -n "$DISPATCH_LINE" ] && [ "$PREFLIGHT_LINE" -lt "$DISPATCH_LINE" ]; then
   ok "RA2: the pre-flight heading sits before dispatch-mode selection (top of Step 5, before any dispatch)"
 else
@@ -325,7 +328,7 @@ else
   bad "RE4: Step 5 does not name the tester stage ADR-0049 introduced"
 fi
 
-WORKTREE_LINE=$(grep -n '^\*\*Pre-dispatch: worktree isolation check' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+WORKTREE_LINE=$(grep -n '^\*\*Pre-dispatch: worktree isolation check' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
 if [ -n "$PREFLIGHT_LINE" ] && [ -n "$WORKTREE_LINE" ] && [ "$PREFLIGHT_LINE" -lt "$WORKTREE_LINE" ]; then
   ok "RE5: the pre-flight block (and its sequencing note) sits before the worktree isolation / dirty-tree check block"
 else
@@ -347,7 +350,7 @@ awk '/^#### Step 5 —/{f=1} /^#### Step 6 —/{f=0} f' "$AB" >"$AB_STEP5" 2>/de
 
 RF2_NEEDLE="Recovery-readiness pre-flight (ADR-0050)"
 if grep -qF "$RF2_NEEDLE" "$AB_STEP5"; then
-  RF2_N=$(grep -c '^#### Recovery-readiness pre-flight (ADR-0050, before any dispatch)$' "$CC" 2>/dev/null || true)
+  RF2_N=$(grep -c '^#### Recovery-readiness pre-flight (ADR-0050, before any dispatch)$' "$STEP5_REF" 2>/dev/null || true)
   case "$RF2_N" in ''|*[!0-9]*) RF2_N=0 ;; esac
   if [ "$RF2_N" = "1" ]; then
     ok "RF2: autopilot-build names the c2c pre-flight block by heading, resolving to exactly one heading in concept-to-code"
@@ -461,7 +464,14 @@ else
 fi
 
 # --- 5.0.1's remediation no longer leads with stash on the chain-artifact case ---
-RH10_BLOCK=$(awk '/^\*\*Step 5.0.1 — Working tree clean/{f=1; next} f&&/^\*\*Step 5.0.2/{exit} f{print}' "$CC")
+# The Step 5 range moved to references/step5-implementation.md (VCS-047, ADR-0174); Step 5.0.1
+# lives inside it now, so the sub-range extraction reads that file instead of $CC.
+RH10_BLOCK=$(awk '/^\*\*Step 5.0.1 — Working tree clean/{f=1; next} f&&/^\*\*Step 5.0.2/{exit} f{print}' "$STEP5_REF")
+if [ -n "$RH10_BLOCK" ]; then
+  ok "RH10a: 5.0.1's block is extractable from references/step5-implementation.md (RH10/RH11 below read)"
+else
+  bad "RH10a: could not extract Step 5.0.1's block from references/step5-implementation.md — RH10/RH11 below would pass vacuously"
+fi
 printf '%s\n' "$RH10_BLOCK" | grep -q 'Never advise `git stash` here' \
   && ok "RH10: 5.0.1 forbids the stash advice on the chain-artifact case" \
   || bad "RH10: 5.0.1 does not forbid stashing the chain's own artifacts — the advice that would delete the coder's inputs"
@@ -575,7 +585,7 @@ rj_extract() {
     grab && /^```bash/ { infence=1; next }
     grab && infence && /^```/ { exit }
     grab && infence { print }
-  ' "$CC"
+  ' "$STEP5_REF"
 }
 RJ_FENCE="$TMP/rj_fence.sh"
 rj_extract >"$RJ_FENCE"

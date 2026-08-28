@@ -5123,3 +5123,63 @@ Key architectural decisions:
   file).
 
 Detail: `docs/architecture/ADR-0173-skill-extraction-blind-guard-hardening.md`.
+
+## Decisions from Step 5 extraction out of concept-to-code/SKILL.md (ADR-0174)
+
+With `skill-extraction-preflight.sh`'s enumerated blast radius in hand from ADR-0173 (21 awk-range
+sites, ~30 whole-file greps, 20 plants, 5 fence markers across ~25 files), this session performed
+the cut ADR-0173 deferred: `### Step 5 — Implementation` (old lines 1018–2708, 38.2% of
+`SKILL.md`'s bytes, the largest contiguous block, needed by one step out of eight) moved
+byte-identically into `references/step5-implementation.md`.
+
+Key architectural decisions:
+- **Full Step 5, not a partial sub-block** (D1). Measured: no sub-block dominates (largest is
+  `#### Fallback` at 7.8%), while 21 of the coupled sites anchor the whole `### Step 5 —` → `###
+  Step 6 —` span regardless of cut size — a smaller cut buys illusory risk reduction and gives up
+  most of the token win.
+- **Three mechanical re-point patterns, chosen by the assertion's own stated semantics, not
+  applied uniformly** (D2): simple repoint where the content moved entirely; whole-file-uniqueness
+  concatenation (`cat "$CC" "$STEP5_REF"`) where the assertion's own wording claims "exactly once
+  in the whole file" — repointing to one file alone would silently narrow that claim;
+  boundary-straddling concatenation where a count has legitimate occurrences on both sides of the
+  cut and neither file alone suffices. Picking the wrong pattern was a real failure mode observed
+  in this pass, not hypothetical — a bare repoint on a boundary-straddling count (e.g.
+  `dispatch-completion.test.sh`'s `dispatch-state.sh` `>= 2` floor, one hit staying in Step 4.5, one
+  moving into Step 5) drops the floor to a value that reads as satisfied for the wrong reason (rule
+  7).
+- **Found a coupling class distinct from both prior ADRs: population-glob coupling** (D3).
+  ADR-0172 named physical-presence coupling (a test plants/greps exact text in `SKILL.md` itself);
+  ADR-0173 named blind-extraction coupling (an unguarded extraction silently passes empty). This
+  session found a third: several tests derive a *population* — dispatch-site declarations,
+  `step5_mode`/`hook_verified` producer literals, `transition-producer.test.sh`'s line-count
+  denominator — via a glob scoped to `*/SKILL.md` only. Content that moved into `references/*.md`
+  silently vanishes from the population with no error, producing a false "drifted from baseline", a
+  false "phantom value", or a genuinely too-narrow derived set. This is rule 18's shape (a scan
+  satisfied by the whole population it searches, not the part it meant) landing at the
+  population-construction layer rather than at a single assertion. Fixed in
+  `dispatch-completion.test.sh` (DC21–DC25), `manifest-field-state.test.sh` (`V_WRITTEN`/
+  `WH_WRITTEN`), and `transition-producer.test.sh` (`$PROD`'s builder), each by widening the glob to
+  cover `*/references/*.md` — the same fix shape ADR-0172 D3 already established for the
+  fence-contract/PAIRS-completeness globs, extended here to test-internal population builders that
+  safety net never covered.
+- **One classifier needed a merged-view splice, not a repoint** (D4).
+  `worktree-isolation-contract.test.sh`'s L2/L3 classify guide-named steps against a single-file
+  `awk` scan of the matching `SKILL.md` block. Step 5's heading stayed in `SKILL.md` but its body
+  (the actual `isolation: worktree` mechanism the classifier looks for) moved out, so scanning
+  `$CC` alone finds the heading with an empty buffer behind it and misclassifies Step 5 as
+  `NEITHER` — a false L2 hit. Neither a repoint (no single file has both heading and body) nor a
+  concatenation (the scan is positional) fixes this. Solution: an `awk` pass that prints the
+  heading, splices in the reference file's full content, then resumes at `### Step 6 —` — building
+  the merged view the classifier was written to expect, rather than changing the classifier.
+- **Two files needed fixes the original plan's table did not anticipate**, found only by the direct
+  suite run, not the pre-research (D6): `fence-contract-coverage.test.sh` (S9, E20) and
+  `hook-verify-workflow.test.sh` (S7, S8) each looked up a `fence-illustration:` marker or
+  documentation prose directly in `SKILL.md` that had moved. Both simple repoints once found — the
+  expected residual shape of a hand-enumerated table meeting a real cut, and exactly the failure
+  mode ADR-0172 first taught this repo to check for by running the real suite rather than trusting
+  research.
+- Full verification: local suite (91 files) 0 failures; `plant-check.sh` 623/623 plants fired,
+  PC1–PC5b clean, PASS=631 FAIL=0; `pairs-completeness.test.sh` 322/322;
+  `fence-contract-coverage.test.sh` 67/67; byte-identical diff against the pre-move body empty.
+
+Detail: `docs/architecture/ADR-0174-step5-extraction-population-glob-coupling.md`.

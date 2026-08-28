@@ -24,7 +24,7 @@
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
 # plant: DC7 | plugin/scripts/dispatch-state.sh | if [ ! -x "$DIR" ] || [ ! -r "$DIR" ]; then | if false; then
 # plant: DC10 | plugin/skills/concept-to-code/SKILL.md | Measure nothing until the coder has finished | Measure whenever
-# plant: DC11 | plugin/skills/concept-to-code/SKILL.md | Do not look for `PATTERN: DONE` in the agent's report | Look for it
+# plant: DC11 | plugin/skills/concept-to-code/references/step5-implementation.md | Do not look for `PATTERN: DONE` in the agent's report | Look for it
 # plant: DC21 | plugin/skills/security-audit/SKILL.md | dispatch-site: security-audit-reviewer | dispatch-note: removed
 # plant: DC22 | plugin/skills/security-audit/SKILL.md | class=inline exempt: the reviewer grant | class=maybe exempt: the reviewer grant
 set -u
@@ -34,6 +34,14 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)
 DS="$SCRIPTS/dispatch-state.sh"
 SKILLS="$STAGING/plugin/skills"
 CC="$SKILLS/concept-to-code/SKILL.md"
+STEP5_REF="$SKILLS/concept-to-code/references/step5-implementation.md"
+
+# VCS-047/ADR-0174: DC20-DC25's population glob was `"$SKILLS"/*/SKILL.md` only. Widened to also
+# cover `*/references/*.md` (the multi-file skill pattern, §8.7) now that dispatch-site
+# declarations for step5-batch-coder/step5-batch-tester/step5-checkpoint-reviewer physically live
+# in references/step5-implementation.md — the same population-glob coupling class ADR-0172 D3
+# already fixed for the fence-contract/pairs-completeness/positional-tokens harnesses.
+DISPATCH_SITE_FILES=$(find "$SKILLS" \( -name 'SKILL.md' -o -path '*/references/*.md' \) 2>/dev/null)
 
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
@@ -144,7 +152,9 @@ _after=$(find "$R3" | sort)
 # DC10-DC12 — the two converted call sites consult the helper.
 # Prose is matched flat and undecorated (ADR-0073/0076/0080/0098/0101).
 # ===========================================================================
-FLAT=$(tr '\n' ' ' <"$CC" | tr -d '`*' | tr -s ' ')
+# VCS-047/ADR-0174: DC10's needle (Step 4.5) stays in $CC; DC11's needle (Step 5) moved to
+# references/step5-implementation.md. Concatenate so both cases still read from one blob.
+FLAT=$(cat "$CC" "$STEP5_REF" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
 
 case "$FLAT" in
   *"Measure nothing until the coder has finished"*)
@@ -158,7 +168,9 @@ case "$FLAT" in
   *) bad "DC11: Step 5 does not forbid reading PATTERN: DONE from the report" ;;
 esac
 
-_gates=$(grep -c "dispatch-state.sh" "$CC" 2>/dev/null || true)
+# VCS-047/ADR-0174: the denominator straddles the boundary — one converted site is in Step 4.5
+# ($CC), the other is in Step 5 (now references/step5-implementation.md). Count across both.
+_gates=$(cat "$CC" "$STEP5_REF" 2>/dev/null | grep -c "dispatch-state.sh" || true)
 [ "${_gates:-0}" -ge 2 ] \
   && ok "DC12: concept-to-code consults dispatch-state.sh at both converted sites ($_gates references)" \
   || bad "DC12: expected >= 2 dispatch-state.sh references in concept-to-code, found ${_gates:-0}"
@@ -169,7 +181,7 @@ _gates=$(grep -c "dispatch-state.sh" "$CC" 2>/dev/null || true)
 # ADR-0124: a floor with slack absorbs its own plant, so the identity of every declaration is
 # frozen rather than counted. The count guard below is a VACUITY guard only, and says so.
 # ===========================================================================
-DECLS=$(grep -rhoE 'dispatch-site: [a-z0-9-]+' "$SKILLS"/*/SKILL.md 2>/dev/null | sed 's/dispatch-site: //' | sort)
+DECLS=$(grep -hoE 'dispatch-site: [a-z0-9-]+' $DISPATCH_SITE_FILES 2>/dev/null | sed 's/dispatch-site: //' | sort)
 DECL_N=$(printf '%s\n' "$DECLS" | grep -c . || true)
 
 [ "${DECL_N:-0}" -ge 10 ] \
@@ -205,7 +217,7 @@ while IFS= read -r _line; do
     *) _badclass=$((_badclass+1)) ;;
   esac
 done <<EOF
-$(grep -rh "dispatch-site:" "$SKILLS"/*/SKILL.md 2>/dev/null)
+$(grep -h "dispatch-site:" $DISPATCH_SITE_FILES 2>/dev/null)
 EOF
 [ "$_badclass" = 0 ] \
   && ok "DC22: every declaration carries class=isolated or class=inline" \
@@ -224,7 +236,7 @@ while IFS= read -r _line; do
       ;;
   esac
 done <<EOF
-$(grep -rh "dispatch-site:" "$SKILLS"/*/SKILL.md 2>/dev/null)
+$(grep -h "dispatch-site:" $DISPATCH_SITE_FILES 2>/dev/null)
 EOF
 [ "$_shortreason" = 0 ] \
   && ok "DC23: every exemption states a reason of at least 40 characters" \
@@ -240,7 +252,10 @@ EOF
 _undeclared=""
 for _s in "$SKILLS"/*/SKILL.md; do
   grep -qE 'subagent_type|Dispatch the `(reviewer|coder|tester|architect|refactorer|debugger)`|Dispatch `(reviewer|coder|tester|architect)`' "$_s" 2>/dev/null || continue
-  grep -q "dispatch-site:" "$_s" 2>/dev/null && continue
+  # VCS-047/ADR-0174: a declaration may now live in this skill's references/*.md sibling rather
+  # than SKILL.md itself — check both before concluding the skill declares nothing.
+  _refs=$(find "$(dirname "$_s")/references" -name '*.md' 2>/dev/null)
+  grep -q "dispatch-site:" "$_s" $_refs 2>/dev/null && continue
   # A skill may forbid dispatch outright; that is a declaration of a different kind.
   grep -qiE "never dispatch|NEVER dispatch a sub-agent|NOT the .Agent. tool" "$_s" 2>/dev/null && continue
   _undeclared="$_undeclared $(basename "$(dirname "$_s")")"
@@ -255,7 +270,7 @@ done
 # ===========================================================================
 _stale=0
 for _id in step5-batch-coder tracer-bullet-coder; do
-  grep -rh "dispatch-site: $_id" "$SKILLS"/*/SKILL.md 2>/dev/null | grep -q "exempt:" && _stale=$((_stale+1))
+  grep -h "dispatch-site: $_id" $DISPATCH_SITE_FILES 2>/dev/null | grep -q "exempt:" && _stale=$((_stale+1))
 done
 [ "$_stale" = 0 ] \
   && ok "DC25: neither converted site carries a stale exemption" \
@@ -294,14 +309,16 @@ printf 'tasks=2 files=5\n' > "$WT_OK/.claude/dispatch/step5-batch-1.done"
 WT_PEND="$TMP/wt-pend"; mkdir -p "$WT_PEND/.claude/dispatch"
 : > "$WT_PEND/.claude/dispatch/step5-batch-1.started"
 
+# VCS-047/ADR-0174: this fence-contract marker physically moved into
+# references/step5-implementation.md with the rest of Step 5's body.
 printf 'export CLAUDE_PLUGIN_ROOT=%s\nexport WT=%s\nexport B=1\n' "$PLUGIN_ROOT" "$WT_OK" > "$SETUP5"
-RC=$(run_fence "step5-batch-completion-gate" "$CC" "$SETUP5")
+RC=$(run_fence "step5-batch-completion-gate" "$STEP5_REF" "$SETUP5")
 [ "$RC" = 0 ] \
   && ok "DC13: the Step 5 gate exits 0 on a DONE completion fact" \
   || bad "DC13: expected rc=0 on DONE, got '$RC' — $(head -2 "$TMP/out-step5-batch-completion-gate" 2>/dev/null)"
 
 printf 'export CLAUDE_PLUGIN_ROOT=%s\nexport WT=%s\nexport B=1\n' "$PLUGIN_ROOT" "$WT_PEND" > "$SETUP5"
-RC=$(run_fence "step5-batch-completion-gate" "$CC" "$SETUP5")
+RC=$(run_fence "step5-batch-completion-gate" "$STEP5_REF" "$SETUP5")
 [ "$RC" = 2 ] \
   && ok "DC13b: the Step 5 gate refuses to advance on PENDING" \
   || bad "DC13b: expected rc=2 on PENDING, got '$RC' — $(head -2 "$TMP/out-step5-batch-completion-gate" 2>/dev/null)"

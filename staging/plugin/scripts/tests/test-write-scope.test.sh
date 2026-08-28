@@ -257,8 +257,17 @@ OUT=$(run "$(payload coder "$ROOT/src/utils.py" Edit "$AID" "$SID" "$TP")")
 # Step 5 extract (never Step 6, which is where write-scope-enforce.sh's OWN marker lives).
 # ==================================================================================================
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 STEP5="$TMP/c2c_step5.txt"
-awk '/^### Step 5 —/{f=1} /^### Step 6 —/{f=0} f' "$CC" >"$STEP5" 2>/dev/null
+# The Step 5 range moved to references/step5-implementation.md (VCS-047, ADR-0174); the
+# reference file's body IS the block, so no awk range is needed any more.
+cp "$STEP5_REF" "$STEP5" 2>/dev/null
+
+if [ -s "$STEP5" ]; then
+  ok "TF0: concept-to-code Step 5 (references/step5-implementation.md) is extractable (TF1/TF2 below read)"
+else
+  bad "TF0: could not read references/step5-implementation.md — TF1/TF2 below would pass vacuously (empty extract, negative-shaped risk)"
+fi
 
 HOOK_HAS_MARKER=0
 grep -qF 'TEST-AUTHORING SCOPE - the tester agent owns test files for this task. Do NOT create or edit tests.' "$HOOK" 2>/dev/null && HOOK_HAS_MARKER=1
@@ -402,7 +411,9 @@ fi
 # ==================================================================================================
 # TK. #### heading uniqueness and placement. EXPECTED RED until Task 4.
 # ==================================================================================================
-GEN_N=$(grep -c '^#### Generator/verifier separation — tester stage and coder test-write deny (ADR-0049)$' "$CC" 2>/dev/null || true)
+# VCS-047/ADR-0174: TK1's uniqueness check is whole-file, so it must count across both SKILL.md
+# and references/step5-implementation.md — the heading itself moved into the latter.
+GEN_N=$(cat "$CC" "$STEP5_REF" 2>/dev/null | grep -c '^#### Generator/verifier separation — tester stage and coder test-write deny (ADR-0049)$' || true)
 case "$GEN_N" in ''|*[!0-9]*) GEN_N=0 ;; esac
 if [ "$GEN_N" -eq 1 ]; then
   ok "TK1: exactly one occurrence of the Generator/verifier separation heading in the whole file"
@@ -410,9 +421,10 @@ else
   bad "TK1: expected exactly 1 occurrence of the heading, found $GEN_N — Task 4"
 fi
 
-GENLINE=$(grep -n '^#### Generator/verifier separation — tester stage and coder test-write deny (ADR-0049)$' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
-SCHEMALINE=$(grep -n '^#### step5-report.json schema' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
-WORKFLOWLINE=$(grep -n '^#### Workflow dispatch' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+# TK2's placement check: all three anchors moved together into references/step5-implementation.md.
+GENLINE=$(grep -n '^#### Generator/verifier separation — tester stage and coder test-write deny (ADR-0049)$' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
+SCHEMALINE=$(grep -n '^#### step5-report.json schema' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
+WORKFLOWLINE=$(grep -n '^#### Workflow dispatch' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
 if [ -n "$GENLINE" ] && [ -n "$SCHEMALINE" ] && [ -n "$WORKFLOWLINE" ] \
    && [ "$GENLINE" -gt "$WORKFLOWLINE" ] && [ "$GENLINE" -lt "$SCHEMALINE" ]; then
   ok "TK2: the heading sits after the Workflow dispatch block and before the step5-report.json schema block"
@@ -469,6 +481,11 @@ fi
 # ==================================================================================================
 TMCC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
 TMTESTER="$STAGING/plugin/agents/tester.md"
+# VCS-047/ADR-0174: TM1-TM3/TM5's dispatch-site clauses physically moved into
+# references/step5-implementation.md with the rest of Step 5's body. TM_CC_ALL concatenates both
+# files so the whole-file occurrence counts below keep reading their real content.
+TM_CC_ALL="$TMP/tm_cc_all.txt"
+cat "$TMCC" "$STEP5_REF" >"$TM_CC_ALL" 2>/dev/null
 
 # count_lit <literal> <file> — LINE count for a literal that must live on one line. Never a
 # `grep -c || echo 0` (that prints "0\n0" on no match, because grep -c prints 0 AND exits 1; issue
@@ -501,21 +518,21 @@ TM_CODER_CLAUSE='were executed by the tester before this dispatch and are NOT yo
 TM_GREEN_CLAUSE='an assertion the plan defers to a later task stays red'
 TM_AGENT_CLAUSE='test-shaped sub-steps in the range are yours in every case'
 
-n=$(count_flat "$TM_TESTER_CLAUSE" "$TMCC")
+n=$(count_flat "$TM_TESTER_CLAUSE" "$TM_CC_ALL")
 if [ "$n" -eq 2 ]; then
   ok "TM1: the tester brief's plan-is-read-always clause appears in exactly 2 dispatch sites (Workflow Stage 1 + Agent-tool Tester batch template)"
 else
   bad "TM1: expected the tester plan-scope clause at exactly 2 dispatch sites, found $n — one path is uncovered (#241, ADR-0088)"
 fi
 
-n=$(count_flat "$TM_CODER_CLAUSE" "$TMCC")
+n=$(count_flat "$TM_CODER_CLAUSE" "$TM_CC_ALL")
 if [ "$n" -eq 2 ]; then
   ok "TM2: the coder brief's test-sub-steps-are-not-yours clause appears in exactly 2 dispatch sites (Workflow Stage 2 + Agent-tool Single batch template)"
 else
   bad "TM2: expected the coder test-sub-step clause at exactly 2 dispatch sites, found $n — one path is uncovered (#241, ADR-0088)"
 fi
 
-n=$(count_flat "$TM_GREEN_CLAUSE" "$TMCC")
+n=$(count_flat "$TM_GREEN_CLAUSE" "$TM_CC_ALL")
 if [ "$n" -eq 2 ]; then
   ok "TM3: 'make them green' is qualified at both coder dispatch sites — a red assertion the plan defers stays red"
 else
@@ -531,7 +548,7 @@ fi
 # TM5 — the regression guard this whole change is measured against. The hook greps ONE literal
 # line; an em dash, a paraphrase or a dropped site makes it silently inert (issue #87).
 hookn=$(count_lit "$MARKER" "$HOOK")
-ccn=$(count_lit "$MARKER" "$TMCC")
+ccn=$(count_lit "$MARKER" "$TM_CC_ALL")
 if [ "$hookn" -eq 1 ] && [ "$ccn" -eq 3 ]; then
   ok "TM5: the TEST-AUTHORING SCOPE marker is byte-identical, ASCII hyphen, at 1 hook site and 3 concept-to-code sites (2 dispatch templates + the mechanism prose)"
 else
