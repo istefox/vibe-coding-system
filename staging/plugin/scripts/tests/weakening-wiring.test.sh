@@ -300,8 +300,11 @@ fi
 # Static prose anchors, deliberately: the file is instructions for a model, not runnable code.
 # ==============================================================================================
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 STEP5="$TMP/c2c_step5.txt"
-awk '/^### Step 5 —/{f=1} /^### Step 6 —/{f=0} f' "$CC" >"$STEP5"
+# The Step 5 range moved to references/step5-implementation.md (VCS-047, ADR-0174); the
+# reference file's body IS the block, so no awk range is needed any more.
+cp "$STEP5_REF" "$STEP5" 2>/dev/null
 
 if [ -s "$STEP5" ]; then
   ok "WC0: Step 5 of concept-to-code/SKILL.md is extractable (the anchor every WC assertion reads)"
@@ -309,7 +312,9 @@ else
   bad "WC0: could not extract Step 5 from $CC — every WC assertion below is meaningless"
 fi
 
-WC1_N=$(grep -c '^#### Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)$' "$CC" || true)
+# VCS-047/ADR-0174: the heading itself moved into references/step5-implementation.md — a
+# whole-file uniqueness check must now count across both files.
+WC1_N=$(cat "$CC" "$STEP5_REF" 2>/dev/null | grep -c '^#### Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)$' || true)
 if [ "$WC1_N" = "1" ]; then
   ok "WC1: exactly one occurrence of the Anti-test-weakening gate heading in the whole file"
 else
@@ -462,7 +467,8 @@ fi
 
 WE5_NEEDLE="Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)"
 if grep -qF "$WE5_NEEDLE" "$AB"; then
-  WE5_N=$(grep -c "^#### $WE5_NEEDLE\$" "$CC" || true)
+  # VCS-047/ADR-0174: same move as WC1 above.
+  WE5_N=$(cat "$CC" "$STEP5_REF" 2>/dev/null | grep -c "^#### $WE5_NEEDLE\$" || true)
   if [ "$WE5_N" = "1" ]; then
     ok "WE5: autopilot-build names the c2c gate by heading, and it resolves to exactly one heading in concept-to-code"
   else
@@ -576,7 +582,7 @@ fi
 # never said otherwise (issue #311, ADR-0148). WJ7 and WJ8 close that.
 # ==================================================================================================
 WS="$STAGING/plugin/skills/review-triage-fix/scripts/weakening-scan.sh"
-CCM="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+CCM="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"  # VCS-047/ADR-0174: WJ4's needle moved here
 CMT="$STAGING/plugin/skills/commit/SKILL.md"
 RTFS="$STAGING/plugin/skills/review-triage-fix/SKILL.md"
 ABS="$STAGING/plugin/skills/autopilot-build/SKILL.md"

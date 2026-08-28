@@ -40,6 +40,7 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)                    # staging/
 REPO=$(cd "$STAGING/.." && pwd)
 SKILL_DIR="$STAGING/plugin/skills/concept-to-code"
 SKILL_MD="$SKILL_DIR/SKILL.md"
+STEP5_REF="$SKILL_DIR/references/step5-implementation.md"
 INIT="$SKILL_DIR/scripts/manifest-init.sh"
 VAL="$SKILL_DIR/scripts/manifest-validate.sh"
 TRN="$SKILL_DIR/scripts/manifest-transition.sh"
@@ -341,7 +342,15 @@ else
 fi
 
 STEP5_TXT="$TMP/step5.txt"
-awk '/^### Step 5 —/{f=1} /^### Step 6 —/{f=0} f' "$SKILL_MD" >"$STEP5_TXT"
+# The Step 5 range moved to references/step5-implementation.md (VCS-047, ADR-0174); the
+# reference file's body IS the block, so no awk range is needed any more.
+cp "$STEP5_REF" "$STEP5_TXT" 2>/dev/null
+
+if [ -s "$STEP5_TXT" ]; then
+  ok "TBF0: Step 5 (references/step5-implementation.md) is extractable (TBF3 below reads)"
+else
+  bad "TBF0: could not read references/step5-implementation.md — TBF3 below would pass vacuously (empty extract, negative-shaped risk)"
+fi
 
 if grep -qi 'pattern seed' "$STEP5_TXT" && grep -qF 'tracer_bullet_verdict' "$STEP5_TXT"; then
   ok "TBF3: the Step 5 section itself references the tracer-bullet pattern seed (coder briefs must cite it)"

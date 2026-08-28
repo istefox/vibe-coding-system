@@ -43,6 +43,7 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 PT="$STAGING/plugin/skills/concept-to-code/scripts/plan-tasks.sh"
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 PLANS="$REPO/docs/superpowers/plans"
 
 PASS=0; FAIL=0
@@ -145,8 +146,10 @@ bov1_o=$(bash "$PT" --count-openers "$PLANS/2026-05-30-deep-refactor-skill.md" 2
 
 # ===========================================================================
 # BO6..BO8 — the call sites. Prose matched flat and undecorated (ADR-0098's rule).
+# VCS-047/ADR-0174: BO6-BO8's needles physically moved into references/step5-implementation.md
+# with the rest of Step 5's body.
 # ===========================================================================
-FLAT=$(tr '\n' ' ' <"$CC" | tr -d '`*' | tr -s ' ')
+FLAT=$(cat "$CC" "$STEP5_REF" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
 
 if printf '%s\n' "$FLAT" | grep -q 'count-openers'; then
   ok "BO6 SKILL.md consumes --count-openers"
@@ -170,11 +173,12 @@ fi
 # BO9 — the issue asked whether the Workflow path consumes the same number. Measured: it does not,
 # it derives task GROUPS by reading the plan. Asserted so the answer does not have to be re-derived.
 # ===========================================================================
-W_A=$(grep -n '^#### Workflow dispatch path — Step 5 implementation' "$CC" | head -1 | cut -d: -f1)
-W_B=$(grep -n '^#### Merge-back and base-fork audit' "$CC" | head -1 | cut -d: -f1)
+# VCS-047/ADR-0174: both anchors now live in references/step5-implementation.md.
+W_A=$(grep -n '^#### Workflow dispatch path — Step 5 implementation' "$STEP5_REF" | head -1 | cut -d: -f1)
+W_B=$(grep -n '^#### Merge-back and base-fork audit' "$STEP5_REF" | head -1 | cut -d: -f1)
 if [ -n "${W_A:-}" ] && [ -n "${W_B:-}" ] && [ "$W_B" -gt "$W_A" ]; then
   ok "BO9 the Workflow dispatch section anchors resolve ($W_A..$W_B)"
-  WBLK=$(awk -v a="$W_A" -v b="$W_B" 'NR>a && NR<b' "$CC")
+  WBLK=$(awk -v a="$W_A" -v b="$W_B" 'NR>a && NR<b' "$STEP5_REF")
   if printf '%s\n' "$WBLK" | grep -q 'plan-tasks.sh'; then
     bad "BO9b the Workflow path now consumes a numeric task count — it derived task GROUPS from the plan, and #242's defect is a count serving a second question"
   else

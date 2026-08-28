@@ -20,6 +20,7 @@ set -u
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 CC_SKILL="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 AGENTS="$STAGING/plugin/agents"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -115,8 +116,10 @@ fi
 # =====================================================================================
 # E. Non-regression: the Step 5 pin this change is modelled on must survive untouched.
 # Same anchors as step5-checkpoint-review.test.sh C6/C7, checked against the whole file.
-if grep -q 'Pin `effort` explicitly too' "$CC_SKILL" \
-   && grep -q 'Pass an explicit model AND an explicit effort of "high"' "$CC_SKILL"; then
+# VCS-047/ADR-0174: both anchors live physically in references/step5-implementation.md now
+# (the Step 5 body moved out of SKILL.md); this stays an explicit Step-5 non-regression check.
+if grep -q 'Pin `effort` explicitly too' "$STEP5_REF" \
+   && grep -q 'Pass an explicit model AND an explicit effort of "high"' "$STEP5_REF"; then
   ok "E1: Step 5 effort-pin anchors intact (C6/C7 non-regression)"
 else
   bad "E1: Step 5 effort-pin text was disturbed by the Step 6 edit"

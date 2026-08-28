@@ -500,9 +500,11 @@ else
   ok "S8: extract_fence fails (non-zero) for an absent id rather than returning empty"
 fi
 
-_ill_ln=$(enumerate_fences "$SKILLS/concept-to-code/SKILL.md" | grep -F 'fence-illustration:' | head -1 | cut -f1)
+# VCS-047/ADR-0174: the merge-back fence moved into references/step5-implementation.md.
+CC_STEP5_REF="$SKILLS/concept-to-code/references/step5-implementation.md"
+_ill_ln=$(enumerate_fences "$CC_STEP5_REF" | grep -F 'fence-illustration:' | head -1 | cut -f1)
 if [ -n "$_ill_ln" ]; then
-  fence_body "$SKILLS/concept-to-code/SKILL.md" "$_ill_ln" >"$TMPROOT/syn2.sh"
+  fence_body "$CC_STEP5_REF" "$_ill_ln" >"$TMPROOT/syn2.sh"
   if bash -n "$TMPROOT/syn2.sh" 2>/dev/null; then
     bad "S9: the real merge-back fence now PARSES — if it became executable, promote it to a contract"
   else
@@ -1138,7 +1140,8 @@ esac
 # `<base-fork halt: …>` pseudo-code and does not parse. F7 would fail if it were declared a
 # contract; this asserts the declaration is the illustration one, so a later edit that makes it
 # executable has to change the marker and pick up an execution with it.
-CCM="$SKILLS/concept-to-code/SKILL.md"
+# VCS-047/ADR-0174: the merge-back fence moved into references/step5-implementation.md.
+CCM="$SKILLS/concept-to-code/references/step5-implementation.md"
 if enumerate_fences "$CCM" | grep -q 'fence-illustration:'; then
   ok "E20: the merge-back fence is declared an illustration, with its reason"
 else

@@ -51,13 +51,13 @@
 # stale-contract cross-check, PTK8 the exact per-call-site variable binding, PTK9 the awk-failed
 # exit-3 branch shared by both modes.
 # plant: PTK1 | plugin/scripts/tests/mode-binding-check.sh | if [ "$#" -ne 2 ]; then | exit 42; if [ "$#" -ne 2 ]; then
-# plant: PTK2 | plugin/skills/concept-to-code/SKILL.md | # plan-tasks-question: guard | # plan-tasks-marker: guard
+# plant: PTK2 | plugin/skills/concept-to-code/references/step5-implementation.md | # plan-tasks-question: guard | # plan-tasks-marker: guard
 # plant: PTK3 | plugin/scripts/tests/mode-binding-check.sh | print_stats() { | print_stats() { MODE_COUNT=0;
 # plant: PTK4 | plugin/scripts/tests/mode-binding-check.sh | printf "%s:%d: UNBOUND %s\n", file, line, tok | printf "%s:%d: NOTAFINDING %s\n", file, line, tok
 # plant: PTK5 | plugin/scripts/tests/mode-binding-check.sh | file = $1; line = $2; tok = $3; mk = $4 | file = $1; line = $2; tok = $3; mk = $4; for (pmi = 1; pmi <= nm; pmi++) if (substr(tok, 1, length(marr[pmi])) == marr[pmi]) { tok = marr[pmi]; break }
 # plant: PTK6 | plugin/scripts/tests/mode-binding-check.sh | invocations of $(basename "$SCRIPT") found under $ROOT (population: *.sh excluding */tests/*, and fenced \`\`\`bash blocks in *.md, non-comment executable context only)" >&2 FINDINGS_TOTAL=0 print_stats exit 3 | invocations of $(basename "$SCRIPT") found under $ROOT (population: *.sh excluding */tests/*, and fenced \`\`\`bash blocks in *.md, non-comment executable context only)" >&2; FINDINGS_TOTAL=0; print_stats; exit 0
 # plant: PTK7 | plugin/scripts/tests/mode-binding-check.sh | for (i = 1; i <= nraw; i++) { if (rawtok[i] == "--help") continue covered = 0 for (j = 1; j <= ncontract; j++) if (cflag[j] == rawtok[i]) { covered = 1; break } if (!covered) printf "FINDING\tUNCOVERED-MODE\t%s\t%d\n", rawtok[i], rawline[i] } for (j = 1; j <= ncontract; j++) { accepted = 0 for (i = 1; i <= nraw; i++) if (rawtok[i] == cflag[j]) { accepted = 1; break } if (!accepted) printf "FINDING\tSTALE-CONTRACT\t%s\t%d\n", cflag[j], cline[j] if (creasonlen[j] < 40) printf "FINDING\tSHORT-REASON\t%s\t%d\n", cflag[j], cline[j] } | if (0) { }
-# plant: PTK8 | plugin/skills/concept-to-code/SKILL.md | openers=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count-openers | openers2=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count-openers
+# plant: PTK8 | plugin/skills/concept-to-code/references/step5-implementation.md | openers=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count-openers | openers2=$(bash ~/.claude/skills/concept-to-code/scripts/plan-tasks.sh --count-openers
 # plant: PTK9 | plugin/skills/concept-to-code/scripts/plan-tasks.sh | awk failed on %s — the check did not run\n' "$SELF" "$PLAN" >&2; exit 3; } | awk failed on %s — the check did not run\n' "$SELF" "$PLAN" >&2; exit 0; }
 set -u
 
@@ -70,6 +70,7 @@ ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 AB="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 
 # ==================================================================================================
@@ -181,7 +182,8 @@ printf '# Plan\n\nJust prose, no tasks at all.\n' > "$TMP/plan-none.md"
 # from 43 passed/0 failed to 35 passed/2 failed — one loud failure that also took FIVE dependent
 # assertions out of the run, and a suite reporting fewer assertions does not read as broken. The
 # marker travels with the fence, and Z1 below is the floor that makes a shrunken run visible.
-CC_STEP5=$(extract_fence "$CC" 'fence-contract: concept-to-code-step5-plan-structure -->')
+# VCS-047/ADR-0174: this fence-contract marker moved into references/step5-implementation.md.
+CC_STEP5=$(extract_fence "$STEP5_REF" 'fence-contract: concept-to-code-step5-plan-structure -->')
 AB_BLOCK=$(extract_fence "$AB" 'fence-contract: autopilot-build-check-5 -->')
 
 printf '%s\n' "$CC_STEP5" | grep -q 'plan-tasks.sh --count' \

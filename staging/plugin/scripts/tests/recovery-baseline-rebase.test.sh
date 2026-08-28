@@ -27,13 +27,14 @@
 # --- plants (plant-check.sh) ------------------------------------------------------------
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
-# plant: RB1 | plugin/skills/concept-to-code/SKILL.md | merge `main` into the feature branch; do not rebase it | keep the branch up to date
+# plant: RB1 | plugin/skills/concept-to-code/references/step5-implementation.md | merge `main` into the feature branch; do not rebase it | keep the branch up to date
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 ADR50=$(ls "$REPO"/docs/architecture/ADR-0050-*.md 2>/dev/null | head -1)
 
 PASS=0; FAIL=0
@@ -47,7 +48,8 @@ trap 'rm -rf "$TMP"' EXIT
 if [ -n "${ADR50:-}" ] && [ -f "$ADR50" ]; then ok "RB0 ADR-0050 resolves ($(basename "$ADR50"))"
 else bad "RB0 ADR-0050 not found — RB4 asserts nothing"; fi
 
-FLAT=$(tr '\n' ' ' <"$CC" | tr -d '`*' | tr -s ' ')
+# VCS-047/ADR-0174: RB1/RB3/RB5's needles moved to references/step5-implementation.md.
+FLAT=$(cat "$CC" "$STEP5_REF" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
 
 # ===========================================================================
 # RB1..RB3 — the rule and the check, at the site where the baseline is written.
@@ -89,10 +91,12 @@ fi
 # RB6..RB9 — the check EXECUTED against real git history, all three states plus did-not-run.
 # ===========================================================================
 FBODY="$TMP/check.sh"
+# VCS-047/ADR-0174: this fence-contract marker physically moved into
+# references/step5-implementation.md with the rest of Step 5's body.
 awk '/fence-contract: c2c-step5-baseline-ancestry -->/{m=1; next}
      m && /^```bash$/{f=1; next}
      f && /^```$/{exit}
-     f{print}' "$CC" >"$FBODY"
+     f{print}' "$STEP5_REF" >"$FBODY"
 
 if [ -s "$FBODY" ] && grep -q 'is-ancestor' "$FBODY"; then
   ok "RB6 the check extracts as a declared fence-contract: c2c-step5-baseline-ancestry -->"

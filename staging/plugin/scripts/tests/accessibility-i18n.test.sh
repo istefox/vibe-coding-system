@@ -15,6 +15,7 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 CC_SKILL="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 ADR="$REPO/docs/architecture/ADR-0066-120-accessibility-i18n.md"
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
 CIYML="$REPO/.github/workflows/ci.yml"
@@ -177,7 +178,8 @@ fi
 
 # AIB6: the schema itself carries the array (outside the extracted Gate 5.05 range — this reads
 # the whole file on purpose, since the schema block sits earlier, near task_metrics).
-if grep -q '"accessibility_i18n_findings"' "$CC_SKILL"; then
+# VCS-047/ADR-0174: the step5-report.json schema block lives in references/step5-implementation.md.
+if grep -q '"accessibility_i18n_findings"' "$STEP5_REF"; then
   ok "AIB6: step5-report.json schema documents accessibility_i18n_findings"
 else
   bad "AIB6: accessibility_i18n_findings missing from the documented schema"
@@ -301,7 +303,8 @@ fi
 # roll-up arithmetic must be consistent: the "stays six arrays, not seven" sentence about
 # task_metrics cannot survive verbatim once a real seventh finding array exists.
 # ==================================================================================================
-if grep -q 'accessibility_i18n_findings.*IS a findings array\|IS a findings array.*accessibility_i18n_findings' "$CC_SKILL"; then
+# VCS-047/ADR-0174: this classification sentence lives in references/step5-implementation.md.
+if grep -q 'accessibility_i18n_findings.*IS a findings array\|IS a findings array.*accessibility_i18n_findings' "$STEP5_REF"; then
   ok "AIG1: SKILL.md explicitly classifies accessibility_i18n_findings as a findings array, not a metric"
 else
   bad "AIG1: no explicit finding-vs-metric classification found for accessibility_i18n_findings"

@@ -36,6 +36,7 @@ set -u
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
@@ -209,8 +210,15 @@ fi
 # ===========================================================================
 # SC8 — the cross-file contract. The collapse matches what the merge-back WRITES; if that message
 # is reworded the collapse silently stops recognising its own commits and refuses forever.
+#
+# VCS-047/ADR-0174: the needle occurs twice pre-move — once as the actual `git commit -m` line
+# that WRITES the message (Step 5's merge-back mechanism, now in references/step5-implementation.md)
+# and once as a prose mention describing the phenomenon in Step 7's own intro (stays in SKILL.md).
+# Pinning to $CC alone would have kept passing on the prose mention even if the real write line
+# were reworded — a silent survivor, not a failure (rule 18: a scan is satisfied by the whole
+# population it searches, not by the part it meant). Check the actual write site.
 # ===========================================================================
-if grep -qF 'chore(step5): snapshot <stage> worktree (<agent_type>)' "$CC"; then
+if grep -qF 'chore(step5): snapshot <stage> worktree (<agent_type>)' "$STEP5_REF"; then
   ok "SC8 (forward guard) the merge-back snapshot message is unchanged — the collapse matches it"
 else
   bad "SC8 the merge-back message was reworded; the collapse pattern no longer recognises chain commits and would refuse on every run"

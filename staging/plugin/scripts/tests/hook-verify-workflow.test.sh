@@ -15,6 +15,8 @@ unset CLAUDE_CODE_SESSION_ID
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 V="$SCRIPTS/hook-verify-workflow.sh"
 SKILL_MD=$(cd "$SCRIPTS/../skills/concept-to-code" && pwd)/SKILL.md
+# VCS-047/ADR-0174: Step 5's exit-code documentation moved into references/step5-implementation.md.
+STEP5_REF=$(cd "$SCRIPTS/../skills/concept-to-code" && pwd)/references/step5-implementation.md
 
 PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); printf 'ok   %s\n' "$1"; }
@@ -197,13 +199,13 @@ grep -q 'CLAUDE_CODE_SESSION_ID is unset' "$V" \
 
 # S7 (static, genuine RED): SKILL.md's exit-3 bullet no longer implies a missing audit log is the only
 # INCONCLUSIVE cause.
-grep -q 'CLAUDE_CODE_SESSION_ID` was unavailable and the post-marker window mixed rows' "$SKILL_MD" \
+grep -q 'CLAUDE_CODE_SESSION_ID` was unavailable and the post-marker window mixed rows' "$STEP5_REF" \
   && ok "S7 SKILL.md exit-3 bullet documents the second INCONCLUSIVE cause" \
   || no "S7 SKILL.md exit-3 bullet should document the second INCONCLUSIVE cause"
 
 # S8 (static, genuine RED): SKILL.md's exit-1 bullet's failure enumeration also names the third
 # REFUTED cause.
-grep -q 'belongs to a different, concurrent Claude Code session' "$SKILL_MD" \
+grep -q 'belongs to a different, concurrent Claude Code session' "$STEP5_REF" \
   && ok "S8 SKILL.md exit-1 bullet names the concurrent-session REFUTED cause" \
   || no "S8 SKILL.md exit-1 bullet should name the concurrent-session REFUTED cause"
 

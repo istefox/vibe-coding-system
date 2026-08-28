@@ -78,6 +78,7 @@ ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 AB="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 RTF="$STAGING/plugin/skills/review-triage-fix/SKILL.md"
 
@@ -376,7 +377,15 @@ fi
 # above by direct grep before this section existed), so every conjunct below is unmet.
 # ==============================================================================================
 CC_STEP5="$TMP/cc-step5.txt"
-awk '/^### Step 5 —/{f=1} /^### Step 6 —/{f=0} f' "$CC" >"$CC_STEP5" 2>/dev/null
+# The Step 5 range moved to references/step5-implementation.md (VCS-047, ADR-0174); the
+# reference file's body IS the block, so no awk range is needed any more.
+cp "$STEP5_REF" "$CC_STEP5" 2>/dev/null
+
+if [ -s "$CC_STEP5" ]; then
+  ok "G0: concept-to-code Step 5 (references/step5-implementation.md) is extractable (G1-G4 below read)"
+else
+  bad "G0: could not read references/step5-implementation.md — G1-G4 below would pass vacuously (empty extract, negative-shaped risk)"
+fi
 
 # G1: the fourth assertion exists, named Step 5.0.4, and names both the key (worktree.baseRef)
 # and the literal required value ("head"). Three conjuncts so a partial mention (heading added
@@ -529,7 +538,7 @@ agent_tool_call_count() {
 # H1 / H1b / H1c (R-06) — every `coder` dispatch (Workflow Stage 2, Workflow Step 6 Phase 3
 # fix-agent, Agent-tool fallback) pins isolation: "worktree" explicitly.
 # ==============================================================================================
-STAGE2_BLOCK=$(block_between "$CC" '^\*\*Stage 2 — coder\.\*\*' '^\*\*Pin the model explicitly')
+STAGE2_BLOCK=$(block_between "$STEP5_REF" '^\*\*Stage 2 — coder\.\*\*' '^\*\*Pin the model explicitly')
 if printf '%s\n' "$STAGE2_BLOCK" | grep -qF 'isolation: "worktree"'; then
   ok "H1: concept-to-code Step 5 Stage 2 (Workflow path) pins isolation: \"worktree\" on the coder dispatch (R-06)"
 else
@@ -543,7 +552,7 @@ else
   bad "H1b: concept-to-code Step 6 Phase 3's fix-agent dispatch names no isolation value — agentType can resolve to \"coder\" (via fix_type) and R-06 requires isolation: 'worktree' there too"
 fi
 
-FALLBACK_CODER_BLOCK=$(block_between "$CC" '^2\. Dispatch coder with batch 1' '^3\. Checkpoint between batches')
+FALLBACK_CODER_BLOCK=$(block_between "$STEP5_REF" '^2\. Dispatch coder with batch 1' '^3\. Checkpoint between batches')
 if printf '%s\n' "$FALLBACK_CODER_BLOCK" | grep -qF 'isolation: "worktree"'; then
   ok "H1c: the Agent-tool fallback's coder dispatch pins isolation: \"worktree\" explicitly (R-06)"
 else
@@ -553,14 +562,14 @@ fi
 # ==============================================================================================
 # H2 / H2b (R-09) — Step 5 Stage 1's tester dispatch carries an isolation value on both paths.
 # ==============================================================================================
-STAGE1_BLOCK=$(block_between "$CC" '^\*\*Stage 1 — tester\.\*\*' '^\*\*Stage 2 — coder\.\*\*')
+STAGE1_BLOCK=$(block_between "$STEP5_REF" '^\*\*Stage 1 — tester\.\*\*' '^\*\*Stage 2 — coder\.\*\*')
 if printf '%s\n' "$STAGE1_BLOCK" | grep -q 'isolation'; then
   ok "H2: concept-to-code Step 5 Stage 1 (Workflow path) tester dispatch names an isolation value (R-09)"
 else
   bad "H2: concept-to-code Step 5 Stage 1 (Workflow path) tester dispatch names no isolation value — R-09 requires isolation: \"worktree\" explicitly"
 fi
 
-FALLBACK_TESTER_BLOCK=$(block_between "$CC" '^1\. Dispatch `tester` for batch 1' '^2\. Dispatch coder with batch 1')
+FALLBACK_TESTER_BLOCK=$(block_between "$STEP5_REF" '^1\. Dispatch `tester` for batch 1' '^2\. Dispatch coder with batch 1')
 if printf '%s\n' "$FALLBACK_TESTER_BLOCK" | grep -q 'isolation'; then
   ok "H2b: the Agent-tool fallback's tester dispatch (batch 1) names an isolation value (R-09)"
 else
@@ -573,7 +582,8 @@ fi
 # recovery-preflight.test.sh RE5 idiom: compare line numbers of two located headings).
 # ==============================================================================================
 MB_HEADING_ERE='^#### Merge-back and base-fork audit'
-MB_SECTION=$(block_from_heading "$CC" "$MB_HEADING_ERE")
+# VCS-047/ADR-0174: this section now lives in references/step5-implementation.md.
+MB_SECTION=$(block_from_heading "$STEP5_REF" "$MB_HEADING_ERE")
 
 if printf '%s\n' "$MB_SECTION" | grep -qF 'worktreePath' && printf '%s\n' "$MB_SECTION" | grep -qF 'worktreeBranch'; then
   ok "H3: a merge-back block exists naming worktreePath and worktreeBranch (R-07)"
@@ -581,9 +591,10 @@ else
   bad "H3: no merge-back block naming worktreePath and worktreeBranch was found (R-07) — Task 6 adds a '#### Merge-back and base-fork audit' section"
 fi
 
-STAGE1_HEAD_LINE=$(grep -n '^\*\*Stage 1 — tester\.\*\*' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
-MB_HEAD_LINE=$(grep -n "$MB_HEADING_ERE" "$CC" 2>/dev/null | head -1 | cut -d: -f1)
-STAGE2_HEAD_LINE=$(grep -n '^\*\*Stage 2 — coder\.\*\*' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+# VCS-047/ADR-0174: all three anchors now live in references/step5-implementation.md.
+STAGE1_HEAD_LINE=$(grep -n '^\*\*Stage 1 — tester\.\*\*' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
+MB_HEAD_LINE=$(grep -n "$MB_HEADING_ERE" "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
+STAGE2_HEAD_LINE=$(grep -n '^\*\*Stage 2 — coder\.\*\*' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
 if [ -n "$STAGE1_HEAD_LINE" ] && [ -n "$MB_HEAD_LINE" ] && [ -n "$STAGE2_HEAD_LINE" ] \
    && [ "$STAGE1_HEAD_LINE" -lt "$MB_HEAD_LINE" ] && [ "$MB_HEAD_LINE" -lt "$STAGE2_HEAD_LINE" ]; then
   ok "H3b: the merge-back block sits between the tester stage heading and the coder stage heading (R-07, R-09, RE5 idiom)"
@@ -615,8 +626,9 @@ fi
 # the ordering half is the one that silently rots (ADR-0068 §D5 step 2, "records the fork point
 # before touching anything").
 # ==============================================================================================
-BASE_SHA_LINE=$(grep -nF 'BASE_SHA=$(git -C "$WT" rev-parse HEAD)' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
-SNAPSHOT_COMMIT_LINE=$(grep -nF 'git -C "$WT" commit -m "chore(step5): snapshot' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+# VCS-047/ADR-0174: both anchors now live in references/step5-implementation.md.
+BASE_SHA_LINE=$(grep -nF 'BASE_SHA=$(git -C "$WT" rev-parse HEAD)' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
+SNAPSHOT_COMMIT_LINE=$(grep -nF 'git -C "$WT" commit -m "chore(step5): snapshot' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
 if [ -n "$BASE_SHA_LINE" ] && [ -n "$SNAPSHOT_COMMIT_LINE" ] && [ "$BASE_SHA_LINE" -lt "$SNAPSHOT_COMMIT_LINE" ]; then
   ok "H5: the fork point (BASE_SHA = rev-parse HEAD) is captured before the snapshot commit lands (R-07, ordering)"
 else
@@ -758,7 +770,7 @@ fi
 # ------------------------------------------------------------------------------------------------
 # I-guard0 / I1 / I2 / I2b — the file-conflict scan block (R-10).
 # ------------------------------------------------------------------------------------------------
-SCAN_BLOCK=$(block_between "$CC" 'conflict scan' 'Step 5 dispatch prompt')
+SCAN_BLOCK=$(block_between "$STEP5_REF" 'conflict scan' 'Step 5 dispatch prompt')
 
 if [ -n "$SCAN_BLOCK" ]; then
   ok "I-guard0 (forward guard): the parallel task conflict scan block was extracted (non-empty) — I1/I2 are not vacuous"
@@ -817,8 +829,9 @@ fi
 # H5 idiom: compare line numbers of two located literals in the whole file, not the pre-extracted
 # MB_SECTION text (which carries no original line numbers).
 # ------------------------------------------------------------------------------------------------
-CONFLICTS_CAPTURE_LINE=$(grep -nF 'CONFLICTS=$(git diff --name-only --diff-filter=U)' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
-MERGE_ABORT_LINE=$(grep -nF 'git merge --abort' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+# VCS-047/ADR-0174: both anchors now live in references/step5-implementation.md.
+CONFLICTS_CAPTURE_LINE=$(grep -nF 'CONFLICTS=$(git diff --name-only --diff-filter=U)' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
+MERGE_ABORT_LINE=$(grep -nF 'git merge --abort' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
 if [ -n "$CONFLICTS_CAPTURE_LINE" ] && [ -n "$MERGE_ABORT_LINE" ] \
    && [ "$CONFLICTS_CAPTURE_LINE" -lt "$MERGE_ABORT_LINE" ]; then
   ok "I5: \$CONFLICTS is captured (git diff --name-only --diff-filter=U) before git merge --abort clears the unmerged paths (R-12, ordering)"
@@ -1357,7 +1370,8 @@ w_count_flat() {
 }
 
 W_CLAUSE='Writes go under the dispatched worktree, never to an absolute path into the shared checkout'
-n=$(w_count_flat "$W_CLAUSE" "$CC")
+# VCS-047/ADR-0174: all 4 occurrences of this clause live in references/step5-implementation.md.
+n=$(w_count_flat "$W_CLAUSE" "$STEP5_REF")
 if [ "$n" -eq 4 ]; then
   ok "W1: the working-root clause appears at exactly 4 dispatch sites (both tester templates, both coder templates)"
 else
@@ -1366,7 +1380,7 @@ fi
 
 # W2 — the check must read UNTRACKED, not the whole porcelain. The manifest is legitimately
 # modified-tracked throughout Step 5 (#239), so a --porcelain check would halt every stage.
-if grep -qF 'git ls-files --others --exclude-standard' "$CC" 2>/dev/null; then
+if grep -qF 'git ls-files --others --exclude-standard' "$STEP5_REF" 2>/dev/null; then
   ok "W2: the merge-back escape check reads untracked files, which is what leaves the #239 manifest case alone"
 else
   bad "W2: the merge-back escape check does not use 'git ls-files --others --exclude-standard' (#245)"
@@ -1374,8 +1388,9 @@ fi
 
 # W3 — ORDER is the property, not presence: after the merge the damage has already happened, and a
 # path collision would have been reported as a conflict whose named cause is wrong.
-_esc=$(grep -n 'git ls-files --others --exclude-standard' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
-_mrg=$(grep -n 'git merge --no-edit "\$WB"' "$CC" 2>/dev/null | head -1 | cut -d: -f1)
+# VCS-047/ADR-0174: both anchors now live in references/step5-implementation.md.
+_esc=$(grep -n 'git ls-files --others --exclude-standard' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
+_mrg=$(grep -n 'git merge --no-edit "\$WB"' "$STEP5_REF" 2>/dev/null | head -1 | cut -d: -f1)
 if [ -n "$_esc" ] && [ -n "$_mrg" ] && [ "$_esc" -lt "$_mrg" ]; then
   ok "W3: the escape check runs BEFORE the merge (line $_esc < $_mrg)"
 else
@@ -1485,12 +1500,33 @@ l_claims() {
     }' "$1"
 }
 
+# VCS-047/ADR-0174: Step 5's own body (isolation:/no-sub-agents mechanism included) moved into
+# references/step5-implementation.md; SKILL.md keeps only the "### Step 5 —" heading plus a
+# pointer paragraph. l_classify's block-buffer scan reads a single file, so a Step 5 block read
+# from $CC alone would see an empty mechanism and misclassify as NEITHER — a false L2 hit. Splice
+# the reference content back in, right after the heading, so the block boundaries l_classify walks
+# match what actually ships (STEP5_REF carries no '### Step 5 —'/'### Step 6 —' heading of its own,
+# so this cannot mis-nest into a neighbouring step).
+L_CC_MERGED="$TMP/cc_merged_for_l.md"
+awk -v step5file="$STEP5_REF" '
+  /^### Step 5 —/ {
+    print
+    while ((getline line < step5file) > 0) print line
+    close(step5file)
+    skip=1
+    next
+  }
+  skip && /^### Step 6 —/ { skip=0 }
+  skip { next }
+  { print }
+' "$CC" > "$L_CC_MERGED"
+
 # The population is every step token the guide actually names — derived, never listed here.
 L_TOKENS=$(grep -oE 'step_[a-z0-9]+[a-z0-9_]*' "$L_GUIDA" 2>/dev/null \
   | sed -E 's/^step_([a-z0-9]+)_.*/\1/' | sort -u)
 L_MAPPED=0; L_DIRECT_HIT=""; L_NEITHER_HIT=""; L_DISPATCH_CLAIMED=0; L_AMBIG=""
 for _id in $L_TOKENS; do
-  _cls=$(l_classify "$CC" "$_id")
+  _cls=$(l_classify "$L_CC_MERGED" "$_id")
   [ "$_cls" = "UNMAPPED" ] || L_MAPPED=$((L_MAPPED+1))
   _cl=$(l_claims "$L_GUIDA" "$_id")
   case "$_cls" in
@@ -1648,20 +1684,22 @@ fi
 # the remediation prose a few lines below ALSO mentions "-derivedDataPath" in English, so a bare
 # `grep -F` would still find a hit after the check itself is neutralised (measured — a registry
 # NOFIRE on the first draft).
-_m1=$(grep -F -- "grep -q -- '-derivedDataPath' .claude/test-cmd" "$CC" | head -1)
-# plant: M1 | plugin/skills/concept-to-code/SKILL.md | grep -q -- '-derivedDataPath' .claude/test-cmd | true
+# VCS-047/ADR-0174: M1's needle moved to references/step5-implementation.md.
+_m1=$(grep -F -- "grep -q -- '-derivedDataPath' .claude/test-cmd" "$STEP5_REF" | head -1)
+# plant: M1 | plugin/skills/concept-to-code/references/step5-implementation.md | grep -q -- '-derivedDataPath' .claude/test-cmd | true
 if [ -n "$_m1" ]; then
   ok "M1: Step 5.0.4b's assertion body checks for -derivedDataPath in .claude/test-cmd, not just for its presence somewhere in the guide"
 else
-  bad "M1: no -derivedDataPath check found in $CC — issue #488's pre-flight gate is missing"
+  bad "M1: no -derivedDataPath check found in $STEP5_REF — issue #488's pre-flight gate is missing"
 fi
 
-_m2=$(grep -F '5.0.4b' "$CC" | grep -iF 'xcodebuild')
+# VCS-047/ADR-0174: M2's needle moved to references/step5-implementation.md.
+_m2=$(grep -F '5.0.4b' "$STEP5_REF" | grep -iF 'xcodebuild')
 # The needle is the HEADING line alone — "build root (issue #488, ADR-0159)." also appears in a
 # second, unrelated sentence at this file's Pre-dispatch worktree-isolation-contract section
 # (measured: the first draft's needle matched both and would have been a registry BADPLANT, "must
 # match exactly 1"). Anchored on "Step 5.0.4b —" to keep it unique to the heading.
-# plant: M2 | plugin/skills/concept-to-code/SKILL.md | Step 5.0.4b — a trusted `xcodebuild` test-cmd names its own build root | Step 5.0.4b — a trusted test-cmd names its own build root
+# plant: M2 | plugin/skills/concept-to-code/references/step5-implementation.md | Step 5.0.4b — a trusted `xcodebuild` test-cmd names its own build root | Step 5.0.4b — a trusted test-cmd names its own build root
 if [ -n "$_m2" ]; then
   ok "M2: Step 5.0.4b names xcodebuild — the gate is scoped to the stack it guards, not every test-cmd"
 else
@@ -1693,18 +1731,19 @@ fi
 # here (rule 13). M4 pins the ordering instruction at the coder-dispatch call site; M5 pins it
 # again at the post-fence branch, where a `complete` verdict authorizes the merge-back rather than
 # the other way round.
-# plant: M4 | plugin/skills/concept-to-code/SKILL.md | BEFORE running its own merge-back | AFTER running its own merge-back
-if grep -qF "BEFORE running its own merge-back" "$CC"; then
+# plant: M4 | plugin/skills/concept-to-code/references/step5-implementation.md | BEFORE running its own merge-back | AFTER running its own merge-back
+# VCS-047/ADR-0174: M4/M5's needles moved to references/step5-implementation.md.
+if grep -qF "BEFORE running its own merge-back" "$STEP5_REF"; then
   ok "M4: the coder-dispatch step reads the completion fact BEFORE running that coder's own merge-back"
 else
-  bad "M4: no 'BEFORE running its own merge-back' instruction found in $CC — the completion-fact read could run after the worktree that holds it is removed (#494)"
+  bad "M4: no 'BEFORE running its own merge-back' instruction found in $STEP5_REF — the completion-fact read could run after the worktree that holds it is removed (#494)"
 fi
 
-# plant: M5 | plugin/skills/concept-to-code/SKILL.md | do NOT run the merge-back | do run the merge-back
-if grep -qF "do NOT run the merge-back" "$CC"; then
+# plant: M5 | plugin/skills/concept-to-code/references/step5-implementation.md | do NOT run the merge-back | do run the merge-back
+if grep -qF "do NOT run the merge-back" "$STEP5_REF"; then
   ok "M5: a HALT from the completion-fact gate explicitly forbids running the merge-back — the worktree stays exactly as it is"
 else
-  bad "M5: no HALT-forbids-merge-back instruction found in $CC — a HALT could still be followed by a merge-back that removes the very worktree it named"
+  bad "M5: no HALT-forbids-merge-back instruction found in $STEP5_REF — a HALT could still be followed by a merge-back that removes the very worktree it named"
 fi
 
 # Z1 — assertion-count floor. §D8: this file had none, so the vanishing-assertion class ADR-0083

@@ -251,7 +251,11 @@ _vd_doc_set() {
 }
 
 # WRITTEN set: every literal a producer assigns, plus manifest-init.sh's default.
+# VCS-047/ADR-0174: widened to also cover */references/*.md — step5_mode's three producer
+# literals physically moved into concept-to-code/references/step5-implementation.md with the
+# rest of Step 5's body (same population-glob coupling class ADR-0172 D3 already fixed elsewhere).
 V_WRITTEN=$(grep -rhoE 'step5_mode: "[a-z_]+"' "$STAGING"/plugin/skills/*/SKILL.md \
+              "$STAGING"/plugin/skills/*/references/*.md \
               "$STAGING"/plugin/skills/*/scripts/*.sh 2>/dev/null \
             | sed 's/.*: "//; s/"//' | sort -u)
 if grep -q 'step5_mode: null' "$INIT_SH" 2>/dev/null; then
@@ -429,8 +433,11 @@ fi
 # collapses this set to {false} (the init.sh default alone survives) — loud, via WH1's count guard,
 # but a real coupling and a plausible future edit.
 # plant: WH1 | plugin/scripts/tests/manifest-field-state.test.sh | manifest-set-flag\.sh.* hook_verified (true|false) | manifest-set-flag\.sh.* hook_verified_ZZZ (true|false)
+# VCS-047/ADR-0174: widened to also cover */references/*.md — both hook_verified producer
+# literals physically moved into concept-to-code/references/step5-implementation.md.
 WH_WRITTEN=$( { grep -rhoE 'manifest-set-flag\.sh.* hook_verified (true|false)' \
-    "$STAGING"/plugin/skills/*/SKILL.md "$STAGING"/plugin/skills/*/scripts/*.sh 2>/dev/null \
+    "$STAGING"/plugin/skills/*/SKILL.md "$STAGING"/plugin/skills/*/references/*.md \
+    "$STAGING"/plugin/skills/*/scripts/*.sh 2>/dev/null \
     | sed -E 's/.*hook_verified (true|false).*/\1/'
   grep -oE '^echo "hook_verified: (true|false)"' "$INIT_SH" 2>/dev/null \
     | sed -E 's/^echo "hook_verified: (true|false)".*/\1/'

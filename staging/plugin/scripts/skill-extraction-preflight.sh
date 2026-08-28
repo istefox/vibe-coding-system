@@ -169,12 +169,19 @@ for t in "$TESTS"/*.test.sh; do
     [ -n "$p1" ] || continue
     # De-escape the ERE-ish anchor back to a literal search string: drop backslash before
     # regex metacharacters this idiom actually uses (. * ^ $ and escaped literals like \.).
+    #
+    # Anchored with `^` via a BRE, not `grep -F`: the awk idiom itself is always `/^PAT/`, i.e.
+    # it matches only at the START of a line. An unanchored `grep -nF "$lit1"` matches PAT
+    # anywhere in ANY line, including prose that happens to contain the same text — e.g.
+    # "## 5. HITL gates" appears both as the real heading and inside a prose sentence describing
+    # it earlier in the file, and the unanchored form found the prose first. Found live on this
+    # tool's first real use against the Step 5 range (VCS-047, 2026-08-28).
     lit1=$(printf '%s' "$p1" | sed 's/\\\././g')
-    a1=$(grep -nF "$lit1" "$TARGET_ABS" 2>/dev/null | head -1 | cut -d: -f1)
+    a1=$(grep -n "^$(printf '%s' "$lit1" | sed 's/[][\.*^$/]/\\&/g')" "$TARGET_ABS" 2>/dev/null | head -1 | cut -d: -f1)
     a2=""
     if [ -n "$p2" ]; then
       lit2=$(printf '%s' "$p2" | sed 's/\\\././g')
-      a2=$(grep -nF "$lit2" "$TARGET_ABS" 2>/dev/null | head -1 | cut -d: -f1)
+      a2=$(grep -n "^$(printf '%s' "$lit2" | sed 's/[][\.*^$/]/\\&/g')" "$TARGET_ABS" 2>/dev/null | head -1 | cut -d: -f1)
     fi
     if [ -n "$a1" ]; then
       overlap="no"

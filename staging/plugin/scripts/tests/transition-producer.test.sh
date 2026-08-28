@@ -37,14 +37,15 @@
 # --- plants (plant-check.sh) ------------------------------------------------------------
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
-# plant: TP6 | plugin/skills/concept-to-code/SKILL.md | bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh "<manifest>" step_5_implementation | true
-# plant: TP1 | plugin/skills/concept-to-code/SKILL.md | → transition to `step_6_review`. | → stop.
+# plant: TP6 | plugin/skills/concept-to-code/references/step5-implementation.md | bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh "<manifest>" step_5_implementation | true
+# plant: TP1 | plugin/skills/concept-to-code/references/step5-implementation.md | → transition to `step_6_review`. | → stop.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 SKILLS="$STAGING/plugin/skills"
 C2C="$SKILLS/concept-to-code/SKILL.md"
+STEP5_REF="$SKILLS/concept-to-code/references/step5-implementation.md"
 TRANS="$SKILLS/concept-to-code/scripts/manifest-transition.sh"
 
 PASS=0; FAIL=0
@@ -92,6 +93,11 @@ for _f in "$SKILLS"/*/SKILL.md; do
   [ "$_f" = "$C2C" ] && continue
   cat "$_f" >>"$PROD"
 done
+# VCS-047/ADR-0174: concept-to-code's Step 5 body (a real chunk of the producer population — the
+# entry transition into step_5_implementation and the exit into step_6_review both live here)
+# physically moved into references/step5-implementation.md. Add it, or every producer inside old
+# Step 5 silently vanishes from the population and its targets read as producerless.
+[ -f "$STEP5_REF" ] && cat "$STEP5_REF" >>"$PROD"
 PROD_N=$(wc -l <"$PROD" | tr -d ' ')
 
 # ---------------------------------------------------------------------------
@@ -373,8 +379,9 @@ fi
 # #248 INSTANCE PINS — TP6/TP7. The class guard above cannot see this defect (see the header);
 # these are what fail against the pre-#248 tree.
 # ===========================================================================
-PRE_A=$(grep -n '^#### Recovery-readiness pre-flight' "$C2C" | head -1 | cut -d: -f1)
-PRE_B=$(grep -n '^#### Pattern seed handoff' "$C2C" | head -1 | cut -d: -f1)
+# VCS-047/ADR-0174: both anchors now live in references/step5-implementation.md.
+PRE_A=$(grep -n '^#### Recovery-readiness pre-flight' "$STEP5_REF" | head -1 | cut -d: -f1)
+PRE_B=$(grep -n '^#### Pattern seed handoff' "$STEP5_REF" | head -1 | cut -d: -f1)
 T45_A=$(grep -n '^### Step 4\.5 — Tracer-bullet probe' "$C2C" | head -1 | cut -d: -f1)
 T45_B=$(grep -n '^### Step 5 — Implementation' "$C2C" | head -1 | cut -d: -f1)
 
@@ -385,7 +392,7 @@ else
   bad "TP5 a region anchor did not resolve — a heading was reworded; TP6/TP8 assert nothing without it"
 fi
 
-_pre=$(awk -v a="${PRE_A:-0}" -v b="${PRE_B:-0}" 'NR>a && NR<b' "$C2C")
+_pre=$(awk -v a="${PRE_A:-0}" -v b="${PRE_B:-0}" 'NR>a && NR<b' "$STEP5_REF")
 # The needle is the INVOCATION, not the two words around it.
 #
 # The first form was `grep -E "manifest-transition\.sh|[Tt]ransition"` AND `grep 'step_5_implementation'`,

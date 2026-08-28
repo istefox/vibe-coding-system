@@ -28,16 +28,16 @@
 # --- plants (plant-check.sh) ------------------------------------------------------------
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
-# plant: BP2 | plugin/skills/concept-to-code/SKILL.md | the first rule outranks the second | both rules apply
-# plant: BP2b | plugin/skills/concept-to-code/SKILL.md | evidence quality beats checkpoint tidiness | that is the convention
-# plant: CB1 | plugin/skills/concept-to-code/SKILL.md | lands with the tests
-# plant: CB2 | plugin/skills/concept-to-code/SKILL.md | **A third rule, and on a compiled or type-checked language it outranks both (issue #486, ADR-0155).** The tester's batch must leave the target BUILDING. The interface or type declaration its tests reference lands with the tests, not with the implementation: **the tester owns the signature, the coder owns the body.** The two rules above assume something nobody wrote down until #486 — that a failing assertion still compiles. In bash it does: the harness runs, prints `FAIL: <id>`, and the observed failing set can be compared against the plan's expected-red table. In Swift, Rust, Go or TypeScript under `tsc --noEmit` it does not. A test referencing a type the coder has not written yet does not fail; it stops the target from building, and then nothing runs at all. Measured on a live run against a Swift project on 2026-08-18: `cannot find type 'GoogleBooksAPIKeyStoring' in scope`, followed by `Testing cancelled because the build failed`. **Its precedence, in the same terms the tie-break above uses.** Violating rule 1 makes an assertion fail for the wrong reason, so the recorded RED proves nothing. Violating this one means there is no recorded RED at all, and no checkpoint state describing what happened — a strictly larger loss, and why it is a precondition rather than a third peer. | **A rule, and on a compiled or type-checked language it outranks both (issue #486, ADR-0155).** The tester's batch must leave the target BUILDING. The interface or type declaration its tests reference lands with the tests, not with the implementation: **the tester owns the signature, the coder owns the body.** The two rules above assume something nobody wrote down until #486 — that a failing assertion still compiles. In bash it does: the harness runs, prints `FAIL: <id>`, and the observed failing set can be compared against the plan's expected-red table. In Swift, Rust, Go or TypeScript under `tsc --noEmit` it does not. A test referencing a type the coder has not written yet does not fail; it stops the target from building, and then nothing runs at all. Measured on a live run against a Swift project on 2026-08-18: `cannot find type 'GoogleBooksAPIKeyStoring' in scope`, followed by `Testing cancelled because the build failed`. **Its precedence, in the same terms the tie-break above uses.** Violating rule 1 makes an assertion fail for the wrong reason, so the recorded RED proves nothing. Violating this one means there is no recorded RED at all, and no checkpoint state describing what happened — a strictly larger loss, and why it is a precondition rather than an equal peer.
-# plant: CB3 | plugin/skills/concept-to-code/SKILL.md | A fourth state exists
+# plant: BP2 | plugin/skills/concept-to-code/references/step5-implementation.md | the first rule outranks the second | both rules apply
+# plant: BP2b | plugin/skills/concept-to-code/references/step5-implementation.md | evidence quality beats checkpoint tidiness | that is the convention
+# plant: CB1 | plugin/skills/concept-to-code/references/step5-implementation.md | lands with the tests
+# plant: CB2 | plugin/skills/concept-to-code/references/step5-implementation.md | **A third rule, and on a compiled or type-checked language it outranks both (issue #486, ADR-0155).** The tester's batch must leave the target BUILDING. The interface or type declaration its tests reference lands with the tests, not with the implementation: **the tester owns the signature, the coder owns the body.** The two rules above assume something nobody wrote down until #486 — that a failing assertion still compiles. In bash it does: the harness runs, prints `FAIL: <id>`, and the observed failing set can be compared against the plan's expected-red table. In Swift, Rust, Go or TypeScript under `tsc --noEmit` it does not. A test referencing a type the coder has not written yet does not fail; it stops the target from building, and then nothing runs at all. Measured on a live run against a Swift project on 2026-08-18: `cannot find type 'GoogleBooksAPIKeyStoring' in scope`, followed by `Testing cancelled because the build failed`. **Its precedence, in the same terms the tie-break above uses.** Violating rule 1 makes an assertion fail for the wrong reason, so the recorded RED proves nothing. Violating this one means there is no recorded RED at all, and no checkpoint state describing what happened — a strictly larger loss, and why it is a precondition rather than a third peer. | **A rule, and on a compiled or type-checked language it outranks both (issue #486, ADR-0155).** The tester's batch must leave the target BUILDING. The interface or type declaration its tests reference lands with the tests, not with the implementation: **the tester owns the signature, the coder owns the body.** The two rules above assume something nobody wrote down until #486 — that a failing assertion still compiles. In bash it does: the harness runs, prints `FAIL: <id>`, and the observed failing set can be compared against the plan's expected-red table. In Swift, Rust, Go or TypeScript under `tsc --noEmit` it does not. A test referencing a type the coder has not written yet does not fail; it stops the target from building, and then nothing runs at all. Measured on a live run against a Swift project on 2026-08-18: `cannot find type 'GoogleBooksAPIKeyStoring' in scope`, followed by `Testing cancelled because the build failed`. **Its precedence, in the same terms the tie-break above uses.** Violating rule 1 makes an assertion fail for the wrong reason, so the recorded RED proves nothing. Violating this one means there is no recorded RED at all, and no checkpoint state describing what happened — a strictly larger loss, and why it is a precondition rather than an equal peer.
+# plant: CB3 | plugin/skills/concept-to-code/references/step5-implementation.md | A fourth state exists
 # plant: CB4 | plugin/skills/concept-to-code/SKILL.md | a failure: stop the task, clear the ports, restart. Do not proceed to tests. | a failure: stop the task, clear the ports, restart. Do not proceed to tests.\n**Stage 1 — tester.**
-# plant: CB4a | plugin/skills/concept-to-code/SKILL.md | the coder owns the body. A test that names
-# plant: CB4b | plugin/skills/concept-to-code/SKILL.md | the coder owns the body. A test naming a type nobody
+# plant: CB4a | plugin/skills/concept-to-code/references/step5-implementation.md | the coder owns the body. A test that names
+# plant: CB4b | plugin/skills/concept-to-code/references/step5-implementation.md | the coder owns the body. A test naming a type nobody
 # plant: CB5 | plugin/agents/architect.md | the plan places the interface or type declaration in the TESTER's task
-# plant: CB6 | plugin/skills/concept-to-code/SKILL.md | uses. Nothing in the hook layer had to change for this: `test-write-scope.sh` constrains the coder only, so it **already permits** the tester to write the declaration (ADR-0155 §D6). What was missing was anything telling it to. **This is an instruction, not an enforcement (rule 16), and nothing here blocks a dispatch.** No hook checks that a plan placed the declaration in the tester's task; `test-write-scope.sh` already permits it either way. What is enforced is that this rule is written down, and the consequence when | uses. Nothing in the hook layer had to change for this: `test-write-scope.sh` constrains the coder only, so nothing there forbids the tester from writing the declaration (ADR-0155 §D6). What was missing was anything telling it to. **This is an instruction, not an enforcement (rule 16), and nothing here blocks a dispatch.** No hook checks that a plan placed the declaration in the tester's task; `test-write-scope.sh` does not forbid it either way. What is enforced is that this rule is written down, and the consequence when
+# plant: CB6 | plugin/skills/concept-to-code/references/step5-implementation.md | uses. Nothing in the hook layer had to change for this: `test-write-scope.sh` constrains the coder only, so it **already permits** the tester to write the declaration (ADR-0155 §D6). What was missing was anything telling it to. **This is an instruction, not an enforcement (rule 16), and nothing here blocks a dispatch.** No hook checks that a plan placed the declaration in the tester's task; `test-write-scope.sh` already permits it either way. What is enforced is that this rule is written down, and the consequence when | uses. Nothing in the hook layer had to change for this: `test-write-scope.sh` constrains the coder only, so nothing there forbids the tester from writing the declaration (ADR-0155 §D6). What was missing was anything telling it to. **This is an instruction, not an enforcement (rule 16), and nothing here blocks a dispatch.** No hook checks that a plan placed the declaration in the tester's task; `test-write-scope.sh` does not forbid it either way. What is enforced is that this rule is written down, and the consequence when
 # plant: CB7 | ../docs/architecture/ADR-0155-compiled-language-tester-batch.md | M4 — the mechanism already permits the fix.
 set -u
 
@@ -45,6 +45,7 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 AB="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 AA="$STAGING/plugin/agents/architect.md"
 ADR88="$REPO/docs/architecture/ADR-0088-241-test-authoring-split-granularity.md"
@@ -62,13 +63,15 @@ done
 # a sentence or sits inside one. BP3 first failed against correct text for exactly that reason —
 # the seventh member of this family (ADR-0073 wrap, ADR-0076 comment marker, ADR-0080 backticks,
 # ADR-0082 one-line marker, ADR-0092 self-derivation, ADR-0098 backticks again, this).
-FLAT=$(tr '\n' ' ' <"$CC" | tr -d '`*' | tr -s ' ')
+# VCS-047/ADR-0174: BP0-BP4/BP8's needles (the batch-boundary rules block) physically moved into
+# references/step5-implementation.md with the rest of Step 5's body.
+FLAT=$(cat "$CC" "$STEP5_REF" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
 AB_FLAT=$(tr '\n' ' ' <"$AB" | tr -d '`*' | tr -s ' ')
 
 # ===========================================================================
 # BP0 — the block exists and is non-vacuous. Without it every prose assertion is vacuous.
 # ===========================================================================
-B_A=$(grep -n '^\*\*Batch boundaries are a design choice' "$CC" | head -1 | cut -d: -f1)
+B_A=$(grep -n '^\*\*Batch boundaries are a design choice' "$STEP5_REF" | head -1 | cut -d: -f1)
 if [ -n "${B_A:-}" ]; then ok "BP0 the batch-boundary block anchor resolves (line $B_A)"
 else bad "BP0 the batch-boundary block anchor did not resolve — it was reworded, and BP1/BP2 assert nothing"; fi
 
@@ -183,7 +186,8 @@ fi
 # the implementation. Scoped to the rules block itself (BP0's anchor to the next major heading),
 # not the whole file, so a stray mention of "compiled" or "interface" elsewhere in the ~4200-line
 # document cannot satisfy it (rule 12).
-BB_BLOCK=$(awk 'BEGIN{g=0} /^\*\*Batch boundaries are a design choice/{g=1} g{ if ($0 ~ /^\*\*Batch-dispatch policy/) exit; print }' "$CC" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
+# VCS-047/ADR-0174: this block now lives in references/step5-implementation.md.
+BB_BLOCK=$(awk 'BEGIN{g=0} /^\*\*Batch boundaries are a design choice/{g=1} g{ if ($0 ~ /^\*\*Batch-dispatch policy/) exit; print }' "$STEP5_REF" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
 if [ -z "$BB_BLOCK" ]; then
   bad "CB1 the batch-boundary rules block anchor did not resolve (duplicates BP0's finding) — CB1/CB2 assert nothing"
 elif printf '%s\n' "$BB_BLOCK" | grep -qi 'compiled or type-checked' \
@@ -212,7 +216,8 @@ fi
 # Distinct from "expected red" and "unclassifiable red" (both already named in this block for the
 # pre-existing two states, confirmed present today) and must say what it MEANS — the third
 # batching rule (CB1/CB2) was violated — not merely that the state exists.
-CP_BLOCK=$(awk 'BEGIN{g=0} /^ *\*\*An intermediate checkpoint can be legitimately red/{g=1} g{ if ($0 ~ /dispatch-site: step5-checkpoint-reviewer/) exit; print }' "$CC" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
+# VCS-047/ADR-0174: this block now lives in references/step5-implementation.md.
+CP_BLOCK=$(awk 'BEGIN{g=0} /^ *\*\*An intermediate checkpoint can be legitimately red/{g=1} g{ if ($0 ~ /dispatch-site: step5-checkpoint-reviewer/) exit; print }' "$STEP5_REF" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
 if [ -z "$CP_BLOCK" ]; then
   bad "CP_BLOCK the checkpoint-classification anchor did not resolve (duplicates BP3's finding) — CB3 asserts nothing"
 elif printf '%s\n' "$CP_BLOCK" | grep -qi 'fourth' \
@@ -226,8 +231,13 @@ fi
 # CB4 — denominator guard (rule 7): exactly the two named tester-dispatch anchors must resolve
 # before CB4a/CB4b assert about their content, or a broken anchor would silently read as "nothing
 # to fix here" instead of as a failed derivation.
-S1_ANCHOR_N=$(grep -c '^\*\*Stage 1 — tester\.\*\*' "$CC" 2>/dev/null)
-S2_ANCHOR_N=$(grep -c '^\*\*Tester batch dispatch template\*\*' "$CC" 2>/dev/null)
+# VCS-047/ADR-0174: the real "Stage 1 — tester." anchor moved to references/step5-implementation.md,
+# but CB4's own plant duplicates it by inserting a second copy into $CC near the end of the file
+# (a different, unrelated section — its needle is the port-conflict remediation text, not
+# movable in this PR). Count across BOTH files, or the CB4 plant lands in a file this count no
+# longer reads and goes NOFIRE. S2 has no such duplicating plant, so it counts STEP5_REF alone.
+S1_ANCHOR_N=$(cat "$STEP5_REF" "$CC" 2>/dev/null | grep -c '^\*\*Stage 1 — tester\.\*\*')
+S2_ANCHOR_N=$(grep -c '^\*\*Tester batch dispatch template\*\*' "$STEP5_REF" 2>/dev/null)
 if [ "${S1_ANCHOR_N:-0}" -eq 1 ] && [ "${S2_ANCHOR_N:-0}" -eq 1 ]; then
   ok "CB4 both tester-dispatch-site anchors resolve exactly once each (Workflow Stage 1, Agent-tool template)"
 else
@@ -238,7 +248,8 @@ fi
 # interface/type declaration so the target keeps building, with the coder owning the body.
 # Asserted SEPARATELY from CB4b (this repo has shipped the defect where only one of two required
 # sites was edited and a combined OR/AND-across-both assertion still went green).
-S1_BLOCK=$(awk 'BEGIN{g=0} /^\*\*Stage 1 — tester\.\*\*/{g=1} g{ if ($0 ~ /^#### Merge-back and base-fork audit/) exit; print }' "$CC" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
+# VCS-047/ADR-0174: this block now lives in references/step5-implementation.md.
+S1_BLOCK=$(awk 'BEGIN{g=0} /^\*\*Stage 1 — tester\.\*\*/{g=1} g{ if ($0 ~ /^#### Merge-back and base-fork audit/) exit; print }' "$STEP5_REF" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
 if printf '%s\n' "$S1_BLOCK" | grep -qiE 'declare (the )?interfaces?|interface (or|and) type declaration|type declaration' \
    && printf '%s\n' "$S1_BLOCK" | grep -qiE 'compil|leaves? the target building|target building' \
    && printf '%s\n' "$S1_BLOCK" | grep -qiE 'coder owns? the (body|implementation)|owning the body|leaves? the body (to|for) the coder'; then
@@ -249,7 +260,8 @@ fi
 
 # CB4b — Agent-tool path's "Tester batch dispatch template" carries the SAME instruction. A
 # separate assertion from CB4a on purpose (see CB4a's comment).
-S2_BLOCK=$(awk 'BEGIN{g=0} /^\*\*Tester batch dispatch template\*\*/{g=1} g{ if ($0 ~ /^\*\*Single batch dispatch template\*\*/) exit; print }' "$CC" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
+# VCS-047/ADR-0174: this block now lives in references/step5-implementation.md.
+S2_BLOCK=$(awk 'BEGIN{g=0} /^\*\*Tester batch dispatch template\*\*/{g=1} g{ if ($0 ~ /^\*\*Single batch dispatch template\*\*/) exit; print }' "$STEP5_REF" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
 if printf '%s\n' "$S2_BLOCK" | grep -qiE 'declare (the )?interfaces?|interface (or|and) type declaration|type declaration' \
    && printf '%s\n' "$S2_BLOCK" | grep -qiE 'compil|leaves? the target building|target building' \
    && printf '%s\n' "$S2_BLOCK" | grep -qiE 'coder owns? the (body|implementation)|owning the body|leaves? the body (to|for) the coder'; then
@@ -282,7 +294,12 @@ fi
 # this file for unrelated mechanisms (rule 16 disclosures at the dispatch-template and Step-7
 # blocks) and "test-write-scope.sh" is named five times elsewhere too — an unscoped whole-file
 # check on either phrase alone would already read GREEN today, which would pin nothing (rule 12).
-FB_BLOCK=$(awk 'BEGIN{g=0} /^#### Fallback — Agent-tool batch dispatch/{g=1} g{ if ($0 ~ /^#### Workflow dispatch path — Step 6 review cycle/) exit; print }' "$CC" 2>/dev/null | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
+# VCS-047/ADR-0174: this block STRADDLES the Step 5/Step 6 boundary — the start anchor
+# (#### Fallback) is now in references/step5-implementation.md, the end anchor (#### Workflow
+# dispatch path — Step 6 review cycle) stays in SKILL.md's Step 6. Concatenate in read order;
+# the start pattern occurs only in STEP5_REF (moved out of CC) and the end pattern only in CC
+# (never moved), so there is no risk of the awk program matching the wrong copy of either.
+FB_BLOCK=$(cat "$STEP5_REF" "$CC" 2>/dev/null | awk 'BEGIN{g=0} /^#### Fallback — Agent-tool batch dispatch/{g=1} g{ if ($0 ~ /^#### Workflow dispatch path — Step 6 review cycle/) exit; print }' | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
 if [ -z "$FB_BLOCK" ]; then
   bad "CB6 the Fallback — Agent-tool batch dispatch section anchor did not resolve — CB6 asserts nothing"
 elif printf '%s\n' "$FB_BLOCK" | grep -qiE 'instruction,? not an enforcement|instruction rather than an enforcement' \

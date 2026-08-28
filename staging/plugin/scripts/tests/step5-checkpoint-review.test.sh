@@ -8,6 +8,7 @@ set -u
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 CC_SKILL="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
 CC_SCRIPTS="$STAGING/plugin/skills/concept-to-code/scripts"
 INIT="$CC_SCRIPTS/manifest-init.sh"
 VALIDATE="$CC_SCRIPTS/manifest-validate.sh"
@@ -83,13 +84,14 @@ fi
 # =====================================================================================
 # C. SKILL.md anchors. Both dispatch paths must gate on the same field, or a chain would
 # behave differently depending on whether hook_verified flipped the Workflow path on.
-if grep -q 'IF manifest.step5_review_mode = checkpoint' "$CC_SKILL"; then
+# VCS-047/ADR-0174: C1-D2's needles all live in references/step5-implementation.md now.
+if grep -q 'IF manifest.step5_review_mode = checkpoint' "$STEP5_REF"; then
   ok "C1: Workflow dispatch path carries the conditional block"
 else
   bad "C1: Workflow path conditional block missing"
 fi
 
-if grep -q 'IF `manifest.step5_review_mode = checkpoint`' "$CC_SKILL"; then
+if grep -q 'IF `manifest.step5_review_mode = checkpoint`' "$STEP5_REF"; then
   ok "C2: Agent-tool fallback path carries the conditional block"
 else
   bad "C2: fallback path conditional block missing"
@@ -97,8 +99,8 @@ fi
 
 # C3 (D6): the Workflow instruction must name pipeline() and must forbid parallel() as a
 # barrier. A barrier here would serialize what Step 5 exists to parallelize.
-if grep -q 'Build the script with pipeline()' "$CC_SKILL" \
-   && grep -q 'Do NOT use parallel() as a barrier' "$CC_SKILL"; then
+if grep -q 'Build the script with pipeline()' "$STEP5_REF" \
+   && grep -q 'Do NOT use parallel() as a barrier' "$STEP5_REF"; then
   ok "C3: Workflow stage is a pipeline, barrier explicitly forbidden (D6)"
 else
   bad "C3: pipeline/barrier instruction missing or incomplete"
@@ -106,7 +108,7 @@ fi
 
 # C4 (D5 as amended): review-only. The checkpoint must not fix anything — the fix cycle stays
 # in RTF at Step 6. Both paths state it.
-N_REVIEW_ONLY=$(grep -c 'reviews only and fixes nothing\|REVIEWS ONLY and fixes nothing' "$CC_SKILL")
+N_REVIEW_ONLY=$(grep -c 'reviews only and fixes nothing\|REVIEWS ONLY and fixes nothing' "$STEP5_REF")
 if [ "$N_REVIEW_ONLY" -ge 2 ]; then
   ok "C4: both paths state the checkpoint is review-only ($N_REVIEW_ONLY sites)"
 else
@@ -115,8 +117,8 @@ fi
 
 # C5 (D7 as amended): the severity vocabulary is the one `reviewer` actually emits. The ADR
 # text says P1/P2/P3, which comes from deep-refactor (ADR-0018) and does not exist on this path.
-if grep -q 'BLOCKER and MAJOR findings into the prompt of the next task' "$CC_SKILL" \
-   && ! grep -q 'P1 and P2 findings are fixed before the next task' "$CC_SKILL"; then
+if grep -q 'BLOCKER and MAJOR findings into the prompt of the next task' "$STEP5_REF" \
+   && ! grep -q 'P1 and P2 findings are fixed before the next task' "$STEP5_REF"; then
   ok "C5: uses BLOCKER/MAJOR, not the P1/P2 vocabulary from deep-refactor"
 else
   bad "C5: severity vocabulary wrong or the P1/P2 phrasing leaked into SKILL.md"
@@ -126,15 +128,15 @@ fi
 # The Workflow tool inherits the session effort when opts.effort is omitted, so raising the
 # orchestrator's effortLevel would silently raise every dispatched agent and discard the
 # per-agent calibration in their frontmatter.
-if grep -q 'Pin `effort` explicitly too' "$CC_SKILL" \
-   && grep -q 'omit to inherit the session effort' "$CC_SKILL"; then
+if grep -q 'Pin `effort` explicitly too' "$STEP5_REF" \
+   && grep -q 'omit to inherit the session effort' "$STEP5_REF"; then
   ok "C6: Workflow path pins effort explicitly, with the inheritance reason stated"
 else
   bad "C6: effort pin instruction missing"
 fi
 
 # C7: the checkpoint reviewer carries an explicit effort too, not just an explicit model.
-if grep -q 'Pass an explicit model AND an explicit effort of "high"' "$CC_SKILL"; then
+if grep -q 'Pass an explicit model AND an explicit effort of "high"' "$STEP5_REF"; then
   ok "C7: checkpoint reviewer dispatch pins both model and effort"
 else
   bad "C7: checkpoint reviewer does not pin effort"
@@ -142,7 +144,7 @@ fi
 
 # =====================================================================================
 # D. step5-report.json schema and the orchestrator read contract.
-if grep -q '"checkpoint_reviews"' "$CC_SKILL"; then
+if grep -q '"checkpoint_reviews"' "$STEP5_REF"; then
   ok "D1: checkpoint_reviews present in the documented schema"
 else
   bad "D1: checkpoint_reviews missing from the schema"
@@ -150,7 +152,7 @@ fi
 
 # D2: it must be documented as never a failure signal. Findings were already fed forward; making
 # them block would turn a feedback channel into a second gate in front of Step 6.
-if grep -q 'checkpoint_reviews` is \*\*never\*\* a failure signal' "$CC_SKILL"; then
+if grep -q 'checkpoint_reviews` is \*\*never\*\* a failure signal' "$STEP5_REF"; then
   ok "D2: read contract states checkpoint_reviews is never a failure signal"
 else
   bad "D2: failure-signal exclusion not documented"
@@ -173,19 +175,20 @@ has() { grep -qF "$1" "$CC_FLAT"; }
 # passes a plan deviation: spec-coverage (the id was cited AND tested), weakening-scan (tests were
 # ADDED), interface-check (a validator is not a signature), diff-budget (smaller, if anything).
 # ==================================================================================================
-if grep -q '"plan_deviations"' "$CC_SKILL"; then
+# VCS-047/ADR-0174: E1-E4's needles all live in references/step5-implementation.md now.
+if grep -q '"plan_deviations"' "$STEP5_REF"; then
   ok "E1: step5-report.json's schema carries the additive plan_deviations array"
 else
   bad "E1: plan_deviations is not in the schema — the deviation never leaves the coder's head"
 fi
 
-if grep -q 'PLAN DEVIATIONS:' "$CC_SKILL"; then
+if grep -q 'PLAN DEVIATIONS:' "$STEP5_REF"; then
   ok "E2: the coder brief asks for the deviations in a terminal PLAN DEVIATIONS: block"
 else
   bad "E2: nothing asks the coder to declare a declined plan constraint"
 fi
 
-if grep -q 'PLAN DEVIATIONS: none' "$CC_SKILL"; then
+if grep -q 'PLAN DEVIATIONS: none' "$STEP5_REF"; then
   ok "E3: the brief specifies the explicit none form — absence of the block is not evidence of none"
 else
   bad "E3: no 'none' sentinel — an omitted block would be indistinguishable from an unasked question"
@@ -193,7 +196,7 @@ fi
 
 # The load-bearing distinction. If this ever reads as a gate, the self-report becomes a check that
 # an agent grades itself on, which is exactly what ADR-0047 A3 refuses.
-if grep -q 'DISCLOSURE, not a gate' "$CC_SKILL"; then
+if grep -q 'DISCLOSURE, not a gate' "$STEP5_REF"; then
   ok "E4: plan_deviations is documented as a disclosure and never a failure signal"
 else
   bad "E4: the disclosure/gate distinction is not stated — this will be mistaken for coverage"
