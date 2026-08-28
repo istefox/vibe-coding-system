@@ -119,7 +119,7 @@ OUT=$(INSTRUCTIONS_LOADED_DIR="$D6" bash "$VERIFY_SCRIPT" "$T6" 2>&1); RC=$?
 D7="$tmp/g/state"; mkdir -p "$D7"
 T7="$tmp/g/tools.md"; printf 'old\n' > "$T7"
 touch -t 202001010000 "$T7"
-OLDM=$(stat -f %m "$T7" 2>/dev/null || stat -c %Y "$T7" 2>/dev/null)
+OLDM=$(stat -c %Y "$T7" 2>/dev/null || stat -f %m "$T7" 2>/dev/null)
 fire "$D7" "$T7" "s7"
 sleep 1
 printf 'new\n' > "$T7"
