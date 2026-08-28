@@ -160,12 +160,21 @@ else
   bad "SFP1: only $SKILL_N SKILL.md files found — expected >= 25; the glob is broken, not clean"
 fi
 
+# Fence coverage (SFP2, and the partition below) is a DIFFERENT population from SFP1's SKILL.md
+# file count: it must also cover any references/*.md a skill splits content into (VCS-042), or a
+# fence moved out of SKILL.md silently leaves this coverage while SFP1's own count is unaffected.
+ALL_SKILL_FILES="$TMPROOT/all_skill_files"; : >"$ALL_SKILL_FILES"
+cat "$SKILL_FILES" >"$ALL_SKILL_FILES"
+for f in "$SKILLS"/*/references/*.md; do
+  [ -f "$f" ] && printf '%s\n' "$f" >>"$ALL_SKILL_FILES"
+done
+
 FENCE_N=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   _n=$(enumerate_fences "$f" | grep -c .)
   FENCE_N=$((FENCE_N + _n))
-done <"$SKILL_FILES"
+done <"$ALL_SKILL_FILES"
 
 # SFP2: second denominator count guard, on the bash-fence population specifically. A fence parser
 # that stops matching wholesale reports zero candidates, indistinguishable from a clean corpus.
@@ -176,7 +185,7 @@ else
 fi
 
 POP_FILE="$TMPROOT/pop"
-population "$SKILLS"/*/SKILL.md >"$POP_FILE"
+population "$SKILLS"/*/SKILL.md "$SKILLS"/*/references/*.md >"$POP_FILE"
 
 BASH_N=$(awk -F'\t' '$3=="BASH"'    "$POP_FILE" | grep -c .)
 NONBASH_N=$(awk -F'\t' '$3=="NONBASH"' "$POP_FILE" | grep -c .)
