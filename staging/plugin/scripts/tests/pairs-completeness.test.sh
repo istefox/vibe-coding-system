@@ -134,6 +134,10 @@ check_complete "$tmp/real-pairs" "user/rules" '*.md'
 # selectively by design (ADR-0024 scope), so demanding an entry for each would report intended
 # absences as defects. A skill's SKILL.md is the file that always has to reach the machine.
 check_complete "$tmp/real-pairs" "plugin/skills" '*/SKILL.md'
+# A skill that splits step-local content out of SKILL.md (VCS-042) puts it under references/*.md —
+# unlike scripts/tests/ above, this IS content the orchestrator reads at runtime, so a missing PAIRS
+# entry here is the same silent deployment gap as a missing SKILL.md entry, not an intended absence.
+check_complete "$tmp/real-pairs" "plugin/skills" '*/references/*.md'
 
 # Hook scripts. Found missing on 2026-07-29 while syncing the issue #174 fix: three REGISTERED,
 # DEPLOYED hooks (auto-format.sh, chain-memory-capture.sh, protect-files.sh) had no PAIRS entry, so

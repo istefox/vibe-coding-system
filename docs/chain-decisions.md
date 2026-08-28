@@ -5019,3 +5019,54 @@ Key architectural decisions:
   (`TODO.md` `VCS-041`).
 
 Detail: `docs/architecture/ADR-0171-instructions-loaded-verification.md`.
+
+## Decisions from concept-to-code skill split, safety net + pilot (ADR-0172)
+
+The 2026-08-28 token/speed audit (`VCS-042`) flagged `concept-to-code/SKILL.md` (4,729 lines) as
+the setup's single biggest per-invocation cost: it loads in full every chain invocation regardless
+of which step is actually reached. Before proposing a cut, three parallel research agents verified
+the premise and measured regression risk rather than assuming either.
+
+Key architectural decisions:
+- **The multi-file skill premise holds, verified live.** Claude Code does not preload a skill
+  directory: the `SKILL.md` body arrives via the Skill tool result, a sibling file only enters
+  context on an explicit `Read` the model issues itself, and six skills in this repo already use
+  this pattern (`git-repo-init`, `project-tasks`, `macos-ux`, `prompt-builder`, `humanize-en`,
+  `swiftui-pro`), with the third-party `impeccable` skill (85-line `SKILL.md` + 35 reference files,
+  ~4,500 lines) as the scale proof. The hard condition: prose "Read `<path>` when you reach step X"
+  instructions only, never `@path` — `@path` resolves at `load_reason: include` and preloads
+  unconditionally, defeating the point.
+- **Split in phases, not one pass** (D1). The file is coupled to 44 test files, 80 `# plant:`
+  declarations, and `cross-reference-form.test.sh`'s "exactly one occurrence" assertions. Step 5
+  (1,691 lines, 4 `fence-contract` markers) and §5 HITL gates (1,169 lines, 1 marker) are the real
+  token prize but also the highest-risk targets — 15+ test files anchor extraction windows inside
+  or around them, plus two tests with a fixed 200-line window off the `### Step 7 — Commit`
+  heading. Both are deliberately deferred to dedicated follow-up sessions, reusing this session's
+  test inventory instead of re-deriving it (`TODO.md` `VCS-047` onward).
+- **Pilot target Express + Hybrid paths (203 lines, zero `fence-contract` markers) was implemented
+  and then reverted** (D2). Pre-implementation research flagged it as the lowest-risk extractable
+  slice, touched by exactly one test as a heading-boundary marker. Implemented and run against the
+  full local suite (per this session's own "the real suite is the gate" rule) it broke three files
+  the research missed: `commit-transition-order.test.sh` and `transition-producer.test.sh` both
+  `sed`-plant literal mutations directly into `SKILL.md`'s own Express/Hybrid text to test their
+  derivations, and `worktree-isolation-contract.test.sh` greps `SKILL.md` for the Express note's
+  exact inline sentence. Widening a population glob (D3's fix) does not help either failure mode —
+  the content has to physically live in `SKILL.md`, not merely be `Read`-reachable from it. Rather
+  than deepen the fix across three independent mutation-testing harnesses for a ~4% token yield,
+  the extraction was reverted (`SKILL.md`, `sync-to-claude.sh` back to baseline, confirmed via
+  `git diff`; all three tests green again). The coupling class is recorded so a future attempt —
+  Step 5, §5, or this same slice again — checks for it before implementing.
+- **Fence-population and PAIRS-completeness globs widened before any content moves** (D3), closing
+  a silent-failure trap independent of the pilot itself: `fence-contract-coverage.test.sh`,
+  `skill-fence-positional-tokens.test.sh`'s fence/token populations, and
+  `pairs-completeness.test.sh`'s reverse deployment check all derived their population from
+  `*/SKILL.md` alone, guarded by a floor that would keep passing even as a `fence-contract`-tagged
+  fence or an undeployed reference file silently left the checked population (repo rule 10, rule
+  16). `skill-fence-positional-tokens.test.sh`'s SFP1 (a distinct SKILL.md file-count guard) was
+  deliberately left untouched — a different denominator than fence/token coverage. None of the
+  three widenings changed today's measured counts, confirmed by re-running each harness before and
+  after.
+- **`docs/vibe-coding-system.md` §8.7 now documents the pattern**, six skills into using it without
+  written guidance, citing `impeccable` as the scale proof and both traps this ADR closes.
+
+Detail: `docs/architecture/ADR-0172-concept-to-code-skill-split-pilot.md`.

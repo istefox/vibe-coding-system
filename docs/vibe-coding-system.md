@@ -2756,6 +2756,17 @@ Research $ARGUMENTS:
 
 All live in `~/.claude/skills/<name>/`. Each has a `SKILL.md`, optional `scripts/` helpers, and a `tests/` harness. The chain skills (rows 1–4) are integrated into the `concept-to-code` orchestrator; they can also be invoked standalone.
 
+### 8.7 Multi-file skills — `references/` for step-local content
+
+A skill's `SKILL.md` body loads in full into context every time the skill is invoked, via the Skill tool result. Nothing else under the skill's directory preloads automatically: a sibling file only enters context when the model issues an explicit `Read` on it. This means a large SKILL.md can be kept slim by moving content that is only needed once a specific step/branch is reached into a `references/<name>.md` file, referenced from the orchestrator body with a plain-prose instruction — **"Read `references/<name>.md` when you reach step X"** — never the `@path` include syntax. `@path` resolves at `load_reason: include` and preloads unconditionally, defeating the point.
+
+This pattern predates its documentation here: `git-repo-init`, `project-tasks`, `macos-ux`, `prompt-builder`, `humanize-en`, and `swiftui-pro` all already split step- or topic-local content into `references/*.md` (one, `project-tasks`, uses the singular `reference/`; the rest use the plural). The third-party `impeccable` skill installed locally is the scale proof: an 85-line `SKILL.md` dispatching to 35 reference files totalling roughly 4,500 lines via a routing table ("**Explicit or clearly implied command:** load its reference and follow it") — if skill directories preloaded, `impeccable` would cost more per invocation than a single 4,500-line file, not less.
+
+Two things a split must not silently break, found while auditing `concept-to-code/SKILL.md` for this pattern (VCS-042):
+
+- **Fence-contract population globs.** Rule 15's bash-fence contract mechanism (`<!-- fence-contract: <id> -->`) is verified by harnesses that enumerate fences via `"$SKILLS"/*/SKILL.md`. A fence-contract-bearing block moved into `references/*.md` without widening that glob silently leaves the checked population — the harness's own `>= N` floor keeps passing while real coverage shrinks (rule 10). Any test deriving a fence or positional-parameter-token population from `*/SKILL.md` must also glob `*/references/*.md`.
+- **PAIRS deployment coverage.** `sync-to-claude.sh`'s reverse completeness check (`pairs-completeness.test.sh`) covered only `*/SKILL.md` one directory level under `plugin/skills`; a new reference file with no PAIRS line never reaches `~/.claude/`, so the deployed orchestrator ends up pointing at a file that does not exist there. `references/*.md` needs its own `check_complete` call, same as `SKILL.md`'s — unlike `scripts/`/`tests/`, which are intentionally exempt (ADR-0024 scope), a reference file is content the orchestrator reads at runtime, not vendored tooling.
+
 ---
 
 ## 9. MCP servers

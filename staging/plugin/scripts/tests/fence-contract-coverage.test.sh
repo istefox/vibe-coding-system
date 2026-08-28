@@ -248,7 +248,10 @@ mkdir -p "$TMPROOT/proj"
 # F. The derived class check.
 
 ALL_FENCES="$TMPROOT/all"; : >"$ALL_FENCES"
-for f in "$SKILLS"/*/SKILL.md; do
+# Population is SKILL.md itself PLUS any references/*.md a skill splits content into (VCS-042):
+# a fence-contract fence moved out of SKILL.md without widening this glob silently leaves the
+# controlled population while the >=100 floor below likely still passes — rule 10.
+for f in "$SKILLS"/*/SKILL.md "$SKILLS"/*/references/*.md; do
   [ -f "$f" ] || continue
   enumerate_fences "$f" | while IFS="$(printf '\t')" read -r ln marker; do
     printf '%s\t%s\t%s\n' "$f" "$ln" "$marker"
