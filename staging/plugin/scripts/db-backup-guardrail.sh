@@ -179,7 +179,7 @@ fresh_mtime() {
   local now
   now=$(date +%s)
   local mt
-  mt=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null)
+  mt=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null)
   case "$mt" in ''|*[!0-9]*) return 1;; esac
   local age_h
   age_h=$(( (now - mt) / 3600 ))
