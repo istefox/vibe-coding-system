@@ -24,7 +24,7 @@
 # --- plants (plant-check.sh) ------------------------------------------------------------
 # Each line below removes ONE mechanism and names the assertion that must go RED for it.
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
-# plant: GR4 | plugin/skills/concept-to-code/SKILL.md | Trigger: post Step 5 (coder complete), `current_step = step_6_review` | Trigger: post Step 5 (coder complete), `current_step = gate_5_review_decision`
+# plant: GR4 | plugin/skills/concept-to-code/references/hitl-gates.md | Trigger: post Step 5 (coder complete), `current_step = step_6_review` | Trigger: post Step 5 (coder complete), `current_step = gate_5_review_decision`
 # plant: GR3 | plugin/scripts/tests/transition-pair-count.sh | STATS_TOTAL="$TOTAL_D" | STATS_TOTAL="999"
 # plant: GR3b | plugin/skills/concept-to-code/SKILL.md | Legal transition pairs (45 total — 25 standard + 6 express + 14 hybrid | Legal transition pairs (46 total — 25 standard + 6 express + 14 hybrid
 set -u
@@ -33,6 +33,7 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 TR="$STAGING/plugin/skills/concept-to-code/scripts/manifest-transition.sh"
 VA="$STAGING/plugin/skills/concept-to-code/scripts/manifest-validate.sh"
 SM="$STAGING/plugin/skills/concept-to-code/tests/smoke-e2e.sh"
@@ -45,10 +46,12 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-for _f in "$CC" "$TR" "$VA"; do
+for _f in "$CC" "$HITL_REF" "$TR" "$VA"; do
   [ -f "$_f" ] || { echo "FATAL: missing $_f"; exit 1; }
 done
-FLAT=$(tr '\n' ' ' <"$CC" | tr -d '`*' | tr -s ' ')
+# VCS-048/ADR-0175: ## 5. HITL gates (Gate 5's Trigger/reasoning prose) moved into
+# references/hitl-gates.md — flatten both files, not just SKILL.md (population-glob coupling).
+FLAT=$(cat "$CC" "$HITL_REF" | tr '\n' ' ' | tr -d '`*' | tr -s ' ')
 
 # ===========================================================================
 # GR0 — the premise, derived: no record is being invalidated.
@@ -138,7 +141,7 @@ fi
 # Same rule-12 shape as GR1: SKILL.md legitimately names the state while explaining why it no longer
 # exists. What must be gone is every reference that treats it as LIVE — a graph arrow, an asserted
 # current_step, or a transition instruction naming it.
-_live=$(grep -nE "(→|->)[[:space:]]*\`?$GONE|current_step = \`?$GONE|[Tt]ransition[^.]*$GONE" "$CC" | head -3)
+_live=$(grep -nE "(→|->)[[:space:]]*\`?$GONE|current_step = \`?$GONE|[Tt]ransition[^.]*$GONE" "$CC" "$HITL_REF" | head -3)
 if [ -z "$_live" ]; then
   ok "GR5 no live reference to the removed state survives in SKILL.md"
 else

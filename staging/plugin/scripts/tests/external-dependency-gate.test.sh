@@ -66,6 +66,7 @@ else
 fi
 
 C2C="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 if [ -f "$C2C" ] && grep -q 'EXTERNAL DEPENDENCY:' "$C2C" 2>/dev/null; then
   ok "EA4: concept-to-code/SKILL.md's Step 2 consumes the EXTERNAL DEPENDENCY: convention"
 else
@@ -315,7 +316,7 @@ else
   bad "EG0: $AUTOPILOT_SKILL not found — EG1-EG2 below are meaningless"
 fi
 
-if grep -q 'external-dependency-check.sh' "$C2C" 2>/dev/null; then
+if grep -q 'external-dependency-check.sh' "$HITL_REF" 2>/dev/null; then
   ok "EG1: concept-to-code/SKILL.md invokes external-dependency-check.sh"
 else
   bad "EG1: concept-to-code/SKILL.md does not reference external-dependency-check.sh"

@@ -215,6 +215,7 @@ plugin/scripts/tests/pre-flight-pattern-enforce.sh|hooks/tests/pre-flight-patter
 plugin/scripts/tests/run-hook-tests.sh|hooks/tests/run-hook-tests.sh
 plugin/skills/concept-to-code/SKILL.md|skills/concept-to-code/SKILL.md
 plugin/skills/concept-to-code/references/step5-implementation.md|skills/concept-to-code/references/step5-implementation.md
+plugin/skills/concept-to-code/references/hitl-gates.md|skills/concept-to-code/references/hitl-gates.md
 plugin/skills/concept-to-code/scripts/agent-metrics.sh|skills/concept-to-code/scripts/agent-metrics.sh
 plugin/skills/concept-to-code/scripts/agent-notes-harvest.sh|skills/concept-to-code/scripts/agent-notes-harvest.sh
 plugin/skills/concept-to-code/scripts/commit-outcome-check.sh|skills/concept-to-code/scripts/commit-outcome-check.sh

@@ -31,6 +31,7 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)                    # staging/
 REPO=$(cd "$STAGING/.." && pwd)
 SKILL_DIR="$STAGING/plugin/skills/concept-to-code"
 SKILL_MD="$SKILL_DIR/SKILL.md"
+HITL_REF="$SKILL_DIR/references/hitl-gates.md"
 INIT="$SKILL_DIR/scripts/manifest-init.sh"
 VAL="$SKILL_DIR/scripts/manifest-validate.sh"
 ARCHITECT="$STAGING/plugin/agents/architect.md"
@@ -323,19 +324,21 @@ if [ -f "$ARCHITECT" ]; then
   fi
 fi
 
-if grep -qi 'PROPOSED AUDIT PROFILE' "$SKILL_MD" 2>/dev/null; then
+# VCS-048/ADR-0175: ## 5. HITL gates (Gate 2's audit-profile block) moved into
+# references/hitl-gates.md.
+if grep -qi 'PROPOSED AUDIT PROFILE' "$HITL_REF" 2>/dev/null; then
   ok "PE4: SKILL.md's Gate 2 block references the architect's PROPOSED AUDIT PROFILE: block"
 else
   bad "PE4: SKILL.md's Gate 2 section does not reference PROPOSED AUDIT PROFILE:"
 fi
 
-if grep -qi 'ADR-0055 §D5\|ADR-0055 §D5)' "$SKILL_MD" 2>/dev/null; then
+if grep -qi 'ADR-0055 §D5\|ADR-0055 §D5)' "$HITL_REF" 2>/dev/null; then
   ok "PE5: SKILL.md's Gate 2 section cites ADR-0055 §D5 (operator confirms, not auto-derived)"
 else
   bad "PE5: SKILL.md does not cite ADR-0055 §D5 near the Gate 2 audit-profile block"
 fi
 
-gate2_section="$(awk '/^\*\*Gate 2 — Architecture review/{f=1} f{print} f && /^\*\*Gate 3/{exit}' "$SKILL_MD" 2>/dev/null)"
+gate2_section="$(awk '/^\*\*Gate 2 — Architecture review/{f=1} f{print} f && /^\*\*Gate 3/{exit}' "$HITL_REF" 2>/dev/null)"
 if printf '%s' "$gate2_section" | grep -qi 'risk: null\|task_type: null'; then
   ok "PE6: Gate 2's own block shows the sed substitution that writes risk/task_type into the manifest ONLY after the gate's approval"
 else

@@ -57,6 +57,15 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 SKILLS="$STAGING/plugin/skills"
 CC="$SKILLS/concept-to-code/SKILL.md"
+HITL_REF="$SKILLS/concept-to-code/references/hitl-gates.md"
+# VCS-048/ADR-0175: ## 5. HITL gates moved out of SKILL.md into references/hitl-gates.md, and
+# C1/C2 (Gate 0d transition block, Step 2b TOFU guard) are boundary-straddling same-file
+# references whose anchor and target now sit on opposite sides of that move — one occurrence
+# stayed in SKILL.md, the other moved. Concatenate for the "same file" checks below (ADR-0174 D2
+# pattern 3).
+CC_TMP=$(mktemp)
+cat "$CC" "$HITL_REF" >"$CC_TMP" 2>/dev/null
+CC_MERGED="$CC_TMP"
 RTF="$SKILLS/review-triage-fix/SKILL.md"
 AB="$SKILLS/autopilot-build/SKILL.md"
 COMMIT="$SKILLS/commit/SKILL.md"
@@ -238,7 +247,7 @@ fi
 # for the right cause. Run against fixtures, through the same functions.
 
 FIX=$(mktemp -d)
-trap 'rm -rf "$FIX" "$POP_FILE"' EXIT
+trap 'rm -rf "$FIX" "$POP_FILE" "$CC_TMP"' EXIT
 
 printf '#!/bin/bash\n# see other.sh:42 for the contract\n' >"$FIX/undeclared.sh"
 printf '#!/bin/bash\n# xref-exempt: other.sh:42 — illustrative path in this fixture, not a real cross-reference at all\n# see other.sh:42 for the contract\n' >"$FIX/declared.sh"
@@ -303,15 +312,15 @@ xref() {  # label, referring-file, anchor, target-file, expected-count-in-target
 }
 
 # C1/C2/C3 — same-file references (expected 2).
-xref "C1" "$CC"  'Gate 0d transition block'                        "$CC"  2
-xref "C2" "$CC"  'Step 2b — TOFU guard (resume path only)'         "$CC"  2
+xref "C1" "$CC_MERGED"  'Gate 0d transition block'                        "$CC_MERGED"  2
+xref "C2" "$CC_MERGED"  'Step 2b — TOFU guard (resume path only)'         "$CC_MERGED"  2
 xref "C3" "$PFE" 'Fail-open on any internal error'                 "$PFE" 2
 
 # C1b/C2b — the marker form must be unique at the target, or "2 occurrences" could be two
 # references and no anchor at all.
 for spec in "C1b|**Gate 0d transition block:**" "C2b|**Step 2b — TOFU guard (resume path only):**"; do
   _lbl=${spec%%|*}; _mk=${spec#*|}
-  _n=$(grep -cF "$_mk" "$CC")
+  _n=$(grep -cF "$_mk" "$CC_MERGED")
   if [ "$_n" -eq 1 ]; then
     ok "$_lbl: exactly one marker \"$_mk\" in concept-to-code/SKILL.md"
   else

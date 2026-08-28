@@ -35,6 +35,7 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 AM="$STAGING/plugin/skills/concept-to-code/scripts/agent-metrics.sh"
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
 STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 NA="$STAGING/plugin/skills/autopilot/SKILL.md"
 ADR22="$REPO/docs/architecture/ADR-0022-morning-report-schema.md"
 TWS="$STAGING/plugin/scripts/test-write-scope.sh"
@@ -54,7 +55,9 @@ STEP5="$TMP/cc_step5.txt"
 # reference file's body IS the block, so no awk range is needed any more.
 cp "$STEP5_REF" "$STEP5" 2>/dev/null
 GATES="$TMP/cc_gates.txt"
-awk '/^## 5\. HITL gates/{f=1} /^## 6\. Coexistence invariants/{f=0} f' "$CC" >"$GATES"
+# VCS-048/ADR-0175: ## 5. HITL gates moved into references/hitl-gates.md; the reference file's
+# body IS the block, so no awk range is needed any more.
+cp "$HITL_REF" "$GATES" 2>/dev/null
 
 if [ -s "$STEP5" ] && [ -s "$GATES" ]; then
   ok "G0b: both extraction anchors (Step 5, ## 5. HITL gates) are non-empty"

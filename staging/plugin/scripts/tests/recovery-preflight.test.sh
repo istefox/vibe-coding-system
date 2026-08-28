@@ -106,6 +106,7 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
 STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 AB="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 INIT="$STAGING/plugin/skills/concept-to-code/scripts/manifest-init.sh"
 VALIDATE="$STAGING/plugin/skills/concept-to-code/scripts/manifest-validate.sh"
@@ -412,7 +413,7 @@ fi
 COMMIT_SKILL="$STAGING/plugin/skills/commit/SKILL.md"
 
 # --- the producer exists, is named once, and is invoked by every proceeding path ---
-RH1_N=$(grep -c '^#### Gate 4.0 — Commit the planning artifacts' "$CC" 2>/dev/null || true)
+RH1_N=$(grep -c '^#### Gate 4.0 — Commit the planning artifacts' "$HITL_REF" 2>/dev/null || true)
 [ "$RH1_N" = "1" ] \
   && ok "RH1: Gate 4.0 is defined exactly once in concept-to-code/SKILL.md" \
   || bad "RH1: expected exactly one Gate 4.0 definition, found $RH1_N"
@@ -420,20 +421,20 @@ RH1_N=$(grep -c '^#### Gate 4.0 — Commit the planning artifacts' "$CC" 2>/dev/
 # Floor raised 3 -> 4 by issue #237 (ADR-0097), which added the attended in-session branch. The
 # floor must track the number of proceeding paths: left at 3 it would report "all three" while four
 # exist, and would tolerate one of them silently losing its reference.
-RH2_N=$(grep -c 'Run \*\*Gate 4.0\*\*' "$CC" 2>/dev/null || true)
+RH2_N=$(grep -c 'Run \*\*Gate 4.0\*\*' "$HITL_REF" 2>/dev/null || true)
 [ "$RH2_N" -ge 4 ] \
   && ok "RH2: all four proceeding paths reference Gate 4.0 ($RH2_N references)" \
   || bad "RH2: only $RH2_N path(s) reference Gate 4.0 — autopilot bypass, both 'Implement now' branches and 'Confirmed' all need it"
 
 # The abort path must NOT commit. Asserted as absence within the abort block, which is the one
 # place a well-meaning edit would add it "for consistency".
-RH3_BLOCK=$(awk '/^\*\*After the user clicks "Abort chain":\*\*/{f=1} f{print} f&&/^STOP/{exit}' "$CC")
+RH3_BLOCK=$(awk '/^\*\*After the user clicks "Abort chain":\*\*/{f=1} f{print} f&&/^STOP/{exit}' "$HITL_REF")
 printf '%s\n' "$RH3_BLOCK" | grep -q 'Gate 4.0' \
   && bad "RH3: the Abort path references Gate 4.0 — an aborted chain must not leave a commit behind" \
   || ok "RH3 (forward guard, green before and after): the Abort path does not run Gate 4.0"
 
 # --- the producer delegates, it does not hand-roll git ---
-RH4_BLOCK=$(awk '/^#### Gate 4.0 — Commit the planning artifacts/{f=1; next} f&&/^\*\*\[Autopilot bypass/{exit} f{print}' "$CC")
+RH4_BLOCK=$(awk '/^#### Gate 4.0 — Commit the planning artifacts/{f=1; next} f&&/^\*\*\[Autopilot bypass/{exit} f{print}' "$HITL_REF")
 printf '%s\n' "$RH4_BLOCK" | grep -q 'commit' \
   && ok "RH4: Gate 4.0 delegates to the commit skill" \
   || bad "RH4: Gate 4.0 does not mention the commit skill"
@@ -529,7 +530,7 @@ else
 fi
 
 # RI4 — Gate 4.0 must actually pass it. A flag no caller passes is #238's shape one skill over.
-RI_BLOCK=$(awk '/^#### Gate 4.0 — Commit the planning artifacts/{f=1; next} f&&/^\*\*\[Autopilot bypass/{exit} f{print}' "$CC")
+RI_BLOCK=$(awk '/^#### Gate 4.0 — Commit the planning artifacts/{f=1; next} f&&/^\*\*\[Autopilot bypass/{exit} f{print}' "$HITL_REF")
 printf '%s\n' "$RI_BLOCK" > "$TMP/ri_block.txt"
 # The needle is the INVOCATION's argument form, not the bare word: this block also explains what
 # --include is for, so a needle of '--include' counted the explanation and passed with the
@@ -1048,7 +1049,7 @@ fi
 # The needle is the ARGUMENT SEQUENCE, not the flag: `--branch feat/<manifest.topic>` occurs twice
 # in this block (the invocation and the paragraph explaining it), so a bare needle survives its
 # removal from the invocation. Same defect as BR1, same run, caught by the same plant.
-# plant: BR7 | plugin/skills/concept-to-code/SKILL.md | --no-pr --branch feat/<manifest.topic> --include | --no-pr --include
+# plant: BR7 | plugin/skills/concept-to-code/references/hitl-gates.md | --no-pr --branch feat/<manifest.topic> --include | --no-pr --include
 if printf '%s\n' "$RH4_BLOCK" | tr '\n' ' ' | tr -s ' ' | grep -qF -- '--no-pr --branch feat/<manifest.topic> --include'; then
   ok "BR7: Gate 4.0 passes --branch feat/<manifest.topic> — the name agrees with publish-feature.sh by construction"
 else

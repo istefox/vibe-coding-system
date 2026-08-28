@@ -39,6 +39,7 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 CC="$STAGING/plugin/skills/concept-to-code/SKILL.md"
+HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 INIT="$STAGING/plugin/skills/concept-to-code/scripts/manifest-init.sh"
 SETGATE="$STAGING/plugin/skills/concept-to-code/scripts/manifest-set-gate.sh"
 VALIDATE="$STAGING/plugin/skills/concept-to-code/scripts/manifest-validate.sh"
@@ -113,14 +114,16 @@ fi
 # ===========================================================================
 # H5/H6 — Part A: the helper has instructed call sites, defined once and referenced.
 # ===========================================================================
-DEF_N=$(grep -c '^#### Gate approval recording' "$CC")
+# VCS-048/ADR-0175: ## 5. HITL gates (the whole "Gate approval recording" block and its five
+# call sites) moved into references/hitl-gates.md.
+DEF_N=$(grep -c '^#### Gate approval recording' "$HITL_REF")
 if [ "$DEF_N" -eq 1 ]; then
   ok "H5 the recording rule is defined exactly once"
 else
   bad "H5 expected one 'Gate approval recording' definition, found $DEF_N — a rule stated in five places drifts in five places"
 fi
 
-REF_N=$(grep -c 'Record the gate outcome' "$CC")
+REF_N=$(grep -c 'Record the gate outcome' "$HITL_REF")
 if [ "$REF_N" -ge 5 ]; then
   ok "H6 five or more gate branches record their outcome ($REF_N references)"
 else
@@ -128,7 +131,7 @@ else
 fi
 
 # The Gate 4 recording is the one that disambiguates `autopilot: true`, so it must say so.
-FLAT=$(tr '\n' ' ' <"$CC" | tr -d '`*' | tr -s ' ')
+FLAT=$(tr '\n' ' ' <"$HITL_REF" | tr -d '`*' | tr -s ' ')
 if printf '%s\n' "$FLAT" | grep -q 'cannot distinguish a human choosing unattended implementation from a roadmap'; then
   ok "H6b the Gate 4 recording states what it disambiguates"
 else
