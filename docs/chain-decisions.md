@@ -4975,3 +4975,47 @@ Key architectural decisions:
   that drops this wiring is reported instead of silent.
 
 Detail: `docs/architecture/ADR-0170-chain-memory-write-gate.md`.
+
+## Decisions from InstructionsLoaded observability (ADR-0171)
+
+`auto-learning` writes corrections into files every future session is supposed to load, but
+nothing measured whether a given file actually loaded — the whole feature rested on trusting
+Claude Code's documented behaviour. Verified live (binary `strings`, official docs) that an
+`InstructionsLoaded` hook event exists, undocumented in this repo until now: fires once per
+instruction file loaded, payload `session_id`/`load_reason`/`file_path`/`cwd`, exit code ignored
+(cannot block).
+
+Key architectural decisions:
+- **Records carry `file_mtime`/`file_size`/`file_sha256`, not just `file_path`.** A design-review
+  pass before any code was written found that a path-only record can never return false — a load
+  from before a correction was written still satisfies every future query for the same path. The
+  writer (`instructions-loaded-log.sh`) records the target's identity at hook time; the reader
+  (`instructions-loaded-verify.sh`) compares *versions*, reporting `LOADED=stale` when a match
+  exists but predates the file's current on-disk mtime, distinct from `LOADED=true`.
+- **Observational only, matching `usage-daily-hint.sh`'s posture (ADR-0058 §D4).** The event's own
+  exit code is already ignored by Claude Code, so the writer has no decision to make even in
+  principle. The reader is a REPORTER with a DID-NOT-RUN sentinel (repo rule 5): it always prints
+  a verdict or an explicit INCONCLUSIVE/BADARG/UNREADABLE state, never abstains silently.
+- **Count-cap with amortised, receipted trim, not date rotation** — no script in this repo does
+  date-based rotation; `chain-memory-capture.sh`'s count-cap precedent was adapted instead. The
+  trim destroys evidence, so it writes a `trim-watermark` receipt before returning; the verifier
+  reports `INCONCLUSIVE reason=truncated` rather than a false `LOADED=false` when a query's anchor
+  predates that watermark.
+- **Default anchor is the target file's own current mtime**, not a timestamp a human must
+  remember to supply — an optional-and-forgettable anchor would silently reopen the same failure
+  the mtime/size/sha256 recording was built to close, just moved into the calling convention.
+- **Exact-match only, via a shared canonicalisation helper.** The match predicate is
+  `.file_path_canon == $p`, never `contains`/`startswith`/glob (repo rule 18), and
+  `instructions-loaded-canon.sh` is the single path-canonicalisation source shared by the writer
+  and the reader (repo rule 6) — the same drift class `sync-manual-steps.test.sh`'s
+  `build_home_skills` fixture had already shown for a different pair of copies, fixed the same day.
+- A second, independent defect — `LOADED=stale` being structurally unreachable because the window
+  filter and the freshness check shared one anchor value — was caught by manual smoke-testing each
+  planned state before the formal test harness was written, and fixed by separating the window
+  anchor from a fresh, always-current `CURRENT_MTIME` used only for the freshness comparison.
+- **Out of scope, recorded rather than attempted:** a `SessionStart` liveness heartbeat (detecting
+  the hook silently ceasing to fire, e.g. after a Claude Code upgrade), and hooking this
+  verification into the `concept-to-code` chain's `[FRESH SESSION]` boundary automatically
+  (`TODO.md` `VCS-041`).
+
+Detail: `docs/architecture/ADR-0171-instructions-loaded-verification.md`.
