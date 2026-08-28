@@ -180,7 +180,15 @@ fi
 # there, explaining that hook_verified now governs Step 5 alone (issue #412) — this checks for the
 # CONDITIONAL construct, not for the word's absence, or that explanatory sentence would fail it.
 SELECTION=$(awk '/^### Step 6 — Review cycle/{f=1} /^####/{f=0} f' "$CC_SKILL")
-if printf '%s\n' "$SELECTION" | grep -qi 'if.*hook_verified.*use\|hook_verified = true.*use\|hook_verified.*: use'; then
+if [ -n "$SELECTION" ]; then
+  ok "G0: Step 6's dispatch-selection paragraph is extractable (the anchor G1/G2 below read)"
+else
+  bad "G0: could not extract Step 6's dispatch-selection paragraph from $CC_SKILL — G1 below would pass vacuously (empty extract, negative-shaped assertion)"
+fi
+
+if [ -z "$SELECTION" ]; then
+  bad "G1: cannot evaluate — dispatch-selection extraction is empty (see G0)"
+elif printf '%s\n' "$SELECTION" | grep -qi 'if.*hook_verified.*use\|hook_verified = true.*use\|hook_verified.*: use'; then
   bad "G1: the Step 6 dispatch-selection paragraph still branches on hook_verified"
 else
   ok "G1: Step 6's dispatch selection no longer branches on hook_verified (#412)"

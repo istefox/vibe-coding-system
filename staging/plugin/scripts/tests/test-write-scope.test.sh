@@ -435,7 +435,16 @@ fi
 AB="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 ABSTEP5="$TMP/ab_step5.txt"
 awk '/^#### Step 5 —/{f=1} /^#### Step 6/{f=0} f' "$AB" >"$ABSTEP5" 2>/dev/null
-if grep -qF 'git diff HEAD --name-only' "$ABSTEP5" 2>/dev/null && grep -qi 'isolation.*none\|none.*isolation' "$ABSTEP5" 2>/dev/null; then
+
+if [ -s "$ABSTEP5" ]; then
+  ok "TL0: autopilot-build/SKILL.md's Step 5 is extractable (the anchor TL1 below reads)"
+else
+  bad "TL0: could not extract Step 5 from $AB — TL1 below would pass vacuously (empty extract, negative-shaped assertion)"
+fi
+
+if [ ! -s "$ABSTEP5" ]; then
+  bad "TL1: cannot evaluate — Step 5 extraction is empty (see TL0)"
+elif grep -qF 'git diff HEAD --name-only' "$ABSTEP5" 2>/dev/null && grep -qi 'isolation.*none\|none.*isolation' "$ABSTEP5" 2>/dev/null; then
   bad "TL1: autopilot-build/SKILL.md's Step 5 still restates the dirty-tree isolation condition — ADR-0068 §D1/R-11 requires it retired (supersedes ADR-0049 §D2 in part)"
 else
   ok "TL1: autopilot-build/SKILL.md's Step 5 no longer restates the dirty-tree isolation condition (ADR-0068 §D1 / R-11, supersedes ADR-0049 §D2 in part)"

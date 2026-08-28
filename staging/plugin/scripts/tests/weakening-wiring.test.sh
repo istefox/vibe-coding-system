@@ -426,6 +426,12 @@ AB_STEP6="$TMP/ab_step6.txt"
 awk '/^#### Step 5 —/{f=1} /^#### Step 6 —/{f=0} f' "$AB" >"$AB_STEP5"
 awk '/^#### Step 6 —/{f=1} /^#### Step 7 —/{f=0} f' "$AB" >"$AB_STEP6"
 
+if [ -s "$AB_STEP5" ] && [ -s "$AB_STEP6" ]; then
+  ok "WE0: autopilot-build/SKILL.md's Step 5 and Step 6 are both extractable (the anchor WE1-WE3 below read)"
+else
+  bad "WE0: extraction empty — AB_STEP5=$([ -s "$AB_STEP5" ] && echo ok || echo EMPTY) AB_STEP6=$([ -s "$AB_STEP6" ] && echo ok || echo EMPTY) — WE1-WE3 below are meaningless"
+fi
+
 # Not a same-line check: the bullet legitimately wraps onto a second physical line in the
 # rendered prose (matching the plan's own example text), so this checks presence within the
 # extracted Step 5 block rather than on one grep line.
@@ -469,6 +475,12 @@ fi
 NA="$STAGING/plugin/skills/autopilot/SKILL.md"
 NA_PHASE1="$TMP/na_phase1.txt"
 awk '/^## 3\. Phase 1 —/{f=1} /^## 4\. Phase 2 —/{f=0} f' "$NA" >"$NA_PHASE1"
+
+if [ -s "$NA_PHASE1" ]; then
+  ok "WE5b: autopilot/SKILL.md's Phase 1 is extractable (the anchor WE6 below reads)"
+else
+  bad "WE5b: could not extract Phase 1 from $NA — WE6 below is meaningless"
+fi
 
 if grep -qi 'weakening' "$NA_PHASE1" && grep -qF 'needs-human' "$NA_PHASE1" && grep -qF 'run-level' "$NA_PHASE1"; then
   ok "WE6: autopilot Phase 1 states the inherited-halt contract (weakening / needs-human / run-level)"

@@ -472,6 +472,12 @@ awk '/^\*\*Step 7\.0b /{f=1} f && /^\*\*Step 7\.0c /{exit} f' "$CC_SKILL" >"$BUM
 STEP70B_FLAT=$(flatten "$STEP70B")
 BUMPBLOCK_FLAT=$(flatten "$BUMPBLOCK")
 
+if [ -s "$STEP70B" ] && [ -s "$BUMPBLOCK" ]; then
+  ok "NB14b: Step 7.0b is extractable in both the wide (STEP70B) and narrow (BUMPBLOCK) forms — the anchor NB15-NB19 below read"
+else
+  bad "NB14b: extraction empty — STEP70B=$([ -s "$STEP70B" ] && echo ok || echo EMPTY) BUMPBLOCK=$([ -s "$BUMPBLOCK" ] && echo ok || echo EMPTY) — NB15-NB19 below are meaningless"
+fi
+
 # NB15 (R-05) — the fence-contract: c2c-step7-baseline-bump marker sits after the spec-archive.sh
 # invocation and before the Step 7.0c heading, ORDERED BY LINE NUMBER (within the extracted
 # Step 7.0b block), not merely by the three anchors' presence.

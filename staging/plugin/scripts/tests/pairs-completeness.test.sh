@@ -149,11 +149,16 @@ check_complete "$tmp/real-pairs" "plugin/skills" '*/references/*.md'
 # registration. worktree-capture.sh is not merely undeployed but MUST NOT be wired: registering it
 # aborts every worktree creation on the machine (ADR-0068 §D2), so an accidental PAIRS entry for it
 # is worse than a missing one.
+# skill-extraction-preflight.sh (VCS-042/047/048, 2026-08-28) is the same shape as the
+# hook-probe trio above: a maintainer tool invoked by hand against staging/'s own tree before
+# a SKILL.md split, never triggered by an event and never read by any skill at runtime. There
+# is nothing in ~/.claude for it to be — a PAIRS entry would deploy a file with no consumer.
 cat > "$tmp/scripts-exempt" <<'EOF'
 plugin/scripts/hook-probe.sh
 plugin/scripts/hook-probe-sandbox.sh
 plugin/scripts/hook-probe-verify.sh
 plugin/scripts/worktree-capture.sh
+plugin/scripts/skill-extraction-preflight.sh
 EOF
 check_complete "$tmp/real-pairs" "plugin/scripts" '*.sh' "$tmp/scripts-exempt"
 check_exemptions_live "$tmp/scripts-exempt"
