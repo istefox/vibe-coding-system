@@ -1443,6 +1443,48 @@ resolved upstream with no local dependency, or already covered by an existing in
 no gap exposed. `VCS-038` (adoption evaluation for 2.1.220–2.1.245 features) remains open and
 unaffected by this pass.
 
+### Audit 2026-08-29 (VCS-038, CC 2.1.220–2.1.245 adoption evaluation)
+
+Five shipped features flagged by `VCS-038` for adoption evaluation, decided individually:
+
+- **`promptCacheTtl`/`subagentPromptCacheTtl` (2.1.243) — not applicable to this account.** The
+  changelog scopes both settings explicitly to "API-key and cloud-provider users." This account
+  authenticates via OAuth/subscription login (`oauthAccount` in `~/.claude.json`, no
+  `ANTHROPIC_API_KEY` or `apiKeyHelper`), so neither setting is available or needed. The empirical
+  "1h prompt-cache TTL" note in `~/.claude/rules/tools.md` (`#var-assign-path-resolution` sibling
+  entries) remains the correct, and only, description of this account's cache behavior. No action.
+- **`subagent_type: "fork"` inheriting conversation and prompt cache, non-teammate spawns running
+  in the background by default (2.1.232) — already the live default, no config exists to set.**
+  Sec. 2.2 and 3.10 describe the flat orchestrator → sub-agent model but did not previously state
+  this platform default explicitly; worth a one-line mention next time either section is touched
+  for an unrelated edit, not urgent enough alone to justify opening one now.
+- **Per-subagent model and effort level visible in `/tasks` and the agent detail dialogs (2.1.243)
+  — already live, no config.** Useful as a debugging aid for the sec. 3.9 per-agent model-routing
+  pins (verifying e.g. `architect` actually ran on Opus at the configured effort); worth a
+  one-line debugging tip in sec. 3.9 the next time that section is edited for an unrelated reason.
+- **Correction to the 2026-07-19 audit (CC 2.1.212–2.1.215) entry above: the 200-subagent-per-session
+  cap it describes was removed in 2.1.224** ("Removed the 200-subagent-per-session spawn cap;
+  long-running sessions no longer refuse new agents; concurrency and depth limits still apply").
+  Per this repo's own rule 14 (a historical record is not corrected in place), the 2026-07-19 entry
+  is left as written — it was an accurate description of 2.1.212–2.1.215 the day it was written.
+  Recorded forward here: as of 2.1.224, only two caps still govern subagent fan-out — 16 concurrent
+  agents, and the Dynamic Workflows 1000-agent lifetime cap per run (ADR-0016). The session-wide
+  200-agent ceiling the 2026-07-19 entry called "a ceiling worth watching as roadmaps grow" no
+  longer exists; long `autopilot`/`project-conductor` roadmap runs are bounded only by the two
+  caps above now, not by a third, tighter one.
+- **`notify_when_idle` on cross-session `SendMessage` (2.1.236) — deferred, needs its own ADR, not
+  a doc note.** Could in principle automate the "fresh session ready" half of Gate 4's `/clear`+
+  resume boundary in `concept-to-code` (sec. 11, `SKILL.md:4285-4310`). Deliberately not decided
+  here: Gate 4 was made explicitly blocking (via `AskUserQuestion`, "Update 2026-05-26" below)
+  specifically because the orchestrator once treated the `ready_for_implementation` state as
+  license to continue past that boundary on its own. Automating the readiness notification risks
+  reintroducing the same failure shape if the design does not preserve an explicit human action at
+  the boundary. Tracked forward as a new TODO item requiring a dedicated ADR before any
+  `SKILL.md` change, not attempted in this pass.
+
+Two items (the cap correction, `notify_when_idle` deferral) are informational-only for `VCS-038`'s
+closure; no `settings.json`, hook, or agent-frontmatter change was made by this pass.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -1600,6 +1642,8 @@ Official Anthropic documentation distinguishes clearly:
 - Agent team for: large cross-layer feature (FastAPI router + React page + tests in parallel), bug investigation with competing hypotheses, multi-perspective code review. **Only for large independent tasks.**
 
 **Flat architecture, deliberate decision (CC 2.1.172 context):** CC 2.1.172 enabled sub-agent nesting up to 5 levels deep (pre-launch classifier in 2.1.178; cap enforced in 2.1.181). The system keeps the orchestrator → sub-agent flat model by design. Reasons: predictable dispatch and bounded cost; clean `PreToolUse`/`PostToolUse` hook propagation (the ADR-0016 `hook_verified` smoke test covers only the one-level dispatch path); fan-out capped at 4 concurrent agents per batch. All four dispatching skills (concept-to-code, deep-refactor, review-triage-fix, autopilot-build) reference §2.2 for this decision rather than restating the constraint as a platform limitation. Source: `code.claude.com/docs/en/changelog.md` v2.1.172, v2.1.178, v2.1.181.
+
+**Platform default since CC 2.1.232:** a `subagent_type: "fork"` dispatch inherits the full conversation and prompt cache automatically, and a non-teammate agent spawn in an interactive session runs in the background by default. No setting governs either; both are the live default for every dispatch this system makes. Source: `code.claude.com/docs/en/changelog.md` v2.1.232.
 
 ### 2.3 Orchestrator parallelization logic
 
@@ -1909,6 +1953,8 @@ Return a concise brief, not an essay. The orchestrator decides what to act on.
 **`memory: local`** scopes memory to `.claude/agent-memory-local/<name>/` — git-ignored, NOT the curated orchestrator auto-memory. The agent gets a dedicated Memory tool. All Edit/Write operations still go through the normal tool gate (pattern-enforce hook for coder). Use Memory tool only for memory writes, never Edit/Write on `.claude/` paths.
 
 **`mcpServers` scoping rule:** general-purpose MCPs (github, sequential-thinking) stay global (settings.json or plugins). Domain-specific MCPs (project-specific databases, APIs, Figma tokens) go in the agent's frontmatter — this avoids polluting every session with servers only one agent needs, and makes the agent self-contained when shared across repos.
+
+**Debugging tip (CC 2.1.243+):** the model and effort level each subagent actually ran on is shown in `/tasks` and the agent detail dialogs. Useful for verifying a per-agent pin above (e.g. confirming `architect` really dispatched on Opus at its configured effort) without instrumenting anything.
 
 ```yaml
 # Example: researcher with inline context7 (self-contained, no plugin dependency)
