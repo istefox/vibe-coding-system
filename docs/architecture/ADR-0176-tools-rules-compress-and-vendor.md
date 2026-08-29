@@ -72,7 +72,7 @@ A pointer specified in one file and consumed in another, with nothing checking t
 exactly rule 17's failure shape. New
 `staging/plugin/scripts/tests/tools-rule-evidence-anchors.test.sh`:
 
-- **TE1 (forward)**: every `→ #anchor` in `tools.md` resolves to a real `## ` heading in
+- **TE1 (forward)**: every `→ #anchor` in `tools.md` resolves to a real `##` heading in
   `tools-evidence.md`.
 - **TE2 (backward, rule 8)**: every heading in `tools-evidence.md` has at least one referring
   anchor in `tools.md`, so an orphaned narrative block cannot accumulate unnoticed — a check that
