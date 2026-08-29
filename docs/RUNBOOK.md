@@ -70,7 +70,7 @@ python3 -m json.tool ~/.claude/settings.json >/dev/null && echo "settings live O
 ```bash
 mkdir -p ~/.claude/rules
 cp staging/user/rules/*.md ~/.claude/rules/
-ls ~/.claude/rules/        # expected: python swift typescript-react web-vanilla sql-migrations shell
+ls ~/.claude/rules/        # expected: parallelization python shell sql-migrations swift tools typescript-react web-vanilla
 ```
 
 ### Step 5 — Zone 2: hook scripts
