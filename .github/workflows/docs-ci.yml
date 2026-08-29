@@ -48,6 +48,83 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
+      # VCS-051 / ADR-0180. Computed independently in every job that needs it, rather than a shared
+      # `decide` job other jobs `needs:` — shell-tests' `needs: [plant-shard]` line is pinned
+      # byte-for-byte by plant-registry-parallel.test.sh's PS11 and must not gain a second entry.
+      # Duplicated per matrix leg here (cheap: a handful of git commands) rather than computed once
+      # and passed in, for the same reason.
+      - name: Decide CI tier
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -u
+          # Best-effort changed-file derivation: the checkout above is shallow (fetch-depth 1,
+          # unchanged — widening it is out of scope here), so the SHAs this step needs are usually
+          # not already present locally. Each branch does a bounded, targeted fetch for exactly the
+          # SHA it needs (same pattern project-templates/ci/ci.yml's dependency-scan step already
+          # uses) and treats a fetch/resolve failure as "cannot cleanly determine a base" rather
+          # than an error — fail toward the expensive tier, never toward the cheap one.
+          CHANGED=""; HAVE_BASE=0
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_BASE_SHA:-}" ] && [ -n "${PR_HEAD_SHA:-}" ]; then
+            git fetch --no-tags --depth=50 origin "$PR_BASE_SHA" "$PR_HEAD_SHA" >/dev/null 2>&1 || true
+            if git cat-file -e "$PR_BASE_SHA" 2>/dev/null && git cat-file -e "$PR_HEAD_SHA" 2>/dev/null; then
+              CHANGED=$(git diff --name-only "$PR_BASE_SHA" "$PR_HEAD_SHA" 2>/dev/null || true)
+              HAVE_BASE=1
+            fi
+          elif [ "$EVENT_NAME" = "push" ] && [ -n "${PUSH_BEFORE_SHA:-}" ] \
+               && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=50 origin "$PUSH_BEFORE_SHA" >/dev/null 2>&1 || true
+            if git cat-file -e "$PUSH_BEFORE_SHA" 2>/dev/null; then
+              CHANGED=$(git diff --name-only "$PUSH_BEFORE_SHA" HEAD 2>/dev/null || true)
+              HAVE_BASE=1
+            fi
+          fi
+
+          if [ "$HAVE_BASE" -eq 1 ] && [ -n "$CHANGED" ]; then
+            printf '%s\n' "$CHANGED" >/tmp/ci-tier-changed.txt
+            set +e
+            CLASSIFY_OUT=$(bash staging/plugin/scripts/ci-tier.sh --classify /tmp/ci-tier-changed.txt 2>/tmp/ci-tier-classify.err)
+            CLASSIFY_RC=$?
+            set -e
+            if [ "$CLASSIFY_RC" -eq 3 ]; then
+              COMPUTED=full
+              echo "::notice::ci-tier: $(cat /tmp/ci-tier-classify.err) — treating as full"
+            else
+              COMPUTED=$(printf '%s\n' "$CLASSIFY_OUT" | grep '^TIER: ' | head -1 | cut -d' ' -f2)
+              [ -n "$COMPUTED" ] || COMPUTED=full
+            fi
+          else
+            COMPUTED=full
+            echo "::notice::ci-tier: could not determine a base for this $EVENT_NAME event (or no changed files) — treating as full"
+          fi
+
+          # The CI: trailer, read from the actually authored commit — HEAD^2 for pull_request
+          # (checkout's synthetic merge commit's OWN message is "Merge ... into ...", never the
+          # trailer; its second parent is the real PR head), HEAD directly for push. Falls back to
+          # full the same way an absent/unparseable trailer already does.
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            TRAILER_SRC=$(git log -1 --format=%B HEAD^2 2>/dev/null || git log -1 --format=%B HEAD 2>/dev/null || true)
+          else
+            TRAILER_SRC=$(git log -1 --format=%B HEAD 2>/dev/null || true)
+          fi
+          REQUESTED=$(printf '%s\n' "$TRAILER_SRC" | grep -oE '^CI: (docs|standard|full)$' | head -1 | cut -d' ' -f2)
+          [ -n "$REQUESTED" ] || REQUESTED=full
+
+          set +e
+          RESOLVE_OUT=$(bash staging/plugin/scripts/ci-tier.sh --resolve "$REQUESTED" "$COMPUTED" 2>/tmp/ci-tier-resolve.err)
+          set -e
+          EFFECTIVE=$(printf '%s\n' "$RESOLVE_OUT" | grep '^TIER: ' | head -1 | cut -d' ' -f2)
+          [ -n "$EFFECTIVE" ] || EFFECTIVE=full
+
+          echo "::notice::CI tier — computed=$COMPUTED requested=$REQUESTED effective=$EFFECTIVE"
+          [ -s /tmp/ci-tier-resolve.err ] && echo "::notice::$(cat /tmp/ci-tier-resolve.err)"
+
+          echo "tier=$EFFECTIVE" >> "$GITHUB_OUTPUT"
+
       # The zsh step below is NOT copied here for symmetry with shell-tests' own install step: it is
       # a build dependency of THIS job specifically (issue #447, ADR-0151 §D8's "not copied for
       # symmetry" note). The registry re-runs fence-contract-coverage.test.sh's WSA/WSB under
@@ -63,6 +140,7 @@ jobs:
           zsh --version
 
       - name: Run the plant registry (shard ${{ matrix.shard }})
+        if: steps.decide.outputs.tier == 'full'
         env:
           PLANT_SHARD: ${{ matrix.shard }}
           PLANT_SHARDS: ${{ strategy.job-total }}
@@ -88,6 +166,72 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
+      # VCS-051 / ADR-0180. Computed independently here rather than via `needs: decide` — this
+      # job's `needs: [plant-shard]` line is pinned byte-for-byte by plant-registry-parallel.test.sh's
+      # PS11 and must not gain a second entry. Identical derivation to the plant-shard job's own
+      # step of the same name; both read the same commit, so both land on the same tier.
+      - name: Decide CI tier
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -u
+          CHANGED=""; HAVE_BASE=0
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_BASE_SHA:-}" ] && [ -n "${PR_HEAD_SHA:-}" ]; then
+            git fetch --no-tags --depth=50 origin "$PR_BASE_SHA" "$PR_HEAD_SHA" >/dev/null 2>&1 || true
+            if git cat-file -e "$PR_BASE_SHA" 2>/dev/null && git cat-file -e "$PR_HEAD_SHA" 2>/dev/null; then
+              CHANGED=$(git diff --name-only "$PR_BASE_SHA" "$PR_HEAD_SHA" 2>/dev/null || true)
+              HAVE_BASE=1
+            fi
+          elif [ "$EVENT_NAME" = "push" ] && [ -n "${PUSH_BEFORE_SHA:-}" ] \
+               && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=50 origin "$PUSH_BEFORE_SHA" >/dev/null 2>&1 || true
+            if git cat-file -e "$PUSH_BEFORE_SHA" 2>/dev/null; then
+              CHANGED=$(git diff --name-only "$PUSH_BEFORE_SHA" HEAD 2>/dev/null || true)
+              HAVE_BASE=1
+            fi
+          fi
+
+          if [ "$HAVE_BASE" -eq 1 ] && [ -n "$CHANGED" ]; then
+            printf '%s\n' "$CHANGED" >/tmp/ci-tier-changed.txt
+            set +e
+            CLASSIFY_OUT=$(bash staging/plugin/scripts/ci-tier.sh --classify /tmp/ci-tier-changed.txt 2>/tmp/ci-tier-classify.err)
+            CLASSIFY_RC=$?
+            set -e
+            if [ "$CLASSIFY_RC" -eq 3 ]; then
+              COMPUTED=full
+              echo "::notice::ci-tier: $(cat /tmp/ci-tier-classify.err) — treating as full"
+            else
+              COMPUTED=$(printf '%s\n' "$CLASSIFY_OUT" | grep '^TIER: ' | head -1 | cut -d' ' -f2)
+              [ -n "$COMPUTED" ] || COMPUTED=full
+            fi
+          else
+            COMPUTED=full
+            echo "::notice::ci-tier: could not determine a base for this $EVENT_NAME event (or no changed files) — treating as full"
+          fi
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            TRAILER_SRC=$(git log -1 --format=%B HEAD^2 2>/dev/null || git log -1 --format=%B HEAD 2>/dev/null || true)
+          else
+            TRAILER_SRC=$(git log -1 --format=%B HEAD 2>/dev/null || true)
+          fi
+          REQUESTED=$(printf '%s\n' "$TRAILER_SRC" | grep -oE '^CI: (docs|standard|full)$' | head -1 | cut -d' ' -f2)
+          [ -n "$REQUESTED" ] || REQUESTED=full
+
+          set +e
+          RESOLVE_OUT=$(bash staging/plugin/scripts/ci-tier.sh --resolve "$REQUESTED" "$COMPUTED" 2>/tmp/ci-tier-resolve.err)
+          set -e
+          EFFECTIVE=$(printf '%s\n' "$RESOLVE_OUT" | grep '^TIER: ' | head -1 | cut -d' ' -f2)
+          [ -n "$EFFECTIVE" ] || EFFECTIVE=full
+
+          echo "::notice::CI tier — computed=$COMPUTED requested=$REQUESTED effective=$EFFECTIVE"
+          [ -s /tmp/ci-tier-resolve.err ] && echo "::notice::$(cat /tmp/ci-tier-resolve.err)"
+
+          echo "tier=$EFFECTIVE" >> "$GITHUB_OUTPUT"
+
       # zsh is a BUILD DEPENDENCY of this job, not a convenience (issue #394, ADR-0133 R-06/R-07).
       # fence-contract-coverage.test.sh's WSA/WSB take one wrapped population fence body, run it
       # under zsh AND under bash with the same fixture, and compare stdout and exit code — the
@@ -110,13 +254,19 @@ jobs:
       # scripts and assert on the output. The scripts target bash 3.2 (macOS); the runner has
       # bash 5, which exercises the logic but not the 3.2 constraint. Keep them 3.2-clean by hand.
       - name: Run offline shell harnesses
+        env:
+          TIER: ${{ steps.decide.outputs.tier }}
         run: |
           set -e
-          for t in phase1 prep hook-probe hook-verify-workflow pairs-completeness clean-public-repo-history-safety concept-to-code-bsd-autopilot-gates concept-to-code-manifest-helpers-guards scope-guards refactor-snapshot-deep-refactor claude-md-slim-content-union-whole-line hook-hardening skill-text-corrections agent-tool-scoping post-write-check step5-checkpoint-review step6-effort-pin workflow-dispatch-pins sync-manual-steps write-scope-enforce agent-write-scope agent-command-scope secret-dep-gate weakening-wiring spec-coverage test-write-scope recovery-preflight reward-hack-detectors diff-budget-scope interface-immutability project-ci-checks proportional-audit-depth sast-security-audit tracer-bullet-probe precompact-occupancy untrusted-input external-dependency-gate human-gate-coverage litter-discipline canonical-mechanism agent-metrics licence-provenance accessibility-i18n worktree-isolation-contract agent-tool-parameter-names plan-task-count pattern-enforce-transcript-source macos-detect manifest-field-state transcript-scan-rule manifest-project-root-terminal cross-reference-form fence-contract-coverage skill-coverage-perimeter triage-state-gitignore transition-producer spec-archive gate4-implementation-axes gate0-recommendation hitl-gate-audit-trail batch-dispatch-openers batch-boundary-precedence gate2b-trust-probe recovery-baseline-rebase step7-snapshot-collapse gate5-state-removal spec-pointer-archive manifest-entry-state permission-mode-state conductor-entry-failure-split autopilot-guard-disarm required-checks-audit transition-pair-count autopilot-run-scope skill-fence-positional-tokens prep-row-select commit-transition-order claude-md-condensation stop-gate-path-predicate dispatch-completion acceptance-contract plant-registry-parallel harness-helper-scope brief-to-app project-tasks-ledger session-context-inject spec-coverage-baseline-bump autopilot-disarm-scope-preserve commit-outcome-backstop worktree-git-guardrail instructions-loaded tools-rule-evidence-anchors; do
-            printf '::group::%s\n' "$t"
-            bash "staging/plugin/scripts/tests/$t.test.sh"
-            printf '::endgroup::\n'
-          done
+          if [ "$TIER" != "docs" ]; then
+            for t in phase1 prep hook-probe hook-verify-workflow pairs-completeness clean-public-repo-history-safety concept-to-code-bsd-autopilot-gates concept-to-code-manifest-helpers-guards scope-guards refactor-snapshot-deep-refactor claude-md-slim-content-union-whole-line hook-hardening skill-text-corrections agent-tool-scoping post-write-check step5-checkpoint-review step6-effort-pin workflow-dispatch-pins sync-manual-steps write-scope-enforce agent-write-scope agent-command-scope secret-dep-gate weakening-wiring spec-coverage test-write-scope recovery-preflight reward-hack-detectors diff-budget-scope interface-immutability project-ci-checks proportional-audit-depth sast-security-audit tracer-bullet-probe precompact-occupancy untrusted-input external-dependency-gate human-gate-coverage litter-discipline canonical-mechanism agent-metrics licence-provenance accessibility-i18n worktree-isolation-contract agent-tool-parameter-names plan-task-count pattern-enforce-transcript-source macos-detect manifest-field-state transcript-scan-rule manifest-project-root-terminal cross-reference-form fence-contract-coverage skill-coverage-perimeter triage-state-gitignore transition-producer spec-archive gate4-implementation-axes gate0-recommendation hitl-gate-audit-trail batch-dispatch-openers batch-boundary-precedence gate2b-trust-probe recovery-baseline-rebase step7-snapshot-collapse gate5-state-removal spec-pointer-archive manifest-entry-state permission-mode-state conductor-entry-failure-split autopilot-guard-disarm required-checks-audit transition-pair-count autopilot-run-scope skill-fence-positional-tokens prep-row-select commit-transition-order claude-md-condensation stop-gate-path-predicate dispatch-completion acceptance-contract plant-registry-parallel harness-helper-scope brief-to-app project-tasks-ledger session-context-inject spec-coverage-baseline-bump autopilot-disarm-scope-preserve commit-outcome-backstop worktree-git-guardrail instructions-loaded tools-rule-evidence-anchors ci-tier; do
+              printf '::group::%s\n' "$t"
+              bash "staging/plugin/scripts/tests/$t.test.sh"
+              printf '::endgroup::\n'
+            done
+          else
+            echo "::notice::offline shell harnesses skipped (tier=docs)"
+          fi
 
       # The plant registry no longer runs HERE: it runs SHARDED, in the plant-shard matrix job
       # above, on four separate machines (issue #447, ADR-0151). This job downloads each shard's
@@ -139,6 +289,7 @@ jobs:
       # already (ADR-0143, then again by this rewrite); re-measure with a run rather than repeat
       # the number here a third time.
       - name: Download every shard's verdict stream
+        if: steps.decide.outputs.tier == 'full'
         continue-on-error: true   # a total absence must reach the union, which reports exit 3
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
@@ -147,12 +298,18 @@ jobs:
           path: ${{ runner.temp }}/plant-shards
 
       - name: Require every plant-shard leg to have succeeded
+        if: steps.decide.outputs.tier == 'full'
         env:
           SHARD_RESULT: ${{ needs.plant-shard.result }}
         run: bash staging/plugin/scripts/tests/plant-check.sh --require-legs "$SHARD_RESULT"
 
       - name: Evaluate the union
+        if: steps.decide.outputs.tier == 'full'
         run: bash staging/plugin/scripts/tests/plant-check.sh --union "${{ runner.temp }}/plant-shards"
+
+      - name: Note plant registry union skipped
+        if: steps.decide.outputs.tier != 'full'
+        run: echo "::notice::plant registry skipped (tier=${{ steps.decide.outputs.tier }})"
 
   links:
     name: links

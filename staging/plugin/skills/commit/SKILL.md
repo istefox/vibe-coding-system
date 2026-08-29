@@ -460,6 +460,97 @@ If branch creation fails: **STOP** — never fall through to Step 4/5 while stil
 every caller of this skill, including `concept-to-code`'s Step 7 (which itself never creates a
 persistent branch before invoking `commit`).
 
+### Step 3.7 — Recommend CI tier (blocking gate, attended; auto-applies under `--autopilot`)
+
+VCS-051 / ADR-0180. **Design note:** Step 3 (above) drafts the commit message BEFORE this step
+runs, so the `CI: <tier>` trailer decided here is appended to that already-drafted message in
+place, right before Step 4 renders it — the simplest option, and the least invasive to Step 3's
+own text (the alternative, moving trailer insertion to Step 5, was rejected: Step 4 is the last
+point before `git commit`, and the human must see the trailer they are approving, not a message
+that gains one silently after approval).
+
+**Why this exists:** a pure-documentation PR still ran the full plant registry (4 shards,
+10-15 min each) plus every harness loop, because nothing distinguished a prose-only change from
+one touching code the registry actually verifies. The tier is derived from the plant registry
+itself, not a hand-written path rule — 11 of the registry's 100 declared targets live under
+`docs/`, so "docs/ is prose, skip the heavy jobs" would silently skip the registry's own
+verification targets.
+
+<!-- fence-contract: commit-step37-ci-tier-classify -->
+```bash
+# ADR-0180 (VCS-051): everything between the two FENCE_BASH lines runs under BASH, not under the
+# host shell (zsh here), which does not word-split the same way a loop over $staged/$tracked_modified
+# /$untracked would need. This fence recomputes the changed-file union itself rather than reusing
+# Step 1's — the two run as separate tool invocations and shell state does not carry between them —
+# so there is no caller-bound variable to `export`; the fence is self-contained and independently
+# testable. The terminator sits at COLUMN 0 on purpose: an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently.
+bash <<'FENCE_BASH'
+staged=$(git diff --name-only --staged)
+tracked_modified=$(git diff --name-only HEAD --diff-filter=ACMRD)
+untracked=$(git ls-files --others --exclude-standard)
+changed_file=$(mktemp)
+printf '%s\n%s\n%s\n' "$staged" "$tracked_modified" "$untracked" | sed '/^$/d' | sort -u >"$changed_file"
+
+# Prefer this repo's own dev copy (pre-sync); fall back to the deployed hook everywhere else.
+# CI_TIER_SH lets a test point this fence at a fixture binary without touching the resolution order.
+CI_TIER_SH="${CI_TIER_SH:-staging/plugin/scripts/ci-tier.sh}"
+[ -f "$CI_TIER_SH" ] || CI_TIER_SH="$HOME/.claude/hooks/ci-tier.sh"
+
+classify_out=$(bash "$CI_TIER_SH" --classify "$changed_file" 2>"$changed_file.err")
+classify_rc=$?
+
+if [ "$classify_rc" -eq 3 ]; then
+  # DID-NOT-RUN is not a clean result (rule 4) — never silently downgrade to docs/standard.
+  computed_tier="full"
+  reason=$(grep 'DID-NOT-RUN' "$changed_file.err" | head -1)
+  echo "computed_tier=full"
+  echo "did_not_run=${reason:-ci-tier.sh exited 3 with no DID-NOT-RUN line}"
+else
+  computed_tier=$(printf '%s\n' "$classify_out" | grep '^TIER: ' | head -1 | sed 's/^TIER: //')
+  [ -n "$computed_tier" ] || computed_tier="full"
+  echo "computed_tier=$computed_tier"
+fi
+printf '%s\n' "$classify_out" | grep '^PLANT-MATCH: ' | sed 's/^PLANT-MATCH: /plant_match=/'
+rm -f "$changed_file" "$changed_file.err"
+FENCE_BASH
+```
+
+Read `computed_tier` and any `plant_match=` lines from the fence's output.
+
+**`--autopilot` in args:** skip the `AskUserQuestion` below entirely. Auto-apply `computed_tier`
+and print exactly one line: `"CI tier: <computed_tier> (autopilot — auto-applied)"`. Set
+`ci_tier=<computed_tier>` and continue.
+
+**Otherwise**, use `AskUserQuestion` — three options, one per tier, `computed_tier` listed FIRST
+with `" (Recommended)"` appended to its label:
+
+```
+question: "CI tier — which checks should this commit's CI run?\n\n
+  Computed from the plant registry: <computed_tier>\n
+  [Files that matched a plant-registry target:\n<plant_match lines, one per line> — OMIT this
+  block entirely when there are no plant_match lines]\n
+  [ci-tier.sh could not classify this change (<did_not_run reason>) — defaulting to full —
+  OMIT unless classify_rc was 3]\n\n
+  Choose the tier for the `CI: <tier>` commit trailer."
+header: "CI tier"
+options:
+  - label: "<computed_tier> (Recommended)"
+    description: "<full: 'Everything — plant-shard (4 shards) + shell-tests + ci. Required: a
+      changed file matches a declared plant-registry target.' | standard: 'Skips plant-shard only
+      — shell-tests and ci still run in full. For staging/**, .github/**, .claude/** changes with
+      no plant-target match.' | docs: 'Skips plant-shard AND the harness loops in shell-tests/ci
+      — markdownlint and links still run. For prose-only changes outside staging/**, .github/**,
+      .claude/**.'>"
+  - label: "<the other two tiers, in strictness order, each with its own description above>"
+  - label: "<...>"
+```
+
+Store the selected label as `ci_tier`. **Append the trailer to the commit message Step 3 already
+drafted**: if the body is non-empty, one blank line then `CI: <ci_tier>`; if the body is empty,
+one blank line after the subject then `CI: <ci_tier>`. The message shown at Step 4 (and executed
+in Step 5) is this trailer-carrying version, never the pre-Step-3.7 draft.
+
 ### Step 4 — HITL gate (AskUserQuestion, BLOCKING — human approval required)
 
 Use `AskUserQuestion`. This decision requires explicit human approval — do NOT auto-answer or auto-complete this gate.

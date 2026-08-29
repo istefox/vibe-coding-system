@@ -5422,3 +5422,65 @@ automation surface at a safety-critical human boundary. This closes the avenue `
 opened, with a verified answer rather than a speculative one, and closes the follow-up alternative
 in the same session rather than leaving it open for a future re-investigation. `VCS-050` closed.
 Detail: `docs/architecture/ADR-0179-vcs-050-notify-when-idle-gate4-evaluation.md`.
+
+## Decisions from deriving CI tier selection from the plant registry (ADR-0180)
+
+`docs-ci.yml`'s `plant-shard` job ran the full plant registry — four matrix legs, ~10-15 minutes
+each — on every pull request and every push to `main`, including one touching nothing but prose.
+`ci.yml`'s `ci` job ran the entire harness suite the same way. Neither distinguished a
+documentation-only change from one touching code the registry actually verifies.
+
+**Measured the premise before designing on it** (rule 13). The obvious fix — "skip the heavy jobs
+when the diff is under `docs/`" — was checked against the actual registry before being written:
+the plant registry declares **100** distinct targets, of which **11 live under `docs/`**,
+including `docs/chain-decisions.md` and `docs/chain-decision-index.md` — the two files this
+narrative itself lives in. A path-prefix rule would have silently skipped the registry's own
+verification targets the instant a docs-only PR touched one of them. Rule 7 (guard the
+denominator) and rule 18 (a scan satisfied by the wrong population) both name this exact shape.
+
+**Why the classification could not live only in the workflow YAML.** `plant-check.sh`'s own
+`--require-legs` block already states the reason, for a different piece of logic: `.github/` is
+copied into the plant-check sandbox for tests to read but is "not a legal plant TARGET" — rule 16,
+"logic that lives only in yaml can be asserted to exist and never to work." A tier rule expressed
+purely as a workflow `if:` could rot silently with nothing to prove it still classifies correctly.
+So the rule lives as ordinary, plantable shell (`ci-tier.sh`), and the workflow YAML does only
+what YAML can safely do: read the script's output and gate steps on it.
+
+**The classification rule**, applied to the changed-file set: `full` if it intersects the derived
+plant-target set; else `standard` if it intersects `staging/**`, `.github/**` or `.claude/**`;
+else `docs`. `ci-tier.sh --classify` exits 3 — DID-NOT-RUN, never a silent `docs` guess — when the
+registry directory is unreadable, the derived target set is empty, or any declared target fails to
+resolve on disk (rule 4: "did not run" is not "found nothing"). Callers must treat exit 3 as
+`full`. `ci-tier.test.sh` proves this with a planted assertion (`CT-DENOM`, on the empty-registry
+guard) rather than by inspection alone.
+
+**Gate STEPS, never whole jobs.** ADR-0037 already rejected "skip CI entirely and let the user
+check manually" for the commit/merge flow, for the same underlying reason this repeats: a check
+that does not run must never look, from the outside, like a check that ran and found nothing.
+Every gated job still reports — the plant-shard matrix legs, `shell-tests`, and `ci` all still run
+and still post a status — with an explicit `::notice::` naming the skipped tier when the heavy
+work inside is bypassed. The `id:`/`outputs:` opt-in pattern reused here is the one
+`project-templates/ci/ci.yml`'s security-audit/licence-scan jobs already established.
+
+**Why each job re-derives the tier independently rather than sharing one `decide` job.**
+`plant-registry-parallel.test.sh`'s PS11 pins `shell-tests`' `needs: [plant-shard]` line
+byte-for-byte; a shared `needs: decide` dependency would break a passing, deliberately narrow
+assertion for a cost — a handful of duplicated git commands per job — not worth the churn. Every
+job reads the same commit, so every job lands on the same tier regardless of where it is computed.
+
+**`commit/SKILL.md` gained Step 3.7**, between the existing Step 3.6 and Step 4, computing the
+tier via the same `ci-tier.sh --classify` call through a `CI_TIER_SH`-overridable fence — testable
+independently of the deployed path. Attended: `AskUserQuestion`, computed tier first and labelled
+`(Recommended)`. Under `--autopilot`: auto-applied, one line printed. Either way the `CI: <tier>`
+trailer is appended to the message Step 3 already drafted, so Step 4's human approval covers the
+trailer as it will actually be committed, never a silent post-approval addition. `--resolve` always
+returns the stricter of a requested and a computed tier — a human can ask for more scrutiny than
+the registry computed, never for less.
+
+Verification: `ci-tier.sh --classify` re-derives the registry live and confirmed `full` on a real
+plant-target change; the exit-3 denominator guard confirmed via a planted mutation, not inspection;
+`pairs-completeness.test.sh`'s CI0/CI0b/CI1/CI2 and `plant-registry-parallel.test.sh`'s PS11 stayed
+green through both workflow edits; `fence-contract-coverage.test.sh`'s F4 required the new Step 3.7
+fence's extraction pattern to carry the marker's full literal text (`fence-contract: <id> -->`),
+not just its id, to count as run. `VCS-051` closed. Detail:
+`docs/architecture/ADR-0180-051-ci-tier-selection.md`.
