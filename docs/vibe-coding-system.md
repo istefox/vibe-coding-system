@@ -1369,6 +1369,80 @@ Step 6 gate beside #100's reporters and #101's weakening scan.
 
 Detail: `docs/architecture/ADR-0048-102-requirement-ids-coverage.md`.
 
+### Audit 2026-08-29 (CC 2.1.246–2.1.251)
+
+Picks up from `VCS-037`'s 2.1.220–2.1.245 pass (2026-08-25). Fetched `CHANGELOG.md` from
+`anthropics/claude-code` (GitHub, 2026-08-29) for the 2.1.246–2.1.251 range and read every entry
+against the 8 agents, `concept-to-code`/`autopilot`/`project-conductor` chain, hooks, and
+worktree-isolation contract. Most items are upstream-only fixes with no local config or doc
+dependency; the handful with real bearing on this system are recorded here, all as **resolved
+risk, no action** unless stated otherwise:
+
+- **Worktree cross-contamination in multi-worktree `/ultrareview`/cloud-session launches** (sec. 12,
+  ADR-0068): 2.1.246 fixed a bug where launching from several worktrees of the same repo at once
+  could start one launch with another launch's uncommitted changes. Directly touches the
+  worktree-isolation contract the `coder` agent (`isolation: worktree`) and `autopilot-build`'s
+  parallel dispatch rely on. Resolved upstream; no local mitigation existed or was needed, since the
+  contract's own compensating control was always platform isolation (ADR-0068's own caveat).
+- **Background sessions could not edit files inside a git worktree they created; the background
+  retention sweep could delete a worktree under `.claude/worktrees/` the user created themselves,
+  if a stale background-session record pointed at the same path** (sec. 12): both fixed in 2.1.246
+  and 2.1.251 respectively. Two more resolved worktree-isolation risks, same section as above.
+- **`/reload-plugins` reported 0 skills for plugins defining skills under `skills/*/SKILL.md`**
+  (sec. 8, sec. 14): 2.1.246 fix. This is exactly this repo's own plugin layout
+  (`staging/plugin/skills/<name>/SKILL.md`); the bug would have hit local plugin-dev iteration via
+  `/reload-plugins`, not the deployed system. Resolved upstream.
+- **Uncommitted `.env`/`.tfvars`/credential-file-copy uploads from `/ultrareview` and cloud
+  sessions** (sec. 16, global rule "never commit `.env`, secrets, API keys, credentials"): 2.1.248
+  fixed `/ultrareview` and locally-seeded cloud sessions uploading uncommitted edits to
+  `prod.env`-style files, `*.tfvars`, and editor swap/temp/backup copies of credential files (e.g.
+  `key.pem.tmp`, `id_rsa.swo`) — they now stay local. A real resolved risk for any repo using
+  `/code-review ultra`, this one included. No local mitigation existed; none needed now.
+- **Hooks: malformed JSON stdout from a hook is now surfaced as an explicit error instead of
+  silently read as plain text or hanging a background session** (sec. 7): 2.1.248, two related
+  fixes. This repo has 4+ hooks that emit `{"decision": ...}` JSON
+  (`db-backup-guardrail.sh`, `pre-flight-pattern-enforce.sh`, `precompact-guard.sh`,
+  `stop-gate.sh`); the fix is pure hardening — any future malformed-JSON regression in one of these
+  now fails loud instead of silently misbehaving or hanging a headless/background run. No hook
+  change required; passive safety-net improvement worth knowing about.
+- **Workflow tool prompt footprint cut from ~5.7k to ~1k tokens; script-authoring guidance moved
+  into a bundled `workflow-authoring` skill** (sec. 3.10, `Workflow` tool token cost): 2.1.248. This
+  system sets `disableBundledSkills: true` (`~/.claude/settings.json`), so the new bundled skill is
+  not loaded here — the `Workflow` tool's own (now smaller) inline description is still the
+  authoring reference for this system's sessions. No action: the tool's built-in instructions
+  remain sufficient, and turning bundled skills on for this one skill was not judged worth the
+  blast radius of re-enabling the rest.
+- **Dynamic-workflow subagents no longer restart silently when a session is backgrounded mid-run**
+  (sec. 3.10): 2.1.246 makes `←`/`/background` during an active `Workflow` run ask first and report
+  how many subagents would restart. Directly relevant to the heavy `Workflow`-based fan-out this
+  system uses in `concept-to-code` Step 5/6 and the token-audit passes (VCS-042…049); resolved
+  upstream, no local change.
+- **A subagent that stops at its `maxTurns` limit now returns partial output with a continue hint
+  via `SendMessage`, instead of silently appearing finished** (sec. 3, sec. 3.10): 2.1.246. Relevant
+  to every dispatched agent in this system's roster; resolved upstream, no local change — a
+  finished-looking-but-truncated subagent result is now distinguishable.
+- **A session that ended in plan mode could resume outside plan mode** (VS Code, `-p --continue`/
+  `--resume` with no permission mode set) (sec. 10, invariant "Plan mode required for >1-file
+  edits"): 2.1.246 fix. A real resolved risk to this system's plan-mode-gate discipline; no local
+  mitigation existed or was needed.
+- **A once-roughly-hourly prompt-cache miss caused by tool-definition re-rendering after an OAuth
+  token refresh, and a `ScheduleWakeup` tool-definition mismatch across `--resume` during usage
+  overage causing a full cache miss on the resumed session's first turn** (`~/.claude/rules/tools.md`
+  empirical "1h prompt-cache TTL" note, `ScheduleWakeup`'s own delay-picking guidance): both fixed
+  in 2.1.248. Neither this system's `tools.md` note nor `ScheduleWakeup`'s cache-window guidance
+  required an edit — both already described observed behavior, not a claimed guarantee — but the
+  fix removes a confound from any future re-measurement of that empirical claim.
+- **Out of scope for this system** (no config, doc, or agent dependency found): Claude apps
+  gateway/Bedrock/Vertex/Foundry items, Remote Control items (`remoteControlAtStartup: false`),
+  Windows-only fixes, self-hosted-runner items, VSCode-extension items, cross-session-messaging
+  edge cases with no matching usage pattern here, and cosmetic/UX fixes (status line, theme,
+  keybindings, `/stats` heatmap, TUI rendering).
+
+No `TODO.md` action items opened: every item with real bearing on this system was either already
+resolved upstream with no local dependency, or already covered by an existing invariant/rule with
+no gap exposed. `VCS-038` (adoption evaluation for 2.1.220–2.1.245 features) remains open and
+unaffected by this pass.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
