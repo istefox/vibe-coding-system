@@ -7,14 +7,10 @@
 set -u
 
 INPUT=$(cat)
-PROMPT=$(echo "$INPUT" | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(d.get('prompt', ''))
-except Exception:
-    print('')
-" 2>/dev/null || true)
+# VCS-045: jq (~5ms startup) replaces the python3 json.load round-trip (~30-50ms) every
+# other hook in this setup already uses jq for. Empty stdin or malformed JSON both yield
+# empty via `// empty`, matching the old try/except's fail-silent behaviour.
+PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // empty' 2>/dev/null || true)
 
 [ -z "$PROMPT" ] && exit 0
 
