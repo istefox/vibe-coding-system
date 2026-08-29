@@ -72,7 +72,9 @@ COMMIT="$SKILLS/commit/SKILL.md"
 MINIT="$SKILLS/concept-to-code/scripts/manifest-init.sh"
 PFE="$SCRIPTS/pre-flight-pattern-enforce.sh"
 HVW="$SCRIPTS/hook-verify-workflow.sh"
-AWS="$SCRIPTS/agent-write-scope.sh"
+# VCS-046: agent-write-scope.sh was merged into test-write-scope.sh; its ARCHITECT SCOPE block
+# (including the two anchors C5/C6 check below) was ported verbatim, so AWS points there now.
+AWS="$SCRIPTS/test-write-scope.sh"
 SSCAN="$SCRIPTS/secret-scan.sh"
 ICHK="$SCRIPTS/interface-check.sh"
 CODER="$STAGING/plugin/agents/coder.md"

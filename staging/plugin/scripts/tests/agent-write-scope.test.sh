@@ -18,7 +18,10 @@ set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
-HOOK="$SCRIPTS/agent-write-scope.sh"
+# VCS-046: agent-write-scope.sh was merged into test-write-scope.sh (universal per-call
+# process-spawn overhead, not agent-type-gated) — the architect-scope logic this file tests now
+# lives in the ARCHITECT BRANCH section of the merged file, unchanged.
+HOOK="$SCRIPTS/test-write-scope.sh"
 ARCH_AGENT="$STAGING/plugin/agents/architect.md"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -117,10 +120,16 @@ done
 # what it enforces. Recorded as an assertion rather than as prose, because the property that makes
 # it immune is exactly the property a future "make the roots configurable per dispatch" change
 # would remove — and that change would look like an improvement.
-if grep -qE 'transcript_path|TRANSCRIPT|\.jsonl' "$HOOK"; then
-  bad "F1: the hook now reads a transcript — re-audit it against issue #127's self-arming class"
+# VCS-046: $HOOK is now the merged test-write-scope.sh, whose CODER branch legitimately reads a
+# subagent transcript (that is the whole point of ADR-0049's marker check). Scoping the grep to
+# only the ARCHITECT BRANCH anchors keeps this assertion meaningful — it still proves the
+# architect logic specifically touches no transcript, rather than failing on the unrelated coder
+# branch's transcript code that now shares the file.
+ARCH_BLOCK=$(awk '/ARCHITECT BRANCH START/,/ARCHITECT BRANCH END/' "$HOOK")
+if printf '%s' "$ARCH_BLOCK" | grep -qE 'transcript_path|TRANSCRIPT|\.jsonl'; then
+  bad "F1: the architect branch now reads a transcript — re-audit it against issue #127's self-arming class"
 else
-  ok "F1: the hook derives its scope from no transcript — structurally cannot self-arm (#127)"
+  ok "F1: the architect branch derives its scope from no transcript — structurally cannot self-arm (#127)"
 fi
 
 # F2: the payload-borne twin of the same question. A file_path that quotes the OTHER hook's marker

@@ -34,9 +34,14 @@ bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 WIRING_MARK="alongside the Edit|Write protect-files entry"
 SCOPE_MARK="alongside the pre-flight-pattern-enforce entry"
-ARCH_MARK="alongside the write-scope-enforce entry"
 CMD_MARK="alongside the agent-write-scope entry"
 TEST_MARK="alongside the agent-command-scope entry"
+# VCS-046: agent-write-scope.sh was merged into test-write-scope.sh and deleted; the "please wire
+# agent-write-scope" notice ARCH_MARK used to key off is gone with it. In its place,
+# sync-to-claude.sh now warns the OPPOSITE thing — that a stale PreToolUse entry invoking the
+# now-deleted script is still present. See section D3/E section below for the inverted fail-safe
+# direction this implies and the new fixtures that exercise it.
+STALE_ARCH_MARK="invoking hooks/agent-write-scope.sh"
 PRECOMPACT_MARK="PreCompact is not currently in the hooks block"
 USAGE_HINT_MARK="usage-daily-hint (issue #112, ADR-0058"
 RETIRED_MARK="MANUAL STEP: retired hook cleanup"
@@ -60,7 +65,10 @@ INSTRUCTIONS_LOADED_MARK="has nothing to read"
 # stale copy. A single source makes that drift structurally impossible instead of forbidden by a
 # comment (rule 6: two copies answering ONE question — "is this hooks block fully wired?" — is
 # the defect, not a design choice).
-WIRED_HOOKS='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}],"InstructionsLoaded":[{"matcher":"session_start|nested_traversal|path_glob_match|include|compact","hooks":[{"type":"command","command":"\"$HOME\"/.claude/hooks/instructions-loaded-log.sh"}]}]}'
+# VCS-046: no agent-write-scope.sh entry here — that PreToolUse entry invoked a script that no
+# longer exists (merged into test-write-scope.sh, which needs no change to gate the architect
+# too), so its PRESENCE is now the outstanding condition (see STALE_ARCH_MARK), not its absence.
+WIRED_HOOKS='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}],"InstructionsLoaded":[{"matcher":"session_start|nested_traversal|path_glob_match|include|compact","hooks":[{"type":"command","command":"\"$HOME\"/.claude/hooks/instructions-loaded-log.sh"}]}]}'
 UNWIRED_HOOKS='{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}'
 
 # build_home <name> <wired:yes|no|nofile> <retired:yes|no> — returns the fixture HOME path.
@@ -155,9 +163,15 @@ case "$OUT" in
   *"$SCOPE_MARK"*) ok "D2: write-scope wiring notice also fail-safes on a missing settings.json" ;;
   *) bad "D2: missing settings.json silently treated as write-scope-wired" ;;
 esac
+# D3 — VCS-046: agent-write-scope.sh was merged into test-write-scope.sh and deleted; the notice
+# this used to test ("please wire agent-write-scope") is gone with it. In its place
+# sync-to-claude.sh now warns the OPPOSITE thing (a stale PreToolUse entry naming the deleted
+# script is still present), so the fail-safe direction inverts too: an unconfirmable settings.json
+# must not be read as containing a stale entry any more than it should be read as containing a
+# wanted one — but here that means the notice must NOT fire, not that it must (contrast D1/D2/D4).
 case "$OUT" in
-  *"$ARCH_MARK"*) ok "D3: agent-write-scope notice also fail-safes on a missing settings.json" ;;
-  *) bad "D3: missing settings.json silently treated as agent-write-scope-wired" ;;
+  *"$STALE_ARCH_MARK"*) bad "D3: stale agent-write-scope notice fired on a missing settings.json — an unconfirmable file cannot be read as containing a stale entry" ;;
+  *) ok "D3: stale agent-write-scope notice correctly silent on a missing settings.json (inverted fail-safe direction vs D1/D2/D4, VCS-046)" ;;
 esac
 case "$OUT" in
   *"$PRECOMPACT_MARK"*) ok "D4: precompact-guard notice also fail-safes on a missing settings.json (issue #112)" ;;
@@ -179,11 +193,14 @@ case "$OUT" in
   *"$SCOPE_MARK"*) ok "E2: write-scope notice fires independently of the autopilot-guard one" ;;
   *) bad "E2: write-scope notice suppressed although it is not wired" ;;
 esac
-# E3: five wiring notices now share the "hook wiring" heading. Each must key off its own hook,
-# so wiring any one of them cannot mute the reminders for the others.
+# E3 — VCS-046: this fixture (only autopilot-guard wired) carries no agent-write-scope entry at
+# all, so the stale-entry notice (see D3 above) has nothing to warn about and must stay silent —
+# proving an unrelated hook being wired does not spuriously trigger it. The positive direction
+# (the notice DOES fire when a stale entry genuinely is present, independent of other wiring) is
+# E6/E6b below.
 case "$OUT" in
-  *"$ARCH_MARK"*) ok "E3: agent-write-scope notice fires independently too" ;;
-  *) bad "E3: agent-write-scope notice suppressed although it is not wired" ;;
+  *"$STALE_ARCH_MARK"*) bad "E3: stale agent-write-scope notice fired although this fixture has no such entry to be stale" ;;
+  *) ok "E3: stale agent-write-scope notice correctly silent when no agent-write-scope entry is present (VCS-046)" ;;
 esac
 case "$OUT" in
   *"$CMD_MARK"*) ok "E4: agent-command-scope notice fires independently too (issue #58 gap 1)" ;;
@@ -201,8 +218,25 @@ case "$OUT5" in
   *) ok "E5: agent-command-scope notice suppressed once wired" ;;
 esac
 case "$OUT5" in
-  *"$ARCH_MARK"*) ok "E6: wiring agent-command-scope does not mute the agent-write-scope notice" ;;
-  *) bad "E6: agent-write-scope notice muted by an unrelated hook being wired" ;;
+  *"$STALE_ARCH_MARK"*) bad "E6-neg: stale agent-write-scope notice fired although the e5 fixture carries no such entry" ;;
+  *) ok "E6-neg: stale agent-write-scope notice correctly silent when e5's agent-command-scope-only fixture has no stale entry (VCS-046)" ;;
+esac
+
+# E6/E6b — VCS-046, positive direction: a fixture genuinely carrying a stale agent-write-scope
+# PreToolUse entry ALONGSIDE agent-command-scope wired. Proves both halves of independence at
+# once — the stale notice fires regardless of what else is wired (E6), and an unrelated hook's
+# OWN notice is unaffected by the unrelated stale entry sitting next to it (E6b) — the same
+# both-directions shape as E1/E2 and E4/E5 above, applied to the new notice.
+_h="$TMP/e6stale"; mkdir -p "$_h/.claude/hooks"
+printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Write|Edit|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-write-scope.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+OUT6=$(run_sync "$_h")
+case "$OUT6" in
+  *"$STALE_ARCH_MARK"*) ok "E6: stale agent-write-scope notice fires when the entry is genuinely present, even with an unrelated hook (agent-command-scope) also wired (VCS-046)" ;;
+  *) bad "E6: stale agent-write-scope notice suppressed although settings.json carries the stale entry — got: $OUT6" ;;
+esac
+case "$OUT6" in
+  *"$CMD_MARK"*) bad "E6b: agent-command-scope's own notice printed although this fixture wires it" ;;
+  *) ok "E6b: agent-command-scope's own notice stays suppressed once wired, unaffected by the unrelated stale entry alongside it" ;;
 esac
 
 case "$OUT" in

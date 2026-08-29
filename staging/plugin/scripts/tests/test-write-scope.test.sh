@@ -600,11 +600,39 @@ OUT=$(run "$(payload tester "$TMREAL" Edit "$AID" "$SID" "$TP")")
              || bad "TM8: the tester was denied $TMREAL — ADR-0088's remedy is not available; got: $OUT"
 
 # ==================================================================================================
+# TN. Architect branch coverage (VCS-046, ADR-0041/issue #58). agent-write-scope.sh was merged
+# into this file — universal per-Edit/Write process-spawn overhead, not agent-type-gated — and its
+# architect-scope logic now lives in the ARCHITECT BRANCH section of $HOOK. This section is a
+# minimal mirror of agent-write-scope.test.sh's sections A/B, enough to make THIS file alone a
+# complete regression suite for the merged hook even if agent-write-scope.test.sh were ever
+# deleted. The fuller architect-scope surface (Edit/MultiEdit coverage, malformed JSON, a
+# marker-shaped path, the architect.md coupling check, the #127 self-arming audit) stays owned by
+# agent-write-scope.test.sh, not duplicated here.
+# ==================================================================================================
+run_arch() { printf '%s' "$1" | AGENT_WRITE_SCOPE_DIR="$TMP/state-arch" TEST_WRITE_SCOPE_DIR="$TMP/state" bash "$HOOK" 2>/dev/null; }
+
+OUT=$(run_arch "$(payload architect "$ROOT/src/main.py" Write)")
+denied "$OUT" && ok "TN1: architect writing outside both doc roots is denied (ADR-0041, ex agent-write-scope.sh)" \
+             || bad "TN1: out-of-scope architect Write was allowed — got: $OUT"
+
+OUT=$(run_arch "$(payload architect "$ROOT/docs/architecture/ADR-0099-x.md" Write)")
+[ -z "$OUT" ] && ok "TN2: architect writing an ADR is allowed" \
+             || bad "TN2: legitimate ADR write was denied — got: $OUT"
+
+OUT=$(run_arch "$(payload architect "$ROOT/docs/superpowers/plans/2026-07-25-x.md" Write)")
+[ -z "$OUT" ] && ok "TN3: architect writing a PLAN is allowed (c2c Step 2 requires this path, the two-roots regression guard)" \
+             || bad "TN3: plan write denied — this would HARD ABORT every chain at Step 2: $OUT"
+
+OUT=$(run_arch "$(payload coder "$ROOT/src/main.py" Write)")
+[ -z "$OUT" ] && ok "TN4: the architect branch is inert for agent_type=coder (falls through to the coder path, which allows here since no agent_id is set)" \
+             || bad "TN4: architect branch fired on a non-architect agent_type — got: $OUT"
+
+# ==================================================================================================
 # Z. Assertion-count floor (ADR-0083 §D3). A suite reporting FEWER assertions does not read as
 # broken and nobody watches the count — six of plan-task-count's assertions once vanished that way.
 # A floor, not an exact count, so adding an assertion does not require bumping it.
 # ==================================================================================================
-Z_FLOOR=46
+Z_FLOOR=50
 if [ "$((PASS + FAIL))" -ge "$Z_FLOOR" ]; then
   ok "Z1: assertion count $((PASS + FAIL)) is at or above the floor of $Z_FLOOR"
 else

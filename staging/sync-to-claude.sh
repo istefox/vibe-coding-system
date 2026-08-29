@@ -180,7 +180,6 @@ plugin/skills/spec-from-issue/SKILL.md|skills/spec-from-issue/SKILL.md
 plugin/scripts/stop-gate.sh|hooks/stop-gate.sh
 plugin/scripts/pre-flight-pattern-enforce.sh|hooks/pre-flight-pattern-enforce.sh
 plugin/scripts/write-scope-enforce.sh|hooks/write-scope-enforce.sh
-plugin/scripts/agent-write-scope.sh|hooks/agent-write-scope.sh
 plugin/scripts/agent-command-scope.sh|hooks/agent-command-scope.sh
 plugin/scripts/test-write-scope.sh|hooks/test-write-scope.sh
 plugin/scripts/db-backup-guardrail.sh|hooks/db-backup-guardrail.sh
@@ -335,7 +334,7 @@ if [ "$APPLY" -eq 1 ]; then
   chmod +x "$DEST/hooks/precompact-guard.sh" "$DEST/hooks/commit-outcome-backstop.sh" "$DEST/hooks/autopilot-guard.sh" "$DEST/hooks/publish-feature.sh" "$DEST/hooks/test-write-scope.sh" \
     "$DEST/hooks/set-branch-protection.sh" "$DEST/hooks/detect-test-cmd.sh" \
     "$DEST/hooks/roadmap-from-issues.sh" "$DEST/hooks/spec-issue-gate.sh" \
-    "$DEST/hooks/write-scope-enforce.sh" "$DEST/hooks/agent-write-scope.sh" \
+    "$DEST/hooks/write-scope-enforce.sh" \
     "$DEST/hooks/agent-command-scope.sh" "$DEST/hooks/vendor-checks.sh" \
     "$DEST/hooks/autopilot-disarm.sh" "$DEST/hooks/autopilot-migrate.sh" \
     "$DEST/hooks/required-checks-audit.sh" "$DEST/hooks/dispatch-state.sh" 2>/dev/null || true
@@ -406,20 +405,24 @@ Phase 3. Until this entry exists the hook is deployed but never invoked.
 NOTE
 fi
 
-if ! grep -q 'agent-write-scope' "$DEST/settings.json" 2>/dev/null; then
+if grep -q 'agent-write-scope' "$DEST/settings.json" 2>/dev/null; then
   MANUAL=1
   cat <<'NOTE'
 
---- MANUAL STEP: hook wiring (not auto-applied) ---
-Add this PreToolUse entry to ~/.claude/settings.json (alongside the write-scope-enforce entry):
+--- MANUAL STEP: stale hook wiring (not auto-removed) ---
+~/.claude/settings.json still has a PreToolUse entry invoking hooks/agent-write-scope.sh:
 
   { "matcher": "Write|Edit|MultiEdit",
     "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/agent-write-scope.sh" } ] }
 
-agent-write-scope (issue #58, gap 2) confines the architect agent to docs/architecture/ and
-docs/superpowers/plans/. Claude Code's frontmatter grammar has no path restriction for Write, so
-architect.md's write-scope line is prose until this hook enforces it. Inert for every other agent
-type. Until this entry exists the hook is deployed but never invoked.
+agent-write-scope.sh no longer exists as a separate script (VCS-046): its architect-scope logic
+(issue #58, gap 2) was merged into test-write-scope.sh, which already gates the architect too —
+both hooks opened by extracting .agent_type via one jq call and bailing on a mismatch, so wiring
+them as two separate PreToolUse entries cost a second bash+jq process spawn on every single
+Edit/Write/MultiEdit for no agent-type-gated reason. A leftover entry invokes a deleted script and
+fails file-not-found on every one of those calls. Remove this PreToolUse entry from
+~/.claude/settings.json by hand; the test-write-scope entry below needs no change, it already does
+this work.
 NOTE
 fi
 
