@@ -5245,4 +5245,48 @@ Key architectural decisions:
   `pairs-completeness.test.sh` 324/324; `fence-contract-coverage.test.sh` 67/67; byte-identical
   diff against the pre-move body empty. Detail: `docs/architecture/ADR-0175-hitl-gates-extraction-boundary-straddling.md`.
 
+## Decisions from vendoring and compressing tools.md (ADR-0176)
+
+`~/.claude/rules/tools.md` was 264 lines, one of only two rules files with no `paths:` key, so it
+loaded on every session in every project regardless of what was being touched — the second-highest
+per-session token cost in the 2026-08-28 audit. It was also, distinct from the token problem,
+invisible to this repo: never vendored under `staging/user/rules/`, never declared in
+`sync-to-claude.sh`'s `PAIRS`, so edits to it had no review path and no test coverage.
+
+Key architectural decisions:
+- **Vendor first, rewrite second** (D1). The live file was copied verbatim into
+  `staging/user/rules/tools.md` before any compression, so the rewrite lands as a reviewable diff
+  against tracked prior state rather than arriving pre-cooked with nothing to diff against.
+- **Compress every entry, archive nothing — the staleness premise measured false** (D2). The
+  originating `TODO.md` note proposed archiving "resolved/stale" entries alongside compressing the
+  rest. Measuring the file falsified that: the 31 entries are permanent machine facts (bash 3.2,
+  zsh word-splitting, BSD `cat`, `ugrep -G` parse quirks, `rm -rf`/`git checkout --` permission
+  denials), not incidents that stopped applying. Selective archiving would need a per-entry
+  staleness proof, and a wrongly-archived entry stops being loaded exactly when its lesson recurs.
+  Compressing all 31 needed no such judgment and produced the bigger, more certain cut: 264 → 152
+  lines (42%), measured against this repo's own proven density (`CLAUDE.md`'s 20-rule section runs
+  3.9 lines/rule; `tools.md`'s 31 entries averaged 8.5).
+- **Split narrative into a paired, not-loaded evidence file, mirroring the `CLAUDE.md`/
+  `chain-decisions.md` shape** (D3). New `docs/tools-evidence.md` holds each entry's dated
+  forensics under a `## <anchor>` heading; `tools.md` keeps a bare `→ #anchor` pointer per entry,
+  not a path, since `tools.md` is user-global and a repo-relative path would not resolve from
+  another project.
+- **Guarded the split in both directions, per rule 8** (D4). New
+  `tools-rule-evidence-anchors.test.sh`: TE1 (forward, every anchor resolves to a real heading),
+  TE2 (backward, every heading has a referring anchor, so orphaned narrative can't accumulate
+  unnoticed), TE3 (denominator guard — exact anchor/heading parity, not a floor, since a floor with
+  slack would absorb its own plant per rule 10). All three plant-declared and needle-uniqueness
+  checked before the full `plant-check.sh` run.
+- **PAIRS entry needed no exemption** (D5): `user/rules/tools.md|rules/tools.md` is the same
+  `user/X → X` mapping every other vendored rules file already uses — no zone-anomaly declaration,
+  no baseline bump.
+- Full verification: `pairs-completeness.test.sh` 326/326; `tools-rule-evidence-anchors.test.sh`
+  (new) 4/4; `worktree-isolation-contract.test.sh` 104/104 (its J5 sweep found no `WorktreeCreate`
+  mention in either new file); no lesson lost — 31 `- **` entries and 31 `→ #` anchors in the
+  rewritten file, checked by direct count, not by inspection. Full local suite (91 files,
+  background): `SUITE_DONE FAIL_COUNT=0`. `plant-check.sh` (background, full run): PASS=634
+  FAIL=0, `DONE rc=0` — PC1 626/626 declarations fired, PC3 across 59 files, PC5/PC5b clean, the
+  three new TE1/TE2/TE3 plants confirmed firing individually. Detail:
+  `docs/architecture/ADR-0176-tools-rules-compress-and-vendor.md`.
+
 Detail: `docs/architecture/ADR-0174-step5-extraction-population-glob-coupling.md`.

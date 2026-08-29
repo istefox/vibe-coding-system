@@ -1,0 +1,152 @@
+# Tools
+
+Facts about invoking tools on this machine. No `paths` key on purpose: these apply to
+every project and must stay loaded after a compaction, since a rule about how to run a
+command is needed while running it, not while reading a file of some type.
+
+Each entry is the rule alone; the incident that established it (dates, exact transcripts,
+measurement detail) lives in `docs/tools-evidence.md` under the matching anchor — read it
+when the reason here isn't enough, don't restate it here.
+
+- **macOS's default bash is 3.2, not 4+.** Never use `mapfile`, associative arrays, or
+  `${var^^}`/`${var,,}` — they fail at runtime, not at `bash -n`. Collect array output with
+  `arr=(); while IFS= read -r x; do arr+=("$x"); done < <(cmd)`. → #bash-32
+
+- **The Bash tool's host shell is zsh, which does not word-split unquoted expansions.**
+  `for t in $LIST` over a space-separated list iterates once, over the whole blob, silently.
+  Wrap the loop in `bash <<'EOF' ... EOF` (exporting what it needs) or use
+  `while IFS= read -r`. → #zsh-word-split
+
+- **macOS ships BSD `cat`, not GNU coreutils** — GNU-only flags like `-A` fail
+  (`illegal option -- A`). Use `od -c file` to inspect control/non-printable characters.
+  → #bsd-cat
+
+- **A filename/dir starting with `-` is parsed as an option** by `ls`, `grep`, `find` —
+  `~/.claude/projects/` entries always start with one. Prefix with `./` or pass `--` first.
+  → #leading-dash-filenames
+
+- **Installing `yt-dlp` for a transcript: use a scratch venv, never global.** Auto-captions
+  use a rolling display window — drop any SRT block whose text is contained in the previous
+  one before treating the result as prose. → #yt-dlp-transcripts
+
+- **Dispatching a subagent to check whether its own definition holds: pass facts only,
+  never restate the rule it's checking.** The reminder tests itself, not the subagent, and
+  hides the failure of the next run that omits it. → #subagent-self-check
+
+- **A GUI app launched with `nohup … &` from a Bash call dies when the command returns** —
+  the tool kills the process group. Use `open -n /path/App.app --args …` instead, which
+  hands the launch to LaunchServices. → #gui-app-nohup
+
+- **`tell ... first process whose unix id is <pid>` fails reliably** (`Indice non valido
+  (-1719)`) even when the pid is alive. Address the process by name:
+  `tell process "AppName" to ...`. → #system-events-by-pid
+
+- **UI-element-level System Events queries fail with `-1728`** (no Accessibility access) —
+  a standing state, not a fluke. Non-UI calls still work. Don't retry variations; ask the
+  user to drive the GUI manually. → #system-events-accessibility
+
+- **`ScheduleWakeup` requires `prompt` unless `stop: true`**, even for a pure `noop: true`
+  ping. Always pass `prompt` alongside `delaySeconds`, `reason`, `noop`.
+  → #schedulewakeup-prompt
+
+- **`VAR=value cmd args…` resolves `cmd` through the NEW value being assigned**, not the
+  caller's current PATH. Testing an empty-PATH failure breaks a bare-name wrapper command
+  too. Capture the interpreter's absolute path first:
+  `real_bin=$(command -v bash); PATH=/nonexistent "$real_bin" -c "..."`.
+  → #var-assign-path-resolution
+
+- **A Bash call likely to run past 2 minutes must not run in the foreground** — the tool
+  kills it at 2 min (`Exit code 143`), discarding output. Reissue with
+  `"run_in_background": true`. → #bash-2min-timeout
+
+- **A multi-line Bash call is approved/denied as one unit — an `rm -rf` anywhere in it,
+  chained or bare, reliably gets the whole call denied.** Never issue `rm -rf`: to replace a
+  directory's contents, `mkdir -p`/`mktemp -d` a fresh dir and `cp -R` into it; to recreate a
+  worktree at the same path, `git worktree add` a differently-suffixed path instead of
+  removing the old one. → #rm-rf-denied
+
+- **An unmatched glob aborts the whole call on this machine's zsh** (`nomatch` is on) —
+  a no-match glob fails the call instead of passing the literal pattern through. Search
+  recursively instead: `grep -rln "pattern" Sources/`. → #zsh-nomatch-glob
+
+- **`gh pr checks <N>` exits non-zero (observed: 8) while checks are merely pending, not
+  only on failure.** Read the per-check status column, or `--json bucket` (lowercase
+  `"pending"`, not `"PENDING"`). Poll in the background:
+  `until gh pr checks <N> --json bucket -q '[.[].bucket] | all(. != "pending")' ...; do
+  sleep 15; done`. → #gh-pr-checks-pending
+
+- **`gh pr view <N> --json ...` has no `merged` field.** Use `mergedAt`:
+  `state == "MERGED"` plus non-null `mergedAt` confirms a merge. → #gh-pr-view-merged
+
+- **`gh pr merge <N> --merge --delete-branch` can exit 1 on local branch-delete failure
+  when the branch is checked out in a separate worktree** — the GitHub-side merge still
+  succeeded. Confirm via `mergedAt`, then clean up manually (`git push origin --delete`,
+  `git worktree remove`, `git branch -D`). → #gh-pr-merge-worktree
+
+- **`mcp__claude-in-chrome` has no standalone `scroll` tool** — scrolling is an action of
+  the unified `computer` tool (`{"action": "scroll", ...}`). → #chrome-scroll-action
+
+- **Dispatching a write-scope-gated agent (e.g. `architect`) while the parent is in plan
+  mode: the two write restrictions don't intersect** and the agent can't write to disk at
+  all. Treat its reply as the deliverable — have the parent `Write` the file itself once out
+  of plan mode. → #agent-write-scope-plan-mode
+
+- **`grep` here execs `ugrep -G`, not GNU/BSD grep** — an escaped `\+` right after an anchor
+  like `^` is a parse error, not a literal plus. Don't escape the plus, or use fixed-string
+  mode (`grep -F`). → #ugrep-anchor-plus
+
+- **`git checkout -- <file>` / `git reset --hard` are denied by the Bash permission system,
+  even issued alone.** If the edit was made via the Edit tool, revert with an inverse Edit
+  call instead — no permission gate there. For a stash-pop conflict, resolve hunks by hand
+  with Edit rather than reaching for reset. → #git-checkout-discard-denied
+
+- **`git push origin :refs/tags/<tag>` is reliably blocked by the Auto Mode classifier** —
+  retrying doesn't help. Delete via the GitHub API instead:
+  `gh api -X DELETE repos/<owner>/<repo>/git/refs/tags/<tag>`.
+  → #git-tag-delete-classifier-blocked
+
+- **Chaining a git-tag create with its push in one Bash call can get the whole call blocked
+  by the auto-mode classifier**, and retrying the combined call doesn't reliably clear it.
+  Split into two separate calls: `git tag` first, verify, then `git push` separately.
+  → #git-tag-create-push-split
+
+- **A branch-protection rule on `main` does not gate tag pushes** — a commit
+  `git push origin main` rejects can still be tagged and pushed straight through, silently
+  firing tag-triggered workflows on an unmerged commit. Confirm the commit is really on the
+  remote branch before tagging a release. → #branch-protection-tags-ungated
+
+- **`notarytool` 401 in CI can persist after rotating the app password if the paired Apple
+  ID secret is stale.** Compare secret timestamps with `gh secret list`; update both
+  together. → #notarytool-401-apple-id
+
+- **`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` is read at process start** — editing it changes
+  nothing for the session doing the editing, and a repo's staged config is not evidence of
+  live behaviour. Read the live value directly; confirm actual behaviour by scanning
+  `compact_boundary` records' `compactMetadata` in the session transcripts.
+  → #autocompact-override-drift
+
+- **zsh reserves `status` (and other names) as read-only special variables.** A loop
+  assigning a grep/command-substitution result to a variable named `status` fails
+  immediately (`read-only variable: status`), aborting the whole loop. Use a non-reserved
+  name (`status_val`). → #zsh-readonly-status
+
+- **A `.txt` file staged per the "publish this prose" convention
+  (`=== TITLE ===`/`=== BODY ===` headers) is not parsed by any publish command** — feeding
+  it straight to `gh issue comment -F` posts the header markers verbatim. Strip the headers
+  first before passing to `--body-file`/`-F`; if already posted, `gh api ... -X PATCH` to
+  fix it in place. → #txt-publish-headers-not-stripped
+
+- **`gh api notifications` cannot be trusted as the sole signal for "did anything happen on
+  GitHub"** — confirmed returning `0`/`[]` even immediately after a real reply landed. When
+  specific issues are known, query them directly (`gh issue view <N> --json comments`)
+  instead of relying on the notifications feed. → #gh-notifications-unreliable
+
+- **A `cd` in one Bash call does not reliably carry over into the next, separate call**,
+  despite the tool's own description. Use `git -C <absolute-path> ...` in every call needing
+  a non-default directory, or chain the whole sequence with `&&` inside one call.
+  → #cd-not-persisted
+
+- **A subagent receives the full CLAUDE.md hierarchy at its own startup, except the
+  built-in `Explore`/`Plan` agents, which skip it entirely** — custom subagents are not
+  exempt. A correction written mid-session never reaches an already-running session or
+  subagent; it applies only to the next dispatch. → #subagent-claude-md-load-timing

@@ -130,6 +130,7 @@ user/rules/parallelization.md|rules/parallelization.md
 user/rules/python.md|rules/python.md
 user/rules/shell.md|rules/shell.md
 user/rules/sql-migrations.md|rules/sql-migrations.md
+user/rules/tools.md|rules/tools.md
 user/rules/swift.md|rules/swift.md
 user/rules/typescript-react.md|rules/typescript-react.md
 user/rules/web-vanilla.md|rules/web-vanilla.md
