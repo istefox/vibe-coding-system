@@ -48,6 +48,9 @@ SKILLMD="$SKILL/SKILL.md"
 SYNC="$STAGING/sync-to-claude.sh"
 C2C="$STAGING/plugin/skills/concept-to-code/SKILL.md"
 CONDUCTOR="$STAGING/plugin/skills/project-conductor/SKILL.md"
+# VCS-049: Step 4 through Step 7 moved byte-identically into
+# references/steps-4-7-chain-execution.md.
+CONDUCTOR_REF="$STAGING/plugin/skills/project-conductor/references/steps-4-7-chain-execution.md"
 CIWF="$STAGING/../.github/workflows/docs-ci.yml"
 
 PASS=0; FAIL=0
@@ -302,7 +305,7 @@ else
   bad "NT8 (R-20): hard-rule clause(s) not found —$NT8_MISSING"
 fi
 
-# plant: NT9 | plugin/skills/project-conductor/SKILL.md | Invoke the `project-tasks` skill in its full mode | Invoke the ledger skill in its full mode
+# plant: NT9 | plugin/skills/project-conductor/references/steps-4-7-chain-execution.md | Invoke the `project-tasks` skill in its full mode | Invoke the ledger skill in its full mode
 # ===========================================================================================
 # NT9 (R-19) — the vendored SKILL.md's description: names concept-to-code and project-conductor,
 # AND both of those skills' own SKILL.md name project-tasks. Both directions in one assertion: a
@@ -319,7 +322,7 @@ else
   NT9_OK=0; NT9_REASON="$NT9_REASON project-tasks-SKILL.md-not-vendored"
 fi
 if [ -f "$C2C" ] && grep -qi 'project-tasks' "$C2C"; then :; else NT9_OK=0; NT9_REASON="$NT9_REASON concept-to-code-does-not-name-project-tasks"; fi
-if [ -f "$CONDUCTOR" ] && grep -qi 'project-tasks' "$CONDUCTOR"; then :; else NT9_OK=0; NT9_REASON="$NT9_REASON project-conductor-does-not-name-project-tasks"; fi
+if [ -f "$CONDUCTOR" ] && grep -qi 'project-tasks' "$CONDUCTOR" "$CONDUCTOR_REF" 2>/dev/null; then :; else NT9_OK=0; NT9_REASON="$NT9_REASON project-conductor-does-not-name-project-tasks"; fi
 if [ "$NT9_OK" -eq 1 ]; then
   ok "NT9 (R-19): project-tasks's description names both chains, and both chains name project-tasks back"
 else

@@ -156,6 +156,7 @@ plugin/skills/autopilot/scripts/prep-row-select.sh|skills/autopilot/scripts/prep
 plugin/skills/autopilot/tests/run-tests.sh|skills/autopilot/tests/run-tests.sh
 plugin/scripts/tests/phase1.test.sh|hooks/tests/phase1.test.sh
 plugin/skills/project-conductor/SKILL.md|skills/project-conductor/SKILL.md
+plugin/skills/project-conductor/references/steps-4-7-chain-execution.md|skills/project-conductor/references/steps-4-7-chain-execution.md
 plugin/skills/project-conductor/scripts/conductor-args.sh|skills/project-conductor/scripts/conductor-args.sh
 plugin/skills/project-conductor/scripts/h16-direction-check.sh|skills/project-conductor/scripts/h16-direction-check.sh
 plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh|skills/project-conductor/scripts/mark-roadmap-skipped.sh

@@ -207,8 +207,11 @@ crout=$("$PUBLISH" --slug demo --issue "" --root "$CRR" --dry-run 2>&1)
 #         is what stops the pair going green against a body that never appends anything.
 
 # --- CR8/CR9: the cross-file contract with project-conductor ---
-CONDUCTOR="$SCRIPTS/../skills/project-conductor/SKILL.md"
-# plant: CR8 | plugin/skills/project-conductor/SKILL.md | --issue "$_issue" | --base main
+# VCS-049: Step 4 through Step 7 moved byte-identically into
+# references/steps-4-7-chain-execution.md — both CR8/CR9 landmarks moved together, so a simple
+# repoint preserves CR9's line-order check.
+CONDUCTOR="$SCRIPTS/../skills/project-conductor/references/steps-4-7-chain-execution.md"
+# plant: CR8 | plugin/skills/project-conductor/references/steps-4-7-chain-execution.md | --issue "$_issue" | --base main
 if [ -f "$CONDUCTOR" ]; then
   grep -q -- '--issue "\$_issue"' "$CONDUCTOR" \
     && ok "CR8 project-conductor passes --issue to publish-feature" \
@@ -217,7 +220,7 @@ if [ -f "$CONDUCTOR" ]; then
   # The number is read BEFORE the checkbox flip, because the flip rewrites the roadmap line to end
   # in `(completed: <date>)` and can take the `(issue #N)` marker with it. Ordering, not presence:
   # both lines can exist and the feature still be broken.
-# plant: CR9 | plugin/skills/project-conductor/SKILL.md | _issue=$(grep -F -- | _issue=$(true --
+# plant: CR9 | plugin/skills/project-conductor/references/steps-4-7-chain-execution.md | _issue=$(grep -F -- | _issue=$(true --
   _cap=$(grep -n '_issue=\$(grep -F' "$CONDUCTOR" | head -1 | cut -d: -f1)
   _flip=$(grep -n 'Update PROJECT.md: `- \[ \]' "$CONDUCTOR" | head -1 | cut -d: -f1)
   { [ -n "$_cap" ] && [ -n "$_flip" ] && [ "$_cap" -lt "$_flip" ]; } \

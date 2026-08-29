@@ -334,6 +334,7 @@ fi
 # G3b pins it.
 
 CONDUCTOR_MD="$STAGING/plugin/skills/project-conductor/SKILL.md"
+CONDUCTOR_REF="$STAGING/plugin/skills/project-conductor/references/steps-4-7-chain-execution.md"
 
 # flat_skill: whitespace-flattened, undecorated, lowercased copy for PROSE needles only.
 # A clause is the same clause whether it wraps, whether a word inside it is backticked or
@@ -346,7 +347,9 @@ CONDUCTOR_MD="$STAGING/plugin/skills/project-conductor/SKILL.md"
 FLAT_SKILL="$TMP/skill-flat.txt"
 cat "$SKILL_MD" "$HITL_REF" 2>/dev/null | tr '\n' ' ' | tr -s ' ' | tr -d '`*' | tr '[:upper:]' '[:lower:]' > "$FLAT_SKILL"
 FLAT_COND="$TMP/cond-flat.txt"
-tr '\n' ' ' < "$CONDUCTOR_MD" | tr -s ' ' | tr -d '`*' | tr '[:upper:]' '[:lower:]' > "$FLAT_COND"
+# VCS-049: Step 4 through Step 7 moved into references/steps-4-7-chain-execution.md — flatten
+# both files, not just SKILL.md (same population-glob coupling class as FLAT_SKILL above).
+cat "$CONDUCTOR_MD" "$CONDUCTOR_REF" 2>/dev/null | tr '\n' ' ' | tr -s ' ' | tr -d '`*' | tr '[:upper:]' '[:lower:]' > "$FLAT_COND"
 
 flat_has() { grep -qF "$1" "$FLAT_SKILL"; }
 
@@ -699,9 +702,9 @@ fi
 # where a guard written against one past error would have fired on the corrected text. Both
 # halves are checked: the old claim must be gone AND the new behaviour must be named.
 cond_flat_has() { grep -qF "$1" "$FLAT_COND"; }
-# plant: G11 | plugin/skills/project-conductor/SKILL.md | As of issue #329 / ADR-0115 the chain does abort | As of some later work the behaviour changed
+# plant: G11 | plugin/skills/project-conductor/references/steps-4-7-chain-execution.md | As of issue #329 / ADR-0115 the chain does abort | As of some later work the behaviour changed
 if cond_flat_has 'as of issue #329' && cond_flat_has 'the chain does abort'; then
-  if grep -qF 'Measured: it does not' "$CONDUCTOR_MD"; then
+  if grep -qF 'Measured: it does not' "$CONDUCTOR_MD" "$CONDUCTOR_REF" 2>/dev/null; then
     bad "G11: project-conductor names the new behaviour but still carries the old 'it does not' claim"
   else
     ok "G11: project-conductor's hard-abort paragraph agrees with the shipped behaviour"
@@ -713,7 +716,7 @@ fi
 # G11b: and the SPEC-COPY guard must stay named as the PRIMARY defence. It never creates a
 # manifest at all; the c2c abort creates one and then aborts it. Both are contained, one is
 # cheaper, and a reader must not conclude the conductor guard is now redundant.
-# plant: G11b | plugin/skills/project-conductor/SKILL.md | this block still runs first and stays primary | this block is now redundant
+# plant: G11b | plugin/skills/project-conductor/references/steps-4-7-chain-execution.md | this block still runs first and stays primary | this block is now redundant
 if cond_flat_has 'stays primary' && cond_flat_has 'do not remove it'; then
   ok "G11b: the conductor's SPEC-COPY guard is stated to stay primary, with a do-not-remove line"
 else

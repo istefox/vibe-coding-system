@@ -28,6 +28,9 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)              # staging/plugin/scripts
 STAGING=$(cd "$SCRIPTS/../.." && pwd)                    # staging/
 AB_SKILL="$STAGING/plugin/skills/autopilot-build/SKILL.md"
 PC_SKILL="$STAGING/plugin/skills/project-conductor/SKILL.md"
+# VCS-049: Step 4 through Step 7 (including Step 5's manifest-lookup call site) moved
+# byte-identically into references/steps-4-7-chain-execution.md.
+PC_REF="$STAGING/plugin/skills/project-conductor/references/steps-4-7-chain-execution.md"
 NA_SKILL="$STAGING/plugin/skills/autopilot/SKILL.md"
 
 PASS=0; FAIL=0
@@ -134,7 +137,7 @@ extract_conductor_lookup() {
     grab && /^```bash/ { infence=1; next }
     grab && infence && /^```/ { exit }
     grab && infence { print }
-  ' "$PC_SKILL"
+  ' "$PC_REF"
 }
 
 # ADR-0133 (issue #394) wrapper-aware bypass. Once this lookup (one of the three unmarked
@@ -185,17 +188,18 @@ run_conductor_lookup() {
 }
 
 # B1 (static, genuine RED now): the old bare-substring glob is gone from all 3 call sites.
-_old_count=$(grep -cF 'ls -t "$_root"/docs/manifests/*<topic-slug>*.manifest.yml' "$PC_SKILL")
+# VCS-049: the population is now two files, not one -- sum occurrences across both.
+_old_count=$(grep -cF 'ls -t "$_root"/docs/manifests/*<topic-slug>*.manifest.yml' "$PC_SKILL" "$PC_REF" | awk -F: '{s+=$2} END{print s+0}')
 [ "$_old_count" -eq 0 ] && ok "B1: old bare-substring glob is gone from all call sites" \
   || bad "B1: old bare-substring glob still present at $_old_count site(s)"
 
 # B2 (static, genuine RED now): the new anchored glob is present at all 3 call sites.
-_new_count=$(grep -cF '"$_root"/docs/manifests/????-??-??-"$_slug".manifest.yml' "$PC_SKILL")
+_new_count=$(grep -cF '"$_root"/docs/manifests/????-??-??-"$_slug".manifest.yml' "$PC_SKILL" "$PC_REF" | awk -F: '{s+=$2} END{print s+0}')
 [ "$_new_count" -eq 3 ] && ok "B2: anchored glob is present at all 3 call sites" \
   || bad "B2: anchored glob expected at 3 call sites, found $_new_count"
 
 # B3 (static, genuine RED now): the topic-field verification is present at all 3 call sites.
-_verify_count=$(grep -cF "grep '^topic:' \"\$_cand\"" "$PC_SKILL")
+_verify_count=$(grep -cF "grep '^topic:' \"\$_cand\"" "$PC_SKILL" "$PC_REF" | awk -F: '{s+=$2} END{print s+0}')
 [ "$_verify_count" -eq 3 ] && ok "B3: topic-field verification is present at all 3 call sites" \
   || bad "B3: topic-field verification expected at 3 call sites, found $_verify_count"
 

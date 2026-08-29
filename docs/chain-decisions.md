@@ -5324,3 +5324,53 @@ Key decisions:
   `docs/architecture/ADR-0177-merge-agent-write-scope-into-test-write-scope.md`.
 
 Detail: `docs/architecture/ADR-0174-step5-extraction-population-glob-coupling.md`.
+
+## Decisions from `project-conductor/SKILL.md` Steps 4–7 extraction (ADR-0178)
+
+`VCS-049` asked whether `autopilot/SKILL.md` and `project-conductor/SKILL.md` — the second and
+third heaviest skills after `concept-to-code`, neither previously measured — cleared the same
+bar the ADR-0174/0175 round set, per the issue's own instruction to decide from measured benefit,
+not raw line count. Measurement: `project-conductor` 60,875 bytes / 1,054 lines, `## Phases` =
+78.5% of the file, **7.1x** max/mean ratio — more skewed than `concept-to-code` was before
+ADR-0174 (4x). `autopilot` 73,247 bytes / 1,228 lines, max section 30.6%, **2.75x**, nine sections
+evenly spread, plus the repo's one AWK-RANGE coupling site (`weakening-wiring.test.sh:483`).
+`project-conductor` split; `autopilot` left untouched, deferred to a future measured pass.
+
+Key decisions:
+- **Cut `### Step 4` through `### Step 7`, lines 489–1026, not `## Phases` whole or Step 4+5
+  alone** (D1 context). This is the real load boundary: Steps 0–3 (load/reconcile `PROJECT.md`,
+  status, HITL gate) run every invocation; Steps 4–7 run only after a human confirms a feature.
+  One contiguous range, so every inter-step goto in the moved text stays resolvable on either
+  side of the cut with no dangling reference.
+- **Heading moves with content, unlike `concept-to-code`'s single-step extractions** (D1). The
+  moved range spans four step headings with no single wrapper to keep in `SKILL.md`, so the
+  pointer paragraph itself carries the anchor instead of a kept heading pointing past it.
+  `SKILL.md` 1,054 → 518 lines (51% cut). `diff` against the pre-move body: empty.
+- **ADR-0174's three mechanical patterns, reused without modification** (D2). Simple repoint
+  dominant (fence-contract call sites, `extract_conductor_lookup`, `phase1.test.sh` CR8/CR9).
+  Whole-file-uniqueness concatenation for four sites whose population was `SKILL.md` alone
+  (`autopilot-run-scope.test.sh` CG9, `concept-to-code-bsd-autopilot-gates.test.sh` FLAT_COND,
+  `human-gate-coverage.test.sh` HIC1a/HIC1b, `project-tasks-ledger.test.sh` NT9).
+  Boundary-straddling concatenation, merged-view splice, split-invocation-and-sum: none needed,
+  checked explicitly per ADR-0175 D4's warning that the three patterns are not exhaustive.
+- **Negative-shaped-check widening confirmed a third time** (D3, ADR-0175 §D3). G11's "string
+  appears nowhere" check widened to both files by inspection. W9
+  (`conductor-entry-failure-split.test.sh`) was not: it kept reading only the shrunk `SKILL.md`
+  flatten, so its check trivially passed once the sentence physically left the file, regardless of
+  the reference file's content. A green 91-file suite did not catch this. Only `plant-check.sh`'s
+  PC1 pass, on a rerun after the mechanical fixes were believed complete, surfaced it — the plant
+  reintroducing the banned text in its new home was the only thing that made the gap visible.
+- **Plant target-field drift is a distinct edit from the execution-site repoint** (D4, rule 1).
+  16 `# plant:` declarations across 5 files needed their target field moved from `SKILL.md` to the
+  new reference path separately from repointing the check itself; `plant-check.sh`'s PC2 pass
+  caught 12 stale fields on the first rerun, all in `conductor-entry-failure-split.test.sh`, where
+  the sheer count of moved call sites made it easy to fix the check but miss a plant declaration
+  living in a separate comment block far from it.
+- Full verification: `diff` of extracted body against pre-move `sed` output empty; full local
+  suite (92 files), run twice, 0 failures both times; `plant-check.sh` 626/626 plants fired,
+  PC1–PC5b clean, 634/634 assertions (two full reruns needed — first cleared PC2's stale targets,
+  second cleared PC1's W9 gap after the D3 fix); `pairs-completeness.test.sh` and
+  `fence-contract-coverage.test.sh` clean with no edit needed, both pre-widened by ADR-0172 ahead
+  of any specific extraction; `sync-to-claude.sh --dry-run` lists the new file. `autopilot/SKILL.md`
+  left unmeasured-into-action, recorded in `TODO.md` for a future pass. Detail:
+  `docs/architecture/ADR-0178-project-conductor-steps4-7-extraction.md`.

@@ -24,6 +24,9 @@ REPO=$(cd "$STAGING/.." && pwd)
 
 COMMIT_SKILL="$STAGING/plugin/skills/commit/SKILL.md"
 CONDUCTOR_SKILL="$STAGING/plugin/skills/project-conductor/SKILL.md"
+# VCS-049: Step 4 through Step 7 (H16 lives in Step 5) moved byte-identically into
+# references/steps-4-7-chain-execution.md.
+CONDUCTOR_REF="$STAGING/plugin/skills/project-conductor/references/steps-4-7-chain-execution.md"
 H16_SCRIPT="$STAGING/plugin/skills/project-conductor/scripts/h16-direction-check.sh"
 SYNCSH="$STAGING/sync-to-claude.sh"
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
@@ -347,12 +350,12 @@ fi
 # ====================================================================================
 
 # HIC1: H16 lives at the Step 5 "current_step = completed" seam, right where a feature finishes.
-if grep -q 'H16' "$CONDUCTOR_SKILL"; then
+if grep -q 'H16' "$CONDUCTOR_SKILL" "$CONDUCTOR_REF"; then
   ok "HIC1a: H16 is named in project-conductor/SKILL.md"
 else
   bad "HIC1a: H16 not found in project-conductor/SKILL.md"
 fi
-if grep -qF 'h16-direction-check.sh' "$CONDUCTOR_SKILL"; then
+if grep -qF 'h16-direction-check.sh' "$CONDUCTOR_SKILL" "$CONDUCTOR_REF"; then
   ok "HIC1b: h16-direction-check.sh is invoked from project-conductor/SKILL.md"
 else
   bad "HIC1b: h16-direction-check.sh is not referenced from project-conductor/SKILL.md"
@@ -361,7 +364,7 @@ fi
 # HIC2: attended-mode-only gating — autopilot has no human to ask (ADR-0022), so H16 must be
 # explicitly skipped when _autopilot=true.
 if grep -qF '_autopilot=false' "$CONDUCTOR_SKILL" | head -1; then :; fi
-H16_BLOCK=$(awk '/H16 — direction check/{f=1} f{print} f && /^- On success, return to Step 2\./{exit}' "$CONDUCTOR_SKILL")
+H16_BLOCK=$(awk '/H16 — direction check/{f=1} f{print} f && /^- On success, return to Step 2\./{exit}' "$CONDUCTOR_REF")
 if printf '%s' "$H16_BLOCK" | grep -qF '_autopilot=false' && printf '%s' "$H16_BLOCK" | grep -qi 'skipped when'; then
   ok "HIC2: H16 is explicitly gated to attended mode only (_autopilot=false)"
 else

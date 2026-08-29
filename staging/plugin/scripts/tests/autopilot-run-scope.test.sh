@@ -128,6 +128,7 @@ GUARD="$SCRIPTS/autopilot-guard.sh"
 DISARM="$SCRIPTS/autopilot-disarm.sh"
 NA="$SKILLS/autopilot/SKILL.md"
 PC="$SKILLS/project-conductor/SKILL.md"
+PC_REF="$SKILLS/project-conductor/references/steps-4-7-chain-execution.md"
 RUNBOOK="$REPO/docs/RUNBOOK-autopilot.md"
 SYNC="$STAGING/sync-to-claude.sh"
 
@@ -1001,7 +1002,7 @@ fi
 # plant: CG6 | plugin/skills/project-conductor/SKILL.md | echo "SCOPE-GATE: EXHAUSTED — $_delivered/$_features delivered." | echo "SCOPE-GATE: EXHAUSTED — $_delivered/$_features delivered."; touch "$_root/.claude/autopilot-state/skipped-features"
 # plant: CG7 | plugin/skills/project-conductor/SKILL.md | SCOPE-GATE: DID-NOT-RUN | SCOPE-GATE: DID_NOT_RUN
 # plant: CG8 | plugin/skills/project-conductor/SKILL.md | grep -qxF "only=$_feature" | grep -qF "only=$_feature"
-# plant: CG9 | plugin/skills/project-conductor/SKILL.md | second counter | another producer
+# plant: CG9 | plugin/skills/project-conductor/references/steps-4-7-chain-execution.md | second counter | another producer
 
 # setup_cg <root> <feature> <autopilot> -- binds the three free variables Task 8's own brief
 # declares: _root, _feature, _autopilot.
@@ -1131,7 +1132,7 @@ fi
 # the delivered counter Step 2's scope gate reads -- a behavioural-adjacent PROSE assertion, no
 # fence, planted in Task 9 (see header). Not EXTRACT_FAILED -- checked against
 # project-conductor/SKILL.md's flattened text directly.
-PC_FLAT=$(tr '\n' ' ' < "$PC" | tr -s ' ' | tr -d '`*')
+PC_FLAT=$(cat "$PC" "$PC_REF" | tr '\n' ' ' | tr -s ' ' | tr -d '`*')
 CG9_OK=1
 printf '%s' "$PC_FLAT" | grep -qi "delivered counter" || CG9_OK=0
 printf '%s' "$PC_FLAT" | grep -qi "second counter" || CG9_OK=0
