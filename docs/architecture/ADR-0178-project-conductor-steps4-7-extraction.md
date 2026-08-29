@@ -53,8 +53,8 @@ concept-to-code` moves with its content (it is the first line of the moved range
 `concept-to-code`'s single-step extractions, which kept the step heading in `SKILL.md` and pointed
 into a reference file starting at the first *sub*-heading, this move spans four step headings
 (Step 4, 5, 5b, 6A/6B, 7) with no single wrapping heading to keep, so the pointer paragraph itself
-carries the anchor: `Read \`references/steps-4-7-chain-execution.md\` when you reach Step 4 — it
-contains the full Step 4 through Step 7 content for this section.` One `PAIRS` line added to
+carries the anchor: ``Read `references/steps-4-7-chain-execution.md` when you reach Step 4 — it
+contains the full Step 4 through Step 7 content for this section.`` One `PAIRS` line added to
 `staging/sync-to-claude.sh`, next to the existing `project-conductor/SKILL.md` entry.
 
 ### D2 — ADR-0174's three mechanical patterns, reused without modification
