@@ -76,6 +76,14 @@
 #   That limit is narrowed here as a by-product; hook-verify-workflow.sh itself is
 #   deliberately NOT changed — phase 1 instruments, it does not decide.
 #
+# v1.7 (2026-08-29, VCS-044): extraction reorder only, no behaviour change. AGENT_TYPE is the
+# field that decides the common-case early bail (non-coder / orchestrator); TOOL, CWD and
+# AGENT_ID are only needed on the coder path. Extracting all four before the bail check spawned
+# 3 unnecessary jq processes on every non-coder Edit/Write/MultiEdit, which is the overwhelming
+# majority of calls into this hook. AGENT_TYPE now extracts and gates first; the rest extract
+# only once the coder path is confirmed. agent-write-scope.sh already used this shape (its own
+# header notes "the whole input" is exactly the fields the static per-type scope needs).
+#
 # v1.6 phase 2 (2026-07-29, issue #194 — THE DECISION, measured on CC 2.1.220).
 # - VERDICT: the main-session fallback STAYS. Recorded here rather than in write-scope-enforce.sh's
 #   header, which is where this hook's behaviour had been explained from until now.
@@ -161,19 +169,23 @@ command -v jq >/dev/null 2>&1 || { log_audit "?" "?" "fail-open" "jq missing"; e
 SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 [ -z "$SID" ] && { log_audit "?" "?" "fail-open" "no session_id (malformed or empty JSON)"; exit 0; }
 
-# Extract tool_name, cwd, agent_type, agent_id from payload
 # v1.1: agent_type is a first-class field in the PreToolUse payload (not in transcript).
-TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
-CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+# v1.7: extracted alone, first — it is the field that decides the bail below, and the common
+# case (non-coder or orchestrator) never needs TOOL/CWD/AGENT_ID at all.
 AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.agent_type // empty' 2>/dev/null)
-AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)
 
 # Discriminator: agent_type in payload (not subagent_type in transcript).
 # Non-coder or orchestrator (agent_type absent or != coder) → bypass silent.
 if [ "$AGENT_TYPE" != "coder" ]; then
+  TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
   log_audit "$SID" "$TOOL" "bypass-noncoder" "agent_type=$AGENT_TYPE"
   exit 0
 fi
+
+# Coder path confirmed: extract the remaining fields only now.
+TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)
 
 # Coder path: find the subagent's own jsonl for PATTERN: search.
 # v1.2: derive project dir from transcript_path in the payload (already CC-encoded).
