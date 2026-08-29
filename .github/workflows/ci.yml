@@ -29,6 +29,71 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
+      # VCS-051 / ADR-0180. Identical derivation to docs-ci.yml's two "Decide CI tier" steps —
+      # duplicated rather than shared because there is no cross-workflow `needs:`, and each
+      # workflow reads the same commit independently.
+      - name: Decide CI tier
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -u
+          CHANGED=""; HAVE_BASE=0
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_BASE_SHA:-}" ] && [ -n "${PR_HEAD_SHA:-}" ]; then
+            git fetch --no-tags --depth=50 origin "$PR_BASE_SHA" "$PR_HEAD_SHA" >/dev/null 2>&1 || true
+            if git cat-file -e "$PR_BASE_SHA" 2>/dev/null && git cat-file -e "$PR_HEAD_SHA" 2>/dev/null; then
+              CHANGED=$(git diff --name-only "$PR_BASE_SHA" "$PR_HEAD_SHA" 2>/dev/null || true)
+              HAVE_BASE=1
+            fi
+          elif [ "$EVENT_NAME" = "push" ] && [ -n "${PUSH_BEFORE_SHA:-}" ] \
+               && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=50 origin "$PUSH_BEFORE_SHA" >/dev/null 2>&1 || true
+            if git cat-file -e "$PUSH_BEFORE_SHA" 2>/dev/null; then
+              CHANGED=$(git diff --name-only "$PUSH_BEFORE_SHA" HEAD 2>/dev/null || true)
+              HAVE_BASE=1
+            fi
+          fi
+
+          if [ "$HAVE_BASE" -eq 1 ] && [ -n "$CHANGED" ]; then
+            printf '%s\n' "$CHANGED" >/tmp/ci-tier-changed.txt
+            set +e
+            CLASSIFY_OUT=$(bash staging/plugin/scripts/ci-tier.sh --classify /tmp/ci-tier-changed.txt 2>/tmp/ci-tier-classify.err)
+            CLASSIFY_RC=$?
+            set -e
+            if [ "$CLASSIFY_RC" -eq 3 ]; then
+              COMPUTED=full
+              echo "::notice::ci-tier: $(cat /tmp/ci-tier-classify.err) — treating as full"
+            else
+              COMPUTED=$(printf '%s\n' "$CLASSIFY_OUT" | grep '^TIER: ' | head -1 | cut -d' ' -f2)
+              [ -n "$COMPUTED" ] || COMPUTED=full
+            fi
+          else
+            COMPUTED=full
+            echo "::notice::ci-tier: could not determine a base for this $EVENT_NAME event (or no changed files) — treating as full"
+          fi
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            TRAILER_SRC=$(git log -1 --format=%B HEAD^2 2>/dev/null || git log -1 --format=%B HEAD 2>/dev/null || true)
+          else
+            TRAILER_SRC=$(git log -1 --format=%B HEAD 2>/dev/null || true)
+          fi
+          REQUESTED=$(printf '%s\n' "$TRAILER_SRC" | grep -oE '^CI: (docs|standard|full)$' | head -1 | cut -d' ' -f2)
+          [ -n "$REQUESTED" ] || REQUESTED=full
+
+          set +e
+          RESOLVE_OUT=$(bash staging/plugin/scripts/ci-tier.sh --resolve "$REQUESTED" "$COMPUTED" 2>/tmp/ci-tier-resolve.err)
+          set -e
+          EFFECTIVE=$(printf '%s\n' "$RESOLVE_OUT" | grep '^TIER: ' | head -1 | cut -d' ' -f2)
+          [ -n "$EFFECTIVE" ] || EFFECTIVE=full
+
+          echo "::notice::CI tier — computed=$COMPUTED requested=$REQUESTED effective=$EFFECTIVE"
+          [ -s /tmp/ci-tier-resolve.err ] && echo "::notice::$(cat /tmp/ci-tier-resolve.err)"
+
+          echo "tier=$EFFECTIVE" >> "$GITHUB_OUTPUT"
+
       # zsh is a BUILD DEPENDENCY of this job, not a convenience (issue #394, ADR-0133 R-06/R-07).
       # This job globs the SAME harness directory docs-ci.yml names file by file, so every
       # dependency of that harness is a dependency here too — a fact AIH2 in
@@ -49,4 +114,11 @@ jobs:
           zsh --version
 
       - name: Run tests
-        run: for t in staging/plugin/scripts/tests/*.test.sh; do bash "$t" || exit 1; done
+        env:
+          TIER: ${{ steps.decide.outputs.tier }}
+        run: |
+          if [ "$TIER" != "docs" ]; then
+            for t in staging/plugin/scripts/tests/*.test.sh; do bash "$t" || exit 1; done
+          else
+            echo "::notice::tests skipped (tier=docs)"
+          fi
