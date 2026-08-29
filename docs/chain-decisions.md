@@ -5374,3 +5374,51 @@ Key decisions:
   of any specific extraction; `sync-to-claude.sh --dry-run` lists the new file. `autopilot/SKILL.md`
   left unmeasured-into-action, recorded in `TODO.md` for a future pass. Detail:
   `docs/architecture/ADR-0178-project-conductor-steps4-7-extraction.md`.
+
+## Decisions from evaluating `notify_when_idle` at Gate 4 (ADR-0179)
+
+`VCS-038` speculated CC 2.1.236's `notify_when_idle` on cross-session `SendMessage` "could automate
+the 'fresh session ready' half of Gate 4's `/clear`+resume flow," but decided nothing at the time —
+carved out as `VCS-050` for a dedicated evaluation given how deliberately blocking Gate 4 was made
+(ADR-0097, the "Update 2026-05-26" correction after the orchestrator once treated
+`ready_for_implementation` as license to continue past that boundary unattended).
+
+Read what `notify_when_idle` actually does before evaluating whether it fits: it asks an
+already-running, named Claude Code session on the same machine to send one notice when it next goes
+idle — opt-in, one-shot, no polling. Read what Gate 4's "Confirmed" branch actually asks of the
+human: a two-line block (`/clear` then `/skill concept-to-code resume <manifest-path>`), typed
+manually, in the human's own time. No second session exists at the moment Gate 4 presents its
+options — it comes into being only when the human runs `/clear`.
+
+Key finding: **the primitive cannot attach to this boundary, mechanically, not by policy choice.**
+`notify_when_idle` needs a live, named target session on at least one side of the wait. At the
+instant Gate 4 fires, there is no fresh session yet to name (the human's own `/clear` creates it),
+and the current session has nothing left to notify once cleared. Neither side of the boundary
+satisfies the primitive's precondition. Checked for a narrower legitimate use before closing the
+item outright: `project-conductor`'s per-feature dispatch continues in-session with no
+background-session wait ("Immediately after concept-to-code returns (do NOT wait for user input): go
+to Step 5"), and `autopilot`/`autopilot-build` track worktree-isolated coder subagents through the
+Workflow tool's own completion signaling, not session-level idle notifications. No call site in this
+system waits on an already-running named session's idle transition.
+
+A follow-up exploratory question surfaced a narrower alternative: skip pointing
+`notify_when_idle` at Gate 4's existing flow, and instead have the current session spawn the
+resumed session itself, programmatically, then notify on that. Verified live (not from memory)
+that the primitive exists: `claude --help` documents `--bg`/`--background` ("Start the session in
+the background and return immediately... `claude agents` lists them") plus `-n`/`--name`; this
+session's own `ListAgents` call showed a `--bg`-started session as a real, addressable peer, not
+an invisible subprocess. Rejected anyway: what makes Gate 4's "Confirmed" branch a real barrier
+isn't the absence of a session to notify, it's that the human's own manual `/clear` + resume is
+the authorization act. A `Bash` call spawning that session is something the model itself could
+issue the instant "Confirmed" is clicked, collapsing the click back into license to continue
+unattended — the exact failure the 2026-05-26 correction fixed. Weighed directly: Gate 4's value
+(the only physical human re-entry point before production code is written) is high and its cost
+(manual `/clear` + resume friction) is low by comparison, so neither automation is worth adopting
+to remove that cost.
+
+Decision: do not implement `notify_when_idle` anywhere in this system, nor the
+programmatic-session-spawn alternative. Gate 4 is unchanged — no `SKILL.md` edit, no new
+automation surface at a safety-critical human boundary. This closes the avenue `VCS-038`'s note
+opened, with a verified answer rather than a speculative one, and closes the follow-up alternative
+in the same session rather than leaving it open for a future re-investigation. `VCS-050` closed.
+Detail: `docs/architecture/ADR-0179-vcs-050-notify-when-idle-gate4-evaluation.md`.
