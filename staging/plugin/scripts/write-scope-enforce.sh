@@ -1,6 +1,11 @@
 #!/bin/bash
-# write-scope-enforce v1.0 — PreToolUse gate for parallel fix agents (issue #87, ADR-0016
+# write-scope-enforce v1.1 — PreToolUse gate for parallel fix agents (issue #87, ADR-0016
 # Addendum 2026-07-25d). Denies Edit/Write/MultiEdit outside the file the agent was assigned.
+#
+# v1.1 (2026-08-29, VCS-044): extraction reorder only, no behaviour change. AGENT_ID is the
+# field that decides the common-case early bail (orchestrator, not a subagent); TOOL, TP and
+# FILE_PATH are only needed once a subagent is confirmed. AGENT_ID now extracts and gates
+# first; the rest extract only after that check passes.
 #
 # Why it exists: concept-to-code Step 6 Phase 3 dispatches fix agents in parallel, one file each.
 # Phase 2's by-file grouping bounds where the FINDINGS are, not where the EDITS land — an agent
@@ -63,13 +68,15 @@ command -v jq >/dev/null 2>&1 || { log_audit "?" "allow" "jq missing"; exit 0; }
 SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 [ -z "$SID" ] && { log_audit "?" "allow" "no session_id (malformed or empty JSON)"; exit 0; }
 
-TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
 AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)
+
+# Not a subagent — the common case. Nothing else needs extracting.
+[ -z "$AGENT_ID" ] && { log_audit "$SID" "allow" "no agent_id (orchestrator, not a subagent)"; exit 0; }
+
+TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
 TP=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
 FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 
-# Not a subagent, or nothing to decide about.
-[ -z "$AGENT_ID" ] && { log_audit "$SID" "allow" "no agent_id (orchestrator, not a subagent)"; exit 0; }
 [ -z "$FILE_PATH" ] && { log_audit "$SID" "allow" "no tool_input.file_path"; exit 0; }
 [ -z "$TP" ] && { log_audit "$SID" "allow" "no transcript_path"; exit 0; }
 
