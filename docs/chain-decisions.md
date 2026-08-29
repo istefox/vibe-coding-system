@@ -5289,4 +5289,38 @@ Key architectural decisions:
   three new TE1/TE2/TE3 plants confirmed firing individually. Detail:
   `docs/architecture/ADR-0176-tools-rules-compress-and-vendor.md`.
 
+## Decisions from merging agent-write-scope.sh into test-write-scope.sh (ADR-0177)
+
+`agent-write-scope.sh` (ADR-0041) and `test-write-scope.sh` (ADR-0049) were both `PreToolUse`
+hooks already extracting `.agent_type` alone and bailing on mismatch, but `settings.json` wired
+them as two separate entries on the same `Write|Edit|MultiEdit` matcher, so every Edit/Write/
+MultiEdit in the system — not just architect/coder dispatches — spawned two `bash`+`jq` pairs to
+reach "allow".
+
+Key decisions:
+- **`test-write-scope.sh` chosen as the surviving filename** (D1): its own `TI1-TI4` registration
+  assertions, `agent-metrics.test.sh`'s `GT0/GT1`, and 8 mentions in
+  `step5-implementation.md` all key off this exact name and needed zero edits; only
+  `architect.md`'s 2 mentions of the other file needed updating either direction.
+- **Two log directories kept separate, not unified** (D2): `$AGENT_WRITE_SCOPE_DIR` and
+  `$TEST_WRITE_SCOPE_DIR` each still write their own audit log, letting both test suites' existing
+  env-var fixtures work with zero changes beyond the new architect coverage section.
+- **Load-bearing anchor comments around the ported branch** (D3): `# --- ARCHITECT BRANCH
+  START/END ---` markers let `agent-write-scope.test.sh`'s F1 (issue #127's self-arming guard)
+  keep scoping its grep to only the ported logic via `awk`, instead of failing or passing
+  vacuously once the file legitimately contains transcript-reading code for the coder branch too.
+- **Historical record untouched** (D4, rule 14): ADR-0041, ADR-0049, and every spec/plan naming
+  either script by filename stay exactly as written; this ADR records the consolidation forward.
+- **Self-healing note inverted** (D5): `sync-to-claude.sh`'s old "please wire agent-write-scope"
+  note (fires on absence) became a "stale agent-write-scope entry" note (fires on presence),
+  since a leftover old entry in a live `settings.json` now invokes a deleted script.
+- Full verification: `agent-write-scope.test.sh` (retargeted, F1 rescoped) 15/15;
+  `test-write-scope.test.sh` (new `TN` section, `Z1` floor 46→50) 53/53; `cross-reference-form.test.sh`
+  38/38; `sync-manual-steps.test.sh` (inverted fixtures, new positive-fire `E6`/`E6b`) 48/48;
+  `agent-metrics.test.sh`/`transcript-scan-rule.test.sh`/`batch-boundary-precedence.test.sh` read
+  first, confirmed no live coupling, run clean (51/51, 14/14, 20/20); manual functional check of
+  the merged architect-deny path matches the original hook's exact reason text; full local suite
+  (91 files) `SUITE_DONE FAIL_COUNT=0`. Detail:
+  `docs/architecture/ADR-0177-merge-agent-write-scope-into-test-write-scope.md`.
+
 Detail: `docs/architecture/ADR-0174-step5-extraction-population-glob-coupling.md`.

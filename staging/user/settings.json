@@ -185,15 +185,6 @@
         ]
       },
       {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/agent-write-scope.sh"
-          }
-        ]
-      },
-      {
         "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
