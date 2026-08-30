@@ -108,6 +108,57 @@ summarise, do NOT wait for input. Your next output is a tool call. Any text here
 
 Then present the alternatives to the user and record the chosen one in `SPEC.md`.
 
+## Step 3.5 — Claude Design, optionally (VCS-052, ADR-0181)
+
+Offer, do not force: not every brief needs a generated mockup, and unlike Steps 3/4 this one
+leaves the session — the human goes to claude.ai/design and comes back. No manifest exists in
+this lane, so what Gate 1d tracks via `current_step` and `artifacts.design`, this lane tracks by
+writing `DESIGN.md` (same file, same template) and recording its path in `SPEC.md`, the way
+Step 3 already records the chosen alternative.
+
+Use `AskUserQuestion`:
+```
+question: "Generate a Claude Design (claude.ai/design) prompt for an initial visual mockup before macOS UX / the plan?\nThis requires a human in a browser on a Pro/Max/Team/Enterprise plan — there is no API."
+header: "Claude Design"
+options:
+  - label: "Yes, generate a prompt"
+    description: "Invoke claude-design-brief, write DESIGN-PROMPT.md, then bring back a shared URL"
+  - label: "No, skip"
+    description: "Proceed to Step 4 without one"
+```
+
+On "No": record nothing, proceed to Step 4.
+
+On "Yes": invoke the `claude-design-brief` skill in-session:
+```
+Use the claude-design-brief skill.
+Chain context: brief-to-app (step 3.5).
+Read first: <project-root>/BRIEF.md — the operator's own words, unedited. It outranks any summary.
+Requirements source: SPEC.md at <project-root>/SPEC.md.
+If present, also read BRAINSTORM.md at <project-root>/BRAINSTORM.md for the adopted approach.
+Compose a single copy-paste-ready Claude Design prompt and write it to
+<project-root>/DESIGN-PROMPT.md.
+Do NOT write SPEC, ADR, plan, or DESIGN.md.
+Do NOT produce a closing summary or handoff message after writing DESIGN-PROMPT.md.
+Return silently — the brief-to-app orchestrator continues immediately after.
+```
+
+**CRITICAL — lane continuation (no stop):** the Skill tool has returned. Do NOT emit text, do NOT
+summarise, do NOT wait for input. Your next output is the message below.
+
+Emit: "Prompt written ✓ — <project-root>/DESIGN-PROMPT.md. Go to claude.ai/design
+(Pro/Max/Team/Enterprise plan required), paste the fenced block, ask for N screens, and share
+with link access. Paste the shared URL back here when ready." Then wait for the operator to paste
+the URL, in this same conversation.
+
+On the pasted URL: run `bash ~/.claude/skills/concept-to-code/scripts/design-url-check.sh --url
+<url>` (shape only, never fetched — see the checker's own contract; exit 3 means the check did
+not run, record `did-not-run` rather than silently `valid`). Write `<project-root>/DESIGN.md`
+with the same structure the chain's Gate 1d writes (Source / Shared URL / URL shape check /
+Captured / Prompt / Local export / Handoff bundle / `## Screens` / `## Binding decisions` /
+`## Not decided here`), filled from whatever the operator transcribes. Then add one line to
+`SPEC.md` recording the path: `Design: DESIGN.md (from claude.ai/design)`.
+
 ## Step 4 — macOS UX, conditionally
 
 Run the detector rather than judging by eye — it strips code spans and table rows first, which is

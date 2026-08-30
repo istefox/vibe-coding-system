@@ -26,7 +26,7 @@
 # An assertion whose plant does not fire pins nothing. Format and rationale: plant-check.sh.
 # plant: GR4 | plugin/skills/concept-to-code/references/hitl-gates.md | Trigger: post Step 5 (coder complete), `current_step = step_6_review` | Trigger: post Step 5 (coder complete), `current_step = gate_5_review_decision`
 # plant: GR3 | plugin/scripts/tests/transition-pair-count.sh | STATS_TOTAL="$TOTAL_D" | STATS_TOTAL="999"
-# plant: GR3b | plugin/skills/concept-to-code/SKILL.md | Legal transition pairs (45 total — 25 standard + 6 express + 14 hybrid | Legal transition pairs (46 total — 25 standard + 6 express + 14 hybrid
+# plant: GR3b | plugin/skills/concept-to-code/SKILL.md | Legal transition pairs (51 total — 28 standard + 6 express + 17 hybrid | Legal transition pairs (52 total — 28 standard + 6 express + 17 hybrid
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -100,10 +100,10 @@ gr3_stats="$(bash "$PTC" "$TR" "$CC" 2>&1 >/dev/null)"
 gr3_rc=$?
 ACTUAL="$(printf '%s\n' "$gr3_stats" | grep -o 'pairs=[0-9]*' | head -1 | cut -d= -f2)"
 ACTUAL="${ACTUAL:-0}"
-if [ "$ACTUAL" -eq 45 ]; then
-  ok "GR3 transition-pair-count.sh (the shared derivation, not a local recount) reports 45 distinct pairs (49 minus the four unreachable ones)"
+if [ "$ACTUAL" -eq 51 ]; then
+  ok "GR3 transition-pair-count.sh (the shared derivation, not a local recount) reports 51 distinct pairs (45 plus the six Gate 1d/H1d pairs, VCS-052)"
 else
-  bad "GR3 transition-pair-count.sh reports $ACTUAL pairs, expected 45"
+  bad "GR3 transition-pair-count.sh reports $ACTUAL pairs, expected 51"
 fi
 
 # GR3b REPLACES the old `>= 3` line-floor over an OR'd needle set (ADR-0120 D-C: a floor over

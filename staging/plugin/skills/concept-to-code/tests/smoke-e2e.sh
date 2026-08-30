@@ -136,7 +136,12 @@ M6="$PROJ6/docs/manifests/$(date +%Y-%m-%d)-macos-ux-path.manifest.yml"
 # Verify ux_blueprint: null line exists in manifest (manifest-init.sh write)
 grep -q '^  ux_blueprint: null' "$M6" \
   || fail "macos-ux" "ux_blueprint not in manifest artifacts"
-echo "[smoke] macos-ux-path init OK M6=$M6 (ux_blueprint field present)" >&2
+# Verify design_prompt/design: null lines exist too (Gate 1d, manifest-init.sh write)
+grep -q '^  design_prompt: null' "$M6" \
+  || fail "macos-ux" "design_prompt not in manifest artifacts"
+grep -q '^  design: null' "$M6" \
+  || fail "macos-ux" "design not in manifest artifacts"
+echo "[smoke] macos-ux-path init OK M6=$M6 (ux_blueprint/design_prompt/design fields present)" >&2
 
 bash "$TRN" "$M6" step_1_interview >/dev/null 2>&1 || fail "macos-ux" "0->1 rejected"
 bash "$TRN" "$M6" gate_1_spec_review >/dev/null 2>&1 || fail "macos-ux" "1->g1 rejected"

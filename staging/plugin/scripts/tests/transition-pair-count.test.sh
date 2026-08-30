@@ -112,22 +112,22 @@ FX_RENAMED="$TMP/tr-renamed.sh"
 lit_replace "$REAL_TR" 'PAIRS="$(mktemp)"' 'PAIRSX="$(mktemp)"' >"$FX_RENAMED"
 
 FX_COMMENT_WRONG="$TMP/tr-comment-wrong.sh"
-lit_replace "$REAL_TR" '45 transitions)' '46 transitions)' >"$FX_COMMENT_WRONG"
+lit_replace "$REAL_TR" '51 transitions)' '52 transitions)' >"$FX_COMMENT_WRONG"
 
 FX_HDR_WRONG="$TMP/skill-hdr-wrong.md"
-lit_replace "$REAL_SKILL" '(45 total — 25 standard + 6 express + 14 hybrid' \
-  '(46 total — 25 standard + 6 express + 14 hybrid' >"$FX_HDR_WRONG"
+lit_replace "$REAL_SKILL" '(51 total — 28 standard + 6 express + 17 hybrid' \
+  '(52 total — 28 standard + 6 express + 17 hybrid' >"$FX_HDR_WRONG"
 
 FX_HELPER_WRONG="$TMP/skill-helper-wrong.md"
-lit_replace "$REAL_SKILL" 'atomically (45 pairs).' 'atomically (46 pairs).' >"$FX_HELPER_WRONG"
+lit_replace "$REAL_SKILL" 'atomically (51 pairs).' 'atomically (52 pairs).' >"$FX_HELPER_WRONG"
 
 FX_SUM_WRONG="$TMP/skill-sum-wrong.md"
-lit_replace "$REAL_SKILL" '(45 total — 25 standard + 6 express + 14 hybrid' \
-  '(45 total — 20 standard + 6 express + 14 hybrid' >"$FX_SUM_WRONG"
+lit_replace "$REAL_SKILL" '(51 total — 28 standard + 6 express + 17 hybrid' \
+  '(51 total — 20 standard + 6 express + 17 hybrid' >"$FX_SUM_WRONG"
 
 FX_STD_WRONG="$TMP/skill-std-wrong.md"
-lit_replace "$REAL_SKILL" '(45 total — 25 standard + 6 express + 14 hybrid' \
-  '(45 total — 20 standard + 11 express + 14 hybrid' >"$FX_STD_WRONG"
+lit_replace "$REAL_SKILL" '(51 total — 28 standard + 6 express + 17 hybrid' \
+  '(51 total — 20 standard + 14 express + 17 hybrid' >"$FX_STD_WRONG"
 
 # ===========================================================================
 # TC0 — denominator guard (ADR-0085): every fixture actually differs from its unmutated source.
@@ -186,17 +186,17 @@ fi
 # TC3 — the stderr statistics line is printed on every run, naming pairs/standard/express/hybrid.
 # ===========================================================================
 _stats="$(flat "$REAL_ERR")"
-if printf '%s' "$_stats" | grep -q 'pairs=45' \
-   && printf '%s' "$_stats" | grep -q 'standard=25' \
+if printf '%s' "$_stats" | grep -q 'pairs=51' \
+   && printf '%s' "$_stats" | grep -q 'standard=28' \
    && printf '%s' "$_stats" | grep -q 'express=6' \
-   && printf '%s' "$_stats" | grep -q 'hybrid=14'; then
-  ok "TC3 stderr states pairs=45 standard=25 express=6 hybrid=14"
+   && printf '%s' "$_stats" | grep -q 'hybrid=17'; then
+  ok "TC3 stderr states pairs=51 standard=28 express=6 hybrid=17"
 else
   bad "TC3 stderr does not state the expected statistics line: [$REAL_ERR]"
 fi
 
 # ===========================================================================
-# TC4 — duplicate pair line: derived count stays 45 (DISTINCT), not 46.
+# TC4 — duplicate pair line: derived count stays 51 (DISTINCT), not 52.
 # ===========================================================================
 run_checker "$FX_DUP" "$REAL_SKILL"
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
@@ -206,7 +206,7 @@ else
 fi
 
 # ===========================================================================
-# TC5 — pair-shaped echo OUTSIDE the block: stays 45 (BOUNDED), not 46.
+# TC5 — pair-shaped echo OUTSIDE the block: stays 51 (BOUNDED), not 52.
 # ===========================================================================
 run_checker "$FX_OUTSIDE" "$REAL_SKILL"
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
@@ -216,12 +216,12 @@ else
 fi
 
 # ===========================================================================
-# TC6 — one genuinely new pair: becomes 46; findings reported (exit 1) because the three
-# literals still say 45.
+# TC6 — one genuinely new pair: becomes 52; findings reported (exit 1) because the three
+# literals still say 51.
 # ===========================================================================
 run_checker "$FX_NEWPAIR" "$REAL_SKILL"
 if [ "$RC" -eq 1 ] && [ -n "$OUT" ]; then
-  ok "TC6 a genuinely new pair moves the count to 46 and is reported as a finding"
+  ok "TC6 a genuinely new pair moves the count to 52 and is reported as a finding"
 else
   bad "TC6 new-pair fixture: rc=$RC stdout=[$OUT] — expected rc=1 with a non-empty finding"
 fi
@@ -276,7 +276,7 @@ fi
 run_checker "$REAL_TR" "$FX_HELPER_WRONG"
 _o10="$(flat "$OUT")"
 if [ "$RC" -eq 1 ] && printf '%s' "$_o10" | grep -q 'atomically'; then
-  ok "TC10 a wrong (45 pairs) helper line is reported, naming that site"
+  ok "TC10 a wrong (51 pairs) helper line is reported, naming that site"
 else
   bad "TC10 wrong-helper-line fixture: rc=$RC stdout=[$OUT] — expected rc=1 naming 'atomically'"
 fi

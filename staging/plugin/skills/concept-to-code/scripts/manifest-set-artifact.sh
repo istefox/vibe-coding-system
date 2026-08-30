@@ -3,7 +3,7 @@
 # Atomically set an artifacts.<key> field in a manifest, avoiding the
 # "file modified since read" error caused by mixing bash writes + Edit-tool writes.
 # Usage: manifest-set-artifact.sh <manifest-path> <key> <value>
-#   key in {spec, brainstorm, ux_blueprint, adr, arch, plan, project_claude_md}
+#   key in {spec, brainstorm, ux_blueprint, design_prompt, design, adr, arch, plan, project_claude_md}
 # Exit: 0 ok | 1 usage | 2 not found | 3 key not present | 4 write failed
 set -u
 

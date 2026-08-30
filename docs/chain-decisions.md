@@ -5484,3 +5484,91 @@ green through both workflow edits; `fence-contract-coverage.test.sh`'s F4 requir
 fence's extraction pattern to carry the marker's full literal text (`fence-contract: <id> -->`),
 not just its id, to count as run. `VCS-051` closed. Detail:
 `docs/architecture/ADR-0180-051-ci-tier-selection.md`.
+
+## Decisions from adding Gate 1d — Claude Design (ADR-0181)
+
+Every output this system produced looked structurally alike, because nothing in the chain carried a
+visual-design artifact through to the coder. Gate 1b's `BRAINSTORM.md` is about approach, not
+appearance, and says so; Gate 1c's `UX-BLUEPRINT.md` is structure only and macOS-only; both are read
+once, by the architect at Step 2, and never again — `grep` found zero occurrences of either filename
+in `references/step5-implementation.md` before this change. Claude Design (claude.ai/design) has no
+public API — a human pastes a prompt in and copies a result out — so the integration had to be a
+two-phase, resumable gate, modeled on Gate 2c's external-dependency pause.
+
+**The gate ships with no detector, and that is the inverse of Gate 1c's own recorded mistake.**
+ADR-0093 measured Gate 1c's macOS detector firing on meta-SPECs in this very repo and never on a
+real macOS app. Here the dangerous direction is inverted: a false negative would hide the very gate
+a user asked for. An always-offered gate defaulting to "No" costs one click and makes no claim about
+the SPEC, so there is nothing about it to be wrong. `concept-to-code-bsd-autopilot-gates.test.sh`'s
+`gate_ids()` heading regex was read before the heading was written, not after — the Gate 1d heading
+matches it exactly, at column 0, confirmed by a planted assertion (C0) rather than by inspection.
+
+**Reaching the coder was the crux — the exact place Gates 1b/1c had already failed.** Two coder
+dispatch templates exist in `references/step5-implementation.md`; editing only one of them is
+precisely the omission that left Gate 1b/1c's artifacts unread past Step 2. Both were widened, and
+CD4's plant targets the coder-facing (non-tester) template specifically — the tester-only template
+was confirmed, in the negative direction (rule 8), to still carry no design-read line, since design
+context serves implementation, not test-writing. The actual enforcement, `design-coverage.sh`,
+checks that every `DESIGN.md` `## Screens` row is cited by at least one plan task at Gate 2 — a
+CHECKER (rule 5) with a denominator guard (rule 7): a table parsing to zero rows exits 3, never a
+clean pass, proven by CD2's plant rather than by inspection. Everything upstream of that CHECKER —
+the architect honoring Binding decisions, the coder actually reading `DESIGN.md`, the human pasting
+the URL of the design they actually made — stays an INSTRUCTION (rule 16), stated plainly as a
+negative consequence rather than implied to be enforced.
+
+**`design-url-check.sh` never fetches the pasted URL.** The resource is org-scoped and login-walled:
+a fetch would return 401/404 for a perfectly valid link, and a 200 would prove nothing about the
+design's content either way. Shape only (`^https://claude\.ai/`), and the checker's own header states
+that shape validity is neither existence nor correctness — the real validation is the human who
+pasted it. CD1's plant targets the DID-NOT-RUN exit (rule 4): no `--url` given must exit 3, never
+silently proceed as if a URL had been checked and found valid.
+
+**A pre-existing, unrelated-to-VCS-052-in-origin defect had to be fixed first, because this feature
+would have shipped broken on its first real run otherwise.** The 5.0.1 pre-flight fence classified a
+dirty tree via an arm naming only `SPEC`/`ADR`/`PLAN`/`CLAUDE.md` — `BRAINSTORM.md` and
+`UX-BLUEPRINT.md` were in neither that arm nor Gate 4.0's `--include` list, so a chain that had run
+Gate 1b or 1c left a root artifact classified `PREFLIGHT_OTHER`, whose printed remediation
+(`git stash push -u`) would have stashed the design brief. Fixed by widening the fence's `export`
+prologue and `case` arm to all four artifacts, verifying an empty `_REL` variable cannot spuriously
+match a non-empty `$f` — proven executed, not just read, by `recovery-preflight.test.sh`'s RJ-series
+after two of its own fixtures (RI4's hardcoded `--include` literal, RJ1's sed-based pre-#239-bug
+reconstruction) were updated to match the new widened text they had been asserting against.
+
+**Needle uniqueness for four of the seven plants (CD1, CD2, CD4, CD7) required correction before
+`plant-check.sh` ever ran**, found by simulating `plant-check.sh`'s own exactly-one-match regex
+directly rather than trusting the plan's illustrative placeholder needles: "exit 3" matched twice in
+`design-url-check.sh` (comment and code); the coverage script's zero-row guard needed the literal
+quoted-variable text `rows" -eq 0`, not the unquoted form; CD4's needle needed widening into the
+unique marker text immediately following the coder-facing template's occurrence, since the identical
+design-read line appears at two sites by design; CD7's needle needed a full-sentence span since
+`DESIGN-PROMPT.md` alone appears eight-plus times in the new skill's own file.
+
+**One implementation defect surfaced only by actually running the harness, not by writing it.**
+`claude-design-gate.test.sh`'s CD7 plant embeds a literal backtick inside a Python needle string
+inside a `<<'PY'`-quoted heredoc nested inside a `$(...)` command substitution — bash's own
+command-substitution parser scans heredoc bodies for backtick-pairing even when the delimiter is
+quoted, and a single unpaired backtick in that exact nesting broke `bash -n` with a misleading
+unmatched-single-quote error pointed at the wrong line entirely. Fixed by constructing the backtick
+via `chr(96)` in the Python needle instead of writing it literally, so the
+heredoc body carries no raw backtick byte at all — confirmed via a minimal, isolated reproduction
+before touching the real file. A second, purely cosmetic defect (A5's `curl|wget|fetch` network-
+primitive check matching the checker's own explanatory comment, which legitimately uses the word
+"fetch" to say the script does not) was fixed by scoping the check to non-comment lines only.
+
+Verification: `transition-pair-count.sh` reports `pairs=51 standard=28 express=6 hybrid=17
+literals=3 findings=0`; the full local suite (94 harnesses under
+`staging/plugin/scripts/tests/*.test.sh`) 0 failures; `plant-check.sh` PASS=642 FAIL=0, PC1 "634 of
+634 declarations run" (covering CD1-CD7 among the total — a NOFIRE among them would have reported
+fewer than 634), PC2-PC5b clean; `pairs-completeness.test.sh` 333/333 (up from 328, confirming both
+the four new `sync-to-claude.sh` PAIRS entries and the new harness's `docs-ci.yml` registration);
+`litter-discipline.test.sh` 30/30 unaffected; `sync-to-claude.sh --dry-run` and `markdownlint-cli2`
+both clean. `concept-to-code/tests/smoke-e2e.sh` remains red at the same pre-existing, unrelated
+transition (`gate_1_spec_review->step_2_architecture`, one of ADR-0099's six originally-whitelisted
+gate-approval pairs, dated to commit `e552ed7` a week before this change) that it was red at before
+this session touched it — confirmed by `git log`/`git merge-base --is-ancestor` that the enforcement
+predates and the smoke test never calls `manifest-set-gate.sh` to satisfy it; the test dies before
+ever reaching this change's own two added manifest-key assertions, which stay unexercised by this
+harness as a result. One item from the plan's own verification list — a live end-to-end run pasting
+a real claude.ai/design URL — needs a human in a browser and was not attempted; the plan named this
+limitation before implementation started. `VCS-052` closed. Detail:
+`docs/architecture/ADR-0181-claude-design-gate-1d.md`.
