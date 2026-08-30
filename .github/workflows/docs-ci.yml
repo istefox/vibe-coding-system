@@ -102,12 +102,17 @@ jobs:
             echo "::notice::ci-tier: could not determine a base for this $EVENT_NAME event (or no changed files) — treating as full"
           fi
 
-          # The CI: trailer, read from the actually authored commit — HEAD^2 for pull_request
-          # (checkout's synthetic merge commit's OWN message is "Merge ... into ...", never the
-          # trailer; its second parent is the real PR head), HEAD directly for push. Falls back to
-          # full the same way an absent/unparseable trailer already does.
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            TRAILER_SRC=$(git log -1 --format=%B HEAD^2 2>/dev/null || git log -1 --format=%B HEAD 2>/dev/null || true)
+          # The CI: trailer, read from the actually authored commit — $PR_HEAD_SHA for
+          # pull_request (checkout's synthetic merge commit's OWN message is "Merge ... into ...",
+          # never the trailer; $PR_HEAD_SHA is the real PR head commit's absolute SHA, already
+          # fetched and cat-file-verified above for the changed-file diff, so no extra fetch is
+          # needed here). HEAD^2 was tried first (VCS-053) and never resolves: the checkout above
+          # is shallow (fetch-depth 1, no parent commits), so relative addressing through the
+          # merge commit's un-fetched parent silently fails and falls back to the merge commit's
+          # own message. HEAD directly for push. Falls back to full the same way an
+          # absent/unparseable trailer already does.
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_HEAD_SHA:-}" ] && git cat-file -e "$PR_HEAD_SHA" 2>/dev/null; then
+            TRAILER_SRC=$(git log -1 --format=%B "$PR_HEAD_SHA" 2>/dev/null || true)
           else
             TRAILER_SRC=$(git log -1 --format=%B HEAD 2>/dev/null || true)
           fi
@@ -213,8 +218,8 @@ jobs:
             echo "::notice::ci-tier: could not determine a base for this $EVENT_NAME event (or no changed files) — treating as full"
           fi
 
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            TRAILER_SRC=$(git log -1 --format=%B HEAD^2 2>/dev/null || git log -1 --format=%B HEAD 2>/dev/null || true)
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_HEAD_SHA:-}" ] && git cat-file -e "$PR_HEAD_SHA" 2>/dev/null; then
+            TRAILER_SRC=$(git log -1 --format=%B "$PR_HEAD_SHA" 2>/dev/null || true)
           else
             TRAILER_SRC=$(git log -1 --format=%B HEAD 2>/dev/null || true)
           fi
@@ -259,7 +264,7 @@ jobs:
         run: |
           set -e
           if [ "$TIER" != "docs" ]; then
-            for t in phase1 prep hook-probe hook-verify-workflow pairs-completeness clean-public-repo-history-safety concept-to-code-bsd-autopilot-gates concept-to-code-manifest-helpers-guards scope-guards refactor-snapshot-deep-refactor claude-md-slim-content-union-whole-line hook-hardening skill-text-corrections agent-tool-scoping post-write-check step5-checkpoint-review step6-effort-pin workflow-dispatch-pins sync-manual-steps write-scope-enforce agent-write-scope agent-command-scope secret-dep-gate weakening-wiring spec-coverage test-write-scope recovery-preflight reward-hack-detectors diff-budget-scope interface-immutability project-ci-checks proportional-audit-depth sast-security-audit tracer-bullet-probe precompact-occupancy untrusted-input external-dependency-gate human-gate-coverage litter-discipline canonical-mechanism agent-metrics licence-provenance accessibility-i18n worktree-isolation-contract agent-tool-parameter-names plan-task-count pattern-enforce-transcript-source macos-detect manifest-field-state transcript-scan-rule manifest-project-root-terminal cross-reference-form fence-contract-coverage skill-coverage-perimeter triage-state-gitignore transition-producer spec-archive gate4-implementation-axes gate0-recommendation hitl-gate-audit-trail batch-dispatch-openers batch-boundary-precedence gate2b-trust-probe recovery-baseline-rebase step7-snapshot-collapse gate5-state-removal spec-pointer-archive manifest-entry-state permission-mode-state conductor-entry-failure-split autopilot-guard-disarm required-checks-audit transition-pair-count autopilot-run-scope skill-fence-positional-tokens prep-row-select commit-transition-order claude-md-condensation stop-gate-path-predicate dispatch-completion acceptance-contract plant-registry-parallel harness-helper-scope brief-to-app project-tasks-ledger session-context-inject spec-coverage-baseline-bump autopilot-disarm-scope-preserve commit-outcome-backstop worktree-git-guardrail instructions-loaded tools-rule-evidence-anchors ci-tier claude-design-gate; do
+            for t in phase1 prep hook-probe hook-verify-workflow pairs-completeness clean-public-repo-history-safety concept-to-code-bsd-autopilot-gates concept-to-code-manifest-helpers-guards scope-guards refactor-snapshot-deep-refactor claude-md-slim-content-union-whole-line hook-hardening skill-text-corrections agent-tool-scoping post-write-check step5-checkpoint-review step6-effort-pin workflow-dispatch-pins sync-manual-steps write-scope-enforce agent-write-scope agent-command-scope secret-dep-gate weakening-wiring spec-coverage test-write-scope recovery-preflight reward-hack-detectors diff-budget-scope interface-immutability project-ci-checks proportional-audit-depth sast-security-audit tracer-bullet-probe precompact-occupancy untrusted-input external-dependency-gate human-gate-coverage litter-discipline canonical-mechanism agent-metrics licence-provenance accessibility-i18n worktree-isolation-contract agent-tool-parameter-names plan-task-count pattern-enforce-transcript-source macos-detect manifest-field-state transcript-scan-rule manifest-project-root-terminal cross-reference-form fence-contract-coverage skill-coverage-perimeter triage-state-gitignore transition-producer spec-archive gate4-implementation-axes gate0-recommendation hitl-gate-audit-trail batch-dispatch-openers batch-boundary-precedence gate2b-trust-probe recovery-baseline-rebase step7-snapshot-collapse gate5-state-removal spec-pointer-archive manifest-entry-state permission-mode-state conductor-entry-failure-split autopilot-guard-disarm required-checks-audit transition-pair-count autopilot-run-scope skill-fence-positional-tokens prep-row-select commit-transition-order claude-md-condensation stop-gate-path-predicate dispatch-completion acceptance-contract plant-registry-parallel harness-helper-scope brief-to-app project-tasks-ledger session-context-inject spec-coverage-baseline-bump autopilot-disarm-scope-preserve commit-outcome-backstop worktree-git-guardrail instructions-loaded tools-rule-evidence-anchors ci-tier ci-tier-workflow-decide claude-design-gate; do
               printf '::group::%s\n' "$t"
               bash "staging/plugin/scripts/tests/$t.test.sh"
               printf '::endgroup::\n'

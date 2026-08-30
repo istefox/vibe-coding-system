@@ -135,3 +135,20 @@ never one added silently after Step 4's click.
 - `--paths`/`--paths-ignore` trigger-level filtering, the markdownlint/links jobs, `VCS-029`
   (stacked-PR base-branch check gap), and `docs-ci.yml:46`'s shard-count comment are explicitly
   out of scope for this change.
+
+## Correction (2026-08-30)
+
+The trailer-read half of each `Decide CI tier` step shipped with a latent bug on `pull_request`
+events: `HEAD^2` (meant to reach the real PR head commit past the synthetic merge commit
+`actions/checkout` produces) cannot resolve under the default shallow checkout (`fetch-depth` 1,
+no parent commits fetched), so the read silently failed and fell back to the merge commit's own
+auto-generated message — `REQUESTED` was always empty, `full` on every PR regardless of the
+declared trailer. Confirmed live on PR #533 and #534 (`computed=docs requested=full
+effective=full`); the trailer itself was written correctly both times. Filed as VCS-053, fixed by
+reading `git log -1 --format=%B "$PR_HEAD_SHA"` instead of `HEAD^2` — the same absolute SHA the
+step already fetches and validates earlier in its own body for the changed-file diff, so no
+checkout-depth or fetch-pattern change was needed. New `ci-tier-workflow-decide.test.sh` extracts
+and executes each of the three call sites' `run:` bodies against fixture git sandboxes rather than
+grepping their text, closing the test-class gap this ADR's own "Negative, stated plainly" section
+flagged only generically (as unverified base-SHA/merge-base resolution, never naming the trailer
+read specifically as sharing the same shallow-checkout exposure).
