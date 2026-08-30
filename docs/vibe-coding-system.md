@@ -1485,6 +1485,36 @@ Five shipped features flagged by `VCS-038` for adoption evaluation, decided indi
 Two items (the cap correction, `notify_when_idle` deferral) are informational-only for `VCS-038`'s
 closure; no `settings.json`, hook, or agent-frontmatter change was made by this pass.
 
+### Correction 2026-08-30 (VCS-055, sub-agent persistent memory re-verified live)
+
+Stefano asked whether `code.claude.com/docs/en/sub-agents`'s persistent-memory section is correctly
+implemented here. It was not, on three independent counts, and the ADR-0038 line 681 restates
+("coder's `memory: local` Memory tool (pilot P1) is observed inert") no longer holds — that
+observation is from 2026-07-14 (CC 2.1.209), left uncorrected in place per rule 14, and superseded
+here.
+
+A read-only diagnostic dispatch of `coder` on 2026-08-30 (CC 2.1.251) returned a full
+`# Persistent Agent Memory` system-prompt block, confirming the feature is live, not inert, on the
+currently installed build. But: no tool named `Memory` exists in any build (this repo's own
+frontmatter and prose invented that name); `memory:` genuinely auto-enables Read/Write/Edit as the
+official docs state; and the memory path resolved *inside* coder's ephemeral
+`isolation: worktree` sandbox (`.claude/worktrees/agent-<id>/.claude/agent-memory-local/coder/`),
+so nothing written there ever survived past the dispatch that wrote it — the two frontmatter fields
+defeat each other by construction. §3.9's field reference above is corrected in place (not a dated
+record); the coder example in §3.2 and its 2026-05-29 deployment note are left as the historical
+record and superseded by a new dated note; `memory: local` and the invented "Memory tool" prose are
+removed from the deployed/staging `coder.md` (VCS-055 Phase 1).
+
+This does not reopen ADR-0012 vs ADR-0013: ADR-0013's native-memory migration remains **Rejected
+after pilot (2026-05-25)** — a different agent (architect) wrote outside its sandbox into the
+curated orchestrator auto-memory during that pilot, a failure mode this correction does not touch.
+ADR-0038's own closing line — *"a follow-up issue should either re-platform or retire the Memory
+pilot rather than leave it silently dead"* — is discharged here by retiring it on coder. A guarded
+re-pilot on `reviewer` (no worktree, `project` scope, gated behind a new PreToolUse hook denying
+sub-agent writes into the curated auto-memory store) is tracked separately as VCS-055 Phase 2, with
+any adoption decision requiring a new ADR before wider rollout. Full record: `docs/architecture/
+ADR-0038-63-native-build-agent-tool-resolution.md` §Correction (2026-08-30).
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
@@ -1712,7 +1742,6 @@ tools: Read, Edit, Write, Glob, Grep, Bash
 model: sonnet
 isolation: worktree
 effort: medium
-memory: local
 ---
 
 You are a senior implementation engineer.
@@ -1728,11 +1757,16 @@ Your job:
 
 Stack rules come from project CLAUDE.md and .claude/rules/. Read them before writing.
 Run in an isolated worktree to avoid conflicts with other parallel coders.
-Use the Memory tool (not Edit/Write) to persist context across batches — task completion status, discovered patterns, key decisions. Store sparingly; prefer the return report for anything that fits there.
 ```
 
 > **Deployment note (2026-05-26):** `isolation: worktree` is now active in the deployed file `~/.claude/agents/coder.md`.
 > **Deployment note (2026-05-29):** `memory: local` added. Coder gets a Memory tool scoped to `.claude/agent-memory-local/coder/`. Safety note: `memory:local` adds a dedicated Memory tool; coder must use ONLY that tool for memory writes — never Edit/Write on `.claude/` paths. The pattern-enforce hook (ADR-0001) gates all Edit/Write calls, providing an additional guardrail. See ADR-0016 §Smoke Test and ADR-0012 for memory architecture context.
+> **Deployment note (2026-08-30, VCS-055 / ADR-0038 Correction):** `memory: local` removed from the
+> deployed file. There never was a "Memory tool" — `memory:` auto-enables the ordinary Read/Write/Edit
+> tools, and this scope resolved *inside* coder's `isolation: worktree` sandbox, so nothing written to
+> it ever persisted past the dispatch. The 2026-05-29 note above is left as the historical record of
+> what was believed and shipped at the time; it is superseded, not corrected in place. Coder's
+> cross-batch continuity is its return report, as it was in practice regardless of this field.
 
 ### 3.3 reviewer
 
@@ -1895,6 +1929,13 @@ Patterns to apply:
 Update your memory with refactoring patterns successful in this codebase.
 ```
 
+> **Deployment note (2026-08-30, ADR-0038 Correction):** `memory: project` on reviewer, debugger and
+> refactorer (shown above) stays absent from the deployed/staging agents, same as architect's own
+> deployment note at 3.6 — superseded by ADR-0012/ADR-0013, not reintroduced. ADR-0012's
+> orchestrator-mediated `DURABLE NOTES:` mechanism is what actually runs on these three agents today.
+> A guarded re-pilot of native `memory:` on reviewer is planned (VCS-055 Phase 2), gated on an
+> explicit adoption decision before any wider rollout.
+
 ### 3.8 researcher
 
 File: `~/.claude/agents/researcher.md`
@@ -1950,7 +1991,7 @@ Return a concise brief, not an essay. The orchestrator decides what to act on.
 | `memory` | `local` / `project` / `user` | Persistent memory scope for this agent |
 | `mcpServers` | YAML list | Inline MCP server definitions scoped to this agent |
 
-**`memory: local`** scopes memory to `.claude/agent-memory-local/<name>/` — git-ignored, NOT the curated orchestrator auto-memory. The agent gets a dedicated Memory tool. All Edit/Write operations still go through the normal tool gate (pattern-enforce hook for coder). Use Memory tool only for memory writes, never Edit/Write on `.claude/` paths.
+**`memory` scopes** (verified live, CC 2.1.251, 2026-08-30): `user` → `~/.claude/agent-memory/<name>/`, `project` → `.claude/agent-memory/<name>/` (shareable via version control, the official-docs recommended default), `local` → `.claude/agent-memory-local/<name>/` (git-ignored). None of these is the curated orchestrator auto-memory. Setting `memory` **auto-enables Read/Write/Edit** on the agent — there is no separate "Memory tool"; the agent writes its `MEMORY.md` with the ordinary `Write`/`Edit` tools. The first 200 lines or 25KB of that `MEMORY.md` are auto-loaded into the agent's system prompt at dispatch. The field has no effect when auto memory is disabled (`autoMemoryEnabled: false` in settings, or `CLAUDE_CODE_DISABLE_AUTO_MEMORY`). **Interaction with `isolation: worktree`:** `local` and `project` scope resolve *inside* the worktree path, so anything written there is deleted with the worktree and never persists across dispatches — `memory` on a worktree-isolated agent needs `user` scope to survive, or should not be combined with `isolation: worktree` at all. See ADR-0038 Correction (2026-08-30) and ADR-0012/ADR-0013 for why this repo currently runs no agent with `memory:` set.
 
 **`mcpServers` scoping rule:** general-purpose MCPs (github, sequential-thinking) stay global (settings.json or plugins). Domain-specific MCPs (project-specific databases, APIs, Figma tokens) go in the agent's frontmatter — this avoids polluting every session with servers only one agent needs, and makes the agent self-contained when shared across repos.
 
