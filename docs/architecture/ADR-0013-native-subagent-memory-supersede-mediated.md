@@ -387,3 +387,17 @@ DURABLE NOTES:
 - [decision] For non-checked-in agent memory use `memory: local` scope (.claude/agent-memory-local/), not `project` (checked-in -> re-introduces ADR-0012 tree pollution) nor `user` (cross-project -> semantically wrong for project-specific memory).
 - [tradeoff] The native `memory:` auto-enables Write/Edit even on read-only agents (e.g. reviewer): acceptable because confined to the memory dir, but it is an explicit concession relative to ADR-0012 "sub-agent sees only text in/out" discipline.
 - [robustness] The native resolves the encoded path internally (scope->path), eliminating the fragile `tr '/' '-'` (ADR-0004/0009 PRIOR NOTE) instead of confining it to the orchestrator as B-mediated did.
+
+## Correction (2026-08-30)
+
+VCS-055 Phase 2 (`memory-store-guard.sh`, a PreToolUse hook denying any sub-agent write into the
+orchestrator's curated auto-memory store) closed exactly the failure mode this ADR's pilot hit.
+A guarded re-pilot of `memory: project` on `reviewer` then ran successfully, and the [tradeoff]
+note above — "acceptable because confined to the memory dir" — was tested live and found **false
+as an assumption**: `memory:` grants unscoped Write/Edit at the tool-schema level with no path
+restriction; the pilot's observed confinement was the agent's own behavior, not a structural
+guarantee. `reviewer-write-scope.sh` (new) now enforces that confinement structurally. See
+**ADR-0182** (`docs/architecture/ADR-0182-native-memory-adopted-on-reviewer.md`) for the full
+decision: native memory is adopted on `reviewer` only; `architect` and `debugger` remain on
+ADR-0012, unaffected by this correction. This note records the outcome going forward; the ADR's
+original text above is left as the correct snapshot of its own day (rule 14).

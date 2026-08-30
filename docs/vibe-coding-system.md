@@ -1935,6 +1935,16 @@ Update your memory with refactoring patterns successful in this codebase.
 > orchestrator-mediated `DURABLE NOTES:` mechanism is what actually runs on these three agents today.
 > A guarded re-pilot of native `memory:` on reviewer is planned (VCS-055 Phase 2), gated on an
 > explicit adoption decision before any wider rollout.
+>
+> **Note (2026-08-30, VCS-055 Phase 2.3 / ADR-0182):** the guarded re-pilot above ran, and the
+> adoption decision landed for `reviewer` only — `memory: project` is now permanent on reviewer,
+> enforced to its own memory directory by `reviewer-write-scope.sh`, and ADR-0012's mediated
+> contract is retired for reviewer specifically. `debugger` and `refactorer` are unaffected by
+> this note: they stay exactly as the 2026-08-30 note above describes. See ADR-0182 for the full
+> decision and the pilot evidence, including the live-verified finding that `memory:` grants
+> unscoped Write/Edit at the tool-schema level (the "acceptable because confined" assumption in
+> ADR-0013 was untested at the time and has since been found false — see ADR-0013's own
+> Correction, 2026-08-30).
 
 ### 3.8 researcher
 

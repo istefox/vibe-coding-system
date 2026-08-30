@@ -15,7 +15,7 @@
 # without editing the script under test — reusable for the others.
 #
 # Section F (issue #176, ADR-0068 Task 5, R-05/R-17): the baseRef settings-key notice. Unlike the
-# six notices above, which are gated by grep on a hook name, this one is gated on a JSON value
+# seven notices above, which are gated by grep on a hook name, this one is gated on a JSON value
 # (worktree.baseRef == "head" in $DEST/settings.json), so it needs its own fixture shape rather
 # than build_home's hooks-only JSON. EXPECTED at RED time: every F assertion FAILS — no such
 # notice exists in sync-to-claude.sh yet (confirmed absent before this section was written); Task
@@ -57,7 +57,7 @@ INSTRUCTIONS_LOADED_MARK="has nothing to read"
 # block look like with nothing outstanding" / "with nothing wired at all". Every notice that is a
 # CONTRACT CHANGE to this file (precompact-guard/ADR-0058, worktree.baseRef/ADR-0068,
 # commit-outcome-backstop/ADR-0168, usage-daily-hint/ADR-0170, memory-store-guard/VCS-055 Phase 2,
-# and whichever is next) must be
+# reviewer-write-scope/VCS-055 Phase 2.3/ADR-0182, and whichever is next) must be
 # reflected here, in the one place, or A3's all-clear assertion breaks the moment the new notice
 # exists. Before this was extracted, the same JSON blob was inlined three times (build_home,
 # build_home_br, build_home_skills), and one of the three copies — build_home_skills — had
@@ -69,7 +69,7 @@ INSTRUCTIONS_LOADED_MARK="has nothing to read"
 # VCS-046: no agent-write-scope.sh entry here — that PreToolUse entry invoked a script that no
 # longer exists (merged into test-write-scope.sh, which needs no change to gate the architect
 # too), so its PRESENCE is now the outstanding condition (see STALE_ARCH_MARK), not its absence.
-WIRED_HOOKS='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/memory-store-guard.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}],"InstructionsLoaded":[{"matcher":"session_start|nested_traversal|path_glob_match|include|compact","hooks":[{"type":"command","command":"\"$HOME\"/.claude/hooks/instructions-loaded-log.sh"}]}]}'
+WIRED_HOOKS='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/memory-store-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/reviewer-write-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}],"InstructionsLoaded":[{"matcher":"session_start|nested_traversal|path_glob_match|include|compact","hooks":[{"type":"command","command":"\"$HOME\"/.claude/hooks/instructions-loaded-log.sh"}]}]}'
 UNWIRED_HOOKS='{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}'
 
 # build_home <name> <wired:yes|no|nofile> <retired:yes|no> — returns the fixture HOME path.
@@ -310,7 +310,7 @@ esac
 # F. baseRef settings-key notice (issue #176, ADR-0068 Task 5, R-05/R-17). Gated on
 # worktree.baseRef == "head" in $DEST/settings.json, not on a hook-name grep.
 
-# F1: absent entirely — all six hooks wired, so the other six notices must stay silent while this
+# F1: absent entirely — all seven hooks wired, so the other seven notices must stay silent while this
 # one fires alone.
 OUT=$(run_sync "$(build_home_br f1 yes absent)")
 case "$OUT" in
@@ -319,7 +319,7 @@ case "$OUT" in
 esac
 case "$OUT" in
   *"$WIRING_MARK"*) bad "F1b: an unrelated hook-wiring notice leaked into the absent-baseRef case" ;;
-  *) ok "F1b: the six hook-wiring notices stay suppressed when only baseRef is missing" ;;
+  *) ok "F1b: the seven hook-wiring notices stay suppressed when only baseRef is missing" ;;
 esac
 
 # F2: present but WRONG value ("fresh", not "head") — the case that matters most, since it is easy
@@ -331,7 +331,7 @@ case "$OUT" in
 esac
 case "$OUT" in
   *"$WIRING_MARK"*) bad "F2b: an unrelated hook-wiring notice leaked into the wrong-baseRef case" ;;
-  *) ok "F2b: the six hook-wiring notices stay suppressed when only baseRef is wrong" ;;
+  *) ok "F2b: the seven hook-wiring notices stay suppressed when only baseRef is wrong" ;;
 esac
 
 # F3: present and correct — suppressed, and the all-clear line fires since nothing is outstanding.
@@ -341,16 +341,16 @@ case "$OUT" in
   *) ok "F3: baseRef notice suppressed once worktree.baseRef is \"head\"" ;;
 esac
 case "$OUT" in
-  *"$CLEAR_MARK"*) ok "F3b: all-clear line prints once baseRef is correct and all six hooks are wired" ;;
-  *) bad "F3b: no all-clear line although baseRef is correct and all six hooks are wired — the CLEAR_MARK condition doesn't yet account for baseRef" ;;
+  *"$CLEAR_MARK"*) ok "F3b: all-clear line prints once baseRef is correct and all seven hooks are wired" ;;
+  *) bad "F3b: no all-clear line although baseRef is correct and all seven hooks are wired — the CLEAR_MARK condition doesn't yet account for baseRef" ;;
 esac
 
 # F4: independence, reverse direction — hooks NOT wired, baseRef correct. Proves fixing baseRef
-# does not mute the six hook-wiring notices, and an unwired hook does not force the baseRef notice.
+# does not mute the seven hook-wiring notices, and an unwired hook does not force the baseRef notice.
 OUT=$(run_sync "$(build_home_br f4 no correct)")
 case "$OUT" in
   *"$BASEREF_MARK"*) bad "F4: baseRef notice printed although worktree.baseRef is \"head\" (should be independent of hook wiring)" ;;
-  *) ok "F4: baseRef notice stays suppressed when correct, even though the six hooks are all unwired" ;;
+  *) ok "F4: baseRef notice stays suppressed when correct, even though the seven hooks are all unwired" ;;
 esac
 case "$OUT" in
   *"$WIRING_MARK"*) ok "F4b: the autopilot-guard wiring notice still fires independently of a correct baseRef" ;;
@@ -435,7 +435,7 @@ esac
 # containing a literal space where the source has a newline never matches the captured stdout.
 COMMIT_OUTCOME_MARK="alongside the chain-memory-capture / agentwake"
 
-# H1: not wired (the plain "no" fixture, same on/off shape the six existing marks use) -> fires.
+# H1: not wired (the plain "no" fixture, same on/off shape the seven existing marks use) -> fires.
 OUT=$(run_sync "$(build_home h1 no no)")
 case "$OUT" in
   *"$COMMIT_OUTCOME_MARK"*) ok "H1: commit-outcome-backstop notice printed when unwired" ;;
@@ -468,7 +468,7 @@ case "$OUT" in
 esac
 
 # I. InstructionsLoaded MANUAL STEP notice (ADR-0171). Gated on
-# `grep -q 'InstructionsLoaded' "$DEST/settings.json"`, same shape as the six hook-name marks
+# `grep -q 'InstructionsLoaded' "$DEST/settings.json"`, same shape as the seven hook-name marks
 # above. INSTRUCTIONS_LOADED_MARK is "has nothing to read" (the closing sentence of the notice's
 # own body, confirmed to occur exactly once in sync-to-claude.sh) rather than the bare hook
 # filename or the shared "top-level \"hooks\" object" phrase — that phrase already appears in the
