@@ -59,7 +59,7 @@ fi
 if [ "$new_step" = "failed" ] || [ "$new_step" = "aborted" ]; then
   : # always legal
 else
-  # Build legal transition pairs into temp file (spec §3.3, 45 transitions)
+  # Build legal transition pairs into temp file (spec §3.3, 51 transitions)
   PAIRS="$(mktemp)"
   echo "step_0_init,step_1_interview" > "$PAIRS"
   echo "step_0_init,gate_0d_scaffolding" >> "$PAIRS"
@@ -73,6 +73,12 @@ else
   echo "gate_1b_brainstorm_decision,step_2_architecture" >> "$PAIRS"
   echo "gate_1b_brainstorm_decision,gate_1c_macos_ux_decision" >> "$PAIRS"
   echo "gate_1c_macos_ux_decision,step_2_architecture" >> "$PAIRS"
+  # Gate 1d — Claude Design decision (optional, VCS-052). Both entry edges kept so "No" at 1b/1c
+  # still routes straight to the architect: gate_1b_brainstorm_decision,step_2_architecture and
+  # gate_1c_macos_ux_decision,step_2_architecture above are UNCHANGED.
+  echo "gate_1b_brainstorm_decision,gate_1d_claude_design_decision" >> "$PAIRS"
+  echo "gate_1c_macos_ux_decision,gate_1d_claude_design_decision" >> "$PAIRS"
+  echo "gate_1d_claude_design_decision,step_2_architecture" >> "$PAIRS"
   echo "step_2_architecture,gate_2_architecture_review" >> "$PAIRS"
   echo "gate_2_architecture_review,step_3_project_memory" >> "$PAIRS"
   echo "gate_2_architecture_review,step_2_architecture" >> "$PAIRS"
@@ -107,6 +113,12 @@ else
   echo "gate_h1b_brainstorm,step_h2_plan" >> "$PAIRS"
   echo "gate_h1b_brainstorm,gate_h1c_macos_ux" >> "$PAIRS"
   echo "gate_h1c_macos_ux,step_h2_plan" >> "$PAIRS"
+  # Gate H1d — Claude Design decision (optional, VCS-052). Both entry edges kept, mirroring
+  # Standard's gate_1d pairs above: gate_h1b_brainstorm,step_h2_plan and
+  # gate_h1c_macos_ux,step_h2_plan above are UNCHANGED.
+  echo "gate_h1b_brainstorm,gate_h1d_claude_design" >> "$PAIRS"
+  echo "gate_h1c_macos_ux,gate_h1d_claude_design" >> "$PAIRS"
+  echo "gate_h1d_claude_design,step_h2_plan" >> "$PAIRS"
   echo "step_h2_plan,step_h3_execute" >> "$PAIRS"
   echo "step_h3_execute,gate_h3_verify" >> "$PAIRS"
   echo "gate_h3_verify,step_h4_review" >> "$PAIRS"

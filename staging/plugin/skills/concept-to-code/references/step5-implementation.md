@@ -17,11 +17,14 @@ Five assertions, run once, at the very top of Step 5 — before dispatch-mode se
 # inner one reaches bash intact. The terminator sits at COLUMN 0 on purpose: an indented one is
 # swallowed into the here-document and destroys this fence's exit code silently, which here would
 # read as a clean tree. Do not tidy it.
-export MANIFEST SPEC ADR PLAN CLAUDE_PLUGIN_ROOT
+export MANIFEST SPEC ADR PLAN CLAUDE_PLUGIN_ROOT BRAINSTORM UXB DESIGN_PROMPT DESIGN
 bash <<'FENCE_BASH'
 # Free variables, bound by the orchestrator before this block runs:
 #   MANIFEST        absolute path to the manifest (the value manifest-init.sh printed)
 #   SPEC ADR PLAN   absolute paths from manifest.artifacts.*; ADR/PLAN may be empty on Express
+#   BRAINSTORM UXB DESIGN_PROMPT DESIGN
+#                   absolute paths from manifest.artifacts.{brainstorm,ux_blueprint,design_prompt,
+#                   design} (VCS-052); empty/null on any chain that never offered Gate 1b/1c/1d
 # Exit contract: 0 = clean, proceed to 5.0.2 · 1 = refuse to dispatch · 3 = the check DID NOT RUN.
 # The third exists for the same reason it does in spec-coverage.sh and plan-tasks.sh: a checker
 # that could not run must not be readable as a checker that found nothing.
@@ -72,11 +75,22 @@ DIRTY=$(git status --porcelain | sed 's/^...//' | grep -vxF "$(bash "$_rrp" "$_t
 SPEC_REL=$(bash "$_rrp" "$_top" "${SPEC:-}")
 ADR_REL=$(bash "$_rrp" "$_top" "${ADR:-}")
 PLAN_REL=$(bash "$_rrp" "$_top" "${PLAN:-}")
+# VCS-052: BRAINSTORM.md/UX-BLUEPRINT.md/DESIGN-PROMPT.md/DESIGN.md are root artifacts exactly
+# like SPEC/ADR/PLAN, produced by Gate 1b/1c/1d when offered. Resolved the same way, so a chain
+# that ran any of those gates does not leave its own artifact classified PREFLIGHT_OTHER — whose
+# printed remediation (`git stash push -u`) would stash the artifact itself. Each of these is
+# null/empty on a chain that never offered the corresponding gate; repo-rel-path.sh's own contract
+# (empty input -> empty stdout, exit 0) means the case pattern below is then the empty string,
+# which the `[ -n "$f" ] || continue` guard already guarantees can never match a non-empty `$f`.
+BRAINSTORM_REL=$(bash "$_rrp" "$_top" "${BRAINSTORM:-}")
+UXB_REL=$(bash "$_rrp" "$_top" "${UXB:-}")
+DESIGN_PROMPT_REL=$(bash "$_rrp" "$_top" "${DESIGN_PROMPT:-}")
+DESIGN_REL=$(bash "$_rrp" "$_top" "${DESIGN:-}")
 CHAIN=""; OTHER=""
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   case "$f" in
-    "$SPEC_REL"|"$ADR_REL"|"$PLAN_REL"|CLAUDE.md) CHAIN="$CHAIN$f " ;;
+    "$SPEC_REL"|"$ADR_REL"|"$PLAN_REL"|"$BRAINSTORM_REL"|"$UXB_REL"|"$DESIGN_PROMPT_REL"|"$DESIGN_REL"|CLAUDE.md) CHAIN="$CHAIN$f " ;;
     *) OTHER="$OTHER$f " ;;
   esac
 done <<DIRTY_EOF
@@ -465,6 +479,8 @@ Read plan at <manifest.artifacts.plan>.
 Read ADR at <manifest.artifacts.adr>.
 Read SPEC.md at <manifest.artifacts.spec>.
 Read project CLAUDE.md at <manifest.artifacts.project_claude_md> (if not null).
+If a Claude Design artifact exists, read it at <manifest.artifacts.design> (if not null) — its
+Binding decisions are a constraint on the implementation, not an input to weigh.
 
 [IF $_project_context is non-empty — add this block, otherwise omit entirely:]
 ## Project Roadmap (multi-feature context)
@@ -1577,6 +1593,8 @@ Read plan at <manifest.artifacts.plan> (tasks <FROM>-<TO> only).
 Read ADR at <manifest.artifacts.adr>.
 Read SPEC.md at <manifest.artifacts.spec>.
 Read project CLAUDE.md at <manifest.artifacts.project_claude_md> (if not null).
+If a Claude Design artifact exists, read it at <manifest.artifacts.design> (if not null) — its
+Binding decisions are a constraint on the implementation, not an input to weigh.
 
 TEST-AUTHORING SCOPE - the tester agent owns test files for this task. Do NOT create or edit tests.
 Sub-steps in your tasks that create or edit test files were executed by the tester before this

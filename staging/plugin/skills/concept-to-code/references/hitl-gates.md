@@ -358,11 +358,11 @@ header: "Gate 1c · macOS UX"
 options:
   - label: "Yes, design with macos-ux"
     description: "Interview-driven HIG blueprint: windows, navigation, Settings, menus, shortcuts"
-  - label: "No, go directly to architect"
-    description: "Standard behavior, zero regressions"
+  - label: "No, skip macOS UX"
+    description: "Standard behavior, zero regressions. Gate 1d (Claude Design) is offered next either way."
 ```
 
-"No" → transition `gate_1c_macos_ux_decision → step_2_architecture`. `artifacts.ux_blueprint` stays null. Dispatch architect.
+"No" → transition `gate_1c_macos_ux_decision → gate_1d_claude_design_decision`. `artifacts.ux_blueprint` stays null. Present Gate 1d (see below).
 
 "Yes" → emit "Gate 1c: macOS UX design active ✓ — invoking macos-ux...". Invoke the `macos-ux` skill in-session:
 ```
@@ -380,10 +380,130 @@ Return silently — the concept-to-code orchestrator continues immediately after
 **CRITICAL — chain continuation (no stop):** After the macos-ux Skill tool returns,
 do NOT produce any text response and do NOT wait for user input. Proceed IMMEDIATELY to:
 1. Write `artifacts.ux_blueprint = <project-root>/UX-BLUEPRINT.md` in the manifest (bash script update).
-2. Transition `gate_1c_macos_ux_decision → step_2_architecture`.
-3. Dispatch architect with UX blueprint in context (see architect brief — `artifacts.ux_blueprint` is now non-null).
+2. Transition `gate_1c_macos_ux_decision → gate_1d_claude_design_decision`.
+3. Present Gate 1d (see below) — architect dispatch happens after Gate 1d resolves, not here.
 
 **[Autopilot default: "No". Emit: "Gate 1c: autopilot — skip macOS UX ✓"]**
+
+---
+
+**Gate 1d — Claude Design (optional)**
+
+Trigger: Gate 1b or Gate 1c resolves (either branch of either gate — Gate 1d always fires, last
+of the three, so the generated prompt can quote `BRAINSTORM.md`'s adopted approach and
+`UX-BLUEPRINT.md`'s HIG skeleton when they exist). `current_step = gate_1d_claude_design_decision`.
+
+**No detector. This gate is unconditional and always offered, and it always defaults to "No"
+(VCS-052, ADR-0181).** Gate 1c's macOS detector fired on meta-SPECs in this repo and never on a
+real macOS app (ADR-0093) — here the dangerous direction is inverted: a false negative would hide
+the very gate the user asked for. An always-offered gate that defaults to "No" costs one click and
+makes no claim about the SPEC, so there is nothing about it to be wrong.
+
+**1d-A — generate the prompt.** Use `AskUserQuestion`:
+```
+question: "Gate 1d — Claude Design (optional)\n\nSPEC ready: <artifacts.spec>\nGenerate a Claude Design (claude.ai/design) prompt to produce an initial visual mockup before the architect?\nThis requires a human in a browser on a Pro/Max/Team/Enterprise plan — there is no API.\n\nThis is your choice — skipping proceeds directly to the architect."
+header: "Gate 1d · Claude Design"
+options:
+  - label: "Yes, generate a Claude Design prompt"
+    description: "Invoke claude-design-brief, write DESIGN-PROMPT.md, then bring back a shared URL"
+  - label: "No, go directly to architect"
+    description: "Standard behavior, zero regressions"
+  - label: "Abort"
+    description: "Terminate the chain"
+```
+
+"No" → transition `gate_1d_claude_design_decision → step_2_architecture`. `artifacts.design_prompt`
+and `artifacts.design` stay null. Dispatch architect.
+
+"Abort" → terminate the chain.
+
+"Yes" → emit "Gate 1d: generating Claude Design prompt ✓ — invoking claude-design-brief...".
+Invoke the `claude-design-brief` skill in-session:
+```
+Use the claude-design-brief skill.
+Chain context: concept-to-code (gate 1d).
+Project root: <project-root>.
+Requirements source: SPEC.md at <project-root>/SPEC.md.
+If present, also read BRAINSTORM.md at <manifest.artifacts.brainstorm> for the adopted approach,
+and UX-BLUEPRINT.md at <manifest.artifacts.ux_blueprint> for platform constraints (quote verbatim).
+Compose a single copy-paste-ready Claude Design prompt and write it to
+<project-root>/DESIGN-PROMPT.md.
+Do NOT write SPEC, ADR, plan, or DESIGN.md. Do NOT invoke writing-plans.
+Do NOT produce a closing summary or handoff message after writing DESIGN-PROMPT.md.
+Return silently — the concept-to-code orchestrator continues immediately after.
+```
+**CRITICAL — chain continuation (no stop):** After the claude-design-brief Skill tool returns,
+do NOT produce a closing/handoff sentence on the skill's behalf. Proceed IMMEDIATELY to:
+1. Write `artifacts.design_prompt = <project-root>/DESIGN-PROMPT.md` in the manifest (bash script update).
+2. Emit: "Gate 1d: prompt written ✓ — <project-root>/DESIGN-PROMPT.md. Go to claude.ai/design
+   (Pro/Max/Team/Enterprise plan required), paste the fenced block, ask for N screens, and share
+   with link access." **Do not transition** — the chain stays at `gate_1d_claude_design_decision`.
+3. Present **1d-B** (below) in the same turn.
+
+**1d-B — bring back the result.** Use `AskUserQuestion`:
+```
+question: "Gate 1d-B — Bring back the Claude Design result\n\nPaste the shared URL you got from claude.ai/design.\nThree tiers change downstream fidelity:\n  • URL only — provenance plus whatever you type under Binding decisions.\n  • URL + standalone-HTML export (recommended) — a file the coder can actually read.\n  • URL + handoff bundle — an opaque directory, recorded as-is (composition unverified).\nStill designing? Choose 'Not yet' — this pauses here, resumable across a break of days."
+header: "Gate 1d-B · Design result"
+options:
+  - label: "Paste the shared URL"
+    description: "Other → the URL. Optionally append ' + export:<path>' for a local HTML export, or ' + bundle:<path>' for a handoff bundle — omit either and the tier is URL only."
+  - label: "Not yet, still designing"
+    description: "Pause here; resume later, same manifest, same gate — the Gate 2c pause shape."
+  - label: "Skip after all"
+    description: "No Claude Design artifact — proceed straight to the architect."
+```
+
+"Not yet, still designing" → do **not** transition. `current_step` stays
+`gate_1d_claude_design_decision`, resumable the same way any other mid-chain pause is (Form-B
+resume path) — this must survive a pause of days, exactly like Gate 2c's "Not yet — I will
+provision now".
+
+"Skip after all" → transition `gate_1d_claude_design_decision → step_2_architecture`.
+`artifacts.design` stays null (`artifacts.design_prompt` keeps whatever 1d-A already set, or
+stays null if 1d-A was never reached). Dispatch architect.
+
+"Paste the shared URL" → parse the `Other` answer for the URL (first `https://` token) and any
+` + export:<path>` / ` + bundle:<path>` suffix. **CRITICAL — chain continuation (no stop):** once
+the URL is parsed, do NOT produce a text response and do NOT wait for user input. Proceed
+IMMEDIATELY to:
+1. Run `bash ~/.claude/skills/concept-to-code/scripts/design-url-check.sh --url <url>`.
+   - exit 0 → `URL shape check: valid`.
+   - exit 1 → the shape did not match `^https://claude\.ai/`. Re-present **1d-B** with a note
+     that the URL didn't look right — do NOT write DESIGN.md, do NOT transition.
+   - exit 3 (DID-NOT-RUN, rule 4) → `URL shape check: did-not-run`. Proceed anyway — a checker
+     that could not run is not evidence the URL is wrong, and the human who pasted it already
+     validated it by hand; never silently write "valid" for this case.
+2. Write `<project-root>/DESIGN.md`:
+   ```markdown
+   # Design — <topic>
+   Source: Claude Design (claude.ai/design)
+   Shared URL: <url>
+   URL shape check: valid | invalid | did-not-run
+   Captured: <ISO-8601 timestamp>
+   Prompt: DESIGN-PROMPT.md
+   Local export: <export path> | none
+   Handoff bundle: <bundle path> | none   <!-- composition UNVERIFIED -->
+
+   ## Screens
+   | Screen | Purpose | SPEC ids | Notes |
+
+   ## Binding decisions
+   ## Not decided here
+   ```
+   The `## Screens` table, `## Binding decisions`, and `## Not decided here` sections are filled
+   in from whatever the human transcribes when pasting the URL (or left as headers with no rows,
+   which `design-coverage.sh` at Gate 2 will flag as DID-NOT-RUN — the denominator guard, rule 7).
+3. Run `bash ~/.claude/skills/concept-to-code/scripts/manifest-set-artifact.sh <manifest-path> design <project-root>/DESIGN.md`.
+4. Transition `gate_1d_claude_design_decision → step_2_architecture`.
+5. Dispatch architect with the design artifact in context (see architect brief —
+   `artifacts.design` is now non-null).
+
+**Autopilot: always "No", and it is structural, not a preference (VCS-052, ADR-0181).** The
+artifact requires a human in a browser on a paid plan; no unattended branch can produce one. Same
+family as Gate 2b's TOFU and Gate 2c's provisioning pause — an unattended agent must not be the
+one deciding a design is "done".
+
+**[Autopilot default: "No". Emit: "Gate 1d: autopilot — Claude Design needs a human in a browser, skipped ✓"]**
 
 ---
 
@@ -723,7 +843,11 @@ of this chain already uses it, so there is exactly one commit path in the system
 - **Attended** (`manifest.autopilot = false`): invoke `commit` with args
   `<topic-full-title> — planning artifacts (ADR: <manifest.artifacts.adr>) --no-pr
   --branch feat/<manifest.topic> --include
-  <spec>,<manifest.artifacts.adr>,<manifest.artifacts.plan>,<manifest-path>`.
+  <spec>[,<manifest.artifacts.brainstorm>][,<manifest.artifacts.ux_blueprint>][,<manifest.artifacts.design_prompt>][,<manifest.artifacts.design>],<manifest.artifacts.adr>,<manifest.artifacts.plan>,<manifest-path>`.
+  Each bracketed entry (VCS-052, ADR-0181) is included only when that manifest field is non-null;
+  a null entry is DROPPED from the comma list entirely — never emitted as an empty slot between two
+  commas. This is an **INSTRUCTION** (rule 16), not a mechanically enforced parse: a chain that ran
+  none of Gate 1b/1c/1d gets the original four-entry list, unchanged, zero regressions.
   The Step 4 gate still asks; `--no-pr` suppresses only the PR question, which would otherwise fire
   on every chain run with nothing to publish.
 - **Unattended** (`manifest.autopilot = true`): the same, plus `--autopilot`. Local commit only —

@@ -22,7 +22,7 @@ with YAML manifest persistence, explicit HITL gates, and dispatch to existing ag
   **Exception (ADR-0017):** Express path step E1 and Hybrid path step H2 use `EnterPlanMode` as their HITL planning gate. This exception is scoped exclusively to those two steps; the prohibition applies everywhere else in all three paths.
 - **Do NOT run** the `using-superpowers` check between steps
   **Exception (ADR-0017):** Express path step E1 allows the `using-superpowers` check inside plan mode. If the scope warrants `writing-plans`, `brainstorming`, or any other superpowers skill during planning, invoke it. The suppression applies to all other paths and steps.
-- The **only** skills invokable inside this chain: `interview-driver`, `design-brainstorm` (gate 1b only), `macos-ux` (gate 1c only, conditional on macOS/SwiftUI SPEC detection), `claude-md-generator`, `review-triage-fix` (step 6 / H4 only, optional), `ui-layout-audit` (gate 5.05 only, conditional on UI files present), `deep-refactor` (gate 5.1 only, conditional on user choice), `commit` (step 7 / E4 / H5, always), superpowers skills (Express step E1 only, inside plan mode); `reviewer` agent with specialized inline prompts (gate 5.06 only, conditional on user choice: silent-failure-hunter scope + type-design-analyzer scope)
+- The **only** skills invokable inside this chain: `interview-driver`, `design-brainstorm` (gate 1b only), `macos-ux` (gate 1c only, conditional on macOS/SwiftUI SPEC detection), `claude-design-brief` (gate 1d only), `claude-md-generator`, `review-triage-fix` (step 6 / H4 only, optional), `ui-layout-audit` (gate 5.05 only, conditional on UI files present), `deep-refactor` (gate 5.1 only, conditional on user choice), `commit` (step 7 / E4 / H5, always), superpowers skills (Express step E1 only, inside plan mode); `reviewer` agent with specialized inline prompts (gate 5.06 only, conditional on user choice: silent-failure-hunter scope + type-design-analyzer scope)
 
 This section **overrides** the using-superpowers rule ("even 1% → invoke"). The chain's HITL gates manage the workflow. All intermediate skill-checks are suppressed.
 
@@ -419,16 +419,23 @@ Terminal states: `completed`, `failed`, `aborted`. Any state can transition to `
 
 Gates 0, 0b–0d are NOT states: they are checks run inside `step_0_init` before the first transition.
 
-Legal transition pairs (45 total — 25 standard + 6 express + 14 hybrid, including Gate 0d routing, Step 4.5 tracer-bullet routing, and direct-close shortcuts). Four standard pairs through `gate_5_review_decision` were removed by issue #265 (ADR-0105): nothing ever entered that state, because Gate 5 is an inline sub-gate:
-- Standard (preserved): 25 pairs total — the 28 pre-existing pairs, minus the four `gate_5_review_decision` pairs removed by ADR-0105, plus 1 new pair for Step 4.5's
+Legal transition pairs (51 total — 28 standard + 6 express + 17 hybrid, including Gate 0d routing, Step 4.5 tracer-bullet routing, Gate 1d/H1d Claude Design routing, and direct-close shortcuts). Four standard pairs through `gate_5_review_decision` were removed by issue #265 (ADR-0105): nothing ever entered that state, because Gate 5 is an inline sub-gate:
+- Standard: 28 pairs total — 25 pairs preserved from the prior reconciliation (the 28 pre-existing pairs, minus the four `gate_5_review_decision` pairs removed by ADR-0105, plus 1 new pair for Step 4.5's
   amber / "red → reduce scope" route (ADR-0057): `ready_for_implementation→gate_2_architecture_review`.
   Green and "red → continue anyway" reuse the existing `ready_for_implementation→step_5_implementation`
   pair; hand-code reuses the existing unconditional any-state-to-`aborted` wildcard. Checked against
   the ADR-0027 Gates-0c/0d lesson (pairs can be written but structurally unreachable) before assuming
   new pairs were needed at all — Gate 2b and Gate 5.05/5.06 are already inline sub-gates with no
-  dedicated state, and Step 4.5 follows the same shape, so only this one pair was actually missing.
+  dedicated state, and Step 4.5 follows the same shape, so only this one pair was actually missing),
+  plus 3 new pairs for Gate 1d's Claude Design decision (VCS-052, ADR-0181):
+  `gate_1b_brainstorm_decision→gate_1d_claude_design_decision`, `gate_1c_macos_ux_decision→gate_1d_claude_design_decision`,
+  `gate_1d_claude_design_decision→step_2_architecture`. The prior direct exits
+  `gate_1b_brainstorm_decision→step_2_architecture` and `gate_1c_macos_ux_decision→step_2_architecture`
+  stay declared and legal but unreachable from the live routing prose now that Gate 1d always fires
+  between them and the architect (same ADR-0027 precedent: a pair can be declared without being
+  currently instructed).
 - Express (new): `step_0_init→step_e1_plan`, `step_e1_plan→step_e2_execute`, `step_e2_execute→gate_e3_verify`, `gate_e3_verify→step_e4_commit`, `step_e4_commit→completed`, `gate_e3_verify→completed`
-- Hybrid (new): `step_0_init→step_h1_interview`, `step_h1_interview→gate_h1_spec_review`, `gate_h1_spec_review→step_h2_plan`, `gate_h1_spec_review→gate_h1b_brainstorm`, `gate_h1_spec_review→step_h1_interview`, `gate_h1b_brainstorm→step_h2_plan`, `gate_h1b_brainstorm→gate_h1c_macos_ux`, `gate_h1c_macos_ux→step_h2_plan`, `step_h2_plan→step_h3_execute`, `step_h3_execute→gate_h3_verify`, `gate_h3_verify→step_h4_review`, `gate_h3_verify→step_h5_commit`, `step_h4_review→step_h5_commit`, `step_h5_commit→completed`
+- Hybrid: `step_0_init→step_h1_interview`, `step_h1_interview→gate_h1_spec_review`, `gate_h1_spec_review→step_h2_plan`, `gate_h1_spec_review→gate_h1b_brainstorm`, `gate_h1_spec_review→step_h1_interview`, `gate_h1b_brainstorm→step_h2_plan`, `gate_h1b_brainstorm→gate_h1c_macos_ux`, `gate_h1c_macos_ux→step_h2_plan`, `step_h2_plan→step_h3_execute`, `step_h3_execute→gate_h3_verify`, `gate_h3_verify→step_h4_review`, `gate_h3_verify→step_h5_commit`, `step_h4_review→step_h5_commit`, `step_h5_commit→completed`, plus 3 new pairs for Gate H1d (VCS-052, ADR-0181): `gate_h1b_brainstorm→gate_h1d_claude_design`, `gate_h1c_macos_ux→gate_h1d_claude_design`, `gate_h1d_claude_design→step_h2_plan`
 
 **Resume semantics:** Express and Hybrid paths do NOT cross session boundaries. Form B resume is valid only for `chain_path=standard` or `chain_path=null` (legacy). Attempting to resume an express or hybrid manifest emits an error and aborts.
 
@@ -448,7 +455,7 @@ Helper scripts:
 - `~/.claude/skills/concept-to-code/scripts/manifest-init.sh` — creates manifest at `step_0_init` (schema 1.3, adds `chain_path`, `gate0.chain_path`, `gate0.auto_detect_reason`)
 - `~/.claude/skills/concept-to-code/scripts/manifest-validate.sh` — validates schema 1.0|1.1|1.2|1.3 + state invariants + optional fields
 - `~/.claude/skills/clean-public-repo/scripts/detect-public-remote.sh` — auto-detect public GitHub remote (D1 ADR-0011); output `public|silent`; fail-safe to `silent`. **NB: belongs to the `clean-public-repo` skill, not to `concept-to-code` — use the absolute path.**
-- `~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest> <new-step> [<new-status>]` — performs legal state transitions atomically (45 pairs).
+- `~/.claude/skills/concept-to-code/scripts/manifest-transition.sh <manifest> <new-step> [<new-status>]` — performs legal state transitions atomically (51 pairs).
   **Calling convention — 2-arg form (use for all in-chain transitions):**
   ```bash
   bash ~/.claude/skills/concept-to-code/scripts/manifest-transition.sh manifest.yml gate_1_spec_review
@@ -604,8 +611,10 @@ Present **Gate 1b** (optional brainstorm, see §5). Then:
 bash ~/.claude/skills/concept-to-code/scripts/detect-macos.sh "<project-root>/SPEC.md"
 ```
 The script strips markdown table rows and fenced/backtick code spans before grepping, avoiding false positives when SPEC.md mentions Swift/SwiftUI as keyword patterns (not as a UI target). Echoes `MACOS_DETECTED` or `NOT_MACOS`, exit 0.
-- `MACOS_DETECTED` → transition `gate_1b_brainstorm_decision → gate_1c_macos_ux_decision`. Present **Gate 1c** (see §5 Gate 1c block). After Gate 1c resolves, transition `gate_1c_macos_ux_decision → step_2_architecture`.
-- `NOT_MACOS` → transition `gate_1b_brainstorm_decision → step_2_architecture`. Dispatch architect (no Gate 1c shown).
+- `MACOS_DETECTED` → transition `gate_1b_brainstorm_decision → gate_1c_macos_ux_decision`. Present **Gate 1c** (see §5 Gate 1c block). After Gate 1c resolves, transition `gate_1c_macos_ux_decision → gate_1d_claude_design_decision`.
+- `NOT_MACOS` → transition `gate_1b_brainstorm_decision → gate_1d_claude_design_decision`. No Gate 1c shown.
+
+**Gate 1d (runs after Gate 1c resolves, or directly after Gate 1b when `NOT_MACOS`; unconditional and optional, VCS-052/ADR-0181 — see §5 Gate 1d block):** present **Gate 1d**. After Gate 1d resolves, transition `gate_1d_claude_design_decision → step_2_architecture`. Dispatch architect.
 
 **Before dispatch — inject prior notes (ADR-0012):** from the project-root run
 `bash ~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh inject architect` and
@@ -630,6 +639,10 @@ alternatives as candidate inputs for the ADR's "Alternatives considered" section
 which you adopt and why.
 If a UX blueprint exists, read it at <manifest.artifacts.ux_blueprint> and honor its
 window/navigation/Settings/menu-bar structure decisions; reflect them in the ADR and plan.
+If a Claude Design artifact exists, read it at <manifest.artifacts.design> and any declared
+local export. Its Binding decisions are a constraint on the plan, not an input to weigh:
+every screen its Screens table names must be cited by a plan task, or the ADR must state why
+it is not being built.
 Produce:
 - ADR at <project-root>/docs/architecture/ADR-NNN-<topic-slug>.md (NNN incremental).
 - Plan at <project-root>/docs/superpowers/plans/YYYY-MM-DD-<topic-slug>.md (TDD plan style, 6-10 tasks).
@@ -1698,22 +1711,39 @@ Identical to standard Gate 1b (see §5 Gate 1b). On `[y]`: invoke `design-brains
 ```bash
 bash ~/.claude/skills/concept-to-code/scripts/detect-macos.sh "<project-root>/SPEC.md"
 ```
-- `MACOS_DETECTED` → transition `gate_h1b_brainstorm → gate_h1c_macos_ux`, show **Gate H1c** (see below). After Gate H1c resolves, transition `gate_h1c_macos_ux → step_h2_plan`.
-- `NOT_MACOS` → transition `gate_h1b_brainstorm → step_h2_plan` directly.
+- `MACOS_DETECTED` → transition `gate_h1b_brainstorm → gate_h1c_macos_ux`, show **Gate H1c** (see below). After Gate H1c resolves, transition `gate_h1c_macos_ux → gate_h1d_claude_design`.
+- `NOT_MACOS` → transition `gate_h1b_brainstorm → gate_h1d_claude_design` directly. No Gate H1c shown.
 
 #### Gate H1c — macOS UX design (optional, conditional)
 
-Identical to standard Gate 1c (see §5 Gate 1c block). On `[y]`: invoke `macos-ux` design, write UX-BLUEPRINT.md, set `artifacts.ux_blueprint`, transition `gate_h1c_macos_ux → step_h2_plan`. On `[n]`: transition directly.
+Identical to standard Gate 1c (see §5 Gate 1c block). On `[y]`: invoke `macos-ux` design, write UX-BLUEPRINT.md, set `artifacts.ux_blueprint`, transition `gate_h1c_macos_ux → gate_h1d_claude_design`. On `[n]`: transition directly.
 
-**CRITICAL — chain continuation (no stop):** After macos-ux returns, do NOT produce any text and do NOT wait. Set artifact, transition, proceed to Step H2.
+**CRITICAL — chain continuation (no stop):** After macos-ux returns, do NOT produce any text and do NOT wait. Set artifact, transition, proceed to Gate H1d.
 
 **[Autopilot default: "No". Emit: "Gate H1c: autopilot — skip macOS UX ✓"]**
+
+#### Gate H1d — Claude Design decision (optional, VCS-052/ADR-0181)
+
+Identical to standard Gate 1d (see §5 Gate 1d block), including its two-phase 1d-A/1d-B structure
+and its "Not yet, still designing" resumable pause. On 1d-A `[y]`: invoke `claude-design-brief`,
+write DESIGN-PROMPT.md, set `artifacts.design_prompt`; do not transition; present 1d-B. On 1d-B
+paste: run `design-url-check.sh`, write DESIGN.md, set `artifacts.design`, transition
+`gate_h1d_claude_design → step_h2_plan`. On 1d-A `[n]` or 1d-B "Skip after all": transition
+`gate_h1d_claude_design → step_h2_plan` directly, `artifacts.design`/`artifacts.design_prompt`
+stay null (whichever was never set). On 1d-B "Not yet": do not transition; `current_step` stays
+`gate_h1d_claude_design`, resumable.
+
+**CRITICAL — chain continuation (no stop):** After claude-design-brief returns, or after a pasted
+URL is checked, do NOT produce a closing/handoff sentence. Set artifact(s), transition (or not, on
+"Not yet"), proceed to Step H2 once `gate_h1d_claude_design → step_h2_plan` actually fires.
+
+**[Autopilot default: "No". Emit: "Gate H1d: autopilot — Claude Design needs a human in a browser, skipped ✓"]**
 
 #### Step H2 — Plan (EnterPlanMode)
 
 1. Emit: "Hybrid path — entering plan mode with SPEC context..."
 2. Call `EnterPlanMode`.
-3. Read SPEC.md (and BRAINSTORM.md if present) plus relevant project files.
+3. Read SPEC.md (and BRAINSTORM.md, DESIGN.md if present) plus relevant project files.
 4. Propose a 4–8 task plan derived from the spec. Each task: goal, files to change, test to run.
 5. Wait for user approval in plan mode.
 6. On approval: call `ExitPlanMode`, emit "Plan approved — executing...", transition `step_h2_plan → step_h3_execute`.
@@ -1794,6 +1824,7 @@ This skill DOES NOT modify any of the following. They remain active and orthogon
 - `~/.claude/skills/claude-md-generator/SKILL.md` — invoked as-is in Step 3 (additive directive conveyed in the prompt template, not in claude-md-generator's SKILL.md).
 - `~/.claude/skills/design-brainstorm/SKILL.md` — invoked at gate 1b (`[y]`). Writes only `BRAINSTORM.md`; this skill updates `artifacts.brainstorm` in the manifest.
 - `~/.claude/skills/macos-ux/SKILL.md` — invoked at gate 1c / gate H1c (`[y]`), conditional on macOS/SwiftUI SPEC detection. Writes only `UX-BLUEPRINT.md`; this skill updates `artifacts.ux_blueprint` in the manifest. Design mode only in chain; review mode is standalone.
+- `~/.claude/skills/claude-design-brief/SKILL.md` — invoked at gate 1d / gate H1d (`[y]`), unconditional and optional (VCS-052, ADR-0181). Writes only `DESIGN-PROMPT.md`; this skill updates `artifacts.design_prompt` in the manifest. It never writes `DESIGN.md` — that file is written by this skill (concept-to-code), from the human's pasted shared URL, at gate 1d-B / H1d-B.
 - `~/.claude/hooks/` — `approve-test-cmd.sh`, `stop-gate.sh` unchanged. (ADR-0014: Step 2 now WRITES a *candidate* `.claude/test-cmd` proposed by the architect and requests approval at Gate 2; the TOFU/SHA-pinned trust mechanism and stop-gate enforcement remain identical — the chain proposes, it does not touch the trust.)
 - `~/.claude/settings.json`, `.mcp.json`, `.claude/rules/` — unchanged.
 

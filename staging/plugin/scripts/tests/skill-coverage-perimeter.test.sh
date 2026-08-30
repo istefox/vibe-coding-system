@@ -308,6 +308,12 @@ if [ -n "$_inv" ]; then
     c2c-side)    bad "C7: c2c §25 no longer restricts ui-layout-audit to gate 5.05 — the contract moved" ;;
     skill-side)  bad "C7: ui-layout-audit/SKILL.md no longer names gate 5.05, which c2c §25 restricts it to" ;;
   esac
+  _g=$(check_gate_contract claude-design-brief "gate 1d")
+  case "$_g" in
+    "")          ok "C8: c2c §25 restricts claude-design-brief to gate 1d and the skill's own text says so" ;;
+    c2c-side)    bad "C8: c2c §25 no longer restricts claude-design-brief to gate 1d — the contract moved" ;;
+    skill-side)  bad "C8: claude-design-brief/SKILL.md no longer names gate 1d, which c2c §25 restricts it to" ;;
+  esac
 fi
 
 # ==============================================================================================
@@ -315,10 +321,10 @@ fi
 # nobody watches the count. A floor catches a vanished assertion without a bump on every addition.
 # ==============================================================================================
 TOTAL=$((PASS + FAIL))
-if [ "$TOTAL" -ge 14 ]; then
-  ok "Z1: assertion floor met ($TOTAL executed, floor 14)"
+if [ "$TOTAL" -ge 15 ]; then
+  ok "Z1: assertion floor met ($TOTAL executed, floor 15)"
 else
-  bad "Z1: only $TOTAL assertions executed — the floor is 14, so something stopped running"
+  bad "Z1: only $TOTAL assertions executed — the floor is 15, so something stopped running"
 fi
 
 echo

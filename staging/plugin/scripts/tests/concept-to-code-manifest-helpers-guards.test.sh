@@ -237,30 +237,30 @@ fi
 # — Step 4.5's amber / "red -> reduce scope" route. Same reconciliation this section itself
 # exists to enforce, applied again: 48 -> 49, 28 -> 29 standard. Then 49 -> 45, 29 -> 25 by
 # issue #265 / ADR-0105, which deleted four unreachable gate_5_review_decision pairs).
-if grep -qF 'Legal transition pairs (45 total — 25 standard + 6 express + 14 hybrid, including Gate 0d routing, Step 4.5 tracer-bullet routing, and direct-close shortcuts).' "$SKILL_MD"; then
-  ok "E1: SKILL.md pair-count header states 45 total (25+6+14)"
+if grep -qF 'Legal transition pairs (51 total — 28 standard + 6 express + 17 hybrid, including Gate 0d routing, Step 4.5 tracer-bullet routing, Gate 1d/H1d Claude Design routing, and direct-close shortcuts).' "$SKILL_MD"; then
+  ok "E1: SKILL.md pair-count header states 51 total (28+6+17)"
 else
-  bad "E1: SKILL.md pair-count header does not state 45 total (25+6+14)"
+  bad "E1: SKILL.md pair-count header does not state 51 total (28+6+17)"
 fi
 
 # E2 (static, updated by issue #111 / ADR-0057, same reconciliation as E1. Message corrected by
 # issue #289 / ADR-0120 D-B: the needle already looked for 45 while the failure message still
 # named 49 -- the needle was never wrong, only what it told a reader on failure).
-# plant: E2 | plugin/skills/concept-to-code/SKILL.md | performs legal state transitions atomically (45 pairs). | performs legal state transitions atomically (46 pairs).
-if grep -qF 'performs legal state transitions atomically (45 pairs).' "$SKILL_MD"; then
-  ok "E2: SKILL.md helper description states (45 pairs)"
+# plant: E2 | plugin/skills/concept-to-code/SKILL.md | performs legal state transitions atomically (51 pairs). | performs legal state transitions atomically (52 pairs).
+if grep -qF 'performs legal state transitions atomically (51 pairs).' "$SKILL_MD"; then
+  ok "E2: SKILL.md helper description states (51 pairs)"
 else
-  bad "E2: SKILL.md helper description does not state (45 pairs)"
+  bad "E2: SKILL.md helper description does not state (51 pairs)"
 fi
 
 # E3 (static, updated by issue #111 / ADR-0057, same reconciliation as E1. Message corrected by
 # issue #289 / ADR-0120 D-B: the SUCCESS message named 49 while the grep looked for 45, so a green
 # run printed the wrong number).
-# plant: E3 | plugin/skills/concept-to-code/scripts/manifest-transition.sh | # Build legal transition pairs into temp file (spec §3.3, 45 transitions) | # Build legal transition pairs into temp file (spec §3.3, 46 transitions)
-if grep -qF '# Build legal transition pairs into temp file (spec §3.3, 45 transitions)' "$TRN"; then
-  ok "E3: manifest-transition.sh comment states 45 transitions"
+# plant: E3 | plugin/skills/concept-to-code/scripts/manifest-transition.sh | # Build legal transition pairs into temp file (spec §3.3, 51 transitions) | # Build legal transition pairs into temp file (spec §3.3, 52 transitions)
+if grep -qF '# Build legal transition pairs into temp file (spec §3.3, 51 transitions)' "$TRN"; then
+  ok "E3: manifest-transition.sh comment states 51 transitions"
 else
-  bad "E3: manifest-transition.sh comment does not state 45 transitions"
+  bad "E3: manifest-transition.sh comment does not state 51 transitions"
 fi
 
 # E4 (static, genuine RED now): both new Hybrid gate_h1c items present, no-space compact-list
@@ -280,11 +280,11 @@ fi
 # Step 4.5 pair was needed (the ADR-0027 Gates-0c/0d lesson) sits unedited on the following lines
 # and is not this needle's concern. EXPECTED RED until the coder's SKILL.md fix lands in this same
 # batch -- that is the intended TDD sequence, not a defect in this assertion.)
-# plant: E5 | plugin/skills/concept-to-code/SKILL.md | Standard (preserved): 25 pairs total | Standard (preserved): 29 pairs total
-if grep -qF 'Standard (preserved): 25 pairs total — the 28 pre-existing pairs, minus the four `gate_5_review_decision` pairs removed by ADR-0105, plus 1 new pair for Step 4.5' "$SKILL_MD"; then
-  ok "E5: SKILL.md Standard bullet states 25 pairs total, reconciled with the header and the script"
+# plant: E5 | plugin/skills/concept-to-code/SKILL.md | Standard: 28 pairs total | Standard: 32 pairs total
+if grep -qF 'Standard: 28 pairs total — 25 pairs preserved from the prior reconciliation (the 28 pre-existing pairs, minus the four `gate_5_review_decision` pairs removed by ADR-0105, plus 1 new pair for Step 4.5' "$SKILL_MD"; then
+  ok "E5: SKILL.md Standard bullet states 28 pairs total, reconciled with the header and the script"
 else
-  bad "E5: SKILL.md Standard bullet does not yet state 25 pairs total (still self-contradicts the header) -- EXPECTED RED until the coder's SKILL.md fix lands"
+  bad "E5: SKILL.md Standard bullet does not yet state 28 pairs total (still self-contradicts the header) -- EXPECTED RED until the coder's SKILL.md fix lands"
 fi
 
 # E6 (static, genuine RED now): Express bullet gains its missing gate_e3_verify→completed pair.
@@ -309,10 +309,10 @@ e7_stats="$(bash "$PTC" "$TRN" "$SKILL_MD" 2>&1 >/dev/null)"
 e7_rc=$?
 actual_pairs="$(printf '%s\n' "$e7_stats" | grep -o 'pairs=[0-9]*' | head -1 | cut -d= -f2)"
 actual_pairs="${actual_pairs:-0}"
-if [ "$e7_rc" -eq 0 ] && [ "$actual_pairs" -eq 45 ]; then
-  ok "E7: transition-pair-count.sh (the shared derivation, not a local recount) reports 45 distinct pairs and zero findings"
+if [ "$e7_rc" -eq 0 ] && [ "$actual_pairs" -eq 51 ]; then
+  ok "E7: transition-pair-count.sh (the shared derivation, not a local recount) reports 51 distinct pairs and zero findings"
 else
-  bad "E7: transition-pair-count.sh reports rc=$e7_rc pairs=$actual_pairs, expected rc=0 pairs=45"
+  bad "E7: transition-pair-count.sh reports rc=$e7_rc pairs=$actual_pairs, expected rc=0 pairs=51"
 fi
 
 # =====================================================================================

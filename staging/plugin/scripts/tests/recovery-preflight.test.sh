@@ -535,8 +535,8 @@ printf '%s\n' "$RI_BLOCK" > "$TMP/ri_block.txt"
 # The needle is the INVOCATION's argument form, not the bare word: this block also explains what
 # --include is for, so a needle of '--include' counted the explanation and passed with the
 # invocation deleted (rule 12, caught by planting rather than by reading).
-if [ "$(ri_flat '--include <spec>,<manifest.artifacts.adr>,<manifest.artifacts.plan>,<manifest-path>' "$TMP/ri_block.txt")" -ge 1 ]; then
-  ok "RI4: Gate 4.0 passes --include with the four artifact paths, so the flag has a caller"
+if [ "$(ri_flat '--include <spec>[,<manifest.artifacts.brainstorm>][,<manifest.artifacts.ux_blueprint>][,<manifest.artifacts.design_prompt>][,<manifest.artifacts.design>],<manifest.artifacts.adr>,<manifest.artifacts.plan>,<manifest-path>' "$TMP/ri_block.txt")" -ge 1 ]; then
+  ok "RI4: Gate 4.0 passes --include with the four artifact paths (plus the four VCS-052 bracketed ones), so the flag has a caller"
 else
   bad "RI4: Gate 4.0 does not pass --include with its artifact paths — the flag exists and nothing uses it (#234)"
 fi
@@ -621,7 +621,7 @@ fi
 # produced is identical either way — verified by RJ1 staying green with this change in place.
 RJ_PREFIX="$TMP/rj_fence_prefix.sh"
 sed -e 's#^DIRTY=.*#DIRTY=$(git status --porcelain | sed "s/^...//")#' \
-    -e 's#"\$SPEC_REL"|"\$ADR_REL"|"\$PLAN_REL"|CLAUDE.md)#"$SPEC_REL"|"$ADR_REL"|"$PLAN_REL"|"$(git -C "$(dirname "$MANIFEST")" rev-parse --show-prefix 2>/dev/null)$(basename "$MANIFEST")"|CLAUDE.md)#' \
+    -e 's#"\$SPEC_REL"|"\$ADR_REL"|"\$PLAN_REL"|"\$BRAINSTORM_REL"|"\$UXB_REL"|"\$DESIGN_PROMPT_REL"|"\$DESIGN_REL"|CLAUDE.md)#"$SPEC_REL"|"$ADR_REL"|"$PLAN_REL"|"$BRAINSTORM_REL"|"$UXB_REL"|"$DESIGN_PROMPT_REL"|"$DESIGN_REL"|"$(git -C "$(dirname "$MANIFEST")" rev-parse --show-prefix 2>/dev/null)$(basename "$MANIFEST")"|CLAUDE.md)#' \
     "$RJ_FENCE" >"$RJ_PREFIX"
 
 # rj_repo <dir> — a real throwaway git repo carrying the four chain artifacts plus one unrelated

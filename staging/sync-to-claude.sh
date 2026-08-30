@@ -242,6 +242,8 @@ plugin/skills/concept-to-code/scripts/plan-tasks.sh|skills/concept-to-code/scrip
 plugin/skills/concept-to-code/scripts/repo-rel-path.sh|skills/concept-to-code/scripts/repo-rel-path.sh
 plugin/skills/concept-to-code/scripts/spec-coverage.sh|skills/concept-to-code/scripts/spec-coverage.sh
 plugin/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh|skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh
+plugin/skills/concept-to-code/scripts/design-coverage.sh|skills/concept-to-code/scripts/design-coverage.sh
+plugin/skills/concept-to-code/scripts/design-url-check.sh|skills/concept-to-code/scripts/design-url-check.sh
 plugin/skills/concept-to-code/tests/agent-notes-roundtrip.sh|skills/concept-to-code/tests/agent-notes-roundtrip.sh
 plugin/skills/concept-to-code/tests/run-tests.sh|skills/concept-to-code/tests/run-tests.sh
 plugin/skills/concept-to-code/tests/smoke-e2e.sh|skills/concept-to-code/tests/smoke-e2e.sh
@@ -281,6 +283,8 @@ plugin/skills/humanize-en/tests/fixture-clean.md|skills/humanize-en/tests/fixtur
 plugin/skills/humanize-en/tests/run-tests.sh|skills/humanize-en/tests/run-tests.sh
 plugin/skills/design-brainstorm/SKILL.md|skills/design-brainstorm/SKILL.md
 plugin/skills/design-brainstorm/tests/run-tests.sh|skills/design-brainstorm/tests/run-tests.sh
+plugin/skills/claude-design-brief/SKILL.md|skills/claude-design-brief/SKILL.md
+plugin/skills/claude-design-brief/tests/run-tests.sh|skills/claude-design-brief/tests/run-tests.sh
 plugin/skills/refactor-snapshot/SKILL.md|skills/refactor-snapshot/SKILL.md
 plugin/skills/refactor-snapshot/scripts/capture.sh|skills/refactor-snapshot/scripts/capture.sh
 plugin/skills/refactor-snapshot/scripts/diff.sh|skills/refactor-snapshot/scripts/diff.sh
