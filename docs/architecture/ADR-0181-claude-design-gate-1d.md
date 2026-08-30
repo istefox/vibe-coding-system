@@ -177,3 +177,18 @@ writing `DESIGN.md` directly plus a one-line `SPEC.md` note, since that lane has
 - **Gate 1d always runs after Gate 1c even on non-macOS SPECs**, where `UX-BLUEPRINT.md` does not
   exist and the generated prompt falls back to `SPEC.md`'s UI-flows section alone — accepted per the
   plan's own note as probably fine, not measured against a real non-macOS run.
+
+## Correction (2026-08-30)
+
+The end-to-end run flagged above as needing "a human in a browser" happened: `/skill
+concept-to-code` was driven in a throwaway scratch project
+(`/Users/stefer/Developer/_scratch/gate1d-e2e-test`), chain_path=hybrid, non-macOS SPEC (Gate 1c
+correctly skipped). Gate 1d fired, `claude-design-brief` wrote `DESIGN-PROMPT.md`, and
+`design-url-check.sh` was exercised against two real inputs in the same run: a
+`claudeusercontent.com` asset URL, correctly rejected (exit 1, shape mismatch against
+`^https://claude\.ai/`) with a re-prompt, followed by a genuine `https://claude.ai/design/p/...`
+share URL, which passed (exit 0). `DESIGN.md` was written with its Screens table, `artifacts.design`
+was recorded in the manifest, and the chain transitioned `gate_h1d_claude_design` → `step_h2_plan`.
+Run paused there by choice (manifest `status: in_progress`, resumable); no commit was made, so this
+does not touch `design-coverage.sh` at Gate 2 or the coder dispatch templates, which remain
+unverified end-to-end.
