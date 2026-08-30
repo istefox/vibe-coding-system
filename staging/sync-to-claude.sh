@@ -181,6 +181,7 @@ plugin/skills/spec-from-issue/SKILL.md|skills/spec-from-issue/SKILL.md
 plugin/scripts/stop-gate.sh|hooks/stop-gate.sh
 plugin/scripts/pre-flight-pattern-enforce.sh|hooks/pre-flight-pattern-enforce.sh
 plugin/scripts/write-scope-enforce.sh|hooks/write-scope-enforce.sh
+plugin/scripts/memory-store-guard.sh|hooks/memory-store-guard.sh
 plugin/scripts/agent-command-scope.sh|hooks/agent-command-scope.sh
 plugin/scripts/test-write-scope.sh|hooks/test-write-scope.sh
 plugin/scripts/db-backup-guardrail.sh|hooks/db-backup-guardrail.sh
@@ -408,6 +409,25 @@ write-scope-enforce (issue #87, ADR-0016 Addendum 2026-07-25d) denies a parallel
 write outside the file it was assigned. It is inert by construction: with no write-scope line in
 an agent's transcript it allows and exits, so wiring it globally affects nothing but Step 6
 Phase 3. Until this entry exists the hook is deployed but never invoked.
+NOTE
+fi
+
+if ! grep -q 'memory-store-guard' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this PreToolUse entry to ~/.claude/settings.json (alongside the write-scope-enforce entry):
+
+  { "matcher": "Edit|Write|MultiEdit",
+    "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/memory-store-guard.sh" } ] }
+
+memory-store-guard (VCS-055 Phase 2, ADR-0038 Correction 2026-08-30) denies a sub-agent (one with
+.agent_id set) any write into the orchestrator's curated auto-memory store
+(~/.claude/projects/*/memory/) — the exact failure mode ADR-0013's 2026-05-25 pilot hit. It is
+inert by construction: no .agent_id, no gate, and a sub-agent writing to its OWN memory directory
+is unaffected. Required BEFORE running the guarded native-memory re-pilot on `reviewer`
+(VCS-055 Phase 2.2). Until this entry exists the hook is deployed but never invoked.
 NOTE
 fi
 

@@ -56,7 +56,8 @@ INSTRUCTIONS_LOADED_MARK="has nothing to read"
 # WIRED_HOOKS / UNWIRED_HOOKS below are the SINGLE definition of "what does a settings.json hooks
 # block look like with nothing outstanding" / "with nothing wired at all". Every notice that is a
 # CONTRACT CHANGE to this file (precompact-guard/ADR-0058, worktree.baseRef/ADR-0068,
-# commit-outcome-backstop/ADR-0168, usage-daily-hint/ADR-0170, and whichever is next) must be
+# commit-outcome-backstop/ADR-0168, usage-daily-hint/ADR-0170, memory-store-guard/VCS-055 Phase 2,
+# and whichever is next) must be
 # reflected here, in the one place, or A3's all-clear assertion breaks the moment the new notice
 # exists. Before this was extracted, the same JSON blob was inlined three times (build_home,
 # build_home_br, build_home_skills), and one of the three copies — build_home_skills — had
@@ -68,7 +69,7 @@ INSTRUCTIONS_LOADED_MARK="has nothing to read"
 # VCS-046: no agent-write-scope.sh entry here — that PreToolUse entry invoked a script that no
 # longer exists (merged into test-write-scope.sh, which needs no change to gate the architect
 # too), so its PRESENCE is now the outstanding condition (see STALE_ARCH_MARK), not its absence.
-WIRED_HOOKS='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}],"InstructionsLoaded":[{"matcher":"session_start|nested_traversal|path_glob_match|include|compact","hooks":[{"type":"command","command":"\"$HOME\"/.claude/hooks/instructions-loaded-log.sh"}]}]}'
+WIRED_HOOKS='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/memory-store-guard.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}],"InstructionsLoaded":[{"matcher":"session_start|nested_traversal|path_glob_match|include|compact","hooks":[{"type":"command","command":"\"$HOME\"/.claude/hooks/instructions-loaded-log.sh"}]}]}'
 UNWIRED_HOOKS='{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}'
 
 # build_home <name> <wired:yes|no|nofile> <retired:yes|no> — returns the fixture HOME path.
