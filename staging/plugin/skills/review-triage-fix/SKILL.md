@@ -75,15 +75,11 @@ no push, no automatic iteration beyond the cycle** inside this skill.
 
 ## Step 1 — Review
 
-**Agent-memory contract (ADR-0012):** before dispatching, inject prior notes — run
-`bash ~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh inject reviewer` and
-append its output (a `PRIOR AGENT NOTES` block, or `none yet`) to the END of the reviewer brief —
-stable content first, dynamic notes last preserves provider prefix-cache hits across runs.
-Require the reviewer to end its report with a terminal `DURABLE NOTES:` section. After the
-report, harvest it: pipe the report into `... agent-notes-harvest.sh harvest reviewer`. The
-encoded path is resolved by the orchestrator running this skill, never by the subagent (D2).
+**Native memory (VCS-055 Phase 2.3, ADR-0182):** reviewer carries `memory: project` and manages
+its own persistent notes — no inject/harvest step here. This replaces the ADR-0012 mediated
+mechanism for reviewer specifically (debugger, below, is unaffected and stays on ADR-0012).
 
-<!-- dispatch-site: rtf-step1-reviewer class=inline exempt: the reviewer grant carries no Write tool so no completion fact is producible, and an empty report yields an empty triage rather than a green -->
+<!-- dispatch-site: rtf-step1-reviewer class=inline exempt: reviewer produces no completion fact — its Edit/Write (via memory: project) is confined to its own memory directory by reviewer-write-scope.sh, and an empty report yields an empty triage rather than a green -->
 Dispatch the `reviewer` agent over the recent changes. Edge cases:
 - Reviewer reports **no detectable changes** → stop, emit a "nothing to do"
   recap, do not invent work.
@@ -173,7 +169,7 @@ and the project's test-cmd so the agent self-verifies.
 - **`sonnet-xhigh`:** use `model: "sonnet"` for all fix dispatches instead of `opus`. Do NOT pin `effort` — RTF dispatches fixes exclusively through the Agent tool (no Workflow `agent()` call exists anywhere in this file), and the Agent tool has no `effort` parameter at all (ADR-0068 §D7, issue #180). This means the variant has no lever for a higher reasoning tier and reduces to a plain model swap — the "higher reasoning tier at lower cost than opus" intent the name `sonnet-xhigh` was chosen for does not survive on the Agent tool as currently spec'd. No mechanism currently exists to pin per-dispatch reasoning effort on this tool; that gap is disclosed here, not solved. No other change to this step.
 - **`advisor`:** for each routable finding, two `Agent`-tool calls instead of one:
   <!-- dispatch-site: rtf-advisor-pair class=inline exempt: the advisor is a reviewer with no Write tool and its own failure clause already falls back to plain opus behaviour for that one finding -->
-  1. **Advisor call** — dispatch `subagent_type: "reviewer"` (read-only, no `Edit`/`Write` in its tool grant, so it structurally cannot make changes even if asked to) at `model: "opus"`. Brief: the finding, `loc`, the reviewer's suggested fix, and the instruction *"Diagnose only, do not propose an edit as a diff — return root cause, fix approach, and exactly which files/functions to touch. Keep the answer under 150 words."* This call is the entire advisor cost — bounded by the word cap, not a full plan. This `reviewer` dispatch is exempt from the ADR-0012 agent-memory contract (no `PRIOR AGENT NOTES`/`DURABLE NOTES:`) — it is a bounded diagnosis, not a review pass.
+  1. **Advisor call** — dispatch `subagent_type: "reviewer"` (read-only by design — it reports, never edits code; its `memory: project` grant is confined to its own memory directory by `reviewer-write-scope.sh`, so it structurally cannot touch source even if asked to) at `model: "opus"`. Brief: the finding, `loc`, the reviewer's suggested fix, and the instruction *"Diagnose only, do not propose an edit as a diff — return root cause, fix approach, and exactly which files/functions to touch. Keep the answer under 150 words."* This call is the entire advisor cost — bounded by the word cap, not a full plan. No agent-memory contract applies here (reviewer uses native memory per ADR-0182; there is nothing to inject or harvest).
   2. **Executor call** — dispatch the normal fix agent (`coder`/`refactorer`/`debugger`) at `model: "sonnet"` (no effort override), with the advisor's diagnosis prepended to the existing dispatch brief under a `FIX GUIDANCE (already diagnosed — apply, do not re-diagnose):` header. Everything else about the dispatch (micro-piano, test-cmd, isolation, circuit breakers) is unchanged.
   If the advisor call errors, times out, or returns empty: skip it and fall back to `opus` behavior for that one finding only — never block the cycle on an advisor failure.
   NIT batching stays a single dispatch either way; run the advisor call once for the whole batch (one diagnosis covering the list), not once per NIT.

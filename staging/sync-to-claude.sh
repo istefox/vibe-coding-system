@@ -182,6 +182,7 @@ plugin/scripts/stop-gate.sh|hooks/stop-gate.sh
 plugin/scripts/pre-flight-pattern-enforce.sh|hooks/pre-flight-pattern-enforce.sh
 plugin/scripts/write-scope-enforce.sh|hooks/write-scope-enforce.sh
 plugin/scripts/memory-store-guard.sh|hooks/memory-store-guard.sh
+plugin/scripts/reviewer-write-scope.sh|hooks/reviewer-write-scope.sh
 plugin/scripts/agent-command-scope.sh|hooks/agent-command-scope.sh
 plugin/scripts/test-write-scope.sh|hooks/test-write-scope.sh
 plugin/scripts/db-backup-guardrail.sh|hooks/db-backup-guardrail.sh
@@ -428,6 +429,26 @@ memory-store-guard (VCS-055 Phase 2, ADR-0038 Correction 2026-08-30) denies a su
 inert by construction: no .agent_id, no gate, and a sub-agent writing to its OWN memory directory
 is unaffected. Required BEFORE running the guarded native-memory re-pilot on `reviewer`
 (VCS-055 Phase 2.2). Until this entry exists the hook is deployed but never invoked.
+NOTE
+fi
+
+if ! grep -q 'reviewer-write-scope' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this PreToolUse entry to ~/.claude/settings.json (alongside the memory-store-guard entry):
+
+  { "matcher": "Edit|Write|MultiEdit",
+    "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/reviewer-write-scope.sh" } ] }
+
+reviewer-write-scope (VCS-055 Phase 2.3, ADR-0182) denies reviewer any write outside its own
+.claude/agent-memory/reviewer/ directory. reviewer's `memory: project` grant carries Edit/Write
+with no path restriction at the tool-schema level (confirmed live 2026-08-30) — this hook is the
+enforcement, not the frontmatter grant, of the boundary review-triage-fix/SKILL.md's advisor call
+relies on. It is inert by construction: gated on .agent_type == "reviewer", so no other agent or
+the orchestrator is affected. Required for the reviewer native-memory adoption to be safe. Until
+this entry exists the hook is deployed but never invoked.
 NOTE
 fi
 
