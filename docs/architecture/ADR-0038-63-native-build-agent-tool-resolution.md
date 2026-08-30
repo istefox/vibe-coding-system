@@ -97,6 +97,34 @@ native-build subagent.
   Step 6), not sync-to-claude PAIRS. Until a human runs that copy, the deployed reviewer keeps the
   narrower scope, the same staging-first convention as ADR-0024 through ADR-0036.
 
+## Correction (2026-08-30)
+
+The "coder's `memory: local` … observed inert on this build" line above does not hold on the
+currently installed CC 2.1.251. A read-only diagnostic dispatch of `coder` on 2026-08-30 returned
+a full `# Persistent Agent Memory` system-prompt block: the mechanism is live, not inert, and was
+never a platform-resolution gap of the kind this ADR otherwise documents (Grep/Glob/LSP being
+silently ignored on native builds). What was actually wrong was local to this repo's own
+specification: `staging/plugin/agents/coder.md` declared a tool literally named `Memory` in its
+`tools:` list and instructed the agent to "use the Memory tool (not Edit/Write)" — no such tool
+exists on any build; `memory:` genuinely auto-enables the ordinary Read/Write/Edit tools, per
+`code.claude.com/docs/en/sub-agents`. Separately, and independently fatal to persistence even once
+that were fixed: `memory: local` resolves inside `isolation: worktree`'s ephemeral sandbox, so
+anything the agent wrote there was deleted with the worktree and never available to a later
+dispatch — confirmed live, path
+`.claude/worktrees/agent-<id>/.claude/agent-memory-local/coder/`.
+
+This ADR's own closing line — *"a follow-up issue should either re-platform or retire the Memory
+pilot rather than leave it silently dead"* — is discharged by **retiring** `memory: local` and the
+`Memory` tool entry from `coder.md` (VCS-055 Phase 1): the field cannot do useful work on a
+worktree-isolated agent, and `user` scope (the only one that would survive the worktree) is the
+wrong semantics for per-project notes, per ADR-0013 §D1. A guarded re-pilot of native memory on a
+non-worktree agent (`reviewer`, `project` scope, behind a new hook denying sub-agent writes into
+the curated orchestrator auto-memory — the exact failure mode that sank ADR-0013's 2026-05-25
+pilot) is tracked separately as VCS-055 Phase 2, gated on its own adoption decision. Does not
+reopen or supersede ADR-0012/ADR-0013. Full narrative:
+`docs/vibe-coding-system.md`, "Correction 2026-08-30 (VCS-055, sub-agent persistent memory
+re-verified live)".
+
 ## 5. References
 
 - `~/.claude/cache/changelog.md` (bundled CC 2.1.209): v2.1.117, v2.1.119, v2.1.162 entries quoted
