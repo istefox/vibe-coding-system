@@ -75,8 +75,8 @@ jobs:
             echo "::notice::ci-tier: could not determine a base for this $EVENT_NAME event (or no changed files) — treating as full"
           fi
 
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            TRAILER_SRC=$(git log -1 --format=%B HEAD^2 2>/dev/null || git log -1 --format=%B HEAD 2>/dev/null || true)
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_HEAD_SHA:-}" ] && git cat-file -e "$PR_HEAD_SHA" 2>/dev/null; then
+            TRAILER_SRC=$(git log -1 --format=%B "$PR_HEAD_SHA" 2>/dev/null || true)
           else
             TRAILER_SRC=$(git log -1 --format=%B HEAD 2>/dev/null || true)
           fi
