@@ -16,6 +16,9 @@
 #     `local`), never a typo or an invented value.
 #   AM4 -- reverse check (rule 8): no agent BODY instructs the use of a "Memory tool", in any file,
 #     so the retired, never-real phrasing cannot creep back into a different agent.
+#   AM5 -- reverse check (rule 8, VCS-056/ADR-0183): `researcher` and `lesson-extractor` never
+#     carry a `memory:` field. Their only safety guarantee is having no Write/Edit tool at all;
+#     `memory:` auto-grants both, silently erasing that guarantee. Machine-checked, not just prose.
 #
 # Zero $HOME dependency: runs identically in CI (ubuntu-latest, no ~/.claude) and locally. Never
 # point any variable at $HOME/.claude/... -- that is the deployed copy, out of scope (same rule as
@@ -65,6 +68,9 @@ fi
 
 # =====================================================================================
 # AM2 -- `memory:` never combined with `isolation: worktree` (the config that cannot persist).
+# Confirmed live TWICE: `local` scope on coder (2026-07, ADR-0038 Correction) and again with
+# `project` scope on coder (2026-08-31, VCS-056/ADR-0183 Phase 0) -- both times the write
+# resolved inside the ephemeral worktree copy and was destroyed when the worktree was removed.
 # =====================================================================================
 # plant: AM2 | plugin/agents/coder.md | isolation: worktree | isolation: worktree\nmemory: local
 _am2_bad=""
@@ -110,6 +116,28 @@ if [ -z "$_am4_bad" ]; then
   ok "AM4: no agent body instructs use of a 'Memory tool'"
 else
   bad "AM4: 'Memory tool' phrasing found in:$_am4_bad"
+fi
+
+# =====================================================================================
+# AM5 -- reverse check (rule 8, VCS-056/ADR-0183): `researcher` never carries `memory:`. Its
+# only safety guarantee is having no Write/Edit tool; `memory:` would auto-grant both.
+# `lesson-extractor` carries the same guarantee but is OUT OF SCOPE here: it is never vendored
+# into staging/plugin/agents/ (deployed-only, owned by the auto-learning skill -- AM0's "exactly
+# 8" denominator excludes it by design), so this repo's harness has no file to check it against.
+# =====================================================================================
+# plant: AM5 | plugin/agents/researcher.md | model: haiku | model: haiku\nmemory: project
+_am5_bad=""
+for _f in $_agent_files; do
+  case "$_f" in
+    */researcher.md)
+      grep -qE '^memory: ' "$_f" && _am5_bad="$_am5_bad $_f"
+      ;;
+  esac
+done
+if [ -z "$_am5_bad" ]; then
+  ok "AM5: researcher never carries memory: (Write/Edit-less safety guarantee intact)"
+else
+  bad "AM5: memory: field found on a Write/Edit-less agent:$_am5_bad"
 fi
 
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"

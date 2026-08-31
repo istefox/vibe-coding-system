@@ -75,9 +75,10 @@ no push, no automatic iteration beyond the cycle** inside this skill.
 
 ## Step 1 — Review
 
-**Native memory (VCS-055 Phase 2.3, ADR-0182):** reviewer carries `memory: project` and manages
-its own persistent notes — no inject/harvest step here. This replaces the ADR-0012 mediated
-mechanism for reviewer specifically (debugger, below, is unaffected and stays on ADR-0012).
+**Native memory (VCS-055 Phase 2.3 / VCS-056, ADR-0182 / ADR-0183):** reviewer and debugger both
+carry `memory: project` and manage their own persistent notes — no inject/harvest step for either.
+This retires the ADR-0012 mediated mechanism entirely; `coder` and `refactorer` were never subject
+to it.
 
 <!-- dispatch-site: rtf-step1-reviewer class=inline exempt: reviewer produces no completion fact — its Edit/Write (via memory: project) is confined to its own memory directory by reviewer-write-scope.sh, and an empty report yields an empty triage rather than a green -->
 Dispatch the `reviewer` agent over the recent changes. Edge cases:
@@ -173,13 +174,6 @@ and the project's test-cmd so the agent self-verifies.
   2. **Executor call** — dispatch the normal fix agent (`coder`/`refactorer`/`debugger`) at `model: "sonnet"` (no effort override), with the advisor's diagnosis prepended to the existing dispatch brief under a `FIX GUIDANCE (already diagnosed — apply, do not re-diagnose):` header. Everything else about the dispatch (micro-piano, test-cmd, isolation, circuit breakers) is unchanged.
   If the advisor call errors, times out, or returns empty: skip it and fall back to `opus` behavior for that one finding only — never block the cycle on an advisor failure.
   NIT batching stays a single dispatch either way; run the advisor call once for the whole batch (one diagnosis covering the list), not once per NIT.
-
-**Agent-memory contract (ADR-0012) — ONLY when the chosen agent is `debugger`:** append a
-`PRIOR AGENT NOTES` block (`agent-notes-harvest.sh inject debugger`) to the END of its dispatch —
-stable content first, dynamic notes last preserves provider prefix-cache hits across runs.
-Require a terminal `DURABLE NOTES:` section in its report, and after the report harvest it
-(`agent-notes-harvest.sh harvest debugger`). `coder` and `refactorer` are NOT subject to this
-contract — never add the `PRIOR AGENT NOTES`/`DURABLE NOTES:` block to their dispatches.
 
 **NIT batching is mandatory.** All routable NITs go to `coder` as a **SINGLE
 dispatch with a list** (one line per NIT: sev, loc, problem, suggested-fix) —

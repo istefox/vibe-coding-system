@@ -209,20 +209,23 @@ if [ -f "$MEM_FILE" ]; then
   MEM_LINE="$pcount entries indexed in MEMORY.md"
 fi
 
-# --- Section 7b: Agent notes (ADR-0012, read-only, non-blocking) ---
+# --- Section 7b: Agent memory (native `memory:`, read-only, non-blocking) ---
+# Re-pointed from the retired ADR-0012 central store to the native per-agent stores
+# (VCS-056, ADR-0183) — those replaced it for every agent that carried it, so watching
+# the old path would render "(no agent-notes)" forever rather than reflecting reality.
 AN_COUNT=0
-AN_LINE="(no agent-notes)"
-AN_DIR="$MEM_DIR/agent-notes"
+AN_LINE="(no agent-memory)"
+AN_DIR="$PWD/.claude/agent-memory"
 if [ -d "$AN_DIR" ]; then
-  AN_COUNT=$(ls -1 "$AN_DIR"/*.md 2>/dev/null | grep -v 'README.md' | wc -l | tr -d ' ')
+  AN_COUNT=$(ls -1 "$AN_DIR"/*/MEMORY.md 2>/dev/null | wc -l | tr -d ' ')
   if [ "$AN_COUNT" -gt 0 ]; then
-    newest=$(ls -t "$AN_DIR"/*.md 2>/dev/null | grep -v 'README.md' | head -1)
+    newest=$(ls -t "$AN_DIR"/*/MEMORY.md 2>/dev/null | head -1)
     mt=""
     [ -n "$newest" ] && mt=$(stat -f '%Sm' -t '%Y-%m-%d' "$newest" 2>/dev/null || stat -c '%y' "$newest" 2>/dev/null | cut -d' ' -f1)
     if [ -n "$mt" ]; then
-      AN_LINE="$AN_COUNT agent(s) with notes, newest $mt"
+      AN_LINE="$AN_COUNT agent(s) with memory, newest $mt"
     else
-      AN_LINE="$AN_COUNT agent(s) with notes"
+      AN_LINE="$AN_COUNT agent(s) with memory"
     fi
   fi
 fi
@@ -273,7 +276,7 @@ ELAPSED=$((END - START))
 
 # --- Render ---
 if [ "$FORMAT" = "json" ]; then
-  printf '{"timestamp":"%s","health":"%s","harness":{"ok":%d,"fail":%d,"err":%d,"total":%d},"adr":%d,"manifests":%d,"skills":%d,"agent_notes":%d,"agents":{"total":%d,"active":%d,"blocked":%d,"completed":%d},"elapsed":%d}\n' \
+  printf '{"timestamp":"%s","health":"%s","harness":{"ok":%d,"fail":%d,"err":%d,"total":%d},"adr":%d,"manifests":%d,"skills":%d,"agent_memory":%d,"agents":{"total":%d,"active":%d,"blocked":%d,"completed":%d},"elapsed":%d}\n' \
     "$TS" "$HEALTH" "$HARNESS_OK" "$HARNESS_FAIL" "$HARNESS_ERR" "$HARNESS_TOTAL" \
     "$ADR_COUNT" "$MANIFEST_COUNT" "$SKILL_COUNT" "$AN_COUNT" \
     "$_ag_total" "$_ag_active" "$_ag_blocked" "$_ag_completed" "$ELAPSED"
@@ -324,7 +327,7 @@ else
 
   bash "$HOME/.claude/skills/vibe-status/scripts/chain-memory-section.sh" "$MEM_DIR" || true
 
-  printf '## Agent notes (ADR-0012)\n%s\n\n' "$AN_LINE"
+  printf '## Agent memory (native)\n%s\n\n' "$AN_LINE"
 
   printf '## Background sessions\n%s\n\n' "$AGENT_LINE"
 

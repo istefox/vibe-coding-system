@@ -2,7 +2,8 @@
 # chain-memory-section.sh — read-only "Active chains" section for vibe-status.
 # Reads STATE OF FACT headers from the native store's chain-history/ files
 # (written by chain-memory-capture.sh, ADR-0021) and renders a Markdown list of
-# non-terminal chains. Mirrors the ADR-0012 agent-notes read-only watch.
+# non-terminal chains. Mirrors the native per-agent memory read-only watch (VCS-056, ADR-0183;
+# formerly the ADR-0012 agent-notes watch, retired).
 #
 # Read-only, fail-graceful: prints nothing on any error, never non-zero in a way
 # that would break aggregate.sh (callers should `|| true`).

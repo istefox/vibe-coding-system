@@ -242,13 +242,10 @@ grep -Eq '1\.3' "$VAL" 2>/dev/null && ok "manifest-validate: schema 1.3 accepted
 CC_BARE_DPR=$(grep -n 'scripts/detect-public-remote' "$CC" 2>/dev/null | grep -v 'clean-public-repo/scripts/detect-public-remote')
 [ -z "$CC_BARE_DPR" ] && ok "concept-to-code: detect-public-remote ref qualified (clean-public-repo abs path)" || bad "concept-to-code: unqualified scripts/detect-public-remote ref (runtime ENOENT)"
 
-# --- ADR-0012 agent-notes round-trip (delegated harness) ---
-RT="$SKILL_DIR/tests/agent-notes-roundtrip.sh"
-if [ -x "$RT" ] && bash "$RT" >/dev/null 2>&1; then
-  ok "agent-notes round-trip (ADR-0012): inject/harvest/persistence green"
-else
-  bad "agent-notes round-trip (ADR-0012) harness failed"
-fi
+# ADR-0012 agent-notes round-trip assertion removed here (VCS-056, ADR-0183): the mediated
+# inject/harvest mechanism it tested (agent-notes-harvest.sh, tests/agent-notes-roundtrip.sh)
+# was retired when every agent that used it (architect, debugger, reviewer) moved to native
+# `memory:` persistence. Rule 19.
 
 # --- ADR-0014: chain (Step 2) proposes .claude/test-cmd + TOFU gate ---
 CC="$SKILL_DIR/SKILL.md"

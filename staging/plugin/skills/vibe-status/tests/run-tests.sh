@@ -136,29 +136,25 @@ else
   ok "11: (skipped: no jq)"
 fi
 
-# Test 12: agent-notes (ADR-0012) freshness signal — present + absent cases
-TMP_AN="$TMP/anhome"
+# Test 12: agent memory (native, VCS-056/ADR-0183) freshness signal — present + absent cases
 ANCWD="$TMP/ancwd"
-mkdir -p "$ANCWD" "$TMP_AN/.claude/skills"
-ENC12=$(printf '%s' "$ANCWD" | tr '/' '-')
-mkdir -p "$TMP_AN/.claude/projects/$ENC12/memory/agent-notes"
-printf '# notes\n- [arch] sample durable note\n' >"$TMP_AN/.claude/projects/$ENC12/memory/agent-notes/architect.md"
-printf 'README\n' >"$TMP_AN/.claude/projects/$ENC12/memory/agent-notes/README.md"
-( cd "$ANCWD" && HOME="$TMP_AN" bash "$AGG" --skip-harness >"$TMP/o12" 2>&1 )
+mkdir -p "$ANCWD/.claude/agent-memory/architect"
+printf '# notes\n- [arch] sample durable note\n' >"$ANCWD/.claude/agent-memory/architect/MEMORY.md"
+( cd "$ANCWD" && bash "$AGG" --skip-harness >"$TMP/o12" 2>&1 )
 rc12=$?
-# Present case: count is 1 (architect.md only; README.md excluded)
-if [ $rc12 -eq 0 ] && grep -A1 '## Agent notes' "$TMP/o12" | grep -q '1 agent'; then
+# Present case: count is 1 (architect's MEMORY.md)
+if [ $rc12 -eq 0 ] && grep -A1 '## Agent memory' "$TMP/o12" | grep -q '1 agent'; then
   ANCWD2="$TMP/ancwd2"
   mkdir -p "$ANCWD2"
-  ( cd "$ANCWD2" && HOME="$TMP_AN" bash "$AGG" --skip-harness >"$TMP/o12b" 2>&1 )
+  ( cd "$ANCWD2" && bash "$AGG" --skip-harness >"$TMP/o12b" 2>&1 )
   rc12b=$?
-  if [ $rc12b -eq 0 ] && grep -A1 '## Agent notes' "$TMP/o12b" | grep -q '(no agent-notes)'; then
-    ok "12: agent-notes signal present(1, README excluded)+absent graceful"
+  if [ $rc12b -eq 0 ] && grep -A1 '## Agent memory' "$TMP/o12b" | grep -q '(no agent-memory)'; then
+    ok "12: agent-memory signal present(1)+absent graceful"
   else
-    bad "12: agent-notes absent case (rc=$rc12b; out=$(grep -A1 '## Agent notes' "$TMP/o12b" | head -2))"
+    bad "12: agent-memory absent case (rc=$rc12b; out=$(grep -A1 '## Agent memory' "$TMP/o12b" | head -2))"
   fi
 else
-  bad "12: agent-notes present case (rc=$rc12; out=$(grep -A1 '## Agent notes' "$TMP/o12" | head -2))"
+  bad "12: agent-memory present case (rc=$rc12; out=$(grep -A1 '## Agent memory' "$TMP/o12" | head -2))"
 fi
 
 # Test 13: ADR scan excludes *-implementation-plan.md companion (ADR-0012 cosmetic fix)
