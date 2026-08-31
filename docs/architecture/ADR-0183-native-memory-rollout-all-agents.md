@@ -235,9 +235,35 @@ explicitly out of scope for this decision (see Out of scope in the working plan)
   `~/.claude/.retired-adr0012-backup-20260831/` and removed, per the sync script's new MANUAL STEP
   note.
 
+## Correction (2026-08-31, VCS-057)
+
+The Phase 0 exclusion of `coder` above rested on a bare dispatch: a fresh worktree, a memory
+write, and nothing more — it never exercised Step 5's merge-back (`step5-implementation.md`,
+"Merge-back and base-fork audit"), which commits the worktree's changes and merges them onto the
+feature branch before the next dispatch forks from that same `HEAD`. VCS-057 re-measured the real
+chain's path, live, in a throwaway scratch repo: a coder's `memory: project` write DOES persist
+onto the feature branch via the merge-back, and IS re-injected into the next dispatch's worktree.
+What does NOT survive is two parallel coder dispatches in the same batch writing the same
+`MEMORY.md` — that produces a genuine merge conflict, measured live as well.
+
+`coder` now carries `memory: project`, gated by a new guard (`coder-memory-scope.sh`, VCS-057/
+ADR-0184) confining its memory writes to a per-dispatch shard file under
+`.claude/agent-memory/coder/topics/`, never `MEMORY.md` directly — the index is curated once by
+the orchestrator, after the batch, never inside the fan-out. See ADR-0184 for the full decision
+(per-feature-branch memory scope, shard pruning, and why shards stay tracked).
+
+**The "Out of scope" clause below is corrected forward, not edited in place (rule 14):** `coder`
+no longer rejoins only by losing `isolation: worktree` — it is in scope today, on the allowlisted
+combination this Correction and ADR-0184 describe. `agent-memory-contract.test.sh`'s AM2 (an
+absolute ban on `memory:` + `isolation: worktree`) is likewise superseded by AM2′, a one-line
+frozen allowlist naming `coder` and this ADR.
+
 ## Out of scope
 
 - `coder` — excluded on measurement, not opinion; rejoins only by losing `isolation: worktree`.
+  **Superseded 2026-08-31 by the Correction above and ADR-0184: `coder` is back in scope under a
+  per-dispatch shard-write discipline, measured against the real chain's merge-back, not the bare
+  dispatch this line described.**
 - `researcher`, `lesson-extractor` — excluded on structural safety, now machine-checked for the one
   of the two vendored in this repo.
 - Deleting the orphaned ADR-0012 stores (`memory/agent-notes/{architect,reviewer}.md`) — declared

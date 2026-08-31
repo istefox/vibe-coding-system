@@ -604,6 +604,9 @@ path.
 # legitimately modified-tracked throughout Step 5 (issue #239), so a dirty-tree check would fire
 # on every stage. The chain itself creates no untracked file in Step 5 — step5-report.json is
 # gitignored — so anything here came from outside the worktree it was supposed to stay in.
+# A coder's memory shard write (VCS-057, ADR-0184) is invisible to this check by design: it lands
+# under the coder's OWN worktree, not the shared checkout this check runs against, and only
+# becomes visible here (as a legitimate tracked addition) after that worktree's own merge-back.
 ESCAPED=$(git ls-files --others --exclude-standard 2>/dev/null)
 [ -z "$ESCAPED" ] || <escape halt: report $ESCAPED as written outside the dispatched worktree,
                       preserve $WB, do NOT merge, stop>
@@ -689,6 +692,11 @@ looking incomplete, say so in your report rather than closing the gap yourself. 
 green, except where the plan defers a red assertion to a later task: an assertion the plan defers
 to a later task stays red, and your report says which one and why.
 Writes go under the dispatched worktree, never to an absolute path into the shared checkout: `isolation: worktree` bounds the working directory, not the filesystem, and an absolute path resolves out of it (ADR-0068 §D11, issue #245). Read the planning artifacts by absolute path; write by relative path.
+Memory write scope (VCS-057, ADR-0184): if you have a durable fact worth keeping, write it to
+`.claude/agent-memory/coder/topics/<this-task-group-id>-<slug>.md` (relative path), and nowhere
+else under `.claude/agent-memory/`. Never write `MEMORY.md` — `coder-memory-scope.sh` denies it,
+and a parallel sibling coder in this same batch would merge-conflict with you on it. The index is
+curated once by the orchestrator after the batch, not by you.
 ```
 A coder whose write is denied by `test-write-scope.sh` is reading a consistent story: the tester
 agent owns test files for this task, and the correct response is to report the gap to the
@@ -760,12 +768,32 @@ After the workflow completes:
 7. Run the `Task-level metrics — Step 5 checkpoints (ADR-0064, issue #118)` block once, over the
    same cumulative diff and every completed task — it never affects the transition and is not
    surfaced at Gate 5 (metrics, not findings, ADR-0064 §D2).
+7b. Run the `Memory shard curation (VCS-057, ADR-0184)` block once, after the last merge-back —
+    it never affects the transition.
 8. If all tasks passed, `test_result` is `green` or `n/a`, the weakening gate found no
    `WEAKENED` line, and the coverage gate exit code is `0` → transition to `step_6_review`.
    Present Gate 5.
 
 Set `step5_mode: "workflow"` in the manifest (via bash sed substitution on the additive
 field — NOT via Edit tool).
+
+#### Memory shard curation (VCS-057, ADR-0184)
+
+One resolution site, referenced by both dispatch paths' final wrap-up (Workflow path step 7b
+below, Agent-tool fallback's equivalent step before its Gate 5 transition) — run once, by the
+orchestrator, after the LAST coder merge-back of this Step 5 run, never inside the fan-out itself
+(the guard `coder-memory-scope.sh` is inert for the orchestrator, which carries no `agent_type`,
+so this is the one write to `coder/MEMORY.md` that is not denied).
+
+1. List `.claude/agent-memory/coder/topics/*.md` on the feature branch (they arrived via each
+   batch's merge-back — VCS-057/ADR-0184 measured that a coder's `memory: project` write does
+   persist that way and is re-injected on the next dispatch).
+2. For any shard not already indexed, append one line to `.claude/agent-memory/coder/MEMORY.md`
+   in the established pointer-list shape: `- [title](topics/<file>.md) — one-line gloss`. Never
+   rewrite or reorder existing index lines.
+3. Commit this index update directly on the feature branch (this IS an orchestrator commit, not a
+   coder one — `coder.md`'s "never commits" instruction is unaffected).
+4. No shards this run → nothing to do, not an error.
 
 #### Generator/verifier separation — tester stage and coder test-write deny (ADR-0049)
 
@@ -1608,6 +1636,11 @@ report it to the orchestrator instead of writing or editing it yourself.
 Use your Pre-flight Pattern Classifier (ADR-0001) for every Edit operation.
 
 Writes go under the dispatched worktree, never to an absolute path into the shared checkout: `isolation: worktree` bounds the working directory, not the filesystem, and an absolute path resolves out of it (ADR-0068 §D11, issue #245). Read the planning artifacts by absolute path; write by relative path.
+Memory write scope (VCS-057, ADR-0184): if you have a durable fact worth keeping, write it to
+`.claude/agent-memory/coder/topics/batch-<B>-<slug>.md` (relative path), and nowhere else under
+`.claude/agent-memory/`. Never write `MEMORY.md` — `coder-memory-scope.sh` denies it, and a
+parallel sibling batch would merge-conflict with you on it. The index is curated once by the
+orchestrator after the batch, not by you.
 
 Auto mode active. No intermediate HITL.
 `.claude/test-cmd` is off-limits — never read, write, or modify it. If the test command needs changing, stop and report it to the orchestrator.
@@ -1701,7 +1734,9 @@ fence exits non-zero on every non-`DONE` token — that half is mechanical. That
 stops rather than pressing on is an instruction, exactly as it was before. What changed is that the
 check no longer consults a channel that cannot carry the answer.
 
-After all batches complete and controller-side verification passes, transition to
+After all batches complete and controller-side verification passes, run the `Memory shard
+curation (VCS-057, ADR-0184)` block once, after the last batch's merge-back — it never affects the
+transition, then transition to
 `step_6_review`. Present Gate 5.
 
 Set `step5_mode: "agent_batch"` in the manifest when the fallback activates (via bash sed substitution on the additive field — NOT via Edit tool, NOT via manifest-set-flag.sh which is boolean-only). <!-- path-rule-exempt: negated -- says NOT to use this helper for the step5_mode write, describing what not to do -->

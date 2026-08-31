@@ -1515,6 +1515,18 @@ sub-agent writes into the curated auto-memory store) is tracked separately as VC
 any adoption decision requiring a new ADR before wider rollout. Full record: `docs/architecture/
 ADR-0038-63-native-build-agent-tool-resolution.md` §Correction (2026-08-30).
 
+### Forward pointer (2026-08-31, VCS-057)
+
+The 2026-08-30 Correction above is itself now partly superseded on `coder` specifically: "the two
+frontmatter fields defeat each other by construction" held for a bare dispatch, but Step 5's own
+merge-back (never exercised by that diagnostic) commits and merges the worktree's changes onto the
+feature branch before the next dispatch forks from it — so a coder memory write DOES survive,
+measured live. `coder` now carries `memory: project` again, under a new per-dispatch shard-write
+discipline enforced by `coder-memory-scope.sh`. Left here as the historical record of the correct
+2026-08-30 finding on a bare dispatch; the current mechanism and its guard are recorded in
+`docs/architecture/ADR-0184-coder-memory-shard-discipline.md`, corrected forward from ADR-0183's
+own Phase 0 exclusion of `coder`, not edited in place there either.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow

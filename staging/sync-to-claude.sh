@@ -183,6 +183,7 @@ plugin/scripts/pre-flight-pattern-enforce.sh|hooks/pre-flight-pattern-enforce.sh
 plugin/scripts/write-scope-enforce.sh|hooks/write-scope-enforce.sh
 plugin/scripts/memory-store-guard.sh|hooks/memory-store-guard.sh
 plugin/scripts/reviewer-write-scope.sh|hooks/reviewer-write-scope.sh
+plugin/scripts/coder-memory-scope.sh|hooks/coder-memory-scope.sh
 plugin/scripts/agent-command-scope.sh|hooks/agent-command-scope.sh
 plugin/scripts/test-write-scope.sh|hooks/test-write-scope.sh
 plugin/scripts/db-backup-guardrail.sh|hooks/db-backup-guardrail.sh
@@ -447,6 +448,30 @@ enforcement, not the frontmatter grant, of the boundary review-triage-fix/SKILL.
 relies on. It is inert by construction: gated on .agent_type == "reviewer", so no other agent or
 the orchestrator is affected. Required for the reviewer native-memory adoption to be safe. Until
 this entry exists the hook is deployed but never invoked.
+NOTE
+fi
+
+if ! grep -q 'coder-memory-scope' "$DEST/settings.json" 2>/dev/null; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: hook wiring (not auto-applied) ---
+Add this PreToolUse entry to ~/.claude/settings.json (alongside the reviewer-write-scope entry):
+
+  { "matcher": "Edit|Write|MultiEdit",
+    "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/coder-memory-scope.sh" } ] }
+
+coder-memory-scope (VCS-057, ADR-0184) confines coder's memory writes to its own per-dispatch
+shard directory (.claude/agent-memory/coder/topics/), never MEMORY.md and never another agent's
+memory dir. Measured live in a throwaway scratch repo: coder's `memory: project` write DOES
+persist onto the feature branch via Step 5's merge-back and IS re-injected on the next dispatch —
+but two parallel coder dispatches sharing one MEMORY.md produce a real merge conflict. This hook
+is the enforcement of the per-dispatch shard discipline coder.md now instructs; unlike
+reviewer-write-scope's whitelist shape, it is inert for everything coder writes OUTSIDE
+.claude/agent-memory/ (ordinary source writes are coder's whole job). It is inert by construction:
+gated on .agent_type == "coder", so no other agent or the orchestrator is affected. Required for
+the coder native-memory adoption to be safe under a parallel fan-out. Until this entry exists the
+hook is deployed but never invoked.
 NOTE
 fi
 
