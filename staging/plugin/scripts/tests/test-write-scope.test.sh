@@ -627,6 +627,17 @@ OUT=$(run_arch "$(payload coder "$ROOT/src/main.py" Write)")
 [ -z "$OUT" ] && ok "TN4: the architect branch is inert for agent_type=coder (falls through to the coder path, which allows here since no agent_id is set)" \
              || bad "TN4: architect branch fired on a non-architect agent_type — got: $OUT"
 
+# VCS-056/ADR-0183: memory: project added a third allowed root, .claude/agent-memory/architect/.
+# plant: TN5 | plugin/scripts/test-write-scope.sh | */.claude/agent-memory/architect/*) | */.claude/agent-memory/architect-disabled/*)
+OUT=$(run_arch "$(payload architect "$ROOT/.claude/agent-memory/architect/MEMORY.md" Write)")
+[ -z "$OUT" ] && ok "TN5: architect writing its own persistent memory is allowed (VCS-056, ADR-0183)" \
+             || bad "TN5: legitimate architect memory write was denied — got: $OUT"
+
+# plant: TN6 | plugin/scripts/test-write-scope.sh | */docs/architecture/*|*/docs/superpowers/plans/*|*/.claude/agent-memory/architect/*) | */docs/architecture/*|*/docs/superpowers/plans/*|*/.claude/agent-memory/*)
+OUT=$(run_arch "$(payload architect "$ROOT/.claude/agent-memory/coder/MEMORY.md" Write)")
+denied "$OUT" && ok "TN6: architect writing into ANOTHER agent's memory dir is denied — the third root is scoped to architect/, not agent-memory/ at large" \
+             || bad "TN6: architect was allowed to write outside its own memory dir — got: $OUT"
+
 # ==================================================================================================
 # Z. Assertion-count floor (ADR-0083 §D3). A suite reporting FEWER assertions does not read as
 # broken and nobody watches the count — six of plan-task-count's assertions once vanished that way.

@@ -221,7 +221,6 @@ plugin/skills/concept-to-code/SKILL.md|skills/concept-to-code/SKILL.md
 plugin/skills/concept-to-code/references/step5-implementation.md|skills/concept-to-code/references/step5-implementation.md
 plugin/skills/concept-to-code/references/hitl-gates.md|skills/concept-to-code/references/hitl-gates.md
 plugin/skills/concept-to-code/scripts/agent-metrics.sh|skills/concept-to-code/scripts/agent-metrics.sh
-plugin/skills/concept-to-code/scripts/agent-notes-harvest.sh|skills/concept-to-code/scripts/agent-notes-harvest.sh
 plugin/skills/concept-to-code/scripts/commit-outcome-check.sh|skills/concept-to-code/scripts/commit-outcome-check.sh
 plugin/skills/concept-to-code/scripts/detect-macos.sh|skills/concept-to-code/scripts/detect-macos.sh
 plugin/skills/concept-to-code/scripts/ui-file-detect.sh|skills/concept-to-code/scripts/ui-file-detect.sh
@@ -246,7 +245,6 @@ plugin/skills/concept-to-code/scripts/spec-coverage.sh|skills/concept-to-code/sc
 plugin/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh|skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh
 plugin/skills/concept-to-code/scripts/design-coverage.sh|skills/concept-to-code/scripts/design-coverage.sh
 plugin/skills/concept-to-code/scripts/design-url-check.sh|skills/concept-to-code/scripts/design-url-check.sh
-plugin/skills/concept-to-code/tests/agent-notes-roundtrip.sh|skills/concept-to-code/tests/agent-notes-roundtrip.sh
 plugin/skills/concept-to-code/tests/run-tests.sh|skills/concept-to-code/tests/run-tests.sh
 plugin/skills/concept-to-code/tests/smoke-e2e.sh|skills/concept-to-code/tests/smoke-e2e.sh
 plugin/skills/autopilot-build/SKILL.md|skills/autopilot-build/SKILL.md
@@ -632,6 +630,21 @@ sync script has no PAIRS entry and no way to remove it from a deployed tree. The
 ~/.claude/hooks/backup-before-deploy.sh still exists — review it (it is wired to no hook event in
 settings.json and its body is a hardcoded one-shot backup dated 2026-05-19) and delete it by hand
 after confirming you no longer need that specific historical backup snapshot.
+NOTE
+fi
+
+if [ -f "$DEST/skills/concept-to-code/scripts/agent-notes-harvest.sh" ] || [ -f "$DEST/skills/concept-to-code/tests/agent-notes-roundtrip.sh" ]; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: retired ADR-0012 memory helper cleanup (not auto-applied) ---
+agent-notes-harvest.sh and its round-trip harness agent-notes-roundtrip.sh are retired (VCS-056,
+ADR-0183): every agent that used the mediated inject/harvest mechanism they implemented
+(architect, debugger, reviewer) now carries native `memory:` persistence instead. Both were
+removed from staging/, so this sync script has no PAIRS entry and no way to remove them from a
+deployed tree. Delete the deployed
+~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh and
+~/.claude/skills/concept-to-code/tests/agent-notes-roundtrip.sh by hand.
 NOTE
 fi
 

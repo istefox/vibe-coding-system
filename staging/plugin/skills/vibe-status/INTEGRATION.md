@@ -38,5 +38,5 @@ VIBE_STATUS_SKILL_DIR="$PWD/staging/plugin/skills/vibe-status" \
 
 ## Why read-only
 
-Consistent with the ADR-0012 agent-notes watch (ADR-0005 / vibe-status): the report only reads the
+Consistent with the native agent-memory watch (VCS-056, ADR-0183; ADR-0005 / vibe-status): the report only reads the
 store; it never writes. The single writer remains the `chain-memory-capture.sh` hook (ADR-0021 D6).

@@ -352,3 +352,15 @@ re-evaluated towards A or C — this tension remains a declared open question.
   the round-trip).
 - ADR-0011 — `docs/architecture/ADR-0011-clean-public-repo-anonymize.md` (notes outside the
   tree survive clean-public-repo / fresh-history publish).
+
+## Correction (2026-08-31)
+
+This ADR's mediated mechanism is now retired in full. `reviewer` moved off it first
+(ADR-0182, VCS-055); `architect`, `debugger`, and the newly-covered `tester`/`refactorer`/
+`doc-writer` moved onto native `memory:` persistence together in **ADR-0183**
+(`docs/architecture/ADR-0183-native-memory-rollout-all-agents.md`, VCS-056). No agent depends on
+`agent-notes-harvest.sh` or the `PRIOR AGENT NOTES`/`DURABLE NOTES:` contract described above after
+that decision; the helper and its round-trip harness were deleted. `coder` was never subject to
+this mechanism and remains excluded from native memory too, on a separate, measured basis (ADR-0183
+Phase 0). This note records the outcome going forward; the ADR's original text above is left as the
+correct snapshot of its own day (rule 14).

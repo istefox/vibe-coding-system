@@ -133,11 +133,11 @@ if [ "$AGENT_TYPE" = "architect" ]; then
   # segments anywhere in the path is looser but errs toward allowing, which is the right direction
   # for a guard whose false positives would break the chain.
   case "$FILE_PATH" in
-    */docs/architecture/*|*/docs/superpowers/plans/*)
+    */docs/architecture/*|*/docs/superpowers/plans/*|*/.claude/agent-memory/architect/*)
       log_audit_arch "$SID" "allow" "in scope: $FILE_PATH"
       exit 0
       ;;
-    docs/architecture/*|docs/superpowers/plans/*)
+    docs/architecture/*|docs/superpowers/plans/*|.claude/agent-memory/architect/*)
       log_audit_arch "$SID" "allow" "in scope (relative): $FILE_PATH"
       exit 0
       ;;
@@ -145,11 +145,11 @@ if [ "$AGENT_TYPE" = "architect" ]; then
 
   log_audit_arch "$SID" "deny" "$TOOL out of scope: $FILE_PATH"
 
-  REASON="agent-write-scope: the architect may write only under docs/architecture/ (ADRs) or docs/superpowers/plans/ (implementation plans). This call targets $FILE_PATH, which is outside both. You never write production code, config, or tests — that is the coder's job. Do NOT retry and do NOT route around this: state the change you believe is needed in your report and let the orchestrator decide."
+  REASON="agent-write-scope: the architect may write only under docs/architecture/ (ADRs), docs/superpowers/plans/ (implementation plans), or its own .claude/agent-memory/architect/ (persistent memory, VCS-056). This call targets $FILE_PATH, which is outside all three. You never write production code, config, or tests — that is the coder's job. Do NOT retry and do NOT route around this: state the change you believe is needed in your report and let the orchestrator decide."
 
   printf '%s' "$REASON" | jq -R -s \
     '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:.}}' 2>/dev/null \
-    || printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"agent-write-scope: architect may write only under docs/architecture/ or docs/superpowers/plans/"}}\n'
+    || printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"agent-write-scope: architect may write only under docs/architecture/, docs/superpowers/plans/, or .claude/agent-memory/architect/"}}\n'
   exit 0
   # --- ARCHITECT BRANCH END ---
 elif [ "$AGENT_TYPE" != "coder" ]; then
