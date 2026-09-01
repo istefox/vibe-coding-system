@@ -475,10 +475,18 @@ Step 5 dispatch prompt (send as a single message to the session):
 ```
 ultracode — use a workflow to dispatch the following coder tasks in parallel.
 IMPORTANT: The workflow script must be deterministic — do NOT use Date.now(), new Date(), or Math.random(). These calls throw at runtime and break workflow resume (CC 2.1.172 removed the validation warning but the runtime constraint remains).
-Read plan at <manifest.artifacts.plan>.
-Read ADR at <manifest.artifacts.adr>.
-Read SPEC.md at <manifest.artifacts.spec>.
-Read project CLAUDE.md at <manifest.artifacts.project_claude_md> (if not null).
+Read plan at <manifest.artifacts.plan> in full — you (the orchestrator) need the whole plan to
+group tasks into batches and to run the file-conflict scan above; the ADR/SPEC/CLAUDE.md below do
+not carry that requirement and are no longer read here unconditionally (VCS-057, ADR-0185 — L1).
+
+Before writing the script, materialize ONE brief per task group via `step5-brief.sh` (see
+"Materializing the per-batch brief" below this section, in the Agent-tool fallback — the same
+mechanism, invoked once per task group regardless of which dispatch path is taken). Give each task
+group's `agent()` prompt the resulting brief path instead of separate "Read ADR/SPEC.md/project
+CLAUDE.md" lines — use the Tester and Coder batch dispatch templates below as the wording to adapt
+into each stage's prompt string. Binding decisions in whichever of ADR/SPEC/CLAUDE.md a dispatched
+agent does open (per the brief's stated reason, or its own judgement) are a constraint on the
+implementation, not an input to weigh.
 If a Claude Design artifact exists, read it at <manifest.artifacts.design> (if not null) — its
 Binding decisions are a constraint on the implementation, not an input to weigh.
 
@@ -1576,13 +1584,43 @@ verification after dispatch is mandatory in all cases.
 
 **Coder model override:** if `manifest.coder_model = "opus"` (or legacy `"fable"`), pass `model: "opus"` to every `Agent(subagent_type="coder", ...)` call in this dispatch. If `sonnet` or null, omit the `model` parameter (global coder.md applies).
 
+**Materializing the per-batch brief (VCS-057, ADR-0185 — L1).** Before each batch's tester dispatch
+below, run:
+
+    step5-brief.sh --plan <manifest.artifacts.plan> --tasks <FROM>-<TO> \
+      --out <project_root>/.claude/dispatch/step5-brief-<B>.md \
+      --adr-path <manifest.artifacts.adr> --adr-reason "<why this batch might need the ADR>" \
+      --spec-path <manifest.artifacts.spec> --spec-reason "requirement IDs for this batch's tests" \
+      --claude-md-path <manifest.artifacts.project_claude_md> --claude-md-reason "<why>" \
+      [--design-path <manifest.artifacts.design> --design-reason "<why>"]
+
+The brief carries this batch's task text **byte-exact and verbatim** (never a paraphrase — a
+summary can silently drop a constraint, a contiguous extract cannot lose one inside its own
+range), the union of files its tasks' `Budget:` lines declare, which OTHER tasks exist and are
+excluded from this batch (each pointing back at the plan's own path, for the tester/coder to
+open the plan directly if a task's constraint looks misattributed), and ADR/SPEC/CLAUDE.md/DESIGN
+as **paths with a stated reason** — no longer read unconditionally. This is ENFORCEMENT, not
+instruction, for the slice and the file-map union (rule 16); "open the ADR only when the brief
+says so" is instruction — nothing stops a dispatched agent from reading it anyway, and this note
+says so rather than implying a guarantee that is not there.
+
+**Exit 3 (DID-NOT-RUN)** means the plan has no recognisable task openers — a malformed-plan
+signal, not "nothing to brief". Fall back to today's full-plan instructions for this batch instead
+(`Read plan at <manifest.artifacts.plan> (tasks <FROM>-<TO> only). Read ADR at
+<manifest.artifacts.adr>. Read SPEC.md at <manifest.artifacts.spec>. Read project CLAUDE.md at
+<manifest.artifacts.project_claude_md> (if not null).`), and **declare that the fallback fired**
+before dispatching — this script does not decide that silently, it only says why (rule 4: an
+unrun check must not read as a clean pass). Any other non-zero exit (2: bad invocation) is a
+defect in the orchestrator's own invocation — fix the arguments, do not fall back.
+
 <!-- dispatch-site: step5-batch-tester class=isolated exempt: its completion is already gated by the merge-back block that must run before the coder forks, so an early advance conflicts rather than passes -->
 **Tester batch dispatch template** (dispatched BEFORE this batch's coder — ADR-0049 §D1; pin
 `subagent_type: "tester"` and `model: "sonnet"` explicitly on this `Agent` call, ADR-0049 §D6; no
 `effort` pin — the Agent tool has no such parameter, ADR-0068 §D7, issue #180):
 ```
-Read plan at <manifest.artifacts.plan> (tasks <FROM>-<TO> only).
-Read SPEC.md at <manifest.artifacts.spec>.
+Read the batch brief at <project_root>/.claude/dispatch/step5-brief-<B>.md (materialized before this
+dispatch — see "Materializing the per-batch brief" above for what it contains and the DID-NOT-RUN
+fallback). Read SPEC.md at <manifest.artifacts.spec>.
 
 Write failing tests for tasks <FROM>-<TO> only. Brief yourself from the SPEC's requirement IDs:
 run `spec-coverage.sh --spec <manifest.artifacts.spec> --plan <manifest.artifacts.plan> --list`
@@ -1617,10 +1655,11 @@ coder.
 **Single batch dispatch template** (dispatched AFTER this batch's tester above; MUST carry the
 TEST-AUTHORING SCOPE marker verbatim, ASCII hyphen, ADR-0049 §D3):
 ```
-Read plan at <manifest.artifacts.plan> (tasks <FROM>-<TO> only).
-Read ADR at <manifest.artifacts.adr>.
-Read SPEC.md at <manifest.artifacts.spec>.
-Read project CLAUDE.md at <manifest.artifacts.project_claude_md> (if not null).
+Read the batch brief at <project_root>/.claude/dispatch/step5-brief-<B>.md (materialized before this
+dispatch — see "Materializing the per-batch brief" above). It carries this batch's task text
+verbatim and, as paths with a stated reason, ADR/SPEC/CLAUDE.md — open one only for the reason the
+brief states, or when your own judgement says the task text is not enough. Binding decisions in
+whichever of those you do open are a constraint on the implementation, not an input to weigh.
 If a Claude Design artifact exists, read it at <manifest.artifacts.design> (if not null) — its
 Binding decisions are a constraint on the implementation, not an input to weigh.
 

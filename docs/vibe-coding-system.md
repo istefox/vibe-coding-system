@@ -1527,6 +1527,23 @@ discipline enforced by `coder-memory-scope.sh`. Left here as the historical reco
 `docs/architecture/ADR-0184-coder-memory-shard-discipline.md`, corrected forward from ADR-0183's
 own Phase 0 exclusion of `coder`, not edited in place there either.
 
+### Update 2026-08-31 (VCS-057 Fase 2 L1 — per-batch dispatch brief)
+
+Separately from the memory question above, Step 5 measured (2026-08-30) a large unconditional
+preamble on every batch dispatch: the full plan, ADR, SPEC.md and project CLAUDE.md, read before a
+tester or coder opens one source file, regardless of how many of the plan's tasks the batch
+actually covers. `step5-brief.sh` (new) materializes, once per batch, a byte-exact slice of the
+plan for that batch's tasks plus the union of their declared `Budget:` files, leaving ADR/SPEC/
+CLAUDE.md as paths with a stated reason instead of an unconditional read. Both dispatch templates
+in `step5-implementation.md` (Workflow path and Agent-tool fallback) now read the brief first; the
+Claude Design artifact line (Gate 1d, ADR-0181) is unchanged — it already reads conditionally
+("if not null") and its exact wording is a pinned contract (`claude-design-gate.test.sh` D0/CD4).
+`PROJECT.md`'s own inline injection into the Workflow preamble is untouched here — its digest is a
+separate, independent step in the same VCS-057 Fase 2 plan. Full record, including two corpus
+defects found and fixed while building this (a task number that legitimately opens twice, and a
+letter-suffixed task designator a digits-only parser was collapsing onto its neighbour):
+`docs/architecture/ADR-0185-step5-task-brief.md`.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow

@@ -116,3 +116,36 @@ documents.
 - `plan-tasks.sh` now has two modes with opposite failure directions, and nothing prevents a future
   caller picking the wrong one — only the header and the two call sites say which is which.
 - Inert until sync.
+
+## Correction 2026-08-31 (`--count-openers` was itself double-counting, corrected)
+
+**This ADR's own fix carried a defect one level down from the one it fixed.** `--count-openers`
+counted OPENER LINES (`is_task_opener($0)` hits), not distinct tasks. `plan-task-predicate.awk`
+recognises two documented forms — a heading and a checklist item — precisely so a plan whose ONLY
+task representation is the checklist form still counts. But a plan using BOTH — the "Task
+checklist" index this repo's own plans document (`- [x] Task N — ...`, scanned by
+`concept-to-code`/`autopilot-build` for progress tracking) immediately followed later by the real
+`## Task N` heading — satisfies `is_task_opener()` twice per task, and `--count-openers` summed
+both. Measured: `2026-07-11-38-hook-hardening.md` reported **18** where **9** real tasks exist;
+corpus-wide, 66 of 672 opener lines were this exact restatement, spread across most plans using the
+checklist-index convention. `task_num()`'s digits-only limit (carried over from ADR-0070, corrected
+separately in ADR-0070's own 2026-08-31 Correction) masked nothing here — this defect is orthogonal,
+a line count with no dedup at all.
+
+Found while building `step5-brief.sh` (VCS-057/ADR-0185), which needed one unambiguous start line
+per task and could not get one from a count that didn't match the corpus it was run against.
+`--count-openers` now counts `seen[task_num($0)]` — distinct task designations, not opener lines —
+loading `plan-budget-parse.awk` alongside the predicate for `task_num()` (rule 6: one function, not
+a second copy). Re-verified against the full 79-plan corpus (`batch-dispatch-openers.test.sh`,
+`plan-task-count.test.sh`: unchanged pass counts, no regression) and the two named exemption plans
+(`### T1 —`, `### Step 0 —`) still return 0, unaffected.
+
+**Consequence for the "Batching behaviour changes on 51 of 58 plan shapes" line above:** that
+divergence measurement compared the pre-existing (correct) `--count` against the pre-existing
+(buggy, un-deduped) `--count-openers`. With the dedup fix, `--count-openers` is smaller on every
+plan that carries a checklist index, so the true divergence population and the true batch ranges
+this ADR shipped were both larger than what any Step 5 run has actually dispatched since — every
+batch dispatched under the old `--count-openers` was sized against an inflated task count, biasing
+toward MORE, SMALLER batches than the plan's real task count warranted, never toward too few. Not
+edited in place (rule 14): this line was a correct measurement of the code as it stood on
+2026-08-02.

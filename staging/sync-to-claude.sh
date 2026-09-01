@@ -237,10 +237,12 @@ plugin/skills/concept-to-code/scripts/manifest-set-gate.sh|skills/concept-to-cod
 plugin/skills/concept-to-code/scripts/manifest-transition.sh|skills/concept-to-code/scripts/manifest-transition.sh
 plugin/skills/concept-to-code/scripts/manifest-validate.sh|skills/concept-to-code/scripts/manifest-validate.sh
 plugin/skills/concept-to-code/scripts/plan-task-predicate.awk|skills/concept-to-code/scripts/plan-task-predicate.awk
+plugin/skills/concept-to-code/scripts/plan-budget-parse.awk|skills/concept-to-code/scripts/plan-budget-parse.awk
 plugin/skills/concept-to-code/scripts/spec-archive.sh|skills/concept-to-code/scripts/spec-archive.sh
 plugin/skills/concept-to-code/scripts/spec-id-predicate.awk|skills/concept-to-code/scripts/spec-id-predicate.awk
 plugin/skills/concept-to-code/scripts/spec-normalize-ids.sh|skills/concept-to-code/scripts/spec-normalize-ids.sh
 plugin/skills/concept-to-code/scripts/plan-tasks.sh|skills/concept-to-code/scripts/plan-tasks.sh
+plugin/skills/concept-to-code/scripts/step5-brief.sh|skills/concept-to-code/scripts/step5-brief.sh
 plugin/skills/concept-to-code/scripts/repo-rel-path.sh|skills/concept-to-code/scripts/repo-rel-path.sh
 plugin/skills/concept-to-code/scripts/spec-coverage.sh|skills/concept-to-code/scripts/spec-coverage.sh
 plugin/skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh|skills/concept-to-code/scripts/spec-coverage-baseline-rows.sh
