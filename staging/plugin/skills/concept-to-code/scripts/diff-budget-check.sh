@@ -76,6 +76,13 @@ SELF="diff-budget-check"
 # finding on a real plan.
 PREDICATE=$(cd "$(dirname "$0")" && pwd)/plan-task-predicate.awk
 
+# The Budget: parser (trim/parse_budget/looks_like_budget/task_num) is LOADED too, as of
+# VCS-057/ADR-0185 (rule 6) — this script used to carry the only copy; `step5-brief.sh` needed the
+# same answer to "does this Budget: line parse" and forking it would have left two copies able to
+# disagree. Deleted-inline-copy note (rule 19): the functions below, up to and including
+# `function task_num`, are unchanged in substance from what stood here before extraction.
+BUDGET_PARSER=$(cd "$(dirname "$0")" && pwd)/plan-budget-parse.awk
+
 usage() {
   [ "${1:-}" = "" ] || printf '%s: %s\n' "$SELF" "$1" >&2
   cat >&2 <<'EOF'
@@ -115,76 +122,12 @@ MALFORMED_FILE="$TMPD/malformed.tsv"; : >"$MALFORMED_FILE"
 SCOPE_GLOBS="$TMPD/scope_globs.txt"; : >"$SCOPE_GLOBS"
 
 # --- plan parser: per-task Budget: (files, line ceiling), whole-plan Scope: globs -----------------
-cat >"$TMPD/plan_parse.awk" <<'AWKEOF'
-# is_task_opener() comes from plan-task-predicate.awk, loaded alongside this program (ADR-0070
-# §D2) — do not redefine it here. This parser needs the BLOCK-OPENER question, not the looser
+# is_task_opener() comes from plan-task-predicate.awk, and trim()/parse_budget()/looks_like_budget()/
+# task_num() come from plan-budget-parse.awk (VCS-057/ADR-0185, rule 6) — both loaded alongside this
+# program, neither redefined here. This driver needs the BLOCK-OPENER question, not the looser
 # is_task_line() in the same file: a checkbox sub-step mentioning a task must not close the
 # previous task's block and steal its Budget.
-function trim(s) { gsub(/^[ \t]+/,"",s); gsub(/[ \t]+$/,"",s); return s }
-
-# parse_budget(rest) -> "<files>\t<total>", or "" when the declaration does not fully parse.
-#
-# A LEFT-TO-RIGHT WALK OVER PAREN GROUPS, which SUBSUMES the documented single-ceiling form rather
-# than branching on it (issue #246). The old parser matched one paren group anchored at end of
-# line, so a PER-FILE declaration —
-#   Budget: a/SKILL.md (~165 lines, new), b/sync.sh (~1 line)
-# — kept only the LAST ceiling (1 instead of 166) and left the first file plus the fragments
-# `(~165 lines` and `new)` in the file list, producing a false SCOPE on a file the plan declares
-# explicitly, an inflated file count, and no BUDGET line at all. Measured over the corpus: 16
-# `Budget:` lines in 3 plans, 12 single-ceiling, 3 per-file — and every one of the three was
-# mis-parsed in all three ways at once.
-#
-# The walk handles both, and mixed forms too: a group's preceding text may itself be a
-# comma-separated list sharing that ceiling, which is exactly the documented form seen as one
-# entry. Ceilings are SUMMED, because the downstream check compares per-task totals.
-function parse_budget(rest,   s, pre, paren, inner, low, num, files, total, rem) {
-  s = rest; files = ""; total = 0
-  while (match(s, /\([^()]*\)/)) {
-    pre   = substr(s, 1, RSTART - 1)
-    paren = substr(s, RSTART, RLENGTH)
-    s     = substr(s, RSTART + RLENGTH)
-    sub(/^[ \t]*,[ \t]*/, "", pre)          # the separator left by the previous entry
-    gsub(/`/, "", pre); pre = trim(pre)
-    sub(/,[ \t]*$/, "", pre)
-    inner = paren; gsub(/[()]/, "", inner); low = tolower(inner)
-    # A note after the count is tolerated — `(~10 lines, comments only)` is in the corpus.
-    if (pre == "" || !match(inner, /[0-9]+/) || index(low, "line") == 0) return ""
-    num = substr(inner, RSTART, RLENGTH)
-    total += num
-    files = (files == "" ? pre : files ", " pre)
-  }
-  # Anything after the last group that is not a separator or markdown emphasis means the line did
-  # NOT fully parse. Without this, `Budget: a.md (~50 lines), b.md` would silently drop b.md — the
-  # half-read this function exists to stop.
-  rem = s; gsub(/[ \t,*_`.]/, "", rem)
-  if (files == "" || rem != "") return ""
-  return files "\t" total
-}
-
-# looks_like_budget(rest) — is this a recognisable ATTEMPT at a declaration? Only then may a parse
-# failure be REPORTED; otherwise it stays silent, exactly as before.
-#
-# The discriminator is measured, not chosen for tidiness. `Budget:` is matched as a case-insensitive
-# SUBSTRING, so the corpus contains `# Performance budget: <10s typical, 8s per-harness timeout.` —
-# a comment inside a fenced code block, never a declaration — and a legitimate prose escape,
-# `Budget: none (verification only, no source files touched beyond what Tasks 1-6 already changed)`.
-# A MALFORMED token firing on either would be this issue's own defect one level up: a detector
-# reporting on text that was never a declaration.
-function looks_like_budget(rest,   s, inner, low) {
-  s = rest
-  while (match(s, /\([^()]*\)/)) {
-    inner = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
-    gsub(/[()]/, "", inner); low = tolower(inner)
-    if (match(inner, /[0-9]+/) && index(low, "line") > 0) return 1
-  }
-  return 0
-}
-function task_num(l,   t) {
-  match(l, /Task[ \t]+[0-9]+/)
-  t = substr(l, RSTART, RLENGTH)
-  gsub(/[^0-9]/, "", t)
-  return t
-}
+cat >"$TMPD/plan_parse.awk" <<'AWKEOF'
 BEGIN { in_task = 0; cur = ""; got = 0 }
 {
   line = $0
@@ -222,7 +165,7 @@ BEGIN { in_task = 0; cur = ""; got = 0 }
 AWKEOF
 
 awk -v BUDGET_FILE="$BUDGET_FILE" -v SCOPE_FILE="$SCOPE_GLOBS" -v MALFORMED_FILE="$MALFORMED_FILE" \
-    -f "$PREDICATE" -f "$TMPD/plan_parse.awk" "$PLAN"
+    -f "$PREDICATE" -f "$BUDGET_PARSER" -f "$TMPD/plan_parse.awk" "$PLAN"
 
 # --- MALFORMED: a recognisable attempt at a declaration that does not parse (issue #246) --------
 # Emitted BEFORE the inert check below, and that ordering is the point: a plan whose only Budget:

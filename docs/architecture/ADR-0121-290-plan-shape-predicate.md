@@ -372,3 +372,16 @@ same 61→62 corpus growth, but against `diff-budget-check.sh`'s own hardcoded e
 (ADR-0070/ADR-0091's subject, not this ADR's). Present before any of this feature's edits — none of
 them touch `diff-budget-check.sh` or `diff-budget-scope.test.sh` — and disclosed rather than fixed,
 since it belongs to a different feature and is itself a `*.test.sh` file.
+
+## Correction 2026-08-31 (the `--count` vs `--count-openers` divergence figures were measured against a since-corrected `--count-openers`)
+
+**The divergence counts on this page ("52 of 61", "53 of 62") and the ones they compare against
+(ADR-0100's "51 of 58") all used `--count-openers` before ADR-0100's own 2026-08-31 Correction:
+that mode summed opener LINES rather than distinct tasks, double-counting every plan carrying the
+"Task checklist" index (concrete case: `hook-hardening.md` reported 18 openers for 9 real tasks).
+Re-running this ADR's divergence measurement today would produce different numbers.** This does not
+reopen the decision here — every plan in the divergent set was still `>= 6` and still over-counted
+relative to `--count`, which is the property §D1 built on, and the fix only ever moves
+`--count-openers` DOWN toward the true task count, never past `--count` in the other direction. Not
+edited in place (rule 14): the figures above are a correct snapshot of the code as measured on
+2026-08-03.

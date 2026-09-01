@@ -36,6 +36,10 @@ ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
 DBC="$STAGING/plugin/skills/concept-to-code/scripts/diff-budget-check.sh"
+# parse_budget() itself moved to plan-budget-parse.awk (VCS-057/ADR-0185, rule 6) — BK9 extracts
+# the function's live text, not the driver, so its source must track the move (rule 17: a producer
+# relocated with no update to the one thing that reads it is exactly this failure one level up).
+BUDGET_PARSER="$STAGING/plugin/skills/concept-to-code/scripts/plan-budget-parse.awk"
 
 # ==================================================================================================
 # B0. The anchor every B assertion below depends on.
@@ -751,7 +755,7 @@ function trim(s){gsub(/^[ \t]+/,"",s);gsub(/[ \t]+$/,"",s);return s}
   print "<none>|-"
 }
 AWKEOF
-sed -n '/^function parse_budget/,/^}$/p' "$DBC" >"$TMP/bk9-new.awk"
+sed -n '/^function parse_budget/,/^}$/p' "$BUDGET_PARSER" >"$TMP/bk9-new.awk"
 cat >>"$TMP/bk9-new.awk" <<'AWKEOF'
 function trim(s){gsub(/^[ \t]+/,"",s);gsub(/[ \t]+$/,"",s);return s}
 /[Bb]udget:/ {

@@ -54,6 +54,9 @@ set -u
 SELF="plan-tasks"
 PRED_DIR=$(cd "$(dirname "$0")" && pwd)
 PREDICATE="$PRED_DIR/plan-task-predicate.awk"
+# task_num() is loaded for --count-openers only (VCS-057/ADR-0185, issue found while building
+# step5-brief.sh) -- see the CORRECTION note above --count-openers's own header for why.
+BUDGET_PARSER="$PRED_DIR/plan-budget-parse.awk"
 
 usage() {
   [ "${1:-}" = "" ] || printf '%s: %s\n' "$SELF" "$1" >&2
@@ -85,6 +88,9 @@ done
 [ -n "$PLAN" ] || usage "a plan file is required"
 [ -f "$PLAN" ] && [ -r "$PLAN" ] || { printf '%s: plan not found or unreadable: %s\n' "$SELF" "$PLAN" >&2; exit 2; }
 [ -f "$PREDICATE" ] && [ -r "$PREDICATE" ] || { printf '%s: predicate not found: %s\n' "$SELF" "$PREDICATE" >&2; exit 3; }
+if [ "$MODE" = "openers" ]; then
+  [ -f "$BUDGET_PARSER" ] && [ -r "$BUDGET_PARSER" ] || { printf '%s: budget parser not found: %s\n' "$SELF" "$BUDGET_PARSER" >&2; exit 3; }
+fi
 
 # The predicate is loaded, never restated (ADR-0069 §D2). `-f` composition is what lets
 # spec-coverage.sh share this exact file without restructuring its heredoc-built program.
@@ -94,18 +100,30 @@ done
 TMPD=$(mktemp -d) || { printf '%s: cannot create a temp directory\n' "$SELF" >&2; exit 3; }
 trap 'rm -rf "$TMPD"' EXIT
 if [ "$MODE" = "openers" ]; then
+  # Counts DISTINCT task designations (task_num()), not opener LINES (VCS-057/ADR-0185
+  # correction, dated 2026-08-31 -- see the header above, this does not rewrite the 2026-08-03
+  # measurement, it corrects forward per rule 14). A plan using the documented "Task checklist"
+  # index -- a compact `- [x] Task N -- ...` block restating every task before its real
+  # `## Task N` heading -- satisfies is_task_opener() TWICE per task, once per form; a bare line
+  # count reports 18 openers on a 9-task plan (hook-hardening.md, measured). seen[] collapses
+  # that to one count per task_num(), which is what every arithmetic caller (the >=6-task batch
+  # split, this script's own header) actually needs.
   cat >"$TMPD/count.awk" <<'AWKEOF'
-{ if (is_task_opener($0)) n++ }
-END { print n + 0 }
+{ if (is_task_opener($0)) seen[task_num($0)] = 1 }
+END { n = 0; for (k in seen) n++; print n + 0 }
 AWKEOF
+  AWK_ARGS=(-f "$PREDICATE" -f "$BUDGET_PARSER" -f "$TMPD/count.awk")
 else
   cat >"$TMPD/count.awk" <<'AWKEOF'
 { if (is_task_line($0)) n++ }
 END { print n + 0 }
 AWKEOF
+  AWK_ARGS=(-f "$PREDICATE" -f "$TMPD/count.awk")
 fi
-
-N=$(awk -f "$PREDICATE" -f "$TMPD/count.awk" "$PLAN" 2>/dev/null) \
+# The awk-failed exit-3 branch is SHARED by both modes (one line, not two -- PTK9, rule 6): a
+# second copy of this identical text broke PTK9's single-match plant contract when the openers
+# mode's own extra -f argument was first added here (VCS-057/ADR-0185, dated 2026-08-31).
+N=$(awk "${AWK_ARGS[@]}" "$PLAN" 2>/dev/null) \
   || { printf '%s: awk failed on %s — the check did not run\n' "$SELF" "$PLAN" >&2; exit 3; }
 
 # A non-integer means awk produced something other than the count: treat as did-not-run rather

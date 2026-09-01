@@ -165,3 +165,20 @@ same thing.
 - `staging/plugin/scripts/tests/diff-budget-scope.test.sh` sections BJ, BB2 — and note BB2's
   amendment: it asserted every plan in the corpus stays silent, which passed only because the check
   was inert, and would have blocked this fix
+
+## Correction 2026-08-31 (`task_num()` now keeps the letter suffix; the digits-only limit is fixed)
+
+**The Negative-consequences line "`task_num()` still extracts digits only, so `## Task 1b` and
+`## Task 1` both resolve to task `1`... Not fixed here" is superseded.** VCS-057/ADR-0185, building
+`step5-brief.sh`'s byte-exact per-task slicing, needed a single unambiguous start/end line per task
+— `diff-budget-check.sh`'s pre-existing membership-only use of `task_num()` never needed that, which
+is exactly why this line went unfixed for over a month. `task_num()` (now in `plan-budget-parse.awk`,
+extracted from this script's own inline copy per rule 6) matches `[0-9]+[A-Za-z]?` and returns the
+full designation: `"Task 1b"` → `"1b"`, distinct from `"Task 1"` → `"1"`. Measured across
+`docs/superpowers/plans/`: exactly two letter-suffixed designators exist corpus-wide (`1b`, `4d`,
+both a single trailing letter, no multi-letter form) — the disclosed risk ("a budget can be
+attributed to a sibling task on a plan that uses letter suffixes") was real but narrow, and no
+`Budget:` line in the corpus was found misattributed by it.
+
+This line is not edited in place (ADR-0034 §D3 / rule 14): it was a correct statement of the
+script's behaviour on 2026-07-29 and stays that way in the historical record above.
