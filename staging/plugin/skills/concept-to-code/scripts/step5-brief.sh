@@ -1,23 +1,25 @@
 #!/bin/bash
 # step5-brief.sh v1.0 — per-batch dispatch brief materializer/verifier (VCS-057/ADR-0185, L1).
 #
-# CONTRACT — a CHECKER, not a reporter (unlike diff-budget-check.sh at the same layer): all three
+# CONTRACT — a CHECKER, not a reporter (unlike diff-budget-check.sh at the same layer): all four
 # modes share one exit-code convention, and the CALLER's fallback depends on distinguishing them —
 #   0 — write mode: brief written to --out.      verify mode: coverage is exact, no findings.
-#       digest mode: roadmap digest written to --out.
+#       digest mode: roadmap digest written to --out.   suggest-batches mode: ranges printed.
 #   1 — (verify mode only) coverage problem(s) found — GAP / OVERLAP / BOUNDARY-MISMATCH lines on
 #       stdout, one or more.
 #   2 — bad invocation (missing/unreadable required argument, a requested task that does not exist
-#       in the plan, or a requested task set that is not a contiguous run of existing task numbers).
-#   3 — DID-NOT-RUN (rule 4): write/verify mode: the plan has zero task openers (write mode:
-#       malformed plan, nothing to slice; verify mode: same, OR zero briefs under --briefs match
-#       this plan at all — an unrun verification must not read as a clean pass). digest mode:
-#       --project-md has zero "### Phase" headings and zero checkbox lines — not this convention,
-#       or an empty roadmap; either way nothing was derived, and rule 7's zero-candidates-vs-
-#       zero-matches distinction applies here exactly as it does to a plan with no tasks. On exit 3
-#       in WRITE or DIGEST mode, the caller (a Step 5 dispatch site) falls back to today's
-#       full-file-read prompt and DECLARES the fallback happened — this script does not decide
-#       that on its own, it only says why.
+#       in the plan, a requested task set that is not a contiguous run of existing task numbers, or
+#       a non-numeric/non-positive --budget).
+#   3 — DID-NOT-RUN (rule 4): write/verify/suggest-batches mode: the plan has zero task openers
+#       (write mode: malformed plan, nothing to slice; verify mode: same, OR zero briefs under
+#       --briefs match this plan at all — an unrun verification must not read as a clean pass;
+#       suggest-batches mode: same, nothing to batch). digest mode: --project-md has zero
+#       "### Phase" headings and zero checkbox lines — not this convention, or an empty roadmap;
+#       either way nothing was derived, and rule 7's zero-candidates-vs-zero-matches distinction
+#       applies here exactly as it does to a plan with no tasks. On exit 3 in WRITE, DIGEST or
+#       SUGGEST-BATCHES mode, the caller (a Step 5 dispatch site) falls back to today's policy
+#       (full-file-read prompt, or fixed opener-count batching) and DECLARES the fallback
+#       happened — this script does not decide that on its own, it only says why.
 #
 # WHY THIS EXISTS (VCS-057 plan, Fase 2 §L1). Measured 2026-08-31: PROJECT.md alone is ~37,600
 # tokens, injected unconditionally into the Workflow dispatch prompt; separately, every dispatched
@@ -51,6 +53,19 @@
 # to disagree with). Workflow-only by design (the Agent-tool fallback templates never inlined
 # PROJECT.md in the first place, so there is nothing there for a digest to replace).
 #
+# SUGGEST-BATCHES MODE (VCS-057 plan, Fase 2 §L2, ADR-0186). Today's Agent-tool fallback batches by
+# opener COUNT alone, fixed at 2-3 task blocks — a proxy for the work, when the plan already
+# DECLARES it in each task's `Budget:` line. `--suggest-batches` fills a batch with consecutive
+# openers while the sum of their declared ceilings stays under `--budget` (default 210 lines = 3x
+# the corpus median, measured 2026-09-01) — hard cap 3, floor 1, exactly as today. A task with no
+# parseable Budget: (absent OR MALFORMED) NEVER moves the sum and NEVER closes the batch on its
+# own — only the hard cap of 3 limits it, so a plan mixing budgeted and unbudgeted tasks (the
+# dominant shape in the corpus: 16 of 23 budgeted plans) is not fragmented by the ones that lack a
+# ceiling. If the WHOLE plan has zero parseable budgets, this falls back to plain opener-count
+# grouping (fixed groups of <=3) and reports `mode\topeners` on stdout instead of `mode\tbudget` —
+# ranges in that case are byte-identical to today's policy. The invariant this mode can never
+# violate: it may only SHRINK a batch relative to today's opener grouping, never grow it past 3.
+#
 # DANGEROUS FAILURE MODE, AND WHY --verify EXISTS (VCS-057 plan). A brief that verifies "clean" —
 # every task assigned to exactly one brief — but whose SLICE boundary is off by a line (an
 # opener's start_line miscomputed) is invisible to a set-only check. --verify additionally
@@ -77,10 +92,13 @@ usage:
                   [--design-path <p>] [--design-reason <r>]
   step5-brief.sh --verify --plan <file> --briefs <dir>
   step5-brief.sh --digest --project-md <file> --out <file>
+  step5-brief.sh --suggest-batches --plan <file> [--budget <N>]
 
-exit: 0 written / verify clean / digest written, 1 verify found gap|overlap|mismatch,
-2 bad invocation, 3 did-not-run (malformed plan, --verify found no briefs for this plan,
-or --digest's --project-md has no "### Phase" heading and no checkbox line).
+exit: 0 written / verify clean / digest written / batches suggested, 1 verify found
+gap|overlap|mismatch, 2 bad invocation (includes a non-numeric/non-positive --budget),
+3 did-not-run (malformed plan, --verify found no briefs for this plan, --digest's
+--project-md has no "### Phase" heading and no checkbox line, or --suggest-batches's
+plan has no task openers).
 EOF
 }
 
@@ -118,7 +136,7 @@ plan_task_starts() {
 plan_total_lines() { awk 'END{print NR}' "$1"; }
 
 MODE="write"
-PLAN=""; TASKS=""; OUT=""; BRIEFS_DIR=""; PROJECT_MD=""
+PLAN=""; TASKS=""; OUT=""; BRIEFS_DIR=""; PROJECT_MD=""; BUDGET_ARG=210
 ADR_PATH=""; ADR_REASON=""; SPEC_PATH=""; SPEC_REASON=""
 CLAUDE_MD_PATH=""; CLAUDE_MD_REASON=""; DESIGN_PATH=""; DESIGN_REASON=""
 
@@ -126,11 +144,13 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --verify) MODE="verify"; shift ;;
     --digest) MODE="digest"; shift ;;
+    --suggest-batches) MODE="suggest"; shift ;;
     --plan) [ $# -ge 2 ] || { usage "--plan needs a file argument"; exit 2; }; PLAN="$2"; shift 2 ;;
     --tasks) [ $# -ge 2 ] || { usage "--tasks needs an argument"; exit 2; }; TASKS="$2"; shift 2 ;;
     --out) [ $# -ge 2 ] || { usage "--out needs a file argument"; exit 2; }; OUT="$2"; shift 2 ;;
     --briefs) [ $# -ge 2 ] || { usage "--briefs needs a directory argument"; exit 2; }; BRIEFS_DIR="$2"; shift 2 ;;
     --project-md) [ $# -ge 2 ] || { usage "--project-md needs a file argument"; exit 2; }; PROJECT_MD="$2"; shift 2 ;;
+    --budget) [ $# -ge 2 ] || { usage "--budget needs a numeric argument"; exit 2; }; BUDGET_ARG="$2"; shift 2 ;;
     --adr-path) ADR_PATH="${2:-}"; shift 2 ;;
     --adr-reason) ADR_REASON="${2:-}"; shift 2 ;;
     --spec-path) SPEC_PATH="${2:-}"; shift 2 ;;
@@ -179,6 +199,96 @@ if [ "$MODE" = "digest" ]; then
 fi
 
 [ -n "$PLAN" ] && [ -r "$PLAN" ] || { usage "--plan (readable file) is required — got [$PLAN]"; exit 2; }
+
+# ================================================================================================
+# --suggest-batches mode (VCS-057 plan, Fase 2 §L2, ADR-0186) — budget-driven batch sizing. Never
+# larger than today's opener grouping: hard cap 3, floor 1 (see the SUGGEST-BATCHES MODE comment
+# above for the full rule).
+# ================================================================================================
+if [ "$MODE" = "suggest" ]; then
+  case "$BUDGET_ARG" in ''|*[!0-9]*) usage "--budget must be a positive integer: $BUDGET_ARG"; exit 2 ;; esac
+  [ "$BUDGET_ARG" -gt 0 ] || { usage "--budget must be a positive integer: $BUDGET_ARG"; exit 2; }
+
+  TMPD=$(mktemp -d) || { printf '%s: cannot create a temp directory\n' "$SELF" >&2; exit 2; }
+  trap 'rm -rf "$TMPD" "$STARTS_AWK"' EXIT
+
+  REAL_TASKS="$TMPD/real_tasks.tsv"
+  plan_task_starts "$PLAN" >"$REAL_TASKS"
+  N_TASKS=$(grep -c . "$REAL_TASKS" 2>/dev/null || true); [ -n "$N_TASKS" ] || N_TASKS=0
+  if [ "$N_TASKS" -eq 0 ]; then
+    printf 'DID-NOT-RUN: %s has no task openers -- falling back to the opener-count batch policy\n' "$PLAN" >&2
+    exit 3
+  fi
+
+  # Every Budget: declaration anywhere in the plan (whole-plan range -- no LO/HI gate here, unlike
+  # write mode's per-request collect.awk). parse_budget()/looks_like_budget()/task_num() are loaded
+  # from plan-budget-parse.awk, never restated (rule 6, ADR-0070 §D2).
+  BUDGET_FILE="$TMPD/budget.tsv"; : >"$BUDGET_FILE"
+  MALFORMED_FILE="$TMPD/malformed.tsv"; : >"$MALFORMED_FILE"
+  cat >"$TMPD/collect.awk" <<'AWKEOF'
+BEGIN { in_task = 0; cur = ""; got = 0 }
+{
+  line = $0
+  if (is_task_opener(line)) {
+    cur = task_num(line)
+    got = 0
+    in_task = 1
+    next
+  }
+  if (in_task && !got) {
+    if (match(line, /[Bb]udget:/)) {
+      rest = trim(substr(line, RSTART + RLENGTH))
+      parsed = parse_budget(rest)
+      if (parsed != "") {
+        split(parsed, pb, "\t")
+        print cur "\t" pb[2] >> BUDGET_FILE
+        got = 1
+      } else if (looks_like_budget(rest)) {
+        print cur "\t" rest >> MALFORMED_FILE
+        got = 1
+      }
+    }
+  }
+}
+AWKEOF
+  awk -v BUDGET_FILE="$BUDGET_FILE" -v MALFORMED_FILE="$MALFORMED_FILE" \
+      -f "$PREDICATE" -f "$BUDGET_PARSER" -f "$TMPD/collect.awk" "$PLAN"
+
+  N_BUDGETED=$(grep -c . "$BUDGET_FILE" 2>/dev/null || true); [ -n "$N_BUDGETED" ] || N_BUDGETED=0
+
+  # Greedy fill, in plan order: add consecutive openers to the current batch until either the hard
+  # cap (3) is hit, or adding one more WITH A PARSEABLE BUDGET would push the sum over --budget. An
+  # opener with no parseable budget (absent or MALFORMED) never moves `sum` and never closes the
+  # batch on its own -- only the hard cap can. Zero plan-wide budgets -> plain opener grouping,
+  # reported as `mode\topeners` (byte-identical to today's fixed <=3 chunking).
+  awk -F'\t' -v budget="$BUDGET_ARG" -v has_plan_budget="$N_BUDGETED" '
+    FNR==NR { ord[++n] = $1; next }
+    { bud[$1] = $2 }
+    END {
+      print (has_plan_budget == 0) ? "mode\topeners" : "mode\tbudget"
+      batch_n = 0; sum = 0; first = ""; last = ""
+      for (i = 1; i <= n; i++) {
+        t = ord[i]
+        has = (has_plan_budget != 0) && (t in bud)
+        b = has ? bud[t] : 0
+        close_batch = 0
+        if (batch_n == 3) close_batch = 1
+        else if (has_plan_budget != 0 && batch_n > 0 && has && (sum + b) > budget) close_batch = 1
+        if (close_batch) {
+          if (first == last) print first; else print first "-" last
+          batch_n = 0; sum = 0; first = ""
+        }
+        if (batch_n == 0) first = t
+        last = t
+        batch_n++
+        sum += b
+      }
+      if (batch_n > 0) { if (first == last) print first; else print first "-" last }
+    }
+  ' "$REAL_TASKS" "$BUDGET_FILE"
+
+  exit 0
+fi
 
 # ================================================================================================
 # --verify mode

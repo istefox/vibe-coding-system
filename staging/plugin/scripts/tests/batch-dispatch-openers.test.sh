@@ -190,6 +190,29 @@ else
 fi
 
 # ===========================================================================
+# BO10/BO10b — VCS-057/ADR-0186 (Fase 2, L2). The Agent-tool batch-dispatch policy now sizes
+# batches on step5-brief.sh --suggest-batches, not a bare fixed rule; the Workflow path stays out
+# of scope by design (dispatch-state.sh: ~94% of runs are Agent-tool, not Workflow — one call site,
+# not two). BO9b above already pins that the Workflow block names no plan-tasks.sh count; BO10b
+# extends that same guard to --suggest-batches specifically.
+# ===========================================================================
+if printf '%s\n' "$FLAT" | grep -q 'suggest-batches'; then
+  ok "BO10 the Agent-tool batch-dispatch policy invokes step5-brief.sh --suggest-batches"
+else
+  bad "BO10 the batch-dispatch policy paragraph never mentions --suggest-batches — still the bare fixed rule"
+fi
+
+if [ -n "${WBLK:-}" ]; then
+  if printf '%s\n' "$WBLK" | grep -q 'suggest-batches'; then
+    bad "BO10b the Workflow path now consumes --suggest-batches — out of scope by design (L2 is Agent-tool only)"
+  else
+    ok "BO10b (forward guard) the Workflow path stays free of --suggest-batches"
+  fi
+else
+  bad "BO10b WBLK not populated (BO9 anchors did not resolve) — cannot evaluate"
+fi
+
+# ===========================================================================
 # Z1 — assertion-count floor (ADR-0083 §D3). Threshold unchanged at 16 (issue #294 adds no
 # assertion here); only the messages move — they said "floor 13" against a test of `>= 16`, a
 # passing Z1 printing the wrong number. When you change a literal in an assertion, grep the

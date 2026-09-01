@@ -1527,6 +1527,34 @@ discipline enforced by `coder-memory-scope.sh`. Left here as the historical reco
 `docs/architecture/ADR-0184-coder-memory-shard-discipline.md`, corrected forward from ADR-0183's
 own Phase 0 exclusion of `coder`, not edited in place there either.
 
+### Update 2026-09-01 (VCS-057 Fase 2 L2 — budget-driven batch sizing)
+
+Closes VCS-057's Fase 2 plan-sequence: the Agent-tool batch-dispatch policy, previously a fixed
+"batches of 2-3 task blocks" rule keyed only to opener count, now sizes on the work the plan
+*declares*. `step5-brief.sh --suggest-batches --plan <file> [--budget N]` (a fourth mode of the
+ADR-0185 script) fills a batch with consecutive task openers while the sum of their declared
+`Budget:` ceilings stays at or under `--budget` (default **210 lines = 3x the corpus median**,
+measured 2026-09-01) — hard cap 3 task blocks, floor 1, the same bound the fixed rule already
+enforced. An unbudgeted or `MALFORMED` task never moves the running sum and never closes a batch on
+its own — only the hard cap does, so a plan mixing budgeted and unbudgeted tasks (16 of 23 budgeted
+plans in the corpus) is not fragmented by the ones lacking a ceiling. Zero parseable budgets
+anywhere in the plan → plain opener grouping, reported as `mode: openers` instead of `mode: budget`,
+byte-identical to today's policy.
+
+This unblocked a re-derivation of the `Budget:` coverage question left open since the plan's
+drafting: two earlier rough counts (109, 157) disagreed and neither reproduced. Re-derived with the
+real predicate over the 79-plan corpus: 672 task blocks, **159 with a parseable budget (23.7%)**,
+median ceiling 70 lines. Both earlier counts summed ceilings per FILE instead of per TASK.
+
+`step5-report.json` gains an optional `batch_sizing` scalar object (`mode`, `budget`, `computed`,
+`dispatched`), emitted only when the dispatched ranges diverge from the computed ones — following
+the `task_metrics` precedent of a field documented in its own paragraph and excluded by name from
+Gate 5's six-array advisory roll-up (ADR-0052 §D5), never a seventh array. Scope: the Agent-tool
+fallback only — `dispatch-state.sh` measures ~94% of runs on that path, and the Workflow path stays
+out to keep the change to one call site. Corpus-verified: zero cases, across all 79 plans, of a
+budget-driven batch larger than today's fixed grouping — 222 → 259 batches corpus-wide at the
+default budget. Full record: `docs/architecture/ADR-0186-budget-driven-batch-sizing.md`.
+
 ### Update 2026-09-01 (VCS-057 Fase 2 L1 — roadmap digest)
 
 Continues the update below: `PROJECT.md`'s inline injection into the Workflow dispatch preamble
