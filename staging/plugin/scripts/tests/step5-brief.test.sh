@@ -17,8 +17,15 @@
 #   - a task number can legitimately open TWICE (a leading "Task checklist" index, then the real
 #     `## Task N` heading) — plan_task_starts() dedupes to the LAST occurrence;
 #   - a letter-suffixed task ("Task 1b") is a DIFFERENT task from the integer it prefixes —
-#     task_num() (plan-budget-parse.awk) now keeps the suffix, and a numeric --tasks range that
-#     straddles one is refused by name, never silently mis-sliced.
+#     task_num() (plan-budget-parse.awk) now keeps the suffix, and a numeric --tasks RANGE that
+#     straddles one is refused by name, never silently mis-sliced. A codex review probe on a real
+#     corpus plan (2026-07-28-176-worktree-isolation-contract.md, Task 1b) then found
+#     --suggest-batches could itself emit such a range ("1-1b") as a batch, which write mode's
+#     range guard correctly rejects but which then made that batch undispatchable. Fixed by never
+#     letting a lettered task open or extend a range in --suggest-batches's greedy fill (it is
+#     always its own standalone singleton) and, since that singleton form itself was ALSO rejected
+#     by write mode before this fix (only bare integers/integer ranges were ever accepted), by
+#     widening write mode's own singleton case to accept one letter-suffixed designator too.
 #
 # --- plants (plant-check.sh) ------------------------------------------------------------
 # plant: SB6  | plugin/skills/concept-to-code/scripts/step5-brief.sh | if [ "${_hits:-0}" -eq 0 ]; then | if [ "${_hits:-0}" -eq 999999 ]; then
@@ -27,6 +34,7 @@
 # plant: SB18 | plugin/skills/concept-to-code/scripts/step5-brief.sh | if [ "$N_LINES" -eq 0 ]; then | if [ "$N_LINES" -eq 999999 ]; then
 # plant: SB21 | plugin/skills/concept-to-code/scripts/step5-brief.sh | if (batch_n == 3) close_batch = 1 | if (batch_n == 999999) close_batch = 1
 # plant: SB23 | plugin/skills/concept-to-code/scripts/step5-brief.sh | has_plan_budget != 0 && batch_n > 0 && has && (sum + b) > budget | has_plan_budget != 0 && batch_n > 0 && (sum + b) > budget
+# plant: SB29 | plugin/skills/concept-to-code/scripts/step5-brief.sh | if (t ~ /[A-Za-z]$/) { | if (0) {
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -604,13 +612,106 @@ else
   bad "SB28 --suggest-batches missing from step5-brief.sh and/or step5-implementation.md"
 fi
 
+# ---------------------------------------------------------------------------
+# SB29 — corpus regression (plant SB29): on the real plan a codex review probe used to find the
+# original defect, --suggest-batches must never print a letter-suffixed designator as one end of
+# a dash-joined range ("1-1b", "1b-2") -- every line naming a lettered task must be a bare
+# singleton. Disabling the "never open/extend a range on a lettered task" guard (plant SB29) lets
+# "Task 1b" merge back into "1-1b", which this assertion catches.
+# ---------------------------------------------------------------------------
+LETPLAN="$PLANS/2026-07-28-176-worktree-isolation-contract.md"
+OUT29=$(bash "$SB" --suggest-batches --plan "$LETPLAN" 2>/dev/null | tail -n +2)
+_sb29_bad=$(printf '%s\n' "$OUT29" | grep -E '[A-Za-z].*-|-.*[A-Za-z]' || true)
+if [ -f "$LETPLAN" ] && [ -z "$_sb29_bad" ] && printf '%s\n' "$OUT29" | grep -qx '1b'; then
+  ok "SB29 corpus regression: Task 1b prints only as a bare singleton, never as a range endpoint"
+else
+  bad "SB29 expected '1b' as a bare singleton line and no lettered range endpoint, got [$OUT29]"
+fi
+
+# ---------------------------------------------------------------------------
+# SB30 — synthetic fixture (rule 9): a lettered task sits at exactly the budget boundary between
+# two plain-numeric neighbors that would otherwise merge. The lettered task must still close out
+# on its own (never merged with Task 1, never preventing Task 2/3 from merging with each other).
+# ---------------------------------------------------------------------------
+LETFIX="$TMP/lettered-boundary-fixture.md"
+cat >"$LETFIX" <<'LETEOF'
+## Task 1 -- a
+Budget: `a.py` (~50 lines)
+
+## Task 1b -- b
+Budget: `b.py` (~50 lines)
+
+## Task 2 -- c
+Budget: `c.py` (~50 lines)
+
+## Task 3 -- d
+Budget: `d.py` (~50 lines)
+LETEOF
+OUT30=$(bash "$SB" --suggest-batches --plan "$LETFIX" --budget 200 2>/dev/null)
+EXPECT30="mode	budget
+1
+1b
+2-3"
+if [ "$OUT30" = "$EXPECT30" ]; then
+  ok "SB30 a lettered task at the budget boundary closes its own batch without blocking its numeric neighbors from merging"
+else
+  bad "SB30 expected [$EXPECT30], got [$OUT30]"
+fi
+
+# ---------------------------------------------------------------------------
+# SB31 — full round-trip on the real corpus plan (rule 8, backward check): every range
+# --suggest-batches prints is accepted by write mode (rc=0), and the union of task headings
+# across all resulting briefs matches the plan's real task set exactly once each -- no gap, no
+# duplication, no loss (the specific silent-content-loss failure mode the first, rejected fix
+# attempt had).
+# ---------------------------------------------------------------------------
+RT_DIR="$TMP/sb31-briefs"; mkdir -p "$RT_DIR"
+RT_FAIL=0; RT_HEADINGS="$TMP/sb31-headings.txt"; : >"$RT_HEADINGS"
+_rt_i=0
+while IFS= read -r _rng; do
+  [ -n "$_rng" ] || continue
+  _rt_i=$((_rt_i+1))
+  _o="$RT_DIR/b$_rt_i.md"
+  bash "$SB" --tasks "$_rng" --plan "$LETPLAN" --out "$_o" >/dev/null 2>&1 || RT_FAIL=$((RT_FAIL+1))
+  grep -oE '^## Task [0-9]+[A-Za-z]?' "$_o" 2>/dev/null | sed 's/^## Task //' >>"$RT_HEADINGS"
+done < <(bash "$SB" --suggest-batches --plan "$LETPLAN" 2>/dev/null | tail -n +2)
+_rt_dupes=$(sort "$RT_HEADINGS" | uniq -d)
+_rt_real_raw=$(awk -f "$AWK_P" -f "$AWK_B" -f /dev/fd/3 "$LETPLAN" 3<<'AWKEOF'
+{ if (is_task_opener($0)) print task_num($0) }
+AWKEOF
+)
+_rt_real=$(printf '%s\n' "$_rt_real_raw" | awk '!seen[$0]++' | sort)
+_rt_got=$(sort -u "$RT_HEADINGS")
+if [ "$RT_FAIL" -eq 0 ] && [ -z "$_rt_dupes" ] && [ "$_rt_real" = "$_rt_got" ]; then
+  ok "SB31 full round-trip: every printed range dispatches, covers every real task exactly once, no loss, no duplication"
+else
+  bad "SB31 round-trip failed: rc-failures=$RT_FAIL dupes=[$_rt_dupes] real=[$_rt_real] got=[$_rt_got]"
+fi
+
+# ---------------------------------------------------------------------------
+# SB32 — write mode's widened singleton case accepts a bare letter-suffixed designator directly
+# (not only via --suggest-batches), and still rejects a malformed one (two trailing letters, or a
+# leading letter) naming --tasks.
+# ---------------------------------------------------------------------------
+O32A=$(mktemp); bash "$SB" --tasks 1b --plan "$LETFIX" --out "$O32A" 2>/tmp/sb32a.log; RC32A=$?
+bash "$SB" --tasks 1bb --plan "$LETFIX" --out /dev/null 2>/tmp/sb32b.log; RC32B=$?
+bash "$SB" --tasks b1 --plan "$LETFIX" --out /dev/null 2>/tmp/sb32c.log; RC32C=$?
+if [ "$RC32A" -eq 0 ] && grep -q '^## Task 1b' "$O32A" \
+   && [ "$RC32B" -eq 2 ] && grep -q -- '--tasks' /tmp/sb32b.log \
+   && [ "$RC32C" -eq 2 ] && grep -q -- '--tasks' /tmp/sb32c.log; then
+  ok "SB32 write mode accepts a bare letter-suffixed singleton (1b) and rejects malformed forms (1bb, b1)"
+else
+  bad "SB32 expected rc=0/2/2, got rc=$RC32A/$RC32B/$RC32C"
+fi
+rm -f "$O32A" /tmp/sb32a.log /tmp/sb32b.log /tmp/sb32c.log
+
 # ===========================================================================
 # Z1 — assertion-count floor. An exact count, not a >= floor with slack (rule 10): every
 # assertion above is enumerated here by hand, so a silently deleted one is caught.
 # ===========================================================================
 TOTAL=$((PASS+FAIL))
-if [ "$TOTAL" -eq 34 ]; then ok "Z1: 34 assertions ran (exact) — none silently vanished"
-else bad "Z1: expected exactly 34 assertions, ran $TOTAL"; fi
+if [ "$TOTAL" -eq 38 ]; then ok "Z1: 38 assertions ran (exact) — none silently vanished"
+else bad "Z1: expected exactly 38 assertions, ran $TOTAL"; fi
 
 echo "----"
 echo "$SCRIPTS/../step5-brief.test.sh: $PASS passed, $FAIL failed"

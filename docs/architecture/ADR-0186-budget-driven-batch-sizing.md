@@ -110,6 +110,27 @@ visible after the fact, which is the limit of what is affordable here.
 compared against machine-generated work has no human intent in the loop and measures nothing. L2
 consumes only budgets the architect explicitly declared; an absent one is absent, never inferred.
 
+**A letter-suffixed task ("Task 1b") is always its own standalone singleton batch, never a range
+endpoint.** Found by a `codex review` probe (an evaluation probe, not yet an adopted mechanism) run
+against the first commit of this ADR's implementation, on the real corpus plan
+`2026-07-28-176-worktree-isolation-contract.md`: the greedy-fill loop could print `1-1b` as a
+range, which write mode's own `--tasks` parser (deliberately numeric-only, see ADR-0185) rejects —
+`0` ranges printed is not `0` batches dispatchable, and the batch was stuck. The first fix
+considered (print only the numeric prefix, "1" instead of "1-1b") was verified by hand and found
+unsound before it shipped: write mode's byte-exact slice for a bare "1" stops at the next task's
+own start line, so a batch meant to also cover "1b" would silently dispatch with **no trace of
+Task 1b's content at all** — a defect worse than the loud rejection it replaced. The shipped fix
+instead never lets a lettered task open or extend a batch (the hard cap of 3 is the only thing
+that can still force a close); it is emitted as its own bare singleton (`1b`, not `1`), and write
+mode's own singleton case — previously bare-integer-only, the same restriction that made this
+producer's singleton form unroutable in the first place — was widened to accept exactly one
+letter-suffixed designator. A range crossing a lettered task is still refused by write mode
+exactly as before; only the true-singleton request for that one task is now accepted, which is
+the "request it as a separate brief" remedy write mode's own range-rejection message already
+promised. Verified end to end: every range `--suggest-batches` prints for the corpus plan now
+round-trips through write mode (rc 0), and the union of task headings across the resulting briefs
+matches the plan's real task set with no gap, no duplication (`step5-brief.test.sh` SB29-SB32).
+
 ## Consequences
 
 ### Positive
@@ -145,6 +166,7 @@ consumes only budgets the architect explicitly declared; an absent one is absent
 - `staging/plugin/skills/concept-to-code/scripts/plan-budget-parse.awk` — the loaded parser,
   unmodified by this ADR
 - `staging/plugin/scripts/tests/step5-brief.test.sh` — the extended assertions for this mode
+  (SB20-SB28), plus SB29-SB32 for the letter-suffixed-task fix
 - `staging/plugin/scripts/tests/batch-dispatch-openers.test.sh` — the flattened-prose assertion on
   the new call-site text
 - `staging/plugin/skills/concept-to-code/references/step5-implementation.md` — the batch-dispatch

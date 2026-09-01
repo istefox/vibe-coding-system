@@ -261,7 +261,28 @@ AWKEOF
   # opener with no parseable budget (absent or MALFORMED) never moves `sum` and never closes the
   # batch on its own -- only the hard cap can. Zero plan-wide budgets -> plain opener grouping,
   # reported as `mode\topeners` (byte-identical to today's fixed <=3 chunking).
+  #
+  # A letter-suffixed task ("Task 1b") is ALWAYS its own standalone singleton batch -- never
+  # merged into a range with a numeric sibling on either side. This is not merely a printing
+  # convention: write mode's byte-exact slice is cut at exact designator boundaries (its own
+  # gap-check deliberately refuses a range whose endpoint is a different designator than the task
+  # actually wanted -- see the write-mode comment above), so a printed range mixing a numeric
+  # designator with a lettered one is either rejected outright ("1-1b", pre-fix) or, worse,
+  # silently drops the lettered task's own content from the dispatched slice (measured live: a
+  # singleton "1" printed for a batch that was meant to also cover "1b" produces a brief with NO
+  # trace of Task 1b -- write mode's END_LINE for "1" stops right before "1b"'s own heading).
+  # Isolating it as its own singleton, printed via its own exact designator, is what write mode's
+  # widened singleton case (see above) now accepts, and it is the only shape that neither drops
+  # nor duplicates content. A codex review probe found the original "1-1b" defect on a real corpus
+  # plan (docs/superpowers/plans/2026-07-28-176-worktree-isolation-contract.md, Task 1b);
+  # hand-verification of the first fix attempt (print the integer prefix) then found IT unsound
+  # too, before either shipped.
+  # A lettered task's own declared budget still counts toward `sum` while it transits through this
+  # loop, but since it always closes its own singleton immediately, that sum never actually
+  # constrains anything else -- consistent with it being real, not absent/MALFORMED, without
+  # needing special-cased accounting. The hard cap (3) is irrelevant to a forced singleton.
   awk -F'\t' -v budget="$BUDGET_ARG" -v has_plan_budget="$N_BUDGETED" '
+    function emit(f, l) { if (f == l) print f; else print f "-" l }
     FNR==NR { ord[++n] = $1; next }
     { bud[$1] = $2 }
     END {
@@ -271,11 +292,16 @@ AWKEOF
         t = ord[i]
         has = (has_plan_budget != 0) && (t in bud)
         b = has ? bud[t] : 0
+        if (t ~ /[A-Za-z]$/) {
+          if (batch_n > 0) { emit(first, last); batch_n = 0; sum = 0; first = "" }
+          emit(t, t)
+          continue
+        }
         close_batch = 0
         if (batch_n == 3) close_batch = 1
         else if (has_plan_budget != 0 && batch_n > 0 && has && (sum + b) > budget) close_batch = 1
         if (close_batch) {
-          if (first == last) print first; else print first "-" last
+          emit(first, last)
           batch_n = 0; sum = 0; first = ""
         }
         if (batch_n == 0) first = t
@@ -283,7 +309,7 @@ AWKEOF
         batch_n++
         sum += b
       }
-      if (batch_n > 0) { if (first == last) print first; else print first "-" last }
+      if (batch_n > 0) emit(first, last)
     }
   ' "$REAL_TASKS" "$BUDGET_FILE"
 
@@ -436,7 +462,27 @@ case "$TASKS" in
     case "$REQ_HI" in ''|*[!0-9]*) usage "--tasks range must be numeric: $TASKS"; exit 2 ;; esac
     [ "$REQ_LO" -le "$REQ_HI" ] || { usage "--tasks range is backwards: $TASKS"; exit 2; } ;;
   *)
-    case "$TASKS" in ''|*[!0-9]*) usage "--tasks must be numeric: $TASKS"; exit 2 ;; esac
+    # A bare designator may also be a single task's own letter-suffixed form ("4d"), matching
+    # task_num()'s own vocabulary (digits + exactly one trailing letter). This is narrower than
+    # the range arm above: a RANGE crossing a letter-suffixed task is still refused (the gap-check
+    # arithmetic below assumes both bounds are plain integers, and a two-different-designator span
+    # has no unambiguous byte-slice meaning here) -- only a TRUE singleton request for exactly that
+    # one task is accepted, which is the "request it as a separate brief" remedy the range arm's
+    # own usage message already promises but this arm did not yet fulfil (VCS-057/ADR-0186 fix:
+    # a codex review probe found --suggest-batches could suggest exactly this singleton and have it
+    # rejected here).
+    case "$TASKS" in
+      ''|*[!0-9A-Za-z]*)
+        usage "--tasks must be numeric or a single letter-suffixed task number (e.g. 4d): $TASKS"; exit 2 ;;
+    esac
+    case "$TASKS" in
+      *[!0-9]*)
+        _sfx="${TASKS##*[0-9]}"
+        _dig="${TASKS%"$_sfx"}"
+        case "$_dig" in ''|*[!0-9]*) usage "--tasks must be numeric or a single letter-suffixed task number (e.g. 4d): $TASKS"; exit 2 ;; esac
+        case "$_sfx" in ?) : ;; *) usage "--tasks must be numeric or a single letter-suffixed task number (e.g. 4d): $TASKS"; exit 2 ;; esac
+        ;;
+    esac
     REQ_LO="$TASKS"; REQ_HI="$TASKS" ;;
 esac
 
@@ -462,6 +508,13 @@ if [ -z "$END_LINE" ]; then usage "task $REQ_HI does not exist in $PLAN"; exit 2
 # whoever gets this message, so the letter-suffixed case is named explicitly instead of reported as
 # an undifferentiated "not contiguous" (rule 3: a clause must say what it means, not make the reader
 # re-derive it).
+#
+# A true singleton (REQ_LO == REQ_HI, digit-only or letter-suffixed alike) has no internal span to
+# gap-check by construction -- START_LINE/END_LINE above already resolved it via an exact string
+# match against REAL_TASKS, which is all a singleton needs. Skipped rather than run: for a
+# letter-suffixed singleton the arithmetic below ($((REQ_HI - REQ_LO + 1))) is not valid shell
+# arithmetic on a non-numeric string and would abort the script, not merely mis-answer.
+if [ "$REQ_LO" != "$REQ_HI" ]; then
 _present=$(awk -F'\t' -v lo="$REQ_LO" -v hi="$REQ_HI" '$1>=lo && $1<=hi {print $1}' "$REAL_TASKS")
 _gap=$(printf '%s\n' "$_present" | grep -c . || true)
 _expected=$((REQ_HI - REQ_LO + 1))
@@ -473,6 +526,7 @@ if [ "$_gap" -ne "$_expected" ]; then
     usage "tasks $REQ_LO-$REQ_HI are not a contiguous run in $PLAN ($_gap of $_expected task numbers present)"
   fi
   exit 2
+fi
 fi
 
 PLAN_REAL=$(cd "$(dirname "$PLAN")" && pwd)/$(basename "$PLAN")
@@ -524,14 +578,20 @@ done <"$BUDGET_FILE"
 FILE_MAP_UNIQ=$(sort -u "$FILE_MAP" 2>/dev/null)
 
 # Which requested tasks declared no parseable budget (informational -- absent is never zero, §D6).
+# A true singleton (REQ_LO == REQ_HI, letter-suffixed or not) is one check, not a countable loop --
+# the $((_t + 1)) increment below is not valid shell arithmetic on a letter-suffixed designator.
 BUDGETED_NUMS="$TMPD/budgeted_nums.txt"
 cut -f1 "$BUDGET_FILE" >"$BUDGETED_NUMS" 2>/dev/null || : >"$BUDGETED_NUMS"
 NO_BUDGET=""
-_t="$REQ_LO"
-while [ "$_t" -le "$REQ_HI" ]; do
-  grep -qxF "$_t" "$BUDGETED_NUMS" 2>/dev/null || NO_BUDGET="$NO_BUDGET $_t"
-  _t=$((_t + 1))
-done
+if [ "$REQ_LO" = "$REQ_HI" ]; then
+  grep -qxF "$REQ_LO" "$BUDGETED_NUMS" 2>/dev/null || NO_BUDGET=" $REQ_LO"
+else
+  _t="$REQ_LO"
+  while [ "$_t" -le "$REQ_HI" ]; do
+    grep -qxF "$_t" "$BUDGETED_NUMS" 2>/dev/null || NO_BUDGET="$NO_BUDGET $_t"
+    _t=$((_t + 1))
+  done
+fi
 
 # --- (3) excluded tasks: every OTHER task the plan declares -----------------------------------
 EXCLUDED=$(awk -F'\t' -v lo="$REQ_LO" -v hi="$REQ_HI" '!(($1+0)>=lo && ($1+0)<=hi){print $1}' "$REAL_TASKS")
