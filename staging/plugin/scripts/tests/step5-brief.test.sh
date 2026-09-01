@@ -17,14 +17,24 @@
 #   - a task number can legitimately open TWICE (a leading "Task checklist" index, then the real
 #     `## Task N` heading) — plan_task_starts() dedupes to the LAST occurrence;
 #   - a letter-suffixed task ("Task 1b") is a DIFFERENT task from the integer it prefixes —
-#     task_num() (plan-budget-parse.awk) now keeps the suffix, and a numeric --tasks range that
-#     straddles one is refused by name, never silently mis-sliced.
+#     task_num() (plan-budget-parse.awk) now keeps the suffix, and a numeric --tasks RANGE that
+#     straddles one is refused by name, never silently mis-sliced. A codex review probe on a real
+#     corpus plan (2026-07-28-176-worktree-isolation-contract.md, Task 1b) then found
+#     --suggest-batches could itself emit such a range ("1-1b") as a batch, which write mode's
+#     range guard correctly rejects but which then made that batch undispatchable. Fixed by never
+#     letting a lettered task open or extend a range in --suggest-batches's greedy fill (it is
+#     always its own standalone singleton) and, since that singleton form itself was ALSO rejected
+#     by write mode before this fix (only bare integers/integer ranges were ever accepted), by
+#     widening write mode's own singleton case to accept one letter-suffixed designator too.
 #
 # --- plants (plant-check.sh) ------------------------------------------------------------
 # plant: SB6  | plugin/skills/concept-to-code/scripts/step5-brief.sh | if [ "${_hits:-0}" -eq 0 ]; then | if [ "${_hits:-0}" -eq 999999 ]; then
 # plant: SB10 | plugin/skills/concept-to-code/scripts/step5-brief.sh | printf 'DID-NOT-RUN: %s has no task openers -- falling back to the full-plan prompt\n' "$PLAN" >&2 exit 3 | printf 'DID-NOT-RUN: %s has no task openers -- falling back to the full-plan prompt\n' "$PLAN" >&2 exit 0
 # plant: SB14 | plugin/skills/concept-to-code/scripts/step5-brief.sh | grep -qF "plan=$PLAN_REAL " | grep -qF "plan="
 # plant: SB18 | plugin/skills/concept-to-code/scripts/step5-brief.sh | if [ "$N_LINES" -eq 0 ]; then | if [ "$N_LINES" -eq 999999 ]; then
+# plant: SB21 | plugin/skills/concept-to-code/scripts/step5-brief.sh | if (batch_n == 3) close_batch = 1 | if (batch_n == 999999) close_batch = 1
+# plant: SB23 | plugin/skills/concept-to-code/scripts/step5-brief.sh | has_plan_budget != 0 && batch_n > 0 && has && (sum + b) > budget | has_plan_budget != 0 && batch_n > 0 && (sum + b) > budget
+# plant: SB29 | plugin/skills/concept-to-code/scripts/step5-brief.sh | if (t ~ /[A-Za-z]$/) { | if (0) {
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -402,12 +412,306 @@ fi
 rm -f /tmp/sb17.log /tmp/sb18.log /tmp/sb19.log
 
 # ===========================================================================
+# SB20-SB28 — --suggest-batches mode (VCS-057 plan, Fase 2 L2, ADR-0186). Budget-driven batch
+# sizing: fill a batch with consecutive openers while the sum of declared Budget: ceilings stays
+# at or under --budget (default 210), hard cap 3, floor 1. An unbudgeted/MALFORMED task never
+# moves the sum and never closes a batch on its own -- only the hard cap does. Zero plan-wide
+# budgets -> plain opener grouping, reported as mode=openers.
+# ===========================================================================
+AWK_P="$STAGING/plugin/skills/concept-to-code/scripts/plan-task-predicate.awk"
+AWK_B="$STAGING/plugin/skills/concept-to-code/scripts/plan-budget-parse.awk"
+
+# --- SB20/SB20b — corpus invariant: on every real plan with task openers, budget-driven batching
+# never produces FEWER batches (i.e. never a batch bigger) than today's fixed ceil(openers/3)
+# grouping, and every printed batch spans at most 3 distinct task numbers. Independently derived
+# per plan (real opener count, deduped), never hardcoded (rule 2 -- same byte-exact discipline as
+# SB17's independent extraction, applied here to a property instead of a string).
+# ---------------------------------------------------------------------------
+_sb20_fail=0; _sb20b_fail=0; _sb20_n=0
+for _p in "$PLANS"/*.md; do
+  _openers=$(awk -f "$AWK_P" -f "$AWK_B" -f /dev/fd/3 "$_p" 3<<'AWKEOF'
+{ if (is_task_opener($0)) print task_num($0) }
+AWKEOF
+)
+  _n_openers=$(printf '%s\n' "$_openers" | awk '!seen[$0]++' | grep -c .)
+  [ "$_n_openers" -eq 0 ] && continue
+  _sb20_n=$((_sb20_n+1))
+  _out=$(bash "$SB" --suggest-batches --plan "$_p" 2>/dev/null)
+  _n_batches=$(printf '%s\n' "$_out" | tail -n +2 | grep -c .)
+  _n_today=$(( (_n_openers + 2) / 3 ))
+  if [ "$_n_batches" -lt "$_n_today" ]; then
+    _sb20_fail=$((_sb20_fail+1))
+  fi
+  while IFS= read -r _rng; do
+    [ -n "$_rng" ] || continue
+    case "$_rng" in
+      *-*)
+        _lo="${_rng%%-*}"; _hi="${_rng##*-}"
+        _members=$(printf '%s\n' "$_openers" | awk '!seen[$0]++' | awk -v lo="$_lo" -v hi="$_hi" '
+          BEGIN{seen=0} $0==lo{seen=1} seen{c++} $0==hi{exit} END{print c}')
+        ;;
+      *) _members=1 ;;
+    esac
+    [ "${_members:-0}" -gt 3 ] && _sb20b_fail=$((_sb20b_fail+1))
+  done < <(printf '%s\n' "$_out" | tail -n +2)
+done
+if [ "$_sb20_n" -ge 20 ] && [ "$_sb20_fail" -eq 0 ]; then
+  ok "SB20 corpus invariant: budget-driven batching never produces fewer batches than ceil(openers/3) on any of $_sb20_n plans"
+else
+  bad "SB20 expected 0 violations across >=20 plans, got $_sb20_fail violations on $_sb20_n plans"
+fi
+if [ "$_sb20b_fail" -eq 0 ]; then
+  ok "SB20b every printed batch spans at most 3 task openers, across the full corpus"
+else
+  bad "SB20b $_sb20b_fail batch(es) exceeded 3 task openers"
+fi
+
+# ---------------------------------------------------------------------------
+# SB21 — the hard cap holds against an adversarial budget: 4 tiny-budget tasks with a huge
+# --budget still split 3+1, never a batch of 4. (plant SB21 disables the cap.)
+# ---------------------------------------------------------------------------
+CAPFIX="$TMP/cap-fixture.md"
+cat >"$CAPFIX" <<'CAPEOF'
+## Task 1 -- a
+Budget: `a.py` (~1 lines)
+
+## Task 2 -- b
+Budget: `b.py` (~1 lines)
+
+## Task 3 -- c
+Budget: `c.py` (~1 lines)
+
+## Task 4 -- d
+Budget: `d.py` (~1 lines)
+CAPEOF
+OUT21=$(bash "$SB" --suggest-batches --plan "$CAPFIX" --budget 999999 2>/dev/null)
+EXPECT21="mode	budget
+1-3
+4"
+if [ "$OUT21" = "$EXPECT21" ]; then
+  ok "SB21 hard cap holds against a huge --budget: 4 tasks split 1-3, 4 -- never a batch of 4"
+else
+  bad "SB21 expected [$EXPECT21], got [$OUT21]"
+fi
+
+# ---------------------------------------------------------------------------
+# SB22 — the floor holds: a single task whose OWN declared budget already exceeds --budget still
+# forms a batch of 1, never 0 (never dropped, never merged past the cap by a hostile ceiling).
+# ---------------------------------------------------------------------------
+FLOORFIX="$TMP/floor-fixture.md"
+cat >"$FLOORFIX" <<'FLOOREOF'
+## Task 1 -- huge
+Budget: `a.py` (~5000 lines)
+
+## Task 2 -- also huge
+Budget: `b.py` (~5000 lines)
+FLOOREOF
+OUT22=$(bash "$SB" --suggest-batches --plan "$FLOORFIX" --budget 10 2>/dev/null)
+EXPECT22="mode	budget
+1
+2"
+if [ "$OUT22" = "$EXPECT22" ]; then
+  ok "SB22 floor holds: each oversized task forms its own singleton batch, never zero, never merged"
+else
+  bad "SB22 expected [$EXPECT22], got [$OUT22]"
+fi
+
+# ---------------------------------------------------------------------------
+# SB23 — a MALFORMED Budget: (an attempt that does not fully parse -- corpus-wide count is 0, so
+# this fixture is synthesized, rule 9) never moves the running sum and never closes a batch on its
+# own: it joins whatever batch is open, exactly like an absent Budget:.
+# ---------------------------------------------------------------------------
+MALFIX="$TMP/malformed-fixture.md"
+cat >"$MALFIX" <<'MALEOF'
+## Task 1 -- a
+Budget: `a.py` (~50 lines)
+
+## Task 2 -- b
+Budget: `b.py` (~50 lines) extra-trailing-junk-that-does-not-parse
+
+## Task 3 -- c
+Budget: `c.py` (~50 lines)
+MALEOF
+OUT23=$(bash "$SB" --suggest-batches --plan "$MALFIX" --budget 40 2>/dev/null)
+EXPECT23="mode	budget
+1-2
+3"
+if [ "$OUT23" = "$EXPECT23" ]; then
+  ok "SB23 a MALFORMED Budget: joins the open batch without moving the sum or forcing a close (1-2, 3)"
+else
+  bad "SB23 expected [$EXPECT23], got [$OUT23]"
+fi
+
+# ---------------------------------------------------------------------------
+# SB24 — plan-wide fallback: a real corpus plan with zero parseable budgets reports mode=openers
+# and ranges byte-identical to an independently-derived plain opener grouping (fixed groups of
+# <=3), never mode=budget.
+# ---------------------------------------------------------------------------
+NOBUDGET="$PLANS/2026-05-17-agents-improvement.md"
+[ -f "$NOBUDGET" ] || { echo "FATAL: missing reference plan $NOBUDGET"; exit 1; }
+OUT24=$(bash "$SB" --suggest-batches --plan "$NOBUDGET" 2>/dev/null)
+MODE24=$(printf '%s\n' "$OUT24" | head -1)
+RANGES24=$(printf '%s\n' "$OUT24" | tail -n +2)
+INDEP24=$(awk -f "$AWK_P" -f "$AWK_B" -f /dev/fd/3 "$NOBUDGET" 3<<'AWKEOF'
+{ if (is_task_opener($0)) print task_num($0) }
+AWKEOF
+)
+INDEP_RANGES24=$(printf '%s\n' "$INDEP24" | awk '!seen[$0]++' | awk '
+  { a[NR]=$0 } END {
+    for (i=1;i<=NR;i+=3) {
+      lo=a[i]; hi=(i+2<=NR)?a[i+2]:a[NR]
+      if (i+1>NR) print lo; else if (lo==hi) print lo; else print lo "-" hi
+    }
+  }')
+if [ "$MODE24" = "mode	openers" ] && [ "$RANGES24" = "$INDEP_RANGES24" ]; then
+  ok "SB24 an unbudgeted plan reports mode=openers with ranges byte-identical to plain opener grouping"
+else
+  bad "SB24 expected mode=openers and ranges=[$INDEP_RANGES24], got mode=[$MODE24] ranges=[$RANGES24]"
+fi
+
+# ---------------------------------------------------------------------------
+# SB25/SB26 — DID-NOT-RUN: the two corpus plans with zero task openers exit 3 under
+# --suggest-batches, same as write/verify mode (rule 4).
+# ---------------------------------------------------------------------------
+bash "$SB" --suggest-batches --plan "$ZERO_A" >/tmp/sb25.log 2>&1; rc=$?
+if [ "$rc" -eq 3 ] && grep -q 'DID-NOT-RUN' /tmp/sb25.log; then
+  ok "SB25 --suggest-batches on a zero-opener plan ($ZERO_A) exits 3, DID-NOT-RUN"
+else
+  bad "SB25 expected exit 3 + DID-NOT-RUN on $ZERO_A, got rc=$rc"
+fi
+bash "$SB" --suggest-batches --plan "$ZERO_B" >/tmp/sb26.log 2>&1; rc=$?
+if [ "$rc" -eq 3 ] && grep -q 'DID-NOT-RUN' /tmp/sb26.log; then
+  ok "SB26 --suggest-batches on a zero-opener plan ($ZERO_B) exits 3, DID-NOT-RUN"
+else
+  bad "SB26 expected exit 3 + DID-NOT-RUN on $ZERO_B, got rc=$rc"
+fi
+rm -f /tmp/sb25.log /tmp/sb26.log
+
+# ---------------------------------------------------------------------------
+# SB27 — bad invocation: a non-numeric or non-positive --budget exits 2, naming --budget.
+# ---------------------------------------------------------------------------
+bash "$SB" --suggest-batches --plan "$HH" --budget abc >/tmp/sb27.log 2>&1; rc27a=$?
+bash "$SB" --suggest-batches --plan "$HH" --budget 0 >/tmp/sb27b.log 2>&1; rc27b=$?
+if [ "$rc27a" -eq 2 ] && grep -q -- '--budget' /tmp/sb27.log \
+   && [ "$rc27b" -eq 2 ] && grep -q -- '--budget' /tmp/sb27b.log; then
+  ok "SB27 a non-numeric or non-positive --budget exits 2, naming --budget"
+else
+  bad "SB27 expected exit 2 naming --budget for both 'abc' and '0', got rc=$rc27a/$rc27b"
+fi
+rm -f /tmp/sb27.log /tmp/sb27b.log
+
+# ---------------------------------------------------------------------------
+# SB28 — producer/consumer meet on the exact flag string (rule 17): "--suggest-batches" appears in
+# both the script and the reference doc that invokes it, scanned from both sides rather than
+# asserted twice by hand.
+# ---------------------------------------------------------------------------
+STEP5REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementation.md"
+if grep -qF -- '--suggest-batches' "$SB" && [ -f "$STEP5REF" ] && grep -qF -- '--suggest-batches' "$STEP5REF"; then
+  ok "SB28 --suggest-batches is named in both step5-brief.sh and step5-implementation.md"
+else
+  bad "SB28 --suggest-batches missing from step5-brief.sh and/or step5-implementation.md"
+fi
+
+# ---------------------------------------------------------------------------
+# SB29 — corpus regression (plant SB29): on the real plan a codex review probe used to find the
+# original defect, --suggest-batches must never print a letter-suffixed designator as one end of
+# a dash-joined range ("1-1b", "1b-2") -- every line naming a lettered task must be a bare
+# singleton. Disabling the "never open/extend a range on a lettered task" guard (plant SB29) lets
+# "Task 1b" merge back into "1-1b", which this assertion catches.
+# ---------------------------------------------------------------------------
+LETPLAN="$PLANS/2026-07-28-176-worktree-isolation-contract.md"
+OUT29=$(bash "$SB" --suggest-batches --plan "$LETPLAN" 2>/dev/null | tail -n +2)
+_sb29_bad=$(printf '%s\n' "$OUT29" | grep -E '[A-Za-z].*-|-.*[A-Za-z]' || true)
+if [ -f "$LETPLAN" ] && [ -z "$_sb29_bad" ] && printf '%s\n' "$OUT29" | grep -qx '1b'; then
+  ok "SB29 corpus regression: Task 1b prints only as a bare singleton, never as a range endpoint"
+else
+  bad "SB29 expected '1b' as a bare singleton line and no lettered range endpoint, got [$OUT29]"
+fi
+
+# ---------------------------------------------------------------------------
+# SB30 — synthetic fixture (rule 9): a lettered task sits at exactly the budget boundary between
+# two plain-numeric neighbors that would otherwise merge. The lettered task must still close out
+# on its own (never merged with Task 1, never preventing Task 2/3 from merging with each other).
+# ---------------------------------------------------------------------------
+LETFIX="$TMP/lettered-boundary-fixture.md"
+cat >"$LETFIX" <<'LETEOF'
+## Task 1 -- a
+Budget: `a.py` (~50 lines)
+
+## Task 1b -- b
+Budget: `b.py` (~50 lines)
+
+## Task 2 -- c
+Budget: `c.py` (~50 lines)
+
+## Task 3 -- d
+Budget: `d.py` (~50 lines)
+LETEOF
+OUT30=$(bash "$SB" --suggest-batches --plan "$LETFIX" --budget 200 2>/dev/null)
+EXPECT30="mode	budget
+1
+1b
+2-3"
+if [ "$OUT30" = "$EXPECT30" ]; then
+  ok "SB30 a lettered task at the budget boundary closes its own batch without blocking its numeric neighbors from merging"
+else
+  bad "SB30 expected [$EXPECT30], got [$OUT30]"
+fi
+
+# ---------------------------------------------------------------------------
+# SB31 — full round-trip on the real corpus plan (rule 8, backward check): every range
+# --suggest-batches prints is accepted by write mode (rc=0), and the union of task headings
+# across all resulting briefs matches the plan's real task set exactly once each -- no gap, no
+# duplication, no loss (the specific silent-content-loss failure mode the first, rejected fix
+# attempt had).
+# ---------------------------------------------------------------------------
+RT_DIR="$TMP/sb31-briefs"; mkdir -p "$RT_DIR"
+RT_FAIL=0; RT_HEADINGS="$TMP/sb31-headings.txt"; : >"$RT_HEADINGS"
+_rt_i=0
+while IFS= read -r _rng; do
+  [ -n "$_rng" ] || continue
+  _rt_i=$((_rt_i+1))
+  _o="$RT_DIR/b$_rt_i.md"
+  bash "$SB" --tasks "$_rng" --plan "$LETPLAN" --out "$_o" >/dev/null 2>&1 || RT_FAIL=$((RT_FAIL+1))
+  grep -oE '^## Task [0-9]+[A-Za-z]?' "$_o" 2>/dev/null | sed 's/^## Task //' >>"$RT_HEADINGS"
+done < <(bash "$SB" --suggest-batches --plan "$LETPLAN" 2>/dev/null | tail -n +2)
+_rt_dupes=$(sort "$RT_HEADINGS" | uniq -d)
+_rt_real_raw=$(awk -f "$AWK_P" -f "$AWK_B" -f /dev/fd/3 "$LETPLAN" 3<<'AWKEOF'
+{ if (is_task_opener($0)) print task_num($0) }
+AWKEOF
+)
+_rt_real=$(printf '%s\n' "$_rt_real_raw" | awk '!seen[$0]++' | sort)
+_rt_got=$(sort -u "$RT_HEADINGS")
+if [ "$RT_FAIL" -eq 0 ] && [ -z "$_rt_dupes" ] && [ "$_rt_real" = "$_rt_got" ]; then
+  ok "SB31 full round-trip: every printed range dispatches, covers every real task exactly once, no loss, no duplication"
+else
+  bad "SB31 round-trip failed: rc-failures=$RT_FAIL dupes=[$_rt_dupes] real=[$_rt_real] got=[$_rt_got]"
+fi
+
+# ---------------------------------------------------------------------------
+# SB32 — write mode's widened singleton case accepts a bare letter-suffixed designator directly
+# (not only via --suggest-batches), and still rejects a malformed one (two trailing letters, or a
+# leading letter) naming --tasks.
+# ---------------------------------------------------------------------------
+O32A=$(mktemp); bash "$SB" --tasks 1b --plan "$LETFIX" --out "$O32A" 2>/tmp/sb32a.log; RC32A=$?
+bash "$SB" --tasks 1bb --plan "$LETFIX" --out /dev/null 2>/tmp/sb32b.log; RC32B=$?
+bash "$SB" --tasks b1 --plan "$LETFIX" --out /dev/null 2>/tmp/sb32c.log; RC32C=$?
+if [ "$RC32A" -eq 0 ] && grep -q '^## Task 1b' "$O32A" \
+   && [ "$RC32B" -eq 2 ] && grep -q -- '--tasks' /tmp/sb32b.log \
+   && [ "$RC32C" -eq 2 ] && grep -q -- '--tasks' /tmp/sb32c.log; then
+  ok "SB32 write mode accepts a bare letter-suffixed singleton (1b) and rejects malformed forms (1bb, b1)"
+else
+  bad "SB32 expected rc=0/2/2, got rc=$RC32A/$RC32B/$RC32C"
+fi
+rm -f "$O32A" /tmp/sb32a.log /tmp/sb32b.log /tmp/sb32c.log
+
+# ===========================================================================
 # Z1 — assertion-count floor. An exact count, not a >= floor with slack (rule 10): every
 # assertion above is enumerated here by hand, so a silently deleted one is caught.
 # ===========================================================================
 TOTAL=$((PASS+FAIL))
-if [ "$TOTAL" -eq 24 ]; then ok "Z1: 24 assertions ran (exact) — none silently vanished"
-else bad "Z1: expected exactly 24 assertions, ran $TOTAL"; fi
+if [ "$TOTAL" -eq 38 ]; then ok "Z1: 38 assertions ran (exact) — none silently vanished"
+else bad "Z1: expected exactly 38 assertions, ran $TOTAL"; fi
 
 echo "----"
 echo "$SCRIPTS/../step5-brief.test.sh: $PASS passed, $FAIL failed"

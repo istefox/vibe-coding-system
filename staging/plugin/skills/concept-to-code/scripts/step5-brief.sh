@@ -1,23 +1,25 @@
 #!/bin/bash
 # step5-brief.sh v1.0 — per-batch dispatch brief materializer/verifier (VCS-057/ADR-0185, L1).
 #
-# CONTRACT — a CHECKER, not a reporter (unlike diff-budget-check.sh at the same layer): all three
+# CONTRACT — a CHECKER, not a reporter (unlike diff-budget-check.sh at the same layer): all four
 # modes share one exit-code convention, and the CALLER's fallback depends on distinguishing them —
 #   0 — write mode: brief written to --out.      verify mode: coverage is exact, no findings.
-#       digest mode: roadmap digest written to --out.
+#       digest mode: roadmap digest written to --out.   suggest-batches mode: ranges printed.
 #   1 — (verify mode only) coverage problem(s) found — GAP / OVERLAP / BOUNDARY-MISMATCH lines on
 #       stdout, one or more.
 #   2 — bad invocation (missing/unreadable required argument, a requested task that does not exist
-#       in the plan, or a requested task set that is not a contiguous run of existing task numbers).
-#   3 — DID-NOT-RUN (rule 4): write/verify mode: the plan has zero task openers (write mode:
-#       malformed plan, nothing to slice; verify mode: same, OR zero briefs under --briefs match
-#       this plan at all — an unrun verification must not read as a clean pass). digest mode:
-#       --project-md has zero "### Phase" headings and zero checkbox lines — not this convention,
-#       or an empty roadmap; either way nothing was derived, and rule 7's zero-candidates-vs-
-#       zero-matches distinction applies here exactly as it does to a plan with no tasks. On exit 3
-#       in WRITE or DIGEST mode, the caller (a Step 5 dispatch site) falls back to today's
-#       full-file-read prompt and DECLARES the fallback happened — this script does not decide
-#       that on its own, it only says why.
+#       in the plan, a requested task set that is not a contiguous run of existing task numbers, or
+#       a non-numeric/non-positive --budget).
+#   3 — DID-NOT-RUN (rule 4): write/verify/suggest-batches mode: the plan has zero task openers
+#       (write mode: malformed plan, nothing to slice; verify mode: same, OR zero briefs under
+#       --briefs match this plan at all — an unrun verification must not read as a clean pass;
+#       suggest-batches mode: same, nothing to batch). digest mode: --project-md has zero
+#       "### Phase" headings and zero checkbox lines — not this convention, or an empty roadmap;
+#       either way nothing was derived, and rule 7's zero-candidates-vs-zero-matches distinction
+#       applies here exactly as it does to a plan with no tasks. On exit 3 in WRITE, DIGEST or
+#       SUGGEST-BATCHES mode, the caller (a Step 5 dispatch site) falls back to today's policy
+#       (full-file-read prompt, or fixed opener-count batching) and DECLARES the fallback
+#       happened — this script does not decide that on its own, it only says why.
 #
 # WHY THIS EXISTS (VCS-057 plan, Fase 2 §L1). Measured 2026-08-31: PROJECT.md alone is ~37,600
 # tokens, injected unconditionally into the Workflow dispatch prompt; separately, every dispatched
@@ -51,6 +53,19 @@
 # to disagree with). Workflow-only by design (the Agent-tool fallback templates never inlined
 # PROJECT.md in the first place, so there is nothing there for a digest to replace).
 #
+# SUGGEST-BATCHES MODE (VCS-057 plan, Fase 2 §L2, ADR-0186). Today's Agent-tool fallback batches by
+# opener COUNT alone, fixed at 2-3 task blocks — a proxy for the work, when the plan already
+# DECLARES it in each task's `Budget:` line. `--suggest-batches` fills a batch with consecutive
+# openers while the sum of their declared ceilings stays under `--budget` (default 210 lines = 3x
+# the corpus median, measured 2026-09-01) — hard cap 3, floor 1, exactly as today. A task with no
+# parseable Budget: (absent OR MALFORMED) NEVER moves the sum and NEVER closes the batch on its
+# own — only the hard cap of 3 limits it, so a plan mixing budgeted and unbudgeted tasks (the
+# dominant shape in the corpus: 16 of 23 budgeted plans) is not fragmented by the ones that lack a
+# ceiling. If the WHOLE plan has zero parseable budgets, this falls back to plain opener-count
+# grouping (fixed groups of <=3) and reports `mode\topeners` on stdout instead of `mode\tbudget` —
+# ranges in that case are byte-identical to today's policy. The invariant this mode can never
+# violate: it may only SHRINK a batch relative to today's opener grouping, never grow it past 3.
+#
 # DANGEROUS FAILURE MODE, AND WHY --verify EXISTS (VCS-057 plan). A brief that verifies "clean" —
 # every task assigned to exactly one brief — but whose SLICE boundary is off by a line (an
 # opener's start_line miscomputed) is invisible to a set-only check. --verify additionally
@@ -77,10 +92,13 @@ usage:
                   [--design-path <p>] [--design-reason <r>]
   step5-brief.sh --verify --plan <file> --briefs <dir>
   step5-brief.sh --digest --project-md <file> --out <file>
+  step5-brief.sh --suggest-batches --plan <file> [--budget <N>]
 
-exit: 0 written / verify clean / digest written, 1 verify found gap|overlap|mismatch,
-2 bad invocation, 3 did-not-run (malformed plan, --verify found no briefs for this plan,
-or --digest's --project-md has no "### Phase" heading and no checkbox line).
+exit: 0 written / verify clean / digest written / batches suggested, 1 verify found
+gap|overlap|mismatch, 2 bad invocation (includes a non-numeric/non-positive --budget),
+3 did-not-run (malformed plan, --verify found no briefs for this plan, --digest's
+--project-md has no "### Phase" heading and no checkbox line, or --suggest-batches's
+plan has no task openers).
 EOF
 }
 
@@ -118,7 +136,7 @@ plan_task_starts() {
 plan_total_lines() { awk 'END{print NR}' "$1"; }
 
 MODE="write"
-PLAN=""; TASKS=""; OUT=""; BRIEFS_DIR=""; PROJECT_MD=""
+PLAN=""; TASKS=""; OUT=""; BRIEFS_DIR=""; PROJECT_MD=""; BUDGET_ARG=210
 ADR_PATH=""; ADR_REASON=""; SPEC_PATH=""; SPEC_REASON=""
 CLAUDE_MD_PATH=""; CLAUDE_MD_REASON=""; DESIGN_PATH=""; DESIGN_REASON=""
 
@@ -126,11 +144,13 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --verify) MODE="verify"; shift ;;
     --digest) MODE="digest"; shift ;;
+    --suggest-batches) MODE="suggest"; shift ;;
     --plan) [ $# -ge 2 ] || { usage "--plan needs a file argument"; exit 2; }; PLAN="$2"; shift 2 ;;
     --tasks) [ $# -ge 2 ] || { usage "--tasks needs an argument"; exit 2; }; TASKS="$2"; shift 2 ;;
     --out) [ $# -ge 2 ] || { usage "--out needs a file argument"; exit 2; }; OUT="$2"; shift 2 ;;
     --briefs) [ $# -ge 2 ] || { usage "--briefs needs a directory argument"; exit 2; }; BRIEFS_DIR="$2"; shift 2 ;;
     --project-md) [ $# -ge 2 ] || { usage "--project-md needs a file argument"; exit 2; }; PROJECT_MD="$2"; shift 2 ;;
+    --budget) [ $# -ge 2 ] || { usage "--budget needs a numeric argument"; exit 2; }; BUDGET_ARG="$2"; shift 2 ;;
     --adr-path) ADR_PATH="${2:-}"; shift 2 ;;
     --adr-reason) ADR_REASON="${2:-}"; shift 2 ;;
     --spec-path) SPEC_PATH="${2:-}"; shift 2 ;;
@@ -179,6 +199,122 @@ if [ "$MODE" = "digest" ]; then
 fi
 
 [ -n "$PLAN" ] && [ -r "$PLAN" ] || { usage "--plan (readable file) is required — got [$PLAN]"; exit 2; }
+
+# ================================================================================================
+# --suggest-batches mode (VCS-057 plan, Fase 2 §L2, ADR-0186) — budget-driven batch sizing. Never
+# larger than today's opener grouping: hard cap 3, floor 1 (see the SUGGEST-BATCHES MODE comment
+# above for the full rule).
+# ================================================================================================
+if [ "$MODE" = "suggest" ]; then
+  case "$BUDGET_ARG" in ''|*[!0-9]*) usage "--budget must be a positive integer: $BUDGET_ARG"; exit 2 ;; esac
+  [ "$BUDGET_ARG" -gt 0 ] || { usage "--budget must be a positive integer: $BUDGET_ARG"; exit 2; }
+
+  TMPD=$(mktemp -d) || { printf '%s: cannot create a temp directory\n' "$SELF" >&2; exit 2; }
+  trap 'rm -rf "$TMPD" "$STARTS_AWK"' EXIT
+
+  REAL_TASKS="$TMPD/real_tasks.tsv"
+  plan_task_starts "$PLAN" >"$REAL_TASKS"
+  N_TASKS=$(grep -c . "$REAL_TASKS" 2>/dev/null || true); [ -n "$N_TASKS" ] || N_TASKS=0
+  if [ "$N_TASKS" -eq 0 ]; then
+    printf 'DID-NOT-RUN: %s has no task openers -- falling back to the opener-count batch policy\n' "$PLAN" >&2
+    exit 3
+  fi
+
+  # Every Budget: declaration anywhere in the plan (whole-plan range -- no LO/HI gate here, unlike
+  # write mode's per-request collect.awk). parse_budget()/looks_like_budget()/task_num() are loaded
+  # from plan-budget-parse.awk, never restated (rule 6, ADR-0070 §D2).
+  BUDGET_FILE="$TMPD/budget.tsv"; : >"$BUDGET_FILE"
+  MALFORMED_FILE="$TMPD/malformed.tsv"; : >"$MALFORMED_FILE"
+  cat >"$TMPD/collect.awk" <<'AWKEOF'
+BEGIN { in_task = 0; cur = ""; got = 0 }
+{
+  line = $0
+  if (is_task_opener(line)) {
+    cur = task_num(line)
+    got = 0
+    in_task = 1
+    next
+  }
+  if (in_task && !got) {
+    if (match(line, /[Bb]udget:/)) {
+      rest = trim(substr(line, RSTART + RLENGTH))
+      parsed = parse_budget(rest)
+      if (parsed != "") {
+        split(parsed, pb, "\t")
+        print cur "\t" pb[2] >> BUDGET_FILE
+        got = 1
+      } else if (looks_like_budget(rest)) {
+        print cur "\t" rest >> MALFORMED_FILE
+        got = 1
+      }
+    }
+  }
+}
+AWKEOF
+  awk -v BUDGET_FILE="$BUDGET_FILE" -v MALFORMED_FILE="$MALFORMED_FILE" \
+      -f "$PREDICATE" -f "$BUDGET_PARSER" -f "$TMPD/collect.awk" "$PLAN"
+
+  N_BUDGETED=$(grep -c . "$BUDGET_FILE" 2>/dev/null || true); [ -n "$N_BUDGETED" ] || N_BUDGETED=0
+
+  # Greedy fill, in plan order: add consecutive openers to the current batch until either the hard
+  # cap (3) is hit, or adding one more WITH A PARSEABLE BUDGET would push the sum over --budget. An
+  # opener with no parseable budget (absent or MALFORMED) never moves `sum` and never closes the
+  # batch on its own -- only the hard cap can. Zero plan-wide budgets -> plain opener grouping,
+  # reported as `mode\topeners` (byte-identical to today's fixed <=3 chunking).
+  #
+  # A letter-suffixed task ("Task 1b") is ALWAYS its own standalone singleton batch -- never
+  # merged into a range with a numeric sibling on either side. This is not merely a printing
+  # convention: write mode's byte-exact slice is cut at exact designator boundaries (its own
+  # gap-check deliberately refuses a range whose endpoint is a different designator than the task
+  # actually wanted -- see the write-mode comment above), so a printed range mixing a numeric
+  # designator with a lettered one is either rejected outright ("1-1b", pre-fix) or, worse,
+  # silently drops the lettered task's own content from the dispatched slice (measured live: a
+  # singleton "1" printed for a batch that was meant to also cover "1b" produces a brief with NO
+  # trace of Task 1b -- write mode's END_LINE for "1" stops right before "1b"'s own heading).
+  # Isolating it as its own singleton, printed via its own exact designator, is what write mode's
+  # widened singleton case (see above) now accepts, and it is the only shape that neither drops
+  # nor duplicates content. A codex review probe found the original "1-1b" defect on a real corpus
+  # plan (docs/superpowers/plans/2026-07-28-176-worktree-isolation-contract.md, Task 1b);
+  # hand-verification of the first fix attempt (print the integer prefix) then found IT unsound
+  # too, before either shipped.
+  # A lettered task's own declared budget still counts toward `sum` while it transits through this
+  # loop, but since it always closes its own singleton immediately, that sum never actually
+  # constrains anything else -- consistent with it being real, not absent/MALFORMED, without
+  # needing special-cased accounting. The hard cap (3) is irrelevant to a forced singleton.
+  awk -F'\t' -v budget="$BUDGET_ARG" -v has_plan_budget="$N_BUDGETED" '
+    function emit(f, l) { if (f == l) print f; else print f "-" l }
+    FNR==NR { ord[++n] = $1; next }
+    { bud[$1] = $2 }
+    END {
+      print (has_plan_budget == 0) ? "mode\topeners" : "mode\tbudget"
+      batch_n = 0; sum = 0; first = ""; last = ""
+      for (i = 1; i <= n; i++) {
+        t = ord[i]
+        has = (has_plan_budget != 0) && (t in bud)
+        b = has ? bud[t] : 0
+        if (t ~ /[A-Za-z]$/) {
+          if (batch_n > 0) { emit(first, last); batch_n = 0; sum = 0; first = "" }
+          emit(t, t)
+          continue
+        }
+        close_batch = 0
+        if (batch_n == 3) close_batch = 1
+        else if (has_plan_budget != 0 && batch_n > 0 && has && (sum + b) > budget) close_batch = 1
+        if (close_batch) {
+          emit(first, last)
+          batch_n = 0; sum = 0; first = ""
+        }
+        if (batch_n == 0) first = t
+        last = t
+        batch_n++
+        sum += b
+      }
+      if (batch_n > 0) emit(first, last)
+    }
+  ' "$REAL_TASKS" "$BUDGET_FILE"
+
+  exit 0
+fi
 
 # ================================================================================================
 # --verify mode
@@ -326,7 +462,27 @@ case "$TASKS" in
     case "$REQ_HI" in ''|*[!0-9]*) usage "--tasks range must be numeric: $TASKS"; exit 2 ;; esac
     [ "$REQ_LO" -le "$REQ_HI" ] || { usage "--tasks range is backwards: $TASKS"; exit 2; } ;;
   *)
-    case "$TASKS" in ''|*[!0-9]*) usage "--tasks must be numeric: $TASKS"; exit 2 ;; esac
+    # A bare designator may also be a single task's own letter-suffixed form ("4d"), matching
+    # task_num()'s own vocabulary (digits + exactly one trailing letter). This is narrower than
+    # the range arm above: a RANGE crossing a letter-suffixed task is still refused (the gap-check
+    # arithmetic below assumes both bounds are plain integers, and a two-different-designator span
+    # has no unambiguous byte-slice meaning here) -- only a TRUE singleton request for exactly that
+    # one task is accepted, which is the "request it as a separate brief" remedy the range arm's
+    # own usage message already promises but this arm did not yet fulfil (VCS-057/ADR-0186 fix:
+    # a codex review probe found --suggest-batches could suggest exactly this singleton and have it
+    # rejected here).
+    case "$TASKS" in
+      ''|*[!0-9A-Za-z]*)
+        usage "--tasks must be numeric or a single letter-suffixed task number (e.g. 4d): $TASKS"; exit 2 ;;
+    esac
+    case "$TASKS" in
+      *[!0-9]*)
+        _sfx="${TASKS##*[0-9]}"
+        _dig="${TASKS%"$_sfx"}"
+        case "$_dig" in ''|*[!0-9]*) usage "--tasks must be numeric or a single letter-suffixed task number (e.g. 4d): $TASKS"; exit 2 ;; esac
+        case "$_sfx" in ?) : ;; *) usage "--tasks must be numeric or a single letter-suffixed task number (e.g. 4d): $TASKS"; exit 2 ;; esac
+        ;;
+    esac
     REQ_LO="$TASKS"; REQ_HI="$TASKS" ;;
 esac
 
@@ -352,6 +508,13 @@ if [ -z "$END_LINE" ]; then usage "task $REQ_HI does not exist in $PLAN"; exit 2
 # whoever gets this message, so the letter-suffixed case is named explicitly instead of reported as
 # an undifferentiated "not contiguous" (rule 3: a clause must say what it means, not make the reader
 # re-derive it).
+#
+# A true singleton (REQ_LO == REQ_HI, digit-only or letter-suffixed alike) has no internal span to
+# gap-check by construction -- START_LINE/END_LINE above already resolved it via an exact string
+# match against REAL_TASKS, which is all a singleton needs. Skipped rather than run: for a
+# letter-suffixed singleton the arithmetic below ($((REQ_HI - REQ_LO + 1))) is not valid shell
+# arithmetic on a non-numeric string and would abort the script, not merely mis-answer.
+if [ "$REQ_LO" != "$REQ_HI" ]; then
 _present=$(awk -F'\t' -v lo="$REQ_LO" -v hi="$REQ_HI" '$1>=lo && $1<=hi {print $1}' "$REAL_TASKS")
 _gap=$(printf '%s\n' "$_present" | grep -c . || true)
 _expected=$((REQ_HI - REQ_LO + 1))
@@ -363,6 +526,7 @@ if [ "$_gap" -ne "$_expected" ]; then
     usage "tasks $REQ_LO-$REQ_HI are not a contiguous run in $PLAN ($_gap of $_expected task numbers present)"
   fi
   exit 2
+fi
 fi
 
 PLAN_REAL=$(cd "$(dirname "$PLAN")" && pwd)/$(basename "$PLAN")
@@ -414,14 +578,20 @@ done <"$BUDGET_FILE"
 FILE_MAP_UNIQ=$(sort -u "$FILE_MAP" 2>/dev/null)
 
 # Which requested tasks declared no parseable budget (informational -- absent is never zero, §D6).
+# A true singleton (REQ_LO == REQ_HI, letter-suffixed or not) is one check, not a countable loop --
+# the $((_t + 1)) increment below is not valid shell arithmetic on a letter-suffixed designator.
 BUDGETED_NUMS="$TMPD/budgeted_nums.txt"
 cut -f1 "$BUDGET_FILE" >"$BUDGETED_NUMS" 2>/dev/null || : >"$BUDGETED_NUMS"
 NO_BUDGET=""
-_t="$REQ_LO"
-while [ "$_t" -le "$REQ_HI" ]; do
-  grep -qxF "$_t" "$BUDGETED_NUMS" 2>/dev/null || NO_BUDGET="$NO_BUDGET $_t"
-  _t=$((_t + 1))
-done
+if [ "$REQ_LO" = "$REQ_HI" ]; then
+  grep -qxF "$REQ_LO" "$BUDGETED_NUMS" 2>/dev/null || NO_BUDGET=" $REQ_LO"
+else
+  _t="$REQ_LO"
+  while [ "$_t" -le "$REQ_HI" ]; do
+    grep -qxF "$_t" "$BUDGETED_NUMS" 2>/dev/null || NO_BUDGET="$NO_BUDGET $_t"
+    _t=$((_t + 1))
+  done
+fi
 
 # --- (3) excluded tasks: every OTHER task the plan declares -----------------------------------
 EXCLUDED=$(awk -F'\t' -v lo="$REQ_LO" -v hi="$REQ_HI" '!(($1+0)>=lo && ($1+0)<=hi){print $1}' "$REAL_TASKS")

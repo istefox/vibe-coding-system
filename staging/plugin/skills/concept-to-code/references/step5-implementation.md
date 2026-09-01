@@ -901,6 +901,8 @@ Schema (JSON):
     { "task": "3", "test_count_delta": 2, "deleted_lines": 14,
       "iteration_count": 2, "elapsed_wall_seconds": 187 }
   ],
+  "batch_sizing": { "mode": "budget", "budget": 210,
+    "computed": ["1-3", "4", "5-6"], "dispatched": ["1-2", "3-4", "5-6"] },
   "accessibility_i18n_findings": [
     { "item": "labels", "status": "pass | fail | not-applicable", "note": "<one line>" },
     { "item": "contrast", "status": "pass | fail | not-applicable", "note": "<one line>" },
@@ -930,6 +932,15 @@ entry means that one metric was not measured for that checkpoint, and MUST NOT b
 apply elsewhere in this codebase, here applied to stored data). A `0` in a present field is a real,
 computed zero (e.g. a checkpoint that genuinely deleted no lines). The `task_metrics` array itself
 is absent, as a whole, on any manifest predating this feature — that is not malformed either.
+
+**`batch_sizing` is a scalar OBJECT, not an array, and — like `task_metrics` immediately above —
+deliberately outside the "six advisory arrays" roll-up (VCS-057, ADR-0186 — L2).** `computed` is
+the range list `step5-brief.sh --suggest-batches` produced; `dispatched` is what the orchestrator
+actually dispatched. **The field is written only when the two diverge** — in the normal case
+(`dispatched == computed`) it is absent, so the Gate 5 roll-up gains no line. The computation
+(`computed`) is enforcement — shell, exit-coded, testable; that the orchestrator dispatches those
+exact ranges is instruction (rule 16), and `batch_sizing` exists to make a divergence between the
+two visible, not to convert the instruction half into enforcement.
 
 **`accessibility_i18n_findings` IS a findings array, unlike `task_metrics` immediately above —
 same distinguishing test ADR-0064 §D2 draws for `task_metrics`, opposite answer: a metric is a
@@ -1011,6 +1022,10 @@ is also what every manifest written before ADR-0039 means by omitting the field.
   from `git` or from the orchestrator's own dispatch bookkeeping, never from an agent's report
   (ADR-0064 §D4) — see the "Task-level metrics" block below for the exact computation of each of
   the four fields.
+- `batch_sizing` is **never** a failure signal and is **not one of the advisory arrays** — like
+  `task_metrics` above it is not even an array, it is a scalar object present only to disclose a
+  divergence (VCS-057, ADR-0186 — L2). Absent means the orchestrator dispatched exactly the ranges
+  `step5-brief.sh --suggest-batches` computed, which is the expected case.
 - `accessibility_i18n_findings` is **never** a failure signal (ADR-0066 §D2): the gate records an
   answer, it does not block, a deliberate divergence from the SPEC's "gate, not aspiration"
   wording — disclosed here rather than resolved in either direction. It IS one of the
@@ -1486,8 +1501,27 @@ produces ranges over tasks that do not exist; on #222's plan it says 38 where th
 
 If `$openers ≥ 6`, do NOT dispatch the coder as a single monolithic block — the dispatch can
 silently truncate halfway (context overflow, timeout) without a final report and without running
-the closing gates. Split the dispatch into **batches of 2-3 task blocks**, numbered by their
-`Task N` designations.
+the closing gates. **Split the dispatch using the ranges `step5-brief.sh --suggest-batches`
+computes (VCS-057, ADR-0186 — L2)**, run once per plan before the first batch:
+
+    step5-brief.sh --suggest-batches --plan <manifest.artifacts.plan>
+
+One range per line on stdout (`1-3`, `4`, `5-6`, in real `Task N` designations), preceded by a
+`mode\tbudget` or `mode\topeners` header line. Fills each batch with consecutive task blocks while
+the sum of their declared `Budget:` ceilings stays at or under 210 lines (3x the corpus median,
+measured 2026-09-01) — **hard cap 3 task blocks, floor 1, exactly the bound the fixed "2-3" rule
+already enforced.** A task with no parseable `Budget:` never moves the running sum and never closes
+a batch by itself — only the hard cap does — so a plan mixing budgeted and unbudgeted tasks (the
+corpus's dominant shape among budgeted plans, 16 of 23) is not fragmented by the ones lacking a
+ceiling. **This can only produce batches at or smaller than the fixed rule's, never larger** — a
+plan with zero parseable budgets reports `mode\topeners` and returns ranges byte-identical to plain
+opener grouping.
+
+**Exit 3 (DID-NOT-RUN)** means the plan has no recognisable task openers. Fall back to the fixed
+`2-3` task-block grouping used before this mechanism existed, and **declare that the fallback
+fired** before dispatching — this script does not decide that silently, it only says why (rule 4).
+Any other non-zero exit (2: bad invocation) is a defect in the orchestrator's own invocation — fix
+the arguments, do not fall back.
 
 **If `$openers = 0` while `$tasks ≥ 1`: dispatch as a single block**, and say so:
 > "Batch dispatch: the plan's tasks are not in the `Task N` form (`plan-tasks.sh --count-openers`
@@ -1501,7 +1535,7 @@ committed in the other direction.
 If `$orc` is 2 or 3 the count did not run: treat it as this same case, single block, and report the
 stderr.
 
-1. Dispatch `tester` for batch 1 (tasks 1-N, where N ≤ 3), BEFORE this batch's coder
+1. Dispatch `tester` for batch 1 (this batch's computed range, at most 3 task blocks), BEFORE this batch's coder
    (ADR-0049 §D1 — same ordering as the Workflow path's Stage 1). Pin `subagent_type: "tester"`,
    `model: "sonnet"`, and `isolation: "worktree"` explicitly (ADR-0049 §D6; `tester` has no
    `isolation` in its own frontmatter, F5, so an omitted value here means no worktree at all,
@@ -1511,7 +1545,7 @@ stderr.
    template** below — same brief contract as the Workflow path: SPEC requirement IDs via
    `spec-coverage.sh --list`, falling back to Success Criteria then to this batch's plan task
    text, never from implementation files.
-2. Dispatch coder with batch 1 (tasks 1-N, where N ≤ 3). Before this dispatch, run the
+2. Dispatch coder with batch 1 (this batch's computed range, at most 3 task blocks). Before this dispatch, run the
    **Merge-back and base-fork audit** block above to merge this batch's tester worktree into the
    feature branch (same resolution site, same ordering as the Workflow path's Stage 1 → Stage 2).
    Pin `isolation: "worktree"` explicitly (ADR-0068 §D1, §D7 — there is no second mode; per the
