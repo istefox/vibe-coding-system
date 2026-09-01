@@ -1,18 +1,23 @@
 #!/bin/bash
 # step5-brief.sh v1.0 — per-batch dispatch brief materializer/verifier (VCS-057/ADR-0185, L1).
 #
-# CONTRACT — a CHECKER, not a reporter (unlike diff-budget-check.sh at the same layer): both modes
-# share one exit-code convention, and the CALLER's fallback depends on distinguishing them —
+# CONTRACT — a CHECKER, not a reporter (unlike diff-budget-check.sh at the same layer): all three
+# modes share one exit-code convention, and the CALLER's fallback depends on distinguishing them —
 #   0 — write mode: brief written to --out.      verify mode: coverage is exact, no findings.
+#       digest mode: roadmap digest written to --out.
 #   1 — (verify mode only) coverage problem(s) found — GAP / OVERLAP / BOUNDARY-MISMATCH lines on
 #       stdout, one or more.
 #   2 — bad invocation (missing/unreadable required argument, a requested task that does not exist
 #       in the plan, or a requested task set that is not a contiguous run of existing task numbers).
-#   3 — DID-NOT-RUN (rule 4): the plan has zero task openers (write mode: malformed plan, nothing
-#       to slice; verify mode: same, OR zero briefs under --briefs match this plan at all — an
-#       unrun verification must not read as a clean pass). On exit 3 in WRITE mode, the caller (a
-#       Step 5 dispatch site) falls back to today's full-file-read prompt and DECLARES the
-#       fallback happened — this script does not decide that on its own, it only says why.
+#   3 — DID-NOT-RUN (rule 4): write/verify mode: the plan has zero task openers (write mode:
+#       malformed plan, nothing to slice; verify mode: same, OR zero briefs under --briefs match
+#       this plan at all — an unrun verification must not read as a clean pass). digest mode:
+#       --project-md has zero "### Phase" headings and zero checkbox lines — not this convention,
+#       or an empty roadmap; either way nothing was derived, and rule 7's zero-candidates-vs-
+#       zero-matches distinction applies here exactly as it does to a plan with no tasks. On exit 3
+#       in WRITE or DIGEST mode, the caller (a Step 5 dispatch site) falls back to today's
+#       full-file-read prompt and DECLARES the fallback happened — this script does not decide
+#       that on its own, it only says why.
 #
 # WHY THIS EXISTS (VCS-057 plan, Fase 2 §L1). Measured 2026-08-31: PROJECT.md alone is ~37,600
 # tokens, injected unconditionally into the Workflow dispatch prompt; separately, every dispatched
@@ -34,6 +39,17 @@
 # from reading the ADR anyway — the failure shape changes (an agent that ignores the brief pays the
 # preamble cost again, quietly) but no guard here can catch that, and this comment says so instead
 # of implying otherwise.
+#
+# DIGEST MODE (VCS-057 plan, Fase 2 §L1, plan-sequence step 4). PROJECT.md's roadmap is read in
+# full only by Step 2 (architect) — the one agent that actually consumes it as a roadmap. Step 5's
+# Workflow dispatch path injects it too, in full, unconditionally, but only to let a dispatched
+# coder recognise existing interfaces/conventions and avoid re-implementing a `[x]` item — a need
+# met by the phase headings and checkbox lines alone, never by the narrative prose between them.
+# `--digest` extracts exactly that: every `### Phase` heading and every checkbox line (`- [ ]` /
+# `- [x]`), nothing else. A MODE of this script, not a script of its own (rule 6: PROJECT.md has
+# exactly one Step-5-side consumer of this reduced form, so there is nothing for a second producer
+# to disagree with). Workflow-only by design (the Agent-tool fallback templates never inlined
+# PROJECT.md in the first place, so there is nothing there for a digest to replace).
 #
 # DANGEROUS FAILURE MODE, AND WHY --verify EXISTS (VCS-057 plan). A brief that verifies "clean" —
 # every task assigned to exactly one brief — but whose SLICE boundary is off by a line (an
@@ -60,9 +76,11 @@ usage:
                   [--claude-md-path <p>] [--claude-md-reason <r>]
                   [--design-path <p>] [--design-reason <r>]
   step5-brief.sh --verify --plan <file> --briefs <dir>
+  step5-brief.sh --digest --project-md <file> --out <file>
 
-exit: 0 written / verify clean, 1 verify found gap|overlap|mismatch, 2 bad invocation,
-3 did-not-run (malformed plan, or --verify found no briefs for this plan).
+exit: 0 written / verify clean / digest written, 1 verify found gap|overlap|mismatch,
+2 bad invocation, 3 did-not-run (malformed plan, --verify found no briefs for this plan,
+or --digest's --project-md has no "### Phase" heading and no checkbox line).
 EOF
 }
 
@@ -100,17 +118,19 @@ plan_task_starts() {
 plan_total_lines() { awk 'END{print NR}' "$1"; }
 
 MODE="write"
-PLAN=""; TASKS=""; OUT=""; BRIEFS_DIR=""
+PLAN=""; TASKS=""; OUT=""; BRIEFS_DIR=""; PROJECT_MD=""
 ADR_PATH=""; ADR_REASON=""; SPEC_PATH=""; SPEC_REASON=""
 CLAUDE_MD_PATH=""; CLAUDE_MD_REASON=""; DESIGN_PATH=""; DESIGN_REASON=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --verify) MODE="verify"; shift ;;
+    --digest) MODE="digest"; shift ;;
     --plan) [ $# -ge 2 ] || { usage "--plan needs a file argument"; exit 2; }; PLAN="$2"; shift 2 ;;
     --tasks) [ $# -ge 2 ] || { usage "--tasks needs an argument"; exit 2; }; TASKS="$2"; shift 2 ;;
     --out) [ $# -ge 2 ] || { usage "--out needs a file argument"; exit 2; }; OUT="$2"; shift 2 ;;
     --briefs) [ $# -ge 2 ] || { usage "--briefs needs a directory argument"; exit 2; }; BRIEFS_DIR="$2"; shift 2 ;;
+    --project-md) [ $# -ge 2 ] || { usage "--project-md needs a file argument"; exit 2; }; PROJECT_MD="$2"; shift 2 ;;
     --adr-path) ADR_PATH="${2:-}"; shift 2 ;;
     --adr-reason) ADR_REASON="${2:-}"; shift 2 ;;
     --spec-path) SPEC_PATH="${2:-}"; shift 2 ;;
@@ -122,6 +142,41 @@ while [ $# -gt 0 ]; do
     *) usage "unknown argument: $1"; exit 2 ;;
   esac
 done
+
+# ================================================================================================
+# --digest mode — does not touch a feature plan at all, so --plan is neither required nor read;
+# handled first and returns before the shared --plan gate below (write/verify only).
+# ================================================================================================
+if [ "$MODE" = "digest" ]; then
+  [ -n "$PROJECT_MD" ] && [ -r "$PROJECT_MD" ] || { usage "--project-md (readable file) is required for --digest -- got [$PROJECT_MD]"; exit 2; }
+  [ -n "$OUT" ] || { usage "--out is required"; exit 2; }
+
+  DIGEST_LINES="$(mktemp)" || { printf '%s: cannot create a temp file\n' "$SELF" >&2; exit 2; }
+  trap 'rm -f "$DIGEST_LINES" "$STARTS_AWK"' EXIT
+  awk '
+    /^### Phase/ { print; next }
+    /^[ \t]*- \[[ xX]\]/ { print; next }
+  ' "$PROJECT_MD" >"$DIGEST_LINES"
+
+  N_LINES=$(grep -c . "$DIGEST_LINES" 2>/dev/null || true); [ -n "$N_LINES" ] || N_LINES=0
+  if [ "$N_LINES" -eq 0 ]; then
+    printf 'DID-NOT-RUN: %s has no "### Phase" heading and no checkbox line -- falling back to the full-file prompt\n' "$PROJECT_MD" >&2
+    exit 3
+  fi
+
+  PROJECT_MD_REAL=$(cd "$(dirname "$PROJECT_MD")" && pwd)/$(basename "$PROJECT_MD")
+  {
+    printf '<!-- step5-brief: digest project-md=%s -->\n' "$PROJECT_MD_REAL"
+    printf '# Project Roadmap digest -- %s\n\n' "$(basename "$PROJECT_MD")"
+    printf 'Phase headings and checkbox lines only (VCS-057/ADR-0185, L1 roadmap digest) -- the\n'
+    printf 'narrative prose between them is not included. Use this only to recognise existing\n'
+    printf 'interfaces, naming and patterns already `[x]` done; never as a substitute for the plan\n'
+    printf 'or SPEC governing this batch.\n\n'
+    cat "$DIGEST_LINES"
+  } >"$OUT"
+
+  exit 0
+fi
 
 [ -n "$PLAN" ] && [ -r "$PLAN" ] || { usage "--plan (readable file) is required — got [$PLAN]"; exit 2; }
 

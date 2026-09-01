@@ -1527,6 +1527,23 @@ discipline enforced by `coder-memory-scope.sh`. Left here as the historical reco
 `docs/architecture/ADR-0184-coder-memory-shard-discipline.md`, corrected forward from ADR-0183's
 own Phase 0 exclusion of `coder`, not edited in place there either.
 
+### Update 2026-09-01 (VCS-057 Fase 2 L1 — roadmap digest)
+
+Continues the update below: `PROJECT.md`'s inline injection into the Workflow dispatch preamble
+described there as untouched is now replaced too. `step5-brief.sh --digest --project-md <file>
+--out <file>` (a mode of the same script, not a second one — PROJECT.md's Step-5-side reduced form
+has exactly one consumer) extracts every `### Phase` heading and every checkbox line from
+`PROJECT.md`, dropping the narrative prose between them — measured on this repo's own 1823-line
+`PROJECT.md`: 216 lines out, an ~88% reduction. Same CHECKER contract as the other two modes: exit
+3 (DID-NOT-RUN) when neither marker is found, and the Workflow dispatch prompt falls back to
+inlining `PROJECT.md`'s full content and declares that the fallback fired, rather than silently
+reading the full file under cover of "the reduced path." Workflow-only by construction — the
+Agent-tool fallback templates never inlined `PROJECT.md` in the first place. Step 2 (architect)
+is untouched: it is the one agent that reads the roadmap as a roadmap, not as a source of
+interface names to avoid re-implementing. Full record, including the correction to the note below
+about which mechanism (L1 vs L2) owns the digest: `docs/architecture/ADR-0185-step5-task-brief.md`
+§Correction 2026-09-01.
+
 ### Update 2026-08-31 (VCS-057 Fase 2 L1 — per-batch dispatch brief)
 
 Separately from the memory question above, Step 5 measured (2026-08-30) a large unconditional

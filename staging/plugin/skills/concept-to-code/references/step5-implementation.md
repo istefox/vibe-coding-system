@@ -490,9 +490,28 @@ implementation, not an input to weigh.
 If a Claude Design artifact exists, read it at <manifest.artifacts.design> (if not null) — its
 Binding decisions are a constraint on the implementation, not an input to weigh.
 
+**If `$_project_context` is non-empty, also materialize ONE roadmap digest (VCS-057, ADR-0185 —
+L1, roadmap digest), once for the whole run, not per task group** — PROJECT.md does not change
+between batches:
+
+    step5-brief.sh --digest --project-md <project-root>/PROJECT.md \
+      --out <project_root>/.claude/dispatch/step5-roadmap-digest.md
+
+The digest holds only `### Phase` headings and checkbox lines — the narrative prose in between,
+which is what made the full file ~37,600 tokens, is not included; a dispatched agent needs the
+digest to recognise existing interfaces/conventions and avoid re-implementing a `[x]` item, not to
+read PROJECT.md as a document. **Exit 3 (DID-NOT-RUN)** means PROJECT.md has neither a `### Phase`
+heading nor a checkbox line — not this convention, or an empty roadmap. Fall back to inlining
+PROJECT.md's full content instead (the `[IF $_project_context...]` block below, unabridged), and
+**declare that the fallback fired** before dispatching — this script does not decide that
+silently, it only says why (rule 4). Any other non-zero exit (2: bad invocation) is a defect in
+the orchestrator's own invocation — fix the arguments, do not fall back.
+
 [IF $_project_context is non-empty — add this block, otherwise omit entirely:]
 ## Project Roadmap (multi-feature context)
-<insert full content of PROJECT.md here>
+Read the roadmap digest at <project_root>/.claude/dispatch/step5-roadmap-digest.md (materialized
+above — phase headings and checkbox lines only, never the full PROJECT.md unless the digest's own
+DID-NOT-RUN fallback fired).
 **Declare any plan constraint you do not implement (ADR-0073 §D1, issue #178).** If the plan
 specifies something concrete — a validation bound, an interface shape, a named approach — and you
 decide against it, do NOT implement it silently. Emit one line per case in your report, in the

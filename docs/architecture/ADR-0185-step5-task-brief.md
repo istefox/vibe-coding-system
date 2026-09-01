@@ -166,5 +166,36 @@ exists as a separate assertion from PC1.
 - `docs/architecture/ADR-0100-242-batch-dispatch-openers.md` §Correction 2026-08-31
 - `docs/architecture/ADR-0121-290-plan-shape-predicate.md` §Correction 2026-08-31
 - `staging/plugin/skills/concept-to-code/references/step5-implementation.md` — "Materializing the
-  per-batch brief", and both dispatch templates
+  per-batch brief", "Materializing the roadmap digest", and both dispatch templates
 - `/Users/stefer/.claude/plans/zippy-whistling-crescent.md` — the approved plan, Fase 2 §L1
+
+## Correction 2026-09-01 (the roadmap digest is L1's own scope, not L2's — and is now built)
+
+**The Positive-consequences line "`PROJECT.md`'s inline injection is unchanged here (its own digest
+is Fase 2's L2, an independent, Workflow-only step, deferred by design)" mislabelled which
+mechanism owns the digest, and is superseded on both counts.** The approved plan's own L1 section
+(`~/.claude/plans/zippy-whistling-crescent.md`, "### L1 — `step5-brief.sh`") states the digest
+as one of L1's five brief contents and says so explicitly: "il digest è una modalità di
+`step5-brief.sh`, non uno script suo" (rule 6 — PROJECT.md's Step-5-side reduced form has exactly
+one consumer, so it is a mode of this ADR's own script, not a second producer). L2 is the
+*separate* budget-driven batch-sizing switch (plan-sequence step 5, not yet built) — the digest was
+never part of it; the deferral was only ever about *when* in plan-sequence step 3 was the byte-exact
+per-task brief, step 4 the roadmap digest, both L1.
+
+`step5-brief.sh --digest --project-md <file> --out <file>` now extracts every `### Phase` heading
+and every checkbox line (`- [ ]` / `- [x]`) from PROJECT.md, dropping the narrative prose between
+them — measured on this repo's own 1823-line PROJECT.md: 216 lines out, an ~88% reduction, holding
+exactly what a dispatched coder needs to recognise an existing `[x]` interface without re-reading
+the roadmap as a document. Same CHECKER contract as write/verify mode: exit 3 (DID-NOT-RUN) when
+PROJECT.md has neither marker, and the Workflow dispatch prompt falls back to inlining PROJECT.md's
+full content and **declares** that the fallback fired (rule 4) — never a silent full-file read
+disguised as the reduced path. `step5-implementation.md`'s Workflow preamble now materializes the
+digest once per run (not per batch — PROJECT.md does not change between batches) and references its
+path instead of inlining PROJECT.md's content directly.
+
+This does not touch Step 2 (architect), which keeps reading `PROJECT.md` in full — it is the one
+agent that actually consumes the roadmap as a roadmap, not as a source of interface names to avoid
+re-implementing (SKILL.md:627-629, untouched).
+
+Superseded lines above are not edited in place (rule 14): they were a correct statement of what had
+shipped on 2026-09-01's predecessor commit and stay that way in the historical record.

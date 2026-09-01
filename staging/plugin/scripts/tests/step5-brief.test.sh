@@ -24,6 +24,7 @@
 # plant: SB6  | plugin/skills/concept-to-code/scripts/step5-brief.sh | if [ "${_hits:-0}" -eq 0 ]; then | if [ "${_hits:-0}" -eq 999999 ]; then
 # plant: SB10 | plugin/skills/concept-to-code/scripts/step5-brief.sh | printf 'DID-NOT-RUN: %s has no task openers -- falling back to the full-plan prompt\n' "$PLAN" >&2 exit 3 | printf 'DID-NOT-RUN: %s has no task openers -- falling back to the full-plan prompt\n' "$PLAN" >&2 exit 0
 # plant: SB14 | plugin/skills/concept-to-code/scripts/step5-brief.sh | grep -qF "plan=$PLAN_REAL " | grep -qF "plan="
+# plant: SB18 | plugin/skills/concept-to-code/scripts/step5-brief.sh | if [ "$N_LINES" -eq 0 ]; then | if [ "$N_LINES" -eq 999999 ]; then
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -322,12 +323,91 @@ else
 fi
 
 # ===========================================================================
+# SB17-SB20 — digest mode (VCS-057/ADR-0185, L1 plan-sequence step 4). A small fixture, not the
+# real corpus: this mode reads a PROJECT.md-shaped file, not a plan, so the plan corpus above is
+# not the right population to test it against.
+# ===========================================================================
+PROJFIX="$TMP/PROJECT-fixture.md"
+cat >"$PROJFIX" <<'PROJEOF'
+# Project: fixture
+
+## Overview
+
+Narrative prose that must NOT appear in the digest — the whole point of this mode.
+
+## Phases
+
+### Phase 1 — prep
+
+Narrative between the heading and its checkboxes, also excluded.
+
+- [x] item one  (issue #1)
+- [x] item two  (issue #2)
+
+### Phase 2 — build
+
+- [ ] item three  (issue #3)
+- [ ] item four  (issue #4)
+
+#### Risks
+
+- a plain, non-checkbox bullet that must NOT appear in the digest either.
+PROJEOF
+
+# ---------------------------------------------------------------------------
+# SB17 — digest holds exactly the "### Phase" headings and checkbox lines, verified against an
+# INDEPENDENT extraction of the same fixture (never compared to a hand-copied string — same
+# byte-exact discipline as SB1, applied to this mode's much smaller output).
+# ---------------------------------------------------------------------------
+OUT17="$TMP/sb17.md"
+bash "$SB" --digest --project-md "$PROJFIX" --out "$OUT17" >/tmp/sb17.log 2>&1
+rc=$?
+INDEPENDENT17=$(awk '/^### Phase/ || /^[ \t]*- \[[ xX]\]/' "$PROJFIX")
+IN_DIGEST17=$(sed -n '/^### Phase/,$p' "$OUT17")
+if [ "$rc" -eq 0 ] && [ "$IN_DIGEST17" = "$INDEPENDENT17" ]; then
+  ok "SB17 digest holds exactly the phase headings and checkbox lines, byte-exact vs an independent extraction"
+else
+  bad "SB17 expected rc=0 and digest == independent extraction, got rc=$rc"
+fi
+if printf '%s\n' "$IN_DIGEST17" | grep -qi 'narrative\|Risks\|plain, non-checkbox'; then
+  bad "SB17b narrative prose / non-checkbox bullets leaked into the digest"
+else
+  ok "SB17b no narrative prose or non-checkbox bullet leaked into the digest"
+fi
+
+# ---------------------------------------------------------------------------
+# SB18 — DID-NOT-RUN: a PROJECT.md with no "### Phase" heading and no checkbox line falls back,
+# exit 3, nothing written (plant SB18 disables this guard).
+# ---------------------------------------------------------------------------
+NOPHASE="$TMP/no-phase-fixture.md"
+printf '# Just a title\n\nSome narrative prose only, no phases, no checkboxes.\n' >"$NOPHASE"
+OUT18="$TMP/sb18.md"
+bash "$SB" --digest --project-md "$NOPHASE" --out "$OUT18" >/tmp/sb18.log 2>&1
+rc=$?
+if [ "$rc" -eq 3 ] && [ ! -f "$OUT18" ] && grep -q 'DID-NOT-RUN' /tmp/sb18.log; then
+  ok "SB18 a PROJECT.md with no phase heading and no checkbox exits 3, writes nothing, says DID-NOT-RUN"
+else
+  bad "SB18 expected exit 3 + no file + DID-NOT-RUN, got rc=$rc, file exists=$([ -f "$OUT18" ] && echo yes || echo no)"
+fi
+
+# ---------------------------------------------------------------------------
+# SB19 — bad invocation: --digest without --project-md exits 2, writes nothing.
+# ---------------------------------------------------------------------------
+bash "$SB" --digest --out "$TMP/sb19.md" >/tmp/sb19.log 2>&1; rc=$?
+if [ "$rc" -eq 2 ] && grep -q -- '--project-md' /tmp/sb19.log && [ ! -f "$TMP/sb19.md" ]; then
+  ok "SB19 --digest without --project-md exits 2, writes nothing"
+else
+  bad "SB19 expected exit 2 naming --project-md, got rc=$rc"
+fi
+rm -f /tmp/sb17.log /tmp/sb18.log /tmp/sb19.log
+
+# ===========================================================================
 # Z1 — assertion-count floor. An exact count, not a >= floor with slack (rule 10): every
 # assertion above is enumerated here by hand, so a silently deleted one is caught.
 # ===========================================================================
 TOTAL=$((PASS+FAIL))
-if [ "$TOTAL" -eq 20 ]; then ok "Z1: 20 assertions ran (exact) — none silently vanished"
-else bad "Z1: expected exactly 20 assertions, ran $TOTAL"; fi
+if [ "$TOTAL" -eq 24 ]; then ok "Z1: 24 assertions ran (exact) — none silently vanished"
+else bad "Z1: expected exactly 24 assertions, ran $TOTAL"; fi
 
 echo "----"
 echo "$SCRIPTS/../step5-brief.test.sh: $PASS passed, $FAIL failed"
