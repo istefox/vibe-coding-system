@@ -10,7 +10,8 @@ in place as the historical record, not deleted.
 - [plant-check.sh mechanics](topics/plant-check-mechanics.md) — plant-id prefix matching, sandbox
   scope (staging/+docs/ only), the env-configures/flags-select-mode idiom
 - [spec-coverage.sh, diff-budget-check.sh, plan-tasks.sh](topics/spec-coverage-and-plan-tools.md) —
-  requirement-id citation traps, the STALE-WAIVER block, budget-line parsing, re-derive-don't-cite
+  requirement-id citation traps, the STALE-WAIVER block, budget-line parsing, re-derive-don't-cite,
+  why RS7/RS8a go red the moment a plan file lands
 - [Write scope and command scope](topics/write-and-command-scope.md) — the three allowed write
   roots (VCS-056 added agent-memory), what `agent-command-scope.sh` actually blocks, frontmatter
   fields that silently don't do what they look like they do

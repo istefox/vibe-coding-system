@@ -5572,3 +5572,18 @@ harness as a result. One item from the plan's own verification list — a live e
 a real claude.ai/design URL — needs a human in a browser and was not attempted; the plan named this
 limitation before implementation started. `VCS-052` closed. Detail:
 `docs/architecture/ADR-0181-claude-design-gate-1d.md`.
+
+## Decisions from the a per-file budget ceiling is parsed and then summed so one file can exceed its own chain (ADR-0189)
+
+Fix for #296: `diff-budget-check.sh` at `staging/plugin/skills/concept-to-code/scripts/`.
+
+Key architectural decisions:
+- **`parse_budget`'s return value stays byte-unchanged; the per-file detail travels through an optional awk out-parameter.** A one-arg call is unaffected, so both existing callers and §BK9's frozen comparison need no edit and prove R-02 by construction rather than inspection.
+- **A file's ceiling is the sum of every selected group naming it; a finding fires only for a file touched by at least one multi-group task.** Reportability and the ceiling are computed from deliberately different populations — that asymmetry is what keeps 135 of 159 corpus declarations byte-inert by property.
+- **A new token, `FILEBUDGET`, not a `BUDGET` variant.** `BUDGET`'s field 2 is a task label everywhere; a per-file variant would silently half-read on every un-updated `grep '^BUDGET'` consumer (ADR-0072's rule, invoked here for the same reason ADR-0091 invoked it for `MALFORMED`).
+- **Recorded in the existing `budget_findings` array, `{task, file, lines_expected, lines_actual}`** — additive, no seventh advisory array, keeping the Gate 5 roll-up pinned at six.
+- **Attribution uses the elision-resolved path and only in-scope files**, riding ADR-0070's existing `--stat=999` recovery rather than duplicating it. Two of 205 declared entries are globs and are accepted as permanently unattributable.
+- **`h16-direction-check.sh`'s `budget-overshoot` trigger becomes more sensitive without being edited** — its `.budget_findings | length >= 2` check now counts per-file findings too, a real behaviour change in a different skill, stated in the ADR rather than left to be discovered there.
+- **R-02's proof is two comparisons, not one** — a frozen-function comparison (§BK9's own method, blind to call-site changes) plus a whole-corpus script-level set-equality comparison, because this feature's change lives mostly in the call site, exactly §BK9's blind spot.
+
+Detail: `docs/architecture/ADR-0189-a-per-file-budget-ceiling-is-parsed-and.md`.

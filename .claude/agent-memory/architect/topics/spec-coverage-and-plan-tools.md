@@ -8,7 +8,19 @@
   citations; a rule treating comment-only as non-evidence would fail the best-tested features).
 - A plan that names a discovered harness by basename imports that harness's whole `R-NN` namespace
   if it also cites an ADR that harness names. Refer to specific assertion ids, never filenames, to
-  avoid importing foreign matches.
+  avoid importing foreign matches. **Measured 2026-09-02 (ADR-0189/#296): ONE throwaway prose aside
+  naming `commit-transition-order.test.sh` flipped all three declared ids from
+  `COVERED/UNSCOPED/UNSCOPED` to `COVERED/COVERED/COVERED`, rc 1 → 0, before a line of source
+  existed.** The remedy that works: write the assertion-id range instead of the basename ("the
+  harness carrying `RS0`–`RS10`"). Always re-run `spec-coverage.sh` after every plan edit, not once
+  at the end — the scope set moves on prose changes.
+- **Writing the plan file itself turns `RS7`/`RS8a` RED, and that is the correct in-flight state.**
+  Once `docs/specs/<N>-*.spec.md` exists (the chain archives the SPEC pointer early), landing
+  `docs/superpowers/plans/<date>-<slug>.md` resolves a new (spec, plan) pair, so the live sweep
+  finds N more rows than the frozen `spec-coverage-scope-baseline.tsv`. Observed 2026-09-02:
+  `PASS=174 FAIL=2`, "3 of 201 live verdicts diverge", baseline at 198 rows, pair count 15 → 23.
+  Owner is Step 7.0b's `c2c-step7-baseline-bump` fence (ADR-0166/#460) — never hand-edit the `.tsv`,
+  never weaken `RS7`. Say so in the plan or the coder will "fix" it.
 - `plant-check.sh` and `test-write-scope.sh` are two useful "safe to name freely" precedents:
   `plant-check.sh`'s basename matches no discovery pattern at all; `test-write-scope.sh` is
   discovered (`test-*.sh`) but carries zero `R-NN` tokens.
