@@ -7,20 +7,34 @@ Nothing downstream chooses a base: `commit --branch` in Gate 4.0 creates the fea
 whatever `HEAD` is when it runs, so the fork point is decided *here* or it is decided by accident.
 Left to accident it is the previous feature's tip, which stacks PR *N* on features 1..*N*.
 
-This is a **CHECKER**: branch on its exit code. Inert when `--fork-from` was not passed, so the
-attended flow is byte-identical.
+This is a **CHECKER**: branch on its exit code. Inert when `--fork-from` was not passed **and the
+run is attended**, so the attended flow is byte-identical. **An unattended (`_autopilot=true`) run
+with no `--fork-from` is not inert — it refuses (issue #474, ADR-0188 §D2).** `INACTIVE` reads
+correctly for a human in their own checkout; for a roadmap-autopilot run advancing feature by
+feature in one checkout, "HEAD as-is" silently *is* the previous feature's tip, which is the
+stacking this whole mechanism exists to remove. `autopilot/SKILL.md` §1.5 step 4 now always records
+a fork ref, so a well-formed autopilot run never reaches this branch — it exists as the backstop for
+when it does (rule 16: the instruction that step 4 always runs is not itself an enforcement).
 
 <!-- fence-contract: conductor-fork-point -->
 ```bash
 # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
 # the host shell. `export` forwards this body's caller-bound free variables across the new process
 # boundary — `_fork_from` is one of the values Step 0's fence binds, and that fence is now a
-# subprocess of its own, so the orchestrator carries it in. Terminator at COLUMN 0; an indented one
-# is swallowed into the here-document and destroys this fence's exit code silently.
-export _root _fork_from
+# subprocess of its own, so the orchestrator carries it in. `_autopilot` is bound the same way
+# (issue #474, ADR-0188 §D2). Terminator at COLUMN 0; an indented one is swallowed into the
+# here-document and destroys this fence's exit code silently.
+export _root _fork_from _autopilot
 bash <<'FENCE_BASH'
-# Free variables: _root, _fork_from (empty unless --fork-from was passed).
-if [ -z "${_fork_from:-}" ]; then
+# Free variables: _root, _fork_from (empty unless --fork-from was passed), _autopilot
+# (bound by Step 0's fence; unset or "false" is attended, "true" is roadmap-autopilot).
+if [ -z "${_fork_from:-}" ] && [ "${_autopilot:-}" = "true" ]; then
+  echo "FORK-POINT: DID-NOT-RUN — autopilot run reached the fork point with no --fork-from."
+  echo "  autopilot/SKILL.md §1.5 step 4 must always record a fork ref; this refusal is the"
+  echo "  backstop for when it did not. Using HEAD as-is here would silently fork this feature"
+  echo "  from the previous feature's tip (issue #474, ADR-0188 §D2)."
+  exit 3
+elif [ -z "${_fork_from:-}" ]; then
   echo "FORK-POINT: INACTIVE — no --fork-from; HEAD is used as-is (attended behaviour)."
 elif ! git -C "$_root" rev-parse --verify --quiet "$_fork_from" >/dev/null 2>&1; then
   echo "FORK-POINT: DID-NOT-RUN — '$_fork_from' does not resolve in $_root."
