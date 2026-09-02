@@ -6,9 +6,9 @@ mode: "brownfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-09-02T16:44:46+00:00"
-last_updated_at: "2026-09-02T19:09:45+00:00"
-current_step: "step_5_implementation"
-status: "in_progress"
+last_updated_at: "2026-09-02T19:10:42+00:00"
+current_step: "completed"
+status: "completed"
 
 # Gate 0 routing result (ADR-0017)
 gate0:
@@ -87,7 +87,7 @@ step6_mode: null
 
 # Artifacts (absolute paths, populated as steps complete)
 artifacts:
-  spec: "/Users/stefer/Developer/vibe-coding-system/SPEC.md"
+  spec: "docs/specs/296-a-per-file-budget-ceiling-is-parsed-and.spec.md"
   brainstorm: null
   ux_blueprint: null
   design_prompt: null
