@@ -171,13 +171,15 @@ if [ "$MODE" = "review" ]; then
           "fix": {"type": "string"},
           "confidence": {"type": "integer"}
         },
-        "required": ["severity", "location", "problem", "fix", "confidence"]
+        "required": ["severity", "location", "problem", "fix", "confidence"],
+        "additionalProperties": false
       }
     },
     "sampled": {"type": "boolean"},
     "verdict": {"type": "string"}
   },
-  "required": ["findings", "sampled", "verdict"]
+  "required": ["findings", "sampled", "verdict"],
+  "additionalProperties": false
 }
 SCHEMA_EOF
 
@@ -234,7 +236,8 @@ else
   "properties": {
     "diagnosis": {"type": "string"}
   },
-  "required": ["diagnosis"]
+  "required": ["diagnosis"],
+  "additionalProperties": false
 }
 SCHEMA_EOF
 
