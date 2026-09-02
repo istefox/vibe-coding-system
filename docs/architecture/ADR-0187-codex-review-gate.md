@@ -224,6 +224,39 @@ several existing `dispatch-site:` HTML-comment markers were left untouched). Sit
   `codex exec --output-schema`'s actual output shape matches this ADR's assumptions rather than
   only what `--help` and `codex doctor` could verify without spending real Codex quota.
 
+## Correction (2026-09-02)
+
+The live, hand-run probe deferred in the Verification section above (`codex-reviewer.sh --mode
+review` against a real diff) has now been run, in an isolated scratch repo
+(`~/Developer/_scratch/codex-reviewer-probe/`, outside this repository).
+
+It found a genuine defect that no prior stub-based testing could have caught: OpenAI's
+structured-output API (what `codex exec --output-schema` uses under the hood) requires
+`"additionalProperties": false` on **every** object in the schema, root and nested alike, or the
+call fails outright with a `400 invalid_json_schema` error (`'additionalProperties' is required to
+be supplied and to be false. In context=()`) before the model ever runs. This was not documented
+anywhere before this probe — the original schemas in `codex-reviewer.sh` (both the review-mode and
+diagnose-mode `--output-schema` blocks) lacked the constraint, since a stub `codex` script on
+`PATH` cannot enforce OpenAI's real API-side JSON Schema validation rules the way the live service
+does.
+
+Fixed: `"additionalProperties": false` added to every object in both schemas (review-mode: the
+nested `findings[].items` object and the outer/root object; diagnose-mode: the single object).
+Re-verified live, twice: `--mode review` against the scratch repo's diff returned exit 0 with
+correct BLOCKER/MAJOR/MINOR/NIT markdown on the two planted bugs (a division-by-zero and an
+unguarded index); `--mode diagnose` returned exit 0 with a correct free-text diagnosis.
+
+A new offline, hermetic regression test, `staging/plugin/scripts/tests/codex-reviewer-schema.test.sh`,
+extracts both `--output-schema` blocks from the real source file and asserts the constraint holds
+on every object — so a future edit that drops it again fails fast in CI, without spending live
+Codex quota. Registered in `.github/workflows/docs-ci.yml`'s harness list (no `sync-to-claude.sh`
+PAIRS entry — this test file, like `use-codex-review-manifest-field.test.sh`, is not itself
+deployed/used at runtime by a hook).
+
+This finding validates the reason the original plan called for a live probe rather than trusting
+stub-based testing alone (rule 13 — measure the premise): the premise here ("the schemas are
+already OpenAI-structured-output-compliant") was untested and wrong.
+
 ## References
 
 - `AGENTS.md` — rewritten
