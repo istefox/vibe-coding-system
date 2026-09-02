@@ -1354,6 +1354,12 @@ fi
   number and the offending text, and say plainly that this task's budget was **not measured**. A
   token the caller drops is a producer with no consumer, which is the defect class #238 records;
   do not leave it unread just because it is advisory.
+- **A fourth token exists: `FILEBUDGET<TAB><tasks-label><TAB><file><TAB>lines=<expected>/<actual><TAB>margin=<N>`
+  (issue #296; ADR-0189).** It means one declared file exceeded **its own** per-file ceiling —
+  distinct from the task-level `BUDGET` line's summed total. It **can fire with no `BUDGET` line
+  present**: that is precisely the case it exists for, a file overrunning its own share while the
+  task's summed total still reads as under budget. An un-updated `grep '^BUDGET'` does not match
+  this token; read the full grammar rather than assuming the two are mutually exclusive.
 
 **Cadence, matching the anti-test-weakening gate above (§D2 — no new checkpoint mechanism, reusing
 the same one).** The Workflow dispatch path runs this once, after the whole workflow completes,
@@ -1368,6 +1374,12 @@ point.
 declaration text verbatim, no `files_*` or `lines_*` keys, because nothing was measured and writing
 zeros there would read as a task that spent nothing. Additive, no schema bump, the same terms as
 every prior extension of this file.
+
+**Record every `FILEBUDGET` line as its own entry in the same `budget_findings` array** (issue
+#296; ADR-0189), shape `{task, file, lines_expected, lines_actual}`. Note that
+**no `files_expected` / `files_actual` keys are written** — a per-file finding measures lines only,
+and a zero there would read as a task that touched no files, the same reasoning `{task, malformed}`
+above already applies. Additive, no schema bump.
 
 **Record every `BUDGET` line's `files=<exp>/<act>` and `lines=<exp>/<act>`, and every `SCOPE`
 line's file, as one entry per checkpoint call** in `step5-report.json`'s `budget_findings` array

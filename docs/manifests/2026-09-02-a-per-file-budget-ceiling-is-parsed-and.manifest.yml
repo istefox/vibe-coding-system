@@ -6,8 +6,8 @@ mode: "brownfield"
 anonymize: false
 chain_path: "standard"
 created_at: "2026-09-02T16:44:46+00:00"
-last_updated_at: "2026-09-02T17:12:21+00:00"
-current_step: "step_4_session_boundary"
+last_updated_at: "2026-09-02T19:09:45+00:00"
+current_step: "step_5_implementation"
 status: "in_progress"
 
 # Gate 0 routing result (ADR-0017)
@@ -29,10 +29,10 @@ autopilot: true
 
 # Dynamic Workflows Step 5 tracking (ADR-0016) — default false; smoke test flips it true per environment
 hook_verified: false
-step5_mode: null
+step5_mode: "agent_batch"
 
 # Recovery-readiness pre-flight (ADR-0050) — HEAD sha recorded once at Step 5 entry
-recovery_baseline_sha: null
+recovery_baseline_sha: "ad0fc8543565b69ef79a9fae9720973f84da5994"
 
 # Worktree isolation contract (ADR-0068 §D1, §D11). worktree_baseref_verified is boolean,
 # set true by Step 5.0.4 via manifest-set-flag.sh once worktree.baseRef == "head" is
@@ -42,7 +42,7 @@ recovery_baseline_sha: null
 # it goes via bash sed on the additive field, the step5_review_mode precedent above. Flip
 # with, per merged stage ({stage, agent_type, branch, base_sha, merge_result}):
 # sed -i '' 's/^worktree_merges: \[\]$/worktree_merges: [{stage: ..., agent_type: ..., branch: ..., base_sha: ..., merge_result: ...}]/' <manifest>
-worktree_baseref_verified: false
+worktree_baseref_verified: true
 worktree_merges: []
 
 # Proportional audit depth (ADR-0055) — risk and task_type axes. Absent/null means STRICT
@@ -116,14 +116,14 @@ hitl_gates:
     notes: "archive block + index line appended (docs/chain-decisions.md, docs/chain-decision-index.md); no new Rules line (autopilot auto-approve)"
   - gate: 4
     label: "implementation_mode"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-09-02T17:13:24+00:00"
+    notes: "autopilot bypass — session boundary skipped, Gate 4.0 commit ad0fc85 on feat/a-per-file-budget-ceiling-is-parsed-and"
   - gate: 5
     label: "review_cycle_decision"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-09-02T19:09:45+00:00"
+    notes: "skip review (autopilot default)"
 
 # Session boundary tracking
 session_boundary:

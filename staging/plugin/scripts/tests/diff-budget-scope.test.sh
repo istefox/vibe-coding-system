@@ -859,12 +859,446 @@ else
   bad "BK10: the Step 5 call site no longer reads the MALFORMED token (caller-idiom bullet, recording bullet, not-measured wording, or {task, malformed} shape is missing) — a reporter line nobody reads is #238's shape"
 fi
 
-# Z1 — assertion-count floor (ADR-0083 §D3). A floor, not an exact count.
+# ==================================================================================================
+# BL. Issue #296 / ADR-0189 / docs/superpowers/plans/2026-09-02-a-per-file-budget-ceiling-is-parsed-and.md
+# — a per-file budget CEILING is parsed and then must SURVIVE to the comparison stage instead of
+# being summed into one task total and discarded. Covers SPEC R-01, R-02, R-03.
+#
+# Prefix `BL` verified free across staging/ on 2026-09-02 (`grep -rnoE '\bBL[0-9]+' staging/` -> 0
+# hits before this section was written).
+#
+# BL1-BL12 ARE RED BY CONSTRUCTION AT THIS CHECKPOINT (Batch A) AND THAT IS THE DELIVERABLE, NOT A
+# DEFECT. `FILEBUDGET` does not exist anywhere in staging/ yet — Task 2 gives parse_budget an
+# optional `groups` out-parameter, Task 4 adds the FILEBUDGET emission to diff-budget-check.sh, and
+# Task 6 teaches step5-implementation.md to read it. Every one of the twelve ids below carries at
+# least one genuinely failing line against this UNMODIFIED tree (BL1, BL2b, BL3, BL4b, BL5b, BL6,
+# BL8, BL9b, BL11a, BL12 fail outright; BL7/BL9a are health-of-the-derivation count guards, always
+# green, matching BK9a's own precedent). Several ids pair a "both sides of the boundary" or
+# "reporter contract" bullet with one half that is STRUCTURALLY unable to distinguish before/after —
+# an absence check (no FILEBUDGET, still CLEAN, still BUDGET_LIVE-gated) is true whether the
+# mechanism is correctly implemented or does not exist at all — mirroring this file's own BA1/BA2 and
+# BJ5b/BJ5c pattern. `BL10` is the one id that is ENTIRELY such a guard (see its own comment below,
+# "forward guard, green before and after", BK6/BK7's labelled precedent) — its plant is the actual
+# evidence it pins something, not a red run today.
+#
+# BK9a/b/c ABOVE ARE NOT TOUCHED BY THIS SECTION. Their staying green, unedited, is itself evidence
+# that this section's fixtures do not disturb the single-ceiling population (ADR-0189
+# §Verification).
+# ==================================================================================================
+
+# BL1 (R-01) — the red evidence, on the real corpus plan (BK1's own plan and task, a different
+# diff). ui-layout-audit/SKILL.md carries 100 of its declared ~165 lines; sync-to-claude.sh carries
+# 60 of its declared ~1. The task total (160) stays under the summed ceiling (166) — no BUDGET line
+# — but sync-to-claude.sh alone blew its OWN ceiling by 59. Exactly SPEC R-01: "a file exceeding its
+# own ceiling is reported even when the task total passes" — the plan's own "Read this first"
+# reproduction.
+if [ -f "$BK_PLAN" ]; then
+  printf ' staging/plugin/skills/ui-layout-audit/SKILL.md | 100 ++\n staging/sync-to-claude.sh |  60 ++\n' >"$TMP/stat_in"
+  BL1_OUT=$(bash "$DBC" --plan "$BK_PLAN" --tasks 2 <"$TMP/stat_in")
+  if printf '%s\n' "$BL1_OUT" | grep -qE "^FILEBUDGET${TAB}2${TAB}staging/sync-to-claude\\.sh${TAB}lines=1/60${TAB}margin=59\$" \
+     && ! printf '%s\n' "$BL1_OUT" | grep -q '^BUDGET'; then
+    ok "BL1: sync-to-claude.sh overruns its own ~1-line ceiling (FILEBUDGET .../sync-to-claude.sh lines=1/60 margin=59) while the task total (160/166) stays under budget — no BUDGET line"
+  else
+    bad "BL1: expected a lone FILEBUDGET${TAB}2${TAB}staging/sync-to-claude.sh${TAB}lines=1/60${TAB}margin=59 and no BUDGET line — got [$BL1_OUT]"
+  fi
+else
+  bad "BL1: $BK_PLAN not found — BL1 is meaningless (see BK0 above)"
+fi
+# plant: BL1 | plugin/skills/concept-to-code/scripts/diff-budget-check.sh | act[f] > ceil[f] | act[f] < ceil[f]
+
+# BL2 (R-01) — the boundary, both sides, matching BA1's own "equal is not over" rule. A synthetic
+# two-group per-file declaration: a.md and b.md each carry their OWN ceiling, sharing nothing.
+cat >"$TMP/bl2-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Boundary (R-01)
+
+Budget: a.md (~10 lines), b.md (~10 lines)
+PLANEOF
+mk_diffstat bl2a "a.md:10" >"$TMP/stat_in"
+BL2A_OUT=$(bash "$DBC" --plan "$TMP/bl2-plan.md" --tasks 1 <"$TMP/stat_in")
+if ! printf '%s\n' "$BL2A_OUT" | grep -qE "^FILEBUDGET${TAB}"; then
+  ok "BL2a: at the exact per-file boundary (10 == 10) no FILEBUDGET fires for a.md"
+else
+  bad "BL2a: expected no FILEBUDGET at the exact per-file boundary — got [$BL2A_OUT]"
+fi
+mk_diffstat bl2b "a.md:11" >"$TMP/stat_in"
+BL2B_OUT=$(bash "$DBC" --plan "$TMP/bl2-plan.md" --tasks 1 <"$TMP/stat_in")
+if printf '%s\n' "$BL2B_OUT" | grep -qE "^FILEBUDGET${TAB}1${TAB}a\\.md${TAB}lines=10/11${TAB}margin=1\$"; then
+  ok "BL2b: one line past the per-file boundary (11 vs 10) FILEBUDGET fires with lines=10/11 margin=1"
+else
+  bad "BL2b: expected FILEBUDGET${TAB}1${TAB}a.md${TAB}lines=10/11${TAB}margin=1 — got [$BL2B_OUT]"
+fi
+# plant: BL2b | plugin/skills/concept-to-code/scripts/diff-budget-check.sh | act[f] > ceil[f] | act[f] < ceil[f]
+
+# BL3 (R-01) — a declared file with zero changed lines produces nothing, even when its SIBLING in
+# the SAME declaration overruns: b.md, declared but never touched, must not appear in any output
+# line while a.md, 5 lines past its own ceiling, correctly fires. An undershoot is not a finding —
+# tied to a genuine overshoot so this assertion cannot pass vacuously before the feature exists.
+mk_diffstat bl3 "a.md:15" >"$TMP/stat_in"
+BL3_OUT=$(bash "$DBC" --plan "$TMP/bl2-plan.md" --tasks 1 <"$TMP/stat_in")
+if printf '%s\n' "$BL3_OUT" | grep -qE "^FILEBUDGET${TAB}1${TAB}a\\.md${TAB}lines=10/15${TAB}margin=5\$" \
+   && ! printf '%s\n' "$BL3_OUT" | grep -qF 'b.md'; then
+  ok "BL3: a.md fires its own FILEBUDGET (lines=10/15 margin=5) while b.md, declared but never touched, appears in no output line at all"
+else
+  bad "BL3: expected FILEBUDGET for a.md only (lines=10/15 margin=5), with b.md absent from every line — got [$BL3_OUT]"
+fi
+# plant: BL3 | plugin/skills/concept-to-code/scripts/diff-budget-check.sh | act[f] > ceil[f] | act[f] < ceil[f]
+
+# BL4 (R-01) — a shared-ceiling group is checked as a unit, and leniently (ADR-0189 §D2): each
+# member of a shared group is compared against the FULL group ceiling, not a divided share. The BK4
+# mixed form: a.md, b.md share (~50 lines); c.md has its own (~10 lines).
+cat >"$TMP/bl4-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Mixed (R-01)
+
+Budget: a.md, b.md (~50 lines), c.md (~10 lines)
+PLANEOF
+printf ' a.md | 40 ++\n b.md |  5 ++\n c.md |  5 ++\n' >"$TMP/stat_in"
+BL4A_OUT=$(bash "$DBC" --plan "$TMP/bl4-plan.md" --tasks 1 <"$TMP/stat_in")
+if ! printf '%s\n' "$BL4A_OUT" | grep -qE "^FILEBUDGET${TAB}"; then
+  ok "BL4a: a.md alone at 40 (80% of the shared 50-line group ceiling) does not fire — the group is checked as a unit, leniently, not a divided per-member share"
+else
+  bad "BL4a: expected no FILEBUDGET (a.md=40, b.md=5, c.md=5, all within their group ceilings) — got [$BL4A_OUT]"
+fi
+printf ' a.md | 40 ++\n b.md |  5 ++\n c.md | 11 ++\n' >"$TMP/stat_in"
+BL4B_OUT=$(bash "$DBC" --plan "$TMP/bl4-plan.md" --tasks 1 <"$TMP/stat_in")
+BL4B_N=$(printf '%s\n' "$BL4B_OUT" | grep -cE "^FILEBUDGET${TAB}" || true); [ -n "$BL4B_N" ] || BL4B_N=0
+if [ "$BL4B_N" -eq 1 ] && printf '%s\n' "$BL4B_OUT" | grep -qE "^FILEBUDGET${TAB}1${TAB}c\\.md${TAB}lines=10/11${TAB}margin=1\$"; then
+  ok "BL4b: only c.md, one line past its own 10-line ceiling, fires — a.md/b.md's shared group stays clean"
+else
+  bad "BL4b: expected exactly one FILEBUDGET, for c.md, lines=10/11 margin=1 — got [$BL4B_OUT] ($BL4B_N FILEBUDGET line(s))"
+fi
+# plant: BL4b | plugin/skills/concept-to-code/scripts/diff-budget-check.sh | act[f] > ceil[f] | act[f] < ceil[f]
+
+# BL5 (R-01) — the ceiling sums across selected tasks (ADR-0189 §D3's asymmetry, the false positive
+# the gate exists to prevent). Task 1 (multi-group): a.sh (~5 lines), sync.sh (~1 line). Task 3
+# (single-group): sync.sh (~50 lines). --tasks 1,3 sums sync.sh's ceiling to 1+50=51.
+cat >"$TMP/bl5-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Multi (R-01)
+
+Budget: a.sh (~5 lines), sync.sh (~1 line)
+
+## Task 3 — Single (R-01)
+
+Budget: sync.sh (~50 lines)
+PLANEOF
+mk_diffstat bl5a "sync.sh:40" >"$TMP/stat_in"
+BL5A_OUT=$(bash "$DBC" --plan "$TMP/bl5-plan.md" --tasks 1,3 <"$TMP/stat_in")
+if ! printf '%s\n' "$BL5A_OUT" | grep -qE "^FILEBUDGET${TAB}"; then
+  ok "BL5a: sync.sh at 40, under its cross-task summed ceiling of 51 (1 from task 1 + 50 from task 3) -> no FILEBUDGET"
+else
+  bad "BL5a: expected no FILEBUDGET (sync.sh=40, summed ceiling=51) — got [$BL5A_OUT]"
+fi
+mk_diffstat bl5b "sync.sh:60" >"$TMP/stat_in"
+BL5B_OUT=$(bash "$DBC" --plan "$TMP/bl5-plan.md" --tasks 1,3 <"$TMP/stat_in")
+if printf '%s\n' "$BL5B_OUT" | grep -qE "^FILEBUDGET${TAB}1,3${TAB}sync\\.sh${TAB}lines=51/60${TAB}margin=9\$"; then
+  ok "BL5b: sync.sh at 60, over its summed ceiling of 51 -> FILEBUDGET lines=51/60 margin=9"
+else
+  bad "BL5b: expected FILEBUDGET${TAB}1,3${TAB}sync.sh${TAB}lines=51/60${TAB}margin=9 — got [$BL5B_OUT]"
+fi
+# plant: BL5b | plugin/skills/concept-to-code/scripts/diff-budget-check.sh | act[f] > ceil[f] | act[f] < ceil[f]
+
+# BL6 (R-02) — function-level corpus comparison against a FROZEN pre-#296 parse_budget, BK9's own
+# device repurposed. The live parse_budget is unmodified today (Task 2 has not run), so the ONLY way
+# to exercise the future (rest, groups) calling convention BL8 depends on is to call it that way
+# now — and doing so is fatal today: the second formal-parameter slot is the internal scratch
+# variable `s`, assigned as a plain scalar (`s = rest`) on the function's first line, so handing it
+# an array crashes the whole sweep. Verified 2026-09-02: `awk: can't assign to g; it's an array
+# name.` on the corpus's first Budget: line, exit 2. RED by construction until Task 2 redeclares
+# parse_budget(rest, groups, ...) with groups genuinely array-typed.
+cat >"$TMP/bl6-old.awk" <<'AWKEOF'
+function trim(s){gsub(/^[ \t]+/,"",s);gsub(/[ \t]+$/,"",s);return s}
+function parse_budget(rest,   s, pre, paren, inner, low, num, files, total, rem) {
+  s = rest; files = ""; total = 0
+  while (match(s, /\([^()]*\)/)) {
+    pre   = substr(s, 1, RSTART - 1)
+    paren = substr(s, RSTART, RLENGTH)
+    s     = substr(s, RSTART + RLENGTH)
+    sub(/^[ \t]*,[ \t]*/, "", pre)
+    gsub(/`/, "", pre); pre = trim(pre)
+    sub(/,[ \t]*$/, "", pre)
+    inner = paren; gsub(/[()]/, "", inner); low = tolower(inner)
+    if (pre == "" || !match(inner, /[0-9]+/) || index(low, "line") == 0) return ""
+    num = substr(inner, RSTART, RLENGTH)
+    total += num
+    files = (files == "" ? pre : files ", " pre)
+  }
+  rem = s; gsub(/[ \t,*_`.]/, "", rem)
+  if (files == "" || rem != "") return ""
+  return files "\t" total
+}
+/[Bb]udget:/ {
+  rest = trim(substr($0, index($0,"udget:")+6))
+  r = parse_budget(rest)
+  if (r == "") { print "<none>|-" } else { sub(/\t/,"|",r); print r }
+}
+AWKEOF
+sed -n '/^function parse_budget/,/^}$/p' "$BUDGET_PARSER" >"$TMP/bl6-new.awk"
+cat >>"$TMP/bl6-new.awk" <<'AWKEOF'
+function trim(s){gsub(/^[ \t]+/,"",s);gsub(/[ \t]+$/,"",s);return s}
+/[Bb]udget:/ {
+  rest = trim(substr($0, index($0,"udget:")+6))
+  delete g
+  r = parse_budget(rest, g)
+  if (r == "") { print "<none>|-" } else { sub(/\t/,"|",r); print r }
+}
+AWKEOF
+awk -f "$TMP/bl6-old.awk" "$REPO"/docs/superpowers/plans/*.md >"$TMP/bl6-old.out" 2>/dev/null
+awk -f "$TMP/bl6-new.awk" "$REPO"/docs/superpowers/plans/*.md >"$TMP/bl6-new.out" 2>/dev/null
+bl6_old_n=$(grep -c . "$TMP/bl6-old.out" 2>/dev/null || true); [ -n "$bl6_old_n" ] || bl6_old_n=0
+bl6_new_n=$(grep -c . "$TMP/bl6-new.out" 2>/dev/null || true); [ -n "$bl6_new_n" ] || bl6_new_n=0
+if [ "$bl6_old_n" -gt 0 ] && [ "$bl6_old_n" = "$bl6_new_n" ]; then
+  bl6_mismatch=$(paste "$TMP/bl6-old.out" "$TMP/bl6-new.out" | awk -F'\t' '$1!=$2' | grep -c . || true)
+else
+  bl6_mismatch="$bl6_old_n"
+fi
+bl6_old_decl=$(grep -vc '^<none>|-$' "$TMP/bl6-old.out" 2>/dev/null || true); [ -n "$bl6_old_decl" ] || bl6_old_decl=0
+if [ "$bl6_mismatch" -eq 0 ] && [ "$bl6_old_decl" -gt 0 ]; then
+  ok "BL6: every declaration returns an identical string under the frozen pre-#296 parser and the live one called (rest, g) — single-ceiling and per-file alike ($bl6_old_decl compared)"
+else
+  bad "BL6: $bl6_mismatch mismatched line(s) of $bl6_old_n (old produced $bl6_old_n, new produced $bl6_new_n) — RED by construction until Task 2 gives parse_budget a genuinely array-typed second parameter (today the new-side sweep dies on the corpus's first Budget: line: \"can't assign to g; it's an array name.\")"
+fi
+
+# BL7 (R-02, rule 7) — count guard on BL6's derivation. Zero comparisons and a clean corpus are
+# indistinguishable from outside; a floor with real slack, not a tripwire (measured 2026-09-02:
+# $bl6_old_decl successfully-parsed declarations in the corpus today, comfortably above 100).
+if [ "$bl6_old_decl" -ge 100 ]; then
+  ok "BL7: BL6 compared $bl6_old_decl declarations — the sweep is not vacuous"
+else
+  bad "BL7: only $bl6_old_decl declaration(s) compared — expected >= 100; the derivation is broken, not the corpus clean"
+fi
+# plant: BL7 | plugin/scripts/tests/diff-budget-scope.test.sh | "$bl6_old_decl" -ge 100 | "$bl6_old_decl" -ge 100000
+
+# BL8 (R-02, rule 9) — BL6 is not vacuous: the future parse_budget(rest, g) call must actually
+# populate g with the per-group breakdown, or BL6 could stay green with the whole per-file feature
+# deleted (a comparison of two crashes pins nothing). The known corpus declaration, verbatim from
+# 2026-07-30-222-vendor-deployed-only-skills.md task 2 (BK1's own line).
+sed -n '/^function parse_budget/,/^}$/p' "$BUDGET_PARSER" >"$TMP/bl8.awk"
+cat >>"$TMP/bl8.awk" <<'AWKEOF'
+function trim(s){gsub(/^[ \t]+/,"",s);gsub(/[ \t]+$/,"",s);return s}
+BEGIN {
+  rest = "staging/plugin/skills/ui-layout-audit/SKILL.md (~165 lines, new), staging/sync-to-claude.sh (~1 line)"
+  delete g
+  r = parse_budget(rest, g)
+  printf "g0=%s\n", g[0]
+  printf "g1=%s\n", g[1]
+  printf "g2=%s\n", g[2]
+}
+AWKEOF
+BL8_OUT=$(awk -f "$TMP/bl8.awk" 2>"$TMP/bl8.err"); BL8_RC=$?
+BL8_G0=$(printf '%s\n' "$BL8_OUT" | sed -n 's/^g0=//p')
+BL8_G1=$(printf '%s\n' "$BL8_OUT" | sed -n 's/^g1=//p')
+BL8_G2=$(printf '%s\n' "$BL8_OUT" | sed -n 's/^g2=//p')
+if [ "$BL8_RC" -eq 0 ] && [ "$BL8_G0" = "2" ] \
+   && printf '%s' "$BL8_G1" | grep -qE "${TAB}165\$" \
+   && printf '%s' "$BL8_G2" | grep -qE "${TAB}1\$"; then
+  ok "BL8: parse_budget(rest, g) on the known corpus declaration populates g[0]==2, g[1] ending ${TAB}165, g[2] ending ${TAB}1"
+else
+  bad "BL8: expected g[0]==2, g[1] ending ${TAB}165, g[2] ending ${TAB}1, rc=0 — got rc=$BL8_RC g0=[$BL8_G0] g1=[$BL8_G1] g2=[$BL8_G2] err=[$(cat "$TMP/bl8.err" 2>/dev/null)] — RED by construction until Task 2 gives parse_budget a genuinely array-typed g"
+fi
+# plant: BL6 | plugin/skills/concept-to-code/scripts/plan-budget-parse.awk | return files "\t" total | return files "\t" (total + 1)
+# plant: BL8 | plugin/skills/concept-to-code/scripts/plan-budget-parse.awk | groups[ng] = pre "\t" num | groups[ng] = pre
+
+# BL9 (R-02) — script-level whole-corpus sweep, set equality in both directions (ADR-0189 §D8, BK9b's
+# device rather than a count). For each budget-declaring plan in the real corpus: derive its declared
+# task set and file set, build a synthetic --stat giving every declared file a large count, run the
+# REAL script over every declared task, and record whether any FILEBUDGET appeared. The set of plans
+# that produced one must equal the set carrying a multi-group declaration.
+PREDICATE="$STAGING/plugin/skills/concept-to-code/scripts/plan-task-predicate.awk"
+cat >"$TMP/bl9-derive.awk" <<'AWKEOF'
+BEGIN { in_task = 0; cur = ""; got = 0; declared = 0; multi = 0 }
+{
+  line = $0
+  if (is_task_opener(line)) {
+    cur = task_num(line); got = 0; in_task = 1
+  } else if (!in_task) {
+    next
+  }
+  if (in_task && !got) {
+    if (match(line, /[Bb]udget:/)) {
+      rest = trim(substr(line, RSTART + RLENGTH))
+      parsed = parse_budget(rest)
+      if (parsed != "") {
+        got = 1; declared = 1
+        print cur >> TASKS_OUT
+        split(parsed, parr, "\t")
+        nfiles = split(parr[1], farr, ",")
+        for (i = 1; i <= nfiles; i++) {
+          f = farr[i]; gsub(/^[ \t]+|[ \t]+$/, "", f)
+          if (f != "") print f >> FILES_OUT
+        }
+        s = rest; q = 0
+        while (match(s, /\([^()]*\)/)) {
+          st = RSTART; ln = RLENGTH
+          inner = substr(s, st + 1, ln - 2); low = tolower(inner)
+          if (match(inner, /[0-9]+/) && index(low, "line") > 0) q++
+          s = substr(s, st + ln)
+        }
+        if (q > 1) multi = 1
+      } else if (looks_like_budget(rest)) {
+        got = 1
+      }
+    }
+  }
+}
+END { if (declared) print "DECL"; if (multi) print "MULTI" }
+AWKEOF
+
+bl9_decl_count=0
+: >"$TMP/bl9-multi-plans.txt"
+: >"$TMP/bl9-produced-plans.txt"
+bl9_unsorted=0
+for _blf in "$REPO"/docs/superpowers/plans/*.md; do
+  _blbn=$(basename "$_blf")
+  : >"$TMP/bl9-tasks.txt"; : >"$TMP/bl9-files.txt"
+  _blcls=$(awk -v TASKS_OUT="$TMP/bl9-tasks.txt" -v FILES_OUT="$TMP/bl9-files.txt" \
+           -f "$PREDICATE" -f "$BUDGET_PARSER" -f "$TMP/bl9-derive.awk" "$_blf" 2>/dev/null)
+  printf '%s\n' "$_blcls" | grep -qx DECL || continue
+  bl9_decl_count=$((bl9_decl_count + 1))
+  printf '%s\n' "$_blcls" | grep -qx MULTI && printf '%s\n' "$_blbn" >>"$TMP/bl9-multi-plans.txt"
+
+  sort -u "$TMP/bl9-files.txt" >"$TMP/bl9-files-u.txt"
+  : >"$TMP/bl9-stat.txt"
+  while IFS= read -r _blff; do
+    [ -n "$_blff" ] || continue
+    printf ' %s | 999 ++\n' "$_blff" >>"$TMP/bl9-stat.txt"
+  done <"$TMP/bl9-files-u.txt"
+  _bltasks=$(sort -u "$TMP/bl9-tasks.txt" | paste -sd, -)
+  _blout=$(bash "$DBC" --plan "$_blf" --tasks "$_bltasks" <"$TMP/bl9-stat.txt" 2>/dev/null)
+  if printf '%s\n' "$_blout" | grep -q '^FILEBUDGET'; then
+    printf '%s\n' "$_blbn" >>"$TMP/bl9-produced-plans.txt"
+    _blfnames=$(printf '%s\n' "$_blout" | awk -F'\t' '$1=="FILEBUDGET"{print $3}')
+    _blsorted=$(printf '%s\n' "$_blfnames" | sort)
+    [ "$_blfnames" = "$_blsorted" ] || bl9_unsorted=$((bl9_unsorted + 1))
+  fi
+done
+
+if [ "$bl9_decl_count" -ge 15 ]; then
+  ok "BL9a (count guard): $bl9_decl_count budget-declaring plans swept — the sweep is not vacuous"
+else
+  bad "BL9a (count guard): only $bl9_decl_count budget-declaring plan(s) — expected >= 15; the derivation is broken, not the corpus clean"
+fi
+sort "$TMP/bl9-multi-plans.txt" >"$TMP/bl9-multi-sorted.txt"
+sort "$TMP/bl9-produced-plans.txt" >"$TMP/bl9-produced-sorted.txt"
+bl9_only_multi=$(comm -23 "$TMP/bl9-multi-sorted.txt" "$TMP/bl9-produced-sorted.txt" | grep -c . || true); [ -n "$bl9_only_multi" ] || bl9_only_multi=0
+bl9_only_produced=$(comm -13 "$TMP/bl9-multi-sorted.txt" "$TMP/bl9-produced-sorted.txt" | grep -c . || true); [ -n "$bl9_only_produced" ] || bl9_only_produced=0
+if [ "$bl9_only_multi" -eq 0 ] && [ "$bl9_only_produced" -eq 0 ] && [ "$bl9_unsorted" -eq 0 ]; then
+  ok "BL9b: the set of plans producing a FILEBUDGET equals the set carrying a multi-group declaration, and every multi-line run is sort-ordered"
+else
+  bl9_multi_n=$(grep -c . "$TMP/bl9-multi-sorted.txt" 2>/dev/null || true); [ -n "$bl9_multi_n" ] || bl9_multi_n=0
+  bad "BL9b: $bl9_only_multi multi-group plan(s) produced no FILEBUDGET, $bl9_only_produced non-multi plan(s) produced one, $bl9_unsorted run(s) came back unsorted — RED by construction until Task 4 lands (today FILEBUDGET is emitted nowhere, so the produced set is empty against $bl9_multi_n multi-group plan(s))"
+fi
+# plant: BL9a | plugin/scripts/tests/diff-budget-scope.test.sh | "$bl9_decl_count" -ge 15 | "$bl9_decl_count" -ge 100000
+# plant: BL9b | plugin/skills/concept-to-code/scripts/diff-budget-check.sh | sort >>"$OUT" | cat >>"$OUT"
+
+# BL10 (R-02) — the single-ceiling population is byte-inert. A synthetic plan whose every task
+# declares exactly one group (the documented, pre-#296 form), run over a diff that blows one file
+# wide open: stdout must contain a BUDGET line and no FILEBUDGET line, whatever the task selection.
+# FORWARD GUARD, GREEN BEFORE AND AFTER (BK6/BK7's own labelled convention) — the ONE BL id with no
+# red half. Its BUDGET clause already holds today (pre-existing behaviour) and its FILEBUDGET clause
+# is trivially satisfied when the token does not exist at all; a pure "must never regress" guarantee
+# cannot itself be red pre-implementation. The plant below is the actual evidence that it pins
+# something: dropping the reportability conjunct from the future FILEBUDGET emission is what would
+# make this scenario (a genuinely single-group declaration) wrongly produce one.
+cat >"$TMP/bl10-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Single (R-01)
+
+Budget: a.py (~10 lines)
+PLANEOF
+mk_diffstat bl10 "a.py:500" >"$TMP/stat_in"
+BL10_OUT=$(bash "$DBC" --plan "$TMP/bl10-plan.md" --tasks 1 <"$TMP/stat_in")
+if printf '%s\n' "$BL10_OUT" | grep -q '^BUDGET' && ! printf '%s\n' "$BL10_OUT" | grep -q '^FILEBUDGET'; then
+  ok "BL10: a single-ceiling declaration blown wide open (a.py 10 -> 500) still produces only a BUDGET line, never FILEBUDGET"
+else
+  bad "BL10: expected a BUDGET line and no FILEBUDGET — got [$BL10_OUT]"
+fi
+# plant: BL10 | plugin/skills/concept-to-code/scripts/diff-budget-check.sh | (f in rep) && act[f] > ceil[f] | act[f] > ceil[f]
+
+# BL11 (R-03) — the reporter contract. Never `[ -n "$out" ]`, never branch on exit code; a reporter
+# always exits 0 and signals on stdout (BT1/BT2's own trap, restated for FILEBUDGET).
+printf ' staging/plugin/skills/ui-layout-audit/SKILL.md | 100 ++\n staging/sync-to-claude.sh |  60 ++\n' >"$TMP/stat_in"
+BL11A_OUT=$(bash "$DBC" --plan "$BK_PLAN" --tasks 2 <"$TMP/stat_in"); BL11A_RC=$?
+if printf '%s\n' "$BL11A_OUT" | grep -q '^FILEBUDGET' && [ "$BL11A_RC" -eq 0 ]; then
+  ok "BL11a: a FILEBUDGET-producing run still exits 0"
+else
+  bad "BL11a: expected a FILEBUDGET line present and exit 0 — got out=[$BL11A_OUT] rc=$BL11A_RC"
+fi
+mk_diffstat bl11b "a.py:5" >"$TMP/stat_in"
+BL11B_OUT=$(bash "$DBC" --plan "$TMP/bl10-plan.md" --tasks 1 <"$TMP/stat_in"); BL11B_RC=$?
+if [ "$BL11B_OUT" = "CLEAN" ] && [ "$BL11B_RC" -eq 0 ]; then
+  ok "BL11b: a run producing nothing still prints the sentinel CLEAN and exits 0"
+else
+  bad "BL11b: expected CLEAN/exit 0 on a nothing-to-report run — got out=[$BL11B_OUT] rc=$BL11B_RC"
+fi
+cat >"$TMP/bl11c-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Broken (R-01)
+
+Budget: a.md (~50 lines), b.md
+PLANEOF
+mk_diffstat bl11c "zzz.md:900" >"$TMP/stat_in"
+BL11C_OUT=$(bash "$DBC" --plan "$TMP/bl11c-plan.md" --tasks 1 <"$TMP/stat_in"); BL11C_RC=$?
+if [ "$BL11C_RC" -eq 0 ] && printf '%s\n' "$BL11C_OUT" | grep -q '^MALFORMED' && ! printf '%s\n' "$BL11C_OUT" | grep -q '^FILEBUDGET'; then
+  ok "BL11c: a plan whose only declaration is malformed still emits MALFORMED, never FILEBUDGET, and exits 0"
+else
+  bad "BL11c: expected MALFORMED, no FILEBUDGET, exit 0 — got out=[$BL11C_OUT] rc=$BL11C_RC"
+fi
+# A task selection carrying no live budget of its own must stay inert even when a DIFFERENT task in
+# the same plan declares a file that ends up in scope: BUDGET_LIVE gates the whole emission block —
+# the pre-existing BUDGET line as much as the new FILEBUDGET one — and this feature must not widen
+# what that gate lets through.
+cat >"$TMP/bl11d-plan.md" <<'PLANEOF'
+# Plan
+
+## Task 1 — Declares (R-01)
+
+Budget: shared.md (~5 lines)
+
+## Task 2 — Declares nothing (R-01)
+
+No budget line on this task at all.
+PLANEOF
+mk_diffstat bl11d "shared.md:900" >"$TMP/stat_in"
+BL11D_OUT=$(bash "$DBC" --plan "$TMP/bl11d-plan.md" --tasks 2 <"$TMP/stat_in"); BL11D_RC=$?
+if [ "$BL11D_OUT" = "CLEAN" ] && [ "$BL11D_RC" -eq 0 ]; then
+  ok "BL11d: selecting a task with no live budget of its own stays CLEAN even when another task's declared file is touched — BUDGET_LIVE still gates the whole block"
+else
+  bad "BL11d: expected CLEAN/exit 0 when the selected task declares no budget — got out=[$BL11D_OUT] rc=$BL11D_RC"
+fi
+# plant: BL11d | plugin/skills/concept-to-code/scripts/diff-budget-check.sh | if [ "$BUDGET_LIVE" -eq 1 ]; then | if true; then
+
+# BL12 (R-01) — the token has a CONSUMER (rule 17, BK10's own pattern). Against the flattened $STEP5
+# copy, four needles each belonging to one block and to nothing else. Never a bare
+# `grep -qF 'FILEBUDGET'` — by Task 6 the word is in three files (this script's own header, this
+# harness's own fixtures, and step5-implementation.md), which is BK10's own recorded first-draft
+# failure one level up.
+BL12_FLAT=$(tr '\n' ' ' <"$STEP5" 2>/dev/null | tr -s ' ')
+bl12_has() { printf '%s' "$BL12_FLAT" | grep -qF "$1"; }
+if bl12_has 'FILEBUDGET<TAB><tasks-label><TAB><file><TAB>lines=<expected>/<actual><TAB>margin=<N>' \
+   && bl12_has '{task, file, lines_expected, lines_actual}' \
+   && bl12_has 'can fire with no `BUDGET` line present' \
+   && bl12_has 'no `files_expected` / `files_actual` keys are written'; then
+  ok "BL12: Step 5 reads the FILEBUDGET token, records {task, file, lines_expected, lines_actual}, states it can fire with no BUDGET line, and states no files_* keys are written"
+else
+  bad "BL12: the Step 5 call site does not yet read the FILEBUDGET token (grammar line, {task, file, lines_expected, lines_actual} shape, 'can fire with no BUDGET line present' sentence, or the no-files_*-keys sentence is missing) — RED by construction until Task 6 lands"
+fi
+# plant: BL12 | plugin/skills/concept-to-code/references/step5-implementation.md | FILEBUDGET<TAB><tasks-label><TAB><file><TAB>lines=<expected>/<actual><TAB>margin=<N> | BUDGETFILE<TAB><tasks-label><TAB><file><TAB>lines=<expected>/<actual><TAB>margin=<N>
+
+# Z1 — assertion-count floor (ADR-0083 §D3). A floor, not an exact count. Bumped from 55 to 66
+# by issue #296 / ADR-0189's twelve BL assertions (measured 2026-09-02: 75 executed with section
+# BL in place, floor set a little below it — a vacuity guard only, never an exact count).
 Z1_TOTAL=$((PASS + FAIL))
-if [ "$Z1_TOTAL" -ge 55 ]; then
+if [ "$Z1_TOTAL" -ge 66 ]; then
   ok "Z1: assertion-count floor met ($Z1_TOTAL executed)"
 else
-  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 55; assertions have gone missing, not passed"
+  bad "Z1: only $Z1_TOTAL assertions executed — expected >= 66; assertions have gone missing, not passed"
 fi
 
 echo "----"
