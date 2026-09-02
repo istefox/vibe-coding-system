@@ -758,7 +758,31 @@ Checkpoint review: ON (ADR-0039 D5-D9).
 Extend the tester → coder pipeline() above with a third stage: reviewer.
 Do NOT use parallel() as a barrier between the stages — task B must keep implementing while
 task A is under review. Wall-clock is the slowest single-task chain, not sum-of-slowest-per-stage.
-Stage 3 dispatches agentType "reviewer" scoped to the files Stage 2 (coder) reported for that task.
+
+**If `manifest.use_codex_review = true` (Gate CDX):** Stage 3 runs
+`codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>` (the deployed
+copy at `~/.claude/hooks/codex-reviewer.sh`) scoped to the files Stage 2 (coder) reported for that
+task, INSTEAD of dispatching `agentType "reviewer"`, via `agent()`'s own `Bash`-equivalent
+execution inside the stage callback (a Workflow script has no interactive `AskUserQuestion` hook —
+see the header comment box in this file's authoring reference for the full hook list — so a
+per-checkpoint fallback gate cannot run here the way it does at every other dispatch site):
+  - exit `0` → read `<tmp-review-file>` as the review, exactly as the paragraph below describes.
+  - exit `3` (DID-NOT-RUN) → do **not** attempt to ask here (structurally impossible). `log()` the
+    reason, record this task's checkpoint entry in `checkpoint_reviews` as
+    `{status: "skipped_codex_unavailable", reason: "<reason>"}` (no findings carried forward for
+    this one task — identical in effect to today's "no detectable changes" case), and continue the
+    pipeline without blocking Stage 2/Stage 1 of any task. **After `Workflow()` returns** to the
+    orchestrator's own turn, if `checkpoint_reviews` contains one or more
+    `skipped_codex_unavailable` entries, ask ONCE (not once per skipped entry): `AskUserQuestion`:
+    "N checkpoint review(s) during Step 5 were skipped because Codex was unavailable (`<first
+    reason>`). These reviews are advisory only — they never blocked implementation. Re-run the
+    skipped ones now via Claude's `reviewer` agent, or accept as-is?" Options: "Re-run via Claude
+    reviewer (Recommended)" → dispatch `reviewer` for each skipped task's diff, same as the
+    paragraph below / "Accept as-is" → proceed to Step 6 unchanged; RTF's full-diff cycle there
+    still covers everything a skipped checkpoint review would have caught early.
+
+**Otherwise (default — `use_codex_review` absent or `false`):** Stage 3 dispatches agentType
+"reviewer" scoped to the files Stage 2 (coder) reported for that task.
 Pass an explicit model AND an explicit effort of "high" (same rules as the coder above).
 It REVIEWS ONLY and fixes nothing.
 Pass each task's BLOCKER and MAJOR findings into the prompt of the next task's Stage 2 (coder) as
@@ -1609,9 +1633,22 @@ stderr.
 
    <!-- dispatch-site: step5-checkpoint-reviewer class=inline exempt: the reviewer grant carries no Write tool so no completion fact is producible, and its findings are carried forward as advice that halts nothing -->
    **[IF `manifest.step5_review_mode = checkpoint` (ADR-0039 D5-D9) — otherwise skip:]**
-   At this same checkpoint, dispatch the `reviewer` agent scoped to the diff of the batch that
-   just closed. It reviews only and fixes nothing: this is where the Workflow path would run its
-   pipeline review stage, and the two paths must reach the same place. Carry the BLOCKER and
+   At this same checkpoint: **if `manifest.use_codex_review = true` (Gate CDX):** run
+   `~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>`
+   scoped to the diff of the batch that just closed.
+   - exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report; continue
+     below unchanged.
+   - exit `3` (DID-NOT-RUN) → **stop and ask, never silently fall back to Claude** (this path runs
+     in the orchestrator's own live turn, unlike the Workflow path's Stage 3, so it can ask
+     directly): `AskUserQuestion`: "Codex review unavailable at the Step 5 checkpoint (batch <N>):
+     `<reason from stderr>`. Fallback to Claude's reviewer agent for this checkpoint, or halt the
+     chain?" Options: "Fallback to Claude reviewer (Recommended)" → dispatch `reviewer` exactly as
+     below, then continue / "Halt the chain" → abort per this chain's existing abort convention.
+
+   **Otherwise (default — `use_codex_review` absent or `false`):** dispatch the `reviewer` agent
+   scoped to the diff of the batch that just closed. It reviews only and fixes nothing: this is
+   where the Workflow path would run its pipeline review stage, and the two paths must reach the
+   same place. Carry the BLOCKER and
    MAJOR findings into the brief of the next batch as "found in batch <N>, do not repeat this".
    MINOR and NIT are recorded and left for Step 6, where RTF runs the full cycle over the whole
    diff. Record each review in `checkpoint_reviews` in `step5-report.json`.

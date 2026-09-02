@@ -81,7 +81,18 @@ This retires the ADR-0012 mediated mechanism entirely; `coder` and `refactorer` 
 to it.
 
 <!-- dispatch-site: rtf-step1-reviewer class=inline exempt: reviewer produces no completion fact — its Edit/Write (via memory: project) is confined to its own memory directory by reviewer-write-scope.sh, and an empty report yields an empty triage rather than a green -->
-Dispatch the `reviewer` agent over the recent changes. Edge cases:
+**If `manifest.use_codex_review = true` (Gate CDX):** run
+`~/.claude/scripts/codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>`.
+- exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report; continue below
+  unchanged.
+- exit `3` (DID-NOT-RUN) → **stop and ask, never silently fall back to Claude:**
+  `AskUserQuestion`: "Codex review unavailable at RTF Step 1: `<reason from stderr>`. Fallback to
+  Claude's reviewer agent for this dispatch, or halt the chain?" Options: "Fallback to Claude
+  reviewer (Recommended)" → dispatch `reviewer` exactly as below, then continue / "Halt the chain"
+  → abort per this skill's existing abort convention.
+
+**Otherwise (default — `use_codex_review` absent or `false`):** Dispatch the `reviewer` agent over
+the recent changes. Edge cases:
 - Reviewer reports **no detectable changes** → stop, emit a "nothing to do"
   recap, do not invent work.
 - **Huge diff sampled** → propagate that caveat verbatim into the recap.
@@ -170,7 +181,18 @@ and the project's test-cmd so the agent self-verifies.
 - **`sonnet-xhigh`:** use `model: "sonnet"` for all fix dispatches instead of `opus`. Do NOT pin `effort` — RTF dispatches fixes exclusively through the Agent tool (no Workflow `agent()` call exists anywhere in this file), and the Agent tool has no `effort` parameter at all (ADR-0068 §D7, issue #180). This means the variant has no lever for a higher reasoning tier and reduces to a plain model swap — the "higher reasoning tier at lower cost than opus" intent the name `sonnet-xhigh` was chosen for does not survive on the Agent tool as currently spec'd. No mechanism currently exists to pin per-dispatch reasoning effort on this tool; that gap is disclosed here, not solved. No other change to this step.
 - **`advisor`:** for each routable finding, two `Agent`-tool calls instead of one:
   <!-- dispatch-site: rtf-advisor-pair class=inline exempt: the advisor is a reviewer with no Write tool and its own failure clause already falls back to plain opus behaviour for that one finding -->
-  1. **Advisor call** — dispatch `subagent_type: "reviewer"` (read-only by design — it reports, never edits code; its `memory: project` grant is confined to its own memory directory by `reviewer-write-scope.sh`, so it structurally cannot touch source even if asked to) at `model: "opus"`. Brief: the finding, `loc`, the reviewer's suggested fix, and the instruction *"Diagnose only, do not propose an edit as a diff — return root cause, fix approach, and exactly which files/functions to touch. Keep the answer under 150 words."* This call is the entire advisor cost — bounded by the word cap, not a full plan. No agent-memory contract applies here (reviewer uses native memory per ADR-0182; there is nothing to inject or harvest).
+  1. **Advisor call.** **If `manifest.use_codex_review = true` (Gate CDX):** run
+     `~/.claude/scripts/codex-reviewer.sh --mode diagnose --finding "<finding + loc + suggested fix>" --out <tmp-diag-file>`.
+     - exit `0` → read `<tmp-diag-file>` as the diagnosis; proceed to the Executor call below.
+     - exit `3` (DID-NOT-RUN) → **stop and ask, never silently fall back to Claude:**
+       `AskUserQuestion`: "Codex advisor unavailable: `<reason from stderr>`. Fallback to Claude's
+       reviewer agent for this advisor call, or halt the chain?" Options: "Fallback to Claude
+       reviewer (Recommended)" → run the Claude advisor call below, then continue / "Halt the
+       chain" → abort per this skill's existing abort convention. This gate covers Codex being
+       *unavailable*; it does not replace the existing "advisor call errors/times out/returns
+       empty" clause below, which stays as-is for the Claude call.
+
+     **Otherwise (default):** dispatch `subagent_type: "reviewer"` (read-only by design — it reports, never edits code; its `memory: project` grant is confined to its own memory directory by `reviewer-write-scope.sh`, so it structurally cannot touch source even if asked to) at `model: "opus"`. Brief: the finding, `loc`, the reviewer's suggested fix, and the instruction *"Diagnose only, do not propose an edit as a diff — return root cause, fix approach, and exactly which files/functions to touch. Keep the answer under 150 words."* This call is the entire advisor cost — bounded by the word cap, not a full plan. No agent-memory contract applies here (reviewer uses native memory per ADR-0182; there is nothing to inject or harvest).
   2. **Executor call** — dispatch the normal fix agent (`coder`/`refactorer`/`debugger`) at `model: "sonnet"` (no effort override), with the advisor's diagnosis prepended to the existing dispatch brief under a `FIX GUIDANCE (already diagnosed — apply, do not re-diagnose):` header. Everything else about the dispatch (micro-piano, test-cmd, isolation, circuit breakers) is unchanged.
   If the advisor call errors, times out, or returns empty: skip it and fall back to `opus` behavior for that one finding only — never block the cycle on an advisor failure.
   NIT batching stays a single dispatch either way; run the advisor call once for the whole batch (one diagnosis covering the list), not once per NIT.
@@ -231,7 +253,20 @@ Apply the circuit breakers:
 **Wording-preservation for cross-cycle hash stability.** When dispatching the re-reviewer, include the previous cycle's findings table (problem column verbatim). Instruct the reviewer: *for any finding that is unchanged, reuse the exact one-line problem wording from the previous cycle's recap — paraphrasing changes the finding hash and generates false RESOLVED+NEW pairs in convergence tracking.* New or genuinely changed findings may use new wording.
 
 <!-- dispatch-site: rtf-step4-rereview class=inline exempt: the reviewer grant carries no Write tool, and an early read produces fewer findings which the cross-cycle diff surfaces rather than hides -->
-Dispatch `reviewer` again over the new state. Recompute the cross-cycle diff:
+**If `manifest.use_codex_review = true` (Gate CDX):** write the previous cycle's findings as
+`sev<TAB>loc<TAB>problem` TSV to a temp file, then run
+`~/.claude/scripts/codex-reviewer.sh --mode review --diff-scope uncommitted --carry-forward <that-tsv-file> --out <tmp-review-file>`
+(`--carry-forward` embeds the wording-preservation instruction above directly in the Codex prompt,
+so it is never skipped when the dispatch is substituted).
+- exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report; continue below
+  unchanged.
+- exit `3` (DID-NOT-RUN) → **stop and ask, never silently fall back to Claude:**
+  `AskUserQuestion`: "Codex review unavailable at RTF Step 4 re-review: `<reason from stderr>`.
+  Fallback to Claude's reviewer agent for this dispatch, or halt the chain?" Options: "Fallback to
+  Claude reviewer (Recommended)" → dispatch `reviewer` exactly as below, then continue / "Halt the
+  chain" → abort per this skill's existing abort convention.
+
+**Otherwise (default — `use_codex_review` absent or `false`):** Dispatch `reviewer` again over the new state. Recompute the cross-cycle diff:
 write the post-fix findings as TSV (`sev<TAB>loc<TAB>problem`) and run — using
 the **same** `<rtf-state-file>` path resolved in Step 0 (never a fresh file,
 or convergence tracking breaks):

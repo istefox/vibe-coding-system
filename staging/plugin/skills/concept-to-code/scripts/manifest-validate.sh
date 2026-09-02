@@ -25,9 +25,9 @@ fail() {
   ERRORS=$((ERRORS+1))
 }
 
-# Invariant 1: manifest_schema_version must be "1.0", "1.1", "1.2", or "1.3"
-if ! grep -Eq '^manifest_schema_version: "(1\.0|1\.1|1\.2|1\.3)"$' "$MANIFEST"; then
-  fail "manifest_schema_version missing or not 1.0/1.1/1.2/1.3"
+# Invariant 1: manifest_schema_version must be "1.0", "1.1", "1.2", "1.3", or "1.4"
+if ! grep -Eq '^manifest_schema_version: "(1\.0|1\.1|1\.2|1\.3|1\.4)"$' "$MANIFEST"; then
+  fail "manifest_schema_version missing or not 1.0/1.1/1.2/1.3/1.4"
 fi
 
 # Invariant 2: topic must be non-empty and match slug pattern
@@ -376,6 +376,15 @@ if grep -q '^worktree_merges:' "$MANIFEST"; then
     '[{'*'}]') ;;
     *) fail "worktree_merges '$wm_val' is not '[]' or a bracketed flow list of maps" ;;
   esac
+fi
+
+# Invariant 24 (conditional, schema 1.4): if use_codex_review field present, must be true or false.
+# Absent = valid (retrocompat 1.0-1.3), same template as anonymize (Invariant 11) — this feature
+# ADDS an opt-in path, so absent/false is the pre-feature-equivalent default.
+if grep -q '^use_codex_review:' "$MANIFEST"; then
+  if ! grep -Eq '^use_codex_review: (true|false)$' "$MANIFEST"; then
+    fail "use_codex_review field present but value is not 'true' or 'false'"
+  fi
 fi
 
 if [ "$ERRORS" != "0" ]; then

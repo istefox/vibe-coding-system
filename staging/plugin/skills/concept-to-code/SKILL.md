@@ -288,6 +288,20 @@ FENCE_BASH
      - `[a]` → abort chain.
    **Decision is exclusively the user's: never auto-applied.**
    (Step 8b was Gate 0c, humanize — removed per ADR-0040. Gate 0b leads straight to step 8c.)
+
+   **Gate CDX (Codex assist — chain-wide, optional, no transition):** ask once via
+   `AskUserQuestion`: "Use Codex instead of Claude for review dispatch in this run? (RTF review
+   cycles and Step 5 checkpoint reviews only — coding and testing stay on Claude.)" Options:
+   `[no]` "No — Claude only (current behaviour)" / `[yes]` "Yes — use Codex for review, with a
+   gate if it's unavailable".
+   - `[no]` → `manifest.use_codex_review` stays `false` (already seeded by `manifest-init.sh`).
+     Byte-identical to today's behaviour for every run that does not opt in.
+   - `[yes]` → set it via
+     `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> use_codex_review true`.
+   **Decision is exclusively the user's: never auto-applied**, and this gate does not fire under
+   `--autopilot` — autopilot runs are unattended, and this feature is not extended to unattended
+   runs in this pass; `manifest.use_codex_review` stays at its seeded `false` for every autopilot
+   run, identically to today.
 8c. **Gate 0d (scaffolding):** see §5 Gate 0d for the full git-auto-detect / license / Xcode /
    commit survey. Gate 0d performs the chain's **single** `current_step` transition out of
    `step_0_init`: `step_0_init → gate_0d_scaffolding`, then immediately `gate_0d_scaffolding →
