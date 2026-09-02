@@ -87,7 +87,7 @@ step6_mode: null
 
 # Artifacts (absolute paths, populated as steps complete)
 artifacts:
-  spec: "docs/specs/296-a-per-file-budget-ceiling-is-parsed-and.spec.md"
+  spec: "/Users/stefer/Developer/vibe-coding-system/docs/specs/296-a-per-file-budget-ceiling-is-parsed-and.spec.md"
   brainstorm: null
   ux_blueprint: null
   design_prompt: null
