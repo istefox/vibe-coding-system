@@ -115,7 +115,7 @@ if [ -n "$BASE" ]; then
   else
     ok "B3: an unknown schema_version (1.5) is rejected"
   fi
-  # plant: B3 | plugin/skills/concept-to-code/scripts/manifest-validate.sh | if ! grep -Eq '^manifest_schema_version: "(1\\.0|1\\.1|1\\.2|1\\.3|1\\.4)"$' "$MANIFEST"; then | if false; then
+# plant: B3 | plugin/skills/concept-to-code/scripts/manifest-validate.sh | if ! grep -Eq '^manifest_schema_version: "(1\.0|1\.1|1\.2|1\.3|1\.4)"$' "$MANIFEST"; then | if false; then
 
   valid absent_field && ok "B4: use_codex_review absent is valid (retrocompat 1.0-1.3)" \
                       || bad "B4: absent field now fails validation — $(why absent_field)"
@@ -130,7 +130,7 @@ if [ -n "$BASE" ]; then
       && ok "B7: an invalid use_codex_review value is rejected, naming the field" \
       || bad "B7: rejected, but not naming use_codex_review — $(why bad_field)"
   fi
-  # plant: B7 | plugin/skills/concept-to-code/scripts/manifest-validate.sh | if ! grep -Eq '^use_codex_review: (true|false)$' "$MANIFEST"; then | if true; then
+# plant: B7 | plugin/skills/concept-to-code/scripts/manifest-validate.sh | if ! grep -Eq '^use_codex_review: (true|false)$' "$MANIFEST"; then | if false; then
 else
   bad "B1-B7: skipped — no base fixture"
 fi
