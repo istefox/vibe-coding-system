@@ -960,6 +960,10 @@ else
     git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m i >/dev/null 2>&1; printf '%s' "$d"; }
   _fp() { ( export _root="$1" _fork_from="$2"; bash "$_fpd/f.sh" >/dev/null 2>&1
       printf '%s|%s' "$?" "$(git -C "$1" branch --show-current)" ) ; }
+  # _fpa additionally exports _autopilot and returns the fence's stdout, so the printed
+  # FORK-POINT: reason line can be asserted, not only the exit code (issue #474, ADR-0188 §D2) —
+  # no test asserted any FORK-POINT: token before this.
+  _fpa() { ( export _root="$1" _fork_from="$2" _autopilot="$3"; bash "$_fpd/f.sh" 2>&1 ) ; }
 
 # plant: FK12 | plugin/skills/project-conductor/references/steps-4-7-chain-execution.md | git -C "$_root" checkout -q "$_fork_from" 2>/dev/null | true
   _r=$(_mkr a); git -C "$_r" branch autopilot/prep-x >/dev/null 2>&1; git -C "$_r" checkout -q -b feat/first >/dev/null 2>&1
@@ -982,6 +986,26 @@ else
   [ "$(_fp "$_r" "")" = "0|main" ] \
     && ok "FK15 (unchanged-behaviour guard): with no --fork-from the fence is INACTIVE and HEAD is used as-is" \
     || bad "FK15: the fence acted without --fork-from — the attended flow must be byte-identical"
+
+# plant: FK16 | plugin/skills/project-conductor/references/steps-4-7-chain-execution.md | if [ -z "${_fork_from:-}" ] && [ "${_autopilot:-}" = "true" ]; then | if false; then
+  _r=$(_mkr e); _out=$(_fpa "$_r" "" "true"); _rc=$?
+  [ "$_rc" = "3" ] && [ "$(git -C "$_r" branch --show-current)" = "main" ] \
+      && printf '%s' "$_out" | grep -qF "DID-NOT-RUN" \
+    && ok "FK16: an autopilot run with no --fork-from refuses (exit 3, DID-NOT-RUN) rather than silently using HEAD — the defect issue #474 describes" \
+    || bad "FK16: an autopilot run with no --fork-from did not refuse (rc=$_rc, out=$(printf '%s' "$_out" | head -1)) — it would silently fork from the previous feature's tip"
+
+  _r=$(_mkr f); _out=$(_fpa "$_r" "" "false"); _rc=$?
+  [ "$_rc" = "0" ] && [ "$(git -C "$_r" branch --show-current)" = "main" ] \
+      && printf '%s' "$_out" | grep -qF "INACTIVE" \
+    && ok "FK17: an ATTENDED run with no --fork-from stays INACTIVE (exit 0) — the new autopilot refusal does not leak into the attended path" \
+    || bad "FK17: the attended path changed behaviour (rc=$_rc, out=$(printf '%s' "$_out" | head -1))"
+
+  _r=$(_mkr g); git -C "$_r" branch autopilot/prep-x >/dev/null 2>&1
+  _out=$(_fpa "$_r" autopilot/prep-x "true"); _rc=$?
+  [ "$_rc" = "0" ] && [ "$(git -C "$_r" branch --show-current)" = "autopilot/prep-x" ] \
+      && printf '%s' "$_out" | grep -qF "FORK-POINT: ON" \
+    && ok "FK18: an autopilot run WITH a resolvable --fork-from still forks correctly — the new refusal arm does not swallow the normal autopilot path" \
+    || bad "FK18: an autopilot run with a resolvable --fork-from misbehaved (rc=$_rc, branch=$(git -C "$_r" branch --show-current))"
 fi
 
 # plant: FK7 | plugin/skills/project-conductor/references/steps-4-7-chain-execution.md | printf '%s\n' "<topic-slug>" >> "$_root/.claude/autopilot-state/published" | true
@@ -1005,6 +1029,13 @@ else
   bad "FK9: no fork point is passed to the conductor — feature N+1 forks from wherever HEAD happens to be"
 fi
 
+# plant: FK19 | plugin/skills/autopilot/SKILL.md | $_prep_ref` is the default branch, in two cases | $_prep_ref` is set elsewhere, in two cases
+if grep -qF '$_prep_ref` is the default branch, in two cases' "$AUTOSK"; then
+  ok "FK19: Phase P step 4 states what \$_prep_ref is when no prep branch was created (issue #474, issue #401) — the gap the run-level fence FK16 backstops"
+else
+  bad "FK19: Phase P step 4 no longer states the no-prep-branch fork ref — \$_prep_ref would again be undefined whenever no prep branch is created, and §3.3 interpolates it unconditionally"
+fi
+
 # FK10 was "the disarm clears the run ledger" (issue #364, ADR-0127 §D4); inverted by issue #400,
 # ADR-0167 §D1 — disarm no longer clears `published`, it preserves it and reports so, and the old
 # needle `"$SDIR/published"` collided with BOTH the presence-check and the read of that same file
@@ -1023,12 +1054,13 @@ fi
 # the number) without needing a bump on every addition. Raised 57 -> 64 (issue #385 Task 6): the
 # seven new CDA assertions above, ALL SEVEN counted toward PASS+FAIL regardless of their RED/GREEN
 # colour, because `TOTAL` sums executed assertions, not passing ones — a failing assertion still
-# ran (the seven CDA cases are exactly that: expected-red today, still counted).
+# ran (the seven CDA cases are exactly that: expected-red today, still counted). Raised 64 -> 68
+# (issue #474, ADR-0188): FK16-FK19, the autopilot fork-point refusal and its prose backstop.
 TOTAL=$((PASS + FAIL))
-if [ "$TOTAL" -ge 64 ]; then
+if [ "$TOTAL" -ge 68 ]; then
   ok "Z1: assertion floor met ($TOTAL)"
 else
-  bad "Z1: only $TOTAL assertions executed, expected >= 64 — did an extraction return empty?"
+  bad "Z1: only $TOTAL assertions executed, expected >= 68 — did an extraction return empty?"
 fi
 
 echo "----"

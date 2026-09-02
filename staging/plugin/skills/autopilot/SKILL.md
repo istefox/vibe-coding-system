@@ -408,11 +408,13 @@ On pass, fall into Phase P.
 ## 1.5 Phase P — Prep: auto-generate the design inputs (ADR-0023)
 
 Runs before pre-flight, and only when the opt-in marker declares a prep source. Idempotent: each
-step skips whatever already exists. With no `prep:` block the phase is a no-op and the run behaves
-exactly as ADR-0022 (roadmap and specs must pre-exist). **Also skipped whole when Phase S resolved
-`source=preserved` (ADR-0167 §D8, §1.3 above):** the continuation this launch is resuming already
-ran Phase P once, and a preserved bound holds resolved roadmap rows, not `--only` tokens, so there
-is nothing left for this phase to select against.
+step skips whatever already exists. With no `prep:` block, steps 1-3 (generation) are a no-op and
+the run behaves exactly as ADR-0022 (roadmap and specs must pre-exist) — **step 4 (the fork point,
+below) is not part of that no-op and always runs, prep block or not** (issue #474, ADR-0188 §D1).
+**Steps 1-4 are all skipped whole only when Phase S resolved `source=preserved` (ADR-0167 §D8, §1.3
+above):** the continuation this launch is resuming already ran Phase P once, including step 4, and a
+preserved bound holds resolved roadmap rows, not `--only` tokens, so there is nothing left for this
+phase to select against or fork from that was not already decided.
 
 Read the source from `.claude/autopilot.yml`:
 ```yaml
@@ -430,7 +432,7 @@ scope:
 before this feature. Passing `--features` or `--only` at launch discards this block whole, never
 merges with it (§D3/A4 — see §1 "When to invoke").
 
-Steps (each is skip-if-present):
+Steps (each is skip-if-present, except step 4, which always runs — see its own text):
 
 1. **test-cmd file** — if `.claude/test-cmd` is absent, run
    `~/.claude/hooks/detect-test-cmd.sh --root "$PWD"` to write a candidate from stack detection.
@@ -569,6 +571,22 @@ FENCE_BASH
    **Skip-if-present, like every step above:** if `autopilot/prep-<today>` already exists, reuse it
    rather than creating a second one. A resumed run must fork from the same base as the run it
    resumes, or half the features sit on a base the other half cannot see.
+
+   **No prep branch is created, and `$_prep_ref` is the default branch, in two cases (issue #474 and
+   issue #401, ADR-0188): no `prep:` block at all, so steps 1-3 never ran; or a `prep:` block whose
+   steps 1-3 all skipped because everything they would generate already existed, so there is nothing
+   to commit and the `commit` skill's own Step 1 would stop on "Nothing to commit" if invoked
+   anyway.** In both cases skip invoking `commit` for this step entirely — do not attempt to create
+   an empty prep branch — and resolve `$_prep_ref` to the default branch, using the same
+   **Default-branch detection** cascade `commit/SKILL.md` Step 3.6 defines (`git symbolic-ref
+   refs/remotes/origin/HEAD` → `git remote set-head` → `gh repo view` → local `main`/`master`), never
+   a hardcoded `"main"`.
+
+   **This is safe here in a way it is not in general (ADR-0127 Finding 2 does not apply):** Finding
+   2 ruled out forking from the default branch because Phase P's outputs land in the working tree
+   before any branch exists, stranding them on whichever feature commits first. When no prep branch
+   is created, steps 1-3 generated nothing to strand — under ADR-0022 the roadmap and specs already
+   exist, already committed on the default branch. There is nothing for a later feature to miss.
 
 Record for the report (schema v2.1 `prep` block): `features_generated`, `features_skipped_thin`,
 `test_cmd_created`, and `prep_ref`. Then fall into Phase 0. Phase 0 still enforces the TOFU-trust
