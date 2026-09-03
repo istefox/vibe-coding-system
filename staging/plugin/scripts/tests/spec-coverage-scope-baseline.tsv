@@ -387,3 +387,6 @@ commit-outcome-backstop-hook.spec.md	R-05	COVERED
 commit-outcome-backstop-hook.spec.md	R-06	COVERED
 commit-outcome-backstop-hook.spec.md	R-07	COVERED
 commit-outcome-backstop-hook.spec.md	R-08	COVERED
+296-a-per-file-budget-ceiling-is-parsed-and.spec.md	R-01	COVERED
+296-a-per-file-budget-ceiling-is-parsed-and.spec.md	R-02	COVERED
+296-a-per-file-budget-ceiling-is-parsed-and.spec.md	R-03	COVERED

@@ -9,6 +9,11 @@
 #   BUDGET<TAB><tasks-label><TAB>files=<expected>/<actual><TAB>lines=<expected>/<actual><TAB>margin=<N>
 #   SCOPE<TAB><file>
 #   MALFORMED<TAB>task <N><TAB><declaration text>   (issue #246)
+#   FILEBUDGET<TAB><tasks-label><TAB><file><TAB>lines=<expected>/<actual><TAB>margin=<N>   (issue #296; ADR-0189)
+# A file's ceiling is the SUM of every selected group naming it, single-ceiling groups included
+# (ADR-0189 §D2); a finding fires only when at least one contributing group came from a task that
+# declared TWO OR MORE groups (§D3). The name deliberately does not begin with BUDGET, so an
+# un-updated consumer's anchored `^BUDGET` grep cannot half-read it.
 # Caller idiom: never `[ -n "$out" ]` to decide whether something was found — true even on a bare
 # CLEAN. Never `n=$(... | grep -c '^BUDGET' || echo 0)` — grep -c prints 0 AND exits 1 on no
 # match, so the fallback also fires and the substitution yields the two-line string "0\n0"; use
@@ -120,6 +125,7 @@ trap 'rm -rf "$TMPD"' EXIT
 BUDGET_FILE="$TMPD/budget.tsv";  : >"$BUDGET_FILE"
 MALFORMED_FILE="$TMPD/malformed.tsv"; : >"$MALFORMED_FILE"
 SCOPE_GLOBS="$TMPD/scope_globs.txt"; : >"$SCOPE_GLOBS"
+GROUPS_FILE="$TMPD/groups.tsv"; : >"$GROUPS_FILE"
 
 # --- plan parser: per-task Budget: (files, line ceiling), whole-plan Scope: globs -----------------
 # is_task_opener() comes from plan-task-predicate.awk, and trim()/parse_budget()/looks_like_budget()/
@@ -150,9 +156,10 @@ BEGIN { in_task = 0; cur = ""; got = 0 }
   if (in_task && !got) {
     if (match(line, /[Bb]udget:/)) {
       rest = trim(substr(line, RSTART + RLENGTH))
-      parsed = parse_budget(rest)
+      parsed = parse_budget(rest, g)
       if (parsed != "") {
         print cur "\t" parsed >> BUDGET_FILE
+        for (i = 1; i <= g[0]; i++) print cur "\t" g[i] "\t" g[0] >> GROUPS_FILE
         got = 1
       } else if (looks_like_budget(rest)) {
         # A recognisable ATTEMPT that does not parse. Reported, never half-read (issue #246).
@@ -165,6 +172,7 @@ BEGIN { in_task = 0; cur = ""; got = 0 }
 AWKEOF
 
 awk -v BUDGET_FILE="$BUDGET_FILE" -v SCOPE_FILE="$SCOPE_GLOBS" -v MALFORMED_FILE="$MALFORMED_FILE" \
+    -v GROUPS_FILE="$GROUPS_FILE" \
     -f "$PREDICATE" -f "$BUDGET_PARSER" -f "$TMPD/plan_parse.awk" "$PLAN"
 
 # --- MALFORMED: a recognisable attempt at a declaration that does not parse (issue #246) --------
@@ -239,6 +247,24 @@ while IFS="$(printf '\t')" read -r _t _files _lines; do
   LINES_EXPECTED=$((LINES_EXPECTED + _lines))
 done <"$BUDGET_FILE"
 
+# --- per-file ceiling/reportability table (issue #296; ADR-0189 §D2/§D3) --------------------------
+# One row per <file, group>: ceiling(f) is the SUM of every selected group naming f (§D2);
+# reportable is 1 only when that group's OWN task declared >= 2 groups (§D3) — a file gets
+# reportable=1 if ANY contributing group qualifies, even when another group naming it does not.
+CEIL_RAW="$TMPD/ceil_raw.tsv"; : >"$CEIL_RAW"
+while IFS="$(printf '\t')" read -r _t _files _ceil _ng; do
+  [ -n "$_t" ] || continue
+  grep -qxF "$_t" "$TASK_SET" 2>/dev/null || continue
+  _reportable=0
+  [ "$_ng" -ge 2 ] 2>/dev/null && _reportable=1
+  _oldifs="$IFS"; IFS=','
+  for _f in $_files; do
+    _f=$(printf '%s' "$_f" | awk '{gsub(/^[ \t]+|[ \t]+$/,""); print}')
+    [ -n "$_f" ] && printf '%s\t%s\t%s\n' "$_f" "$_ceil" "$_reportable" >>"$CEIL_RAW"
+  done
+  IFS="$_oldifs"
+done <"$GROUPS_FILE"
+
 # --- consume stdin (git diff --stat output), excluding chain-owned files by basename -------------
 STAT_IN="$TMPD/stat_in.txt"
 cat >"$STAT_IN"
@@ -287,6 +313,7 @@ glob_match() {
 }
 
 OUT="$TMPD/out.txt"; : >"$OUT"
+ACTUAL_FILE="$TMPD/actual.tsv"; : >"$ACTUAL_FILE"
 
 FILES_ACTUAL=0
 LINES_ACTUAL=0
@@ -314,6 +341,7 @@ while IFS="$(printf '\t')" read -r _path _cnt; do
   if grep -qxF "$_lookup" "$MASTER_SCOPE" 2>/dev/null || glob_match "$_lookup"; then
     FILES_ACTUAL=$((FILES_ACTUAL + 1))
     LINES_ACTUAL=$((LINES_ACTUAL + _cnt))
+    printf '%s\t%s\n' "$_lookup" "$_cnt" >>"$ACTUAL_FILE"
   else
     printf 'SCOPE\t%s\n' "$_path" >>"$OUT"
   fi
@@ -326,6 +354,19 @@ if [ "$BUDGET_LIVE" -eq 1 ]; then
     [ "$MARGIN" -lt 0 ] && MARGIN=0
     printf 'BUDGET\t%s\tfiles=%s/%s\tlines=%s/%s\tmargin=%s\n' \
       "$TASKS" "$FILES_EXPECTED" "$FILES_ACTUAL" "$LINES_EXPECTED" "$LINES_ACTUAL" "$MARGIN" >>"$OUT"
+  fi
+
+  # --- FILEBUDGET: per-file ceiling attribution (issue #296; ADR-0189) ---------------------------
+  if [ -s "$CEIL_RAW" ] && [ -s "$ACTUAL_FILE" ]; then
+    awk -F'\t' -v TASKS="$TASKS" '
+      FNR == NR { ceil[$1] += $2; if ($3 == "1") rep[$1] = 1; next }
+      { act[$1] += $2 }
+      END {
+        for (f in act)
+          if ((f in rep) && act[f] > ceil[f])
+            printf "FILEBUDGET\t%s\t%s\tlines=%d/%d\tmargin=%d\n", TASKS, f, ceil[f], act[f], act[f] - ceil[f]
+      }
+    ' "$CEIL_RAW" "$ACTUAL_FILE" | sort >>"$OUT"
   fi
 fi
 

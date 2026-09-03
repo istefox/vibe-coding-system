@@ -25,6 +25,12 @@
 # MALFORMED_FILE and SCOPE_FILE output before and after.
 #
 # Bash 3.2 / POSIX awk clean: no gensub, no length(array), no --re-interval dependency.
+#
+# `groups` is an OPTIONAL out-parameter on parse_budget (VCS-057/ADR-0189 §D1, issue #296): a
+# one-argument call (`parse_budget(rest)`) still works exactly as before, since `groups` then binds
+# to a discarded local array. The return value is DELIBERATELY UNCHANGED, so the two existing
+# consumers (diff-budget-check.sh, step5-brief.sh) and BK9's frozen function-level comparison need
+# no edit — one producer, widened, not forked (rule 6).
 
 function trim(s) { gsub(/^[ \t]+/,"",s); gsub(/[ \t]+$/,"",s); return s }
 
@@ -43,7 +49,8 @@ function trim(s) { gsub(/^[ \t]+/,"",s); gsub(/[ \t]+$/,"",s); return s }
 # The walk handles both, and mixed forms too: a group's preceding text may itself be a
 # comma-separated list sharing that ceiling, which is exactly the documented form seen as one
 # entry. Ceilings are SUMMED, because the downstream check compares per-task totals.
-function parse_budget(rest,   s, pre, paren, inner, low, num, files, total, rem) {
+function parse_budget(rest, groups,   s, pre, paren, inner, low, num, files, total, rem, ng) {
+  groups[0] = 0; ng = 0
   s = rest; files = ""; total = 0
   while (match(s, /\([^()]*\)/)) {
     pre   = substr(s, 1, RSTART - 1)
@@ -58,12 +65,14 @@ function parse_budget(rest,   s, pre, paren, inner, low, num, files, total, rem)
     num = substr(inner, RSTART, RLENGTH)
     total += num
     files = (files == "" ? pre : files ", " pre)
+    ng++; groups[ng] = pre "\t" num
   }
   # Anything after the last group that is not a separator or markdown emphasis means the line did
   # NOT fully parse. Without this, `Budget: a.md (~50 lines), b.md` would silently drop b.md — the
   # half-read this function exists to stop.
   rem = s; gsub(/[ \t,*_`.]/, "", rem)
   if (files == "" || rem != "") return ""
+  groups[0] = ng
   return files "\t" total
 }
 
