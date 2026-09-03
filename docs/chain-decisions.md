@@ -5587,3 +5587,19 @@ Key architectural decisions:
 - **R-02's proof is two comparisons, not one** — a frozen-function comparison (§BK9's own method, blind to call-site changes) plus a whole-corpus script-level set-equality comparison, because this feature's change lives mostly in the call site, exactly §BK9's blind spot.
 
 Detail: `docs/architecture/ADR-0189-a-per-file-budget-ceiling-is-parsed-and.md`.
+
+## Decisions from spec-coverage.sh's O(1) forks and parallel Step 5→6 gates (ADR-0190)
+
+Fix for a reported 3-15 minute Step 5→6 wait (no GitHub issue filed — reported directly in chat).
+`spec-coverage.sh` at `staging/plugin/skills/concept-to-code/scripts/`.
+
+Key architectural decisions:
+- **The per-id boundary check becomes a one-time precompute, not a smarter per-id search.** `grep_boundary_test()`/`grep_boundary_test_claimed()` forked a population-wide grep once per declared id — O(ids × population). Replaced by two small lookup sets (`COVERED_IDS`, `CLAIMED_IDS`) built by a single awk pass each, with the main loop reduced to the same fixed-string `-xF` lookup idiom already used for `$PLAN_TOKENS`/`$NOTEST`.
+- **Token extraction reuses `plan_parse.awk`'s existing `extract_tokens()`, not a new regex.** A second, independently-written token shape could silently diverge from `$IDS`'s own `strict_ok` predicate; reusing the same function keeps both in lockstep by construction.
+- **The precompute's insertion point is dictated by `$TESTFILES_SCOPED`'s last mutation, not by where the removed functions happened to live.** The SCOPE-EMPTY fallback can still overwrite `$TESTFILES_SCOPED` after the scope-classification loop — precomputing before that resolves would silently read stale data.
+- **Three independent Step 5→6 gates (weakening-scan, spec-coverage, diff-budget-check) now dispatch as parallel Bash calls, Workflow path only** — confirmed true siblings (disjoint shell state, independent inputs) by reading the actual call sites, not the summary contract table that lists all four Step 5→6-family scripts together. `interface-check.sh` stays sequential: it runs after Step 6's own fix cycle, on a diff that cycle changed.
+- **The parallel-dispatch instruction reuses Gate 5.06's existing caveat verbatim** — "an instruction, not a guarantee" (ADR-0139) — rather than restating a new one, since it's the identical limitation (prose an LLM orchestrator follows, no harness enforcement).
+- **The regex reaching awk's precompute must travel via `ENVIRON[]`, never `-v`.** `$OWN_LINE_RE` carries a backslash-escaped literal dot from the plan basename; POSIX `-v var=value` re-interprets that escape the way a string literal would, silently turning the literal dot into an unescaped wildcard — measured on this machine's BWK awk, reproduced end-to-end, and confirmed to misreport a near-miss citation as this feature's own coverage. Caught before this fix ever reached the real repo: one of the parallel candidate implementations discovered and fixed exactly this defect independently; the candidate initially selected as the "winner" had not, and RZ11 (a new planted regression test) now pins it.
+- **Verification is two independent re-runs of the same 179+25-assertion suite** (once inside the implementing agent's own worktree, once outside it in the reviewing session) rather than trusting one — the same "measure the premise" discipline (rule 13) applied to the fix's own claim of correctness, not just to the original diagnosis.
+
+Detail: `docs/architecture/ADR-0190-spec-coverage-o1-forks-and-parallel-step5-6-gates.md`.

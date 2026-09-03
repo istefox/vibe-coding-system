@@ -810,12 +810,21 @@ After the workflow completes:
 2. If the file is absent → fall back to `git diff + test run` directly (do NOT re-dispatch).
 3. If `tasks_failed` is non-empty OR `test_result` is `red` → failure signal. Present to
    user; do NOT transition to `step_6_review` without user acknowledgment.
-4. Run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)` block once, before
-   deciding the transition.
-5. Run the `Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)` block once, before
-   deciding the transition.
-6. Run the `Diff budget and scope check — Step 5 checkpoints (ADR-0052)` block once, over the
-   cumulative diff and every completed task — it never affects the transition (advisory only).
+4-6. **Dispatch these three gates together, in parallel — issue their three Bash invocations in
+   the same message, not one after another.** They are independent siblings: none reads another's
+   output, and each owns disjoint shell state (`_wk`/`_sus` vs. `_scov`/`_out`/`_rc` vs.
+   `_dbudget`/`_db`) and its own input (each gate resolves and pipes/passes its own arguments).
+   Wait for all three before evaluating any policy below — **and this is an instruction, not a
+   guarantee**, the same caveat Gate 5.06's parallel Agent dispatch already states
+   (`hitl-gates.md`, ADR-0139): each gate still runs entirely its own internal logic (e.g.
+   `spec-coverage.sh`'s plain-bullet self-repair and re-run) within its own invocation —
+   parallelizing across gates changes nothing about what happens inside one.
+   4. Run the `Anti-test-weakening gate — Step 5 → Step 6 (ADR-0047)` block once, before
+      deciding the transition.
+   5. Run the `Requirement-ID coverage gate — Step 5 → Step 6 (ADR-0048)` block once, before
+      deciding the transition.
+   6. Run the `Diff budget and scope check — Step 5 checkpoints (ADR-0052)` block once, over the
+      cumulative diff and every completed task — it never affects the transition (advisory only).
 7. Run the `Task-level metrics — Step 5 checkpoints (ADR-0064, issue #118)` block once, over the
    same cumulative diff and every completed task — it never affects the transition and is not
    surfaced at Gate 5 (metrics, not findings, ADR-0064 §D2).

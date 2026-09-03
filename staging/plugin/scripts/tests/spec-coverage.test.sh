@@ -1437,7 +1437,7 @@ else
   bad "RX4: expected exit 3 + MALFORMED R-01 for a 5-char no-test: reason — got rc=$RC out=[$OUT]"
 fi
 
-# plant: RX5 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if [ -n "$TROOT" ] && grep_boundary_test "$id"; then | if [ -n "$TROOT" ] && false && grep_boundary_test "$id"; then
+# plant: RX5 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if [ -n "$TROOT" ] && grep -qxF "$id" "$COVERED_IDS" 2>/dev/null; then | if [ -n "$TROOT" ] && false && grep -qxF "$id" "$COVERED_IDS" 2>/dev/null; then
 # plant: RH1 | plugin/skills/interview-driver/SKILL.md | ## Success criteria | ## Criteri di successo
 cat >"$TMP/rx5.spec.md" <<'EOF'
 ## Success criteria
@@ -1996,7 +1996,7 @@ cat >"$TMP/rz6-tests/alpha.test.sh" <<'EOF'
 # names the plan back: rz6-plan.md
 # covers R-01 — this belongs to issue #999, not this feature
 EOF
-# plant: RZ6 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | grep -qE "$OWN_LINE_RE" && return 0 | grep -qE "." && return 0
+# plant: RZ6 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | ($0 ~ OWN_RE) | (1)
 run_scov --spec "$TMP/rz6.spec.md" --plan "$TMP/rz6-plan.md" --tests-root "$TMP/rz6-tests"
 if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
   ok "RZ6 (VCS-035): a matching line carrying a foreign claim (#999) and no own-key on that line is not coverage -> UNSCOPED	R-01	1, exit 1. Pre-fix this exact fixture reported COVERED, exit 0."
@@ -2019,7 +2019,7 @@ EOF
 cat >"$TMP/rz7-tests/alpha.test.sh" <<'EOF'
 # covers R-01 — carried over from issue #999, now this feature's own harness, see rz7-plan.md
 EOF
-# plant: RZ7 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | grep -qE "$OWN_LINE_RE" && return 0 | grep -qE "NEVERMATCH_RZ7" && return 0
+# plant: RZ7 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | ($0 ~ OWN_RE) | ($0 ~ "NEVERMATCH_RZ7")
 run_scov --spec "$TMP/rz7.spec.md" --plan "$TMP/rz7-plan.md" --tests-root "$TMP/rz7-tests"
 if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
   ok "RZ7 (positive twin of RZ6, CLAUDE.md rule 8): a line carrying BOTH a foreign claim and this feature's own-key -> COVERED, exit 0. Without this twin, RZ6 is satisfiable by a filter that discards every claim-bearing line regardless of ownership."
@@ -2098,6 +2098,137 @@ if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; the
   ok "RZ10 (positive twin of RZ9, CLAUDE.md rule 8): a line citing an ADR THIS feature's own plan also cites -> COVERED, exit 0. Without this twin, RZ9 is satisfiable by a filter that discards every ADR-bearing line regardless of ownership — the rejected naive design."
 else
   bad "RZ10: expected exit 0 + COVERED R-01 (own-plan ADR citation on the line beats the generic ADR filter) — got rc=$RC out=[$OUT]"
+fi
+
+# RZ11 — VCS-035's own-key check must compare a LITERAL dot in the plan basename, not a wildcard.
+# $OWN_LINE_RE is built from $PLAN_BN_ESC (a sed-escaped plan basename, so a real "." in the
+# filename becomes the ERE escape "\."). The COVERED_IDS precompute (perf-final-books-slowdown)
+# reads $OWN_LINE_RE inside an awk program; if that string ever reaches awk via `-v` instead of
+# `ENVIRON[]`, POSIX `-v var=value` re-interprets the backslash the way a string literal would and
+# "\." silently becomes an unescaped "." — a wildcard matching ANY character, not just a literal
+# dot. Fixture: a plan named "rz11.own.plan.md" (two dots) and a test line carrying a foreign claim
+# (#999) plus a NEAR-MISS of the plan's own basename with a stand-in character where each dot
+# should be ("rz11Xown.planXmd") — same length, wrong characters. A correct literal-dot match must
+# NOT recognise this as the plan's own-key, so the line stays a bare foreign claim -> UNSCOPED. A
+# wildcarded "-v"-style match WOULD recognise it (any two characters "fill" the two "." wildcards)
+# and misreport COVERED — reproduced and confirmed against this exact fixture before this test was
+# written, both in isolation (`awk -v RE='a\.b'` matches "axb" on this machine's BWK awk) and
+# end-to-end through this script.
+mkdir -p "$TMP/rz11-tests"
+cat >"$TMP/rz11.spec.md" <<'EOF'
+## Success criteria
+- [ ] R-01 — first
+EOF
+cat >"$TMP/rz11.own.plan.md" <<'EOF'
+### Task 1 — do thing (R-01)
+Test coverage lives in alpha.test.sh.
+EOF
+cat >"$TMP/rz11-tests/alpha.test.sh" <<'EOF'
+# names the plan back: rz11.own.plan.md
+# covers R-01 — this belongs to issue #999, not this feature, see rz11Xown.planXmd
+EOF
+# plant: RZ11 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | is_claim = ($0 ~ ENVIRON["CLAIM_LINE_RE"]) if (!is_claim || (is_claim && ($0 ~ ENVIRON["OWN_LINE_RE"]))) extract_tokens($0) | is_claim = ($0 ~ CLAIM_RE)\nif (!is_claim || (is_claim && ($0 ~ OWN_RE))) extract_tokens($0)
+run_scov --spec "$TMP/rz11.spec.md" --plan "$TMP/rz11.own.plan.md" --tests-root "$TMP/rz11-tests"
+if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
+  ok "RZ11 (VCS-035, escaping): a near-miss of the plan's own basename (stand-in characters where its literal dots are) does not count as an own-key citation -> UNSCOPED	R-01	1, exit 1. A '-v'-passed \$OWN_LINE_RE would wildcard-match this and misreport COVERED."
+else
+  bad "RZ11: expected exit 1 + UNSCOPED R-01 1 (a near-miss of the plan basename, wrong chars where its dots are, must not match as an own-key) — got rc=$RC out=[$OUT]"
+fi
+
+# ==================================================================================================
+# RW. Performance (issue perf-final-books-slowdown). grep_boundary_test()/grep_boundary_test_claimed()
+# used to fork `xargs -0 grep -hE "<id-anchored-pattern>"` over the WHOLE scoped/unscoped test-file
+# population ONCE PER DECLARED ID inside the main loop — O(ids x population) forks, measured as the
+# dominant cost of a 3-15 minute Step 5 -> Step 6 gate on a real project. Both were replaced by a
+# one-time, single-pass awk precompute (COVERED_IDS / CLAIMED_IDS). RW1 is the PRIMARY guard: an
+# EXACT structural count (CLAUDE.md rule 10 — prefer a structural count over a timing floor), proven
+# against a real regression by its own plant. RW2 is a SECONDARY, generous wall-clock ceiling,
+# belt-and-suspenders only.
+# ==================================================================================================
+
+# RW0 — shared fixture for RW1: 24 declared ids (>= 20) and 32 discovered test files (>= 30). The
+# plan cites every id on one task line but names no test file basename at all, so the SCOPE-EMPTY
+# fallback (ADR-0138 §D2, unchanged by this fix) populates $TESTFILES_SCOPED from the whole
+# discovered population — both boundary-coverage precompute branches (COVERED_IDS and CLAIMED_IDS)
+# actually run, which is what RW1 measures.
+{
+  echo "## Success criteria"
+  _rw_i=1
+  while [ "$_rw_i" -le 24 ]; do
+    printf -- '- [ ] R-%02d — item %d\n' "$_rw_i" "$_rw_i"
+    _rw_i=$((_rw_i + 1))
+  done
+} >"$TMP/rw.spec.md"
+{
+  printf '### Task 1 — cover everything ('
+  _rw_i=1
+  while [ "$_rw_i" -le 24 ]; do
+    printf 'R-%02d' "$_rw_i"
+    [ "$_rw_i" -lt 24 ] && printf ', '
+    _rw_i=$((_rw_i + 1))
+  done
+  printf ')\n'
+} >"$TMP/rw-plan.md"
+mkdir -p "$TMP/rw-tests"
+_rw_i=1
+while [ "$_rw_i" -le 32 ]; do
+  _rw_mod=$(( (_rw_i % 24) + 1 ))
+  printf '# covers R-%02d\n' "$_rw_mod" >"$TMP/rw-tests/file$_rw_i.test.sh"
+  _rw_i=$((_rw_i + 1))
+done
+
+# plant: RW1 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | if grep -qxF "$id" "$COVERED_IDS" 2>/dev/null; then | if tr '\n' '\0' <"$TESTFILES_SCOPED"| xargs -0 grep -qE "$id" 2>/dev/null; then
+RW_TRACE="$TMP/rw-trace.txt"
+bash -x "$SCOV" --spec "$TMP/rw.spec.md" --plan "$TMP/rw-plan.md" --tests-root "$TMP/rw-tests" \
+  >"$TMP/rw-out.txt" 2>"$RW_TRACE"
+RW_XARGS_N=$(grep -c 'xargs' "$RW_TRACE" 2>/dev/null); RW_XARGS_N=${RW_XARGS_N:-0}
+if [ "$RW_XARGS_N" -le 5 ]; then
+  ok "RW1 (structural fork-count guard, issue perf-final-books-slowdown): 24 declared ids x 32 discovered test files fork xargs only $RW_XARGS_N time(s) in the bash -x trace — bounded by a small constant, NOT scaling with id count. The removed grep_boundary_test()/grep_boundary_test_claimed() shape forked one xargs pipeline PER ID; this pins that the O(ids) fork pattern has not returned."
+else
+  bad "RW1: expected <= 5 xargs invocation(s) in the bash -x trace (a fork count independent of id count) — got $RW_XARGS_N. This is the O(ids) fork regression the perf fix removed."
+fi
+
+# RW2 — SECONDARY, generous wall-clock ceiling (CLAUDE.md rule 10: a floor/ceiling is kept only as a
+# vacuity guard, stated as such here, never the primary pin — RW1 above is the primary pin). Fixture:
+# 60 declared ids x 300 discovered test files, the scale the fix's plan named for a before/after
+# measurement. Measured on the development machine 2026-09-03: this exact fixture ran in ~2.7s AFTER
+# the fix (~3.4s before it, on the unmodified pre-fix script) — the ceiling below is a generous ~10x
+# that measurement, on purpose: this assertion is a coarse, environment-sensitive smoke check, and a
+# FAILURE here means "investigate" (a slow CI runner, a noisy neighbour), never "this is a confirmed
+# regression" — RW1's exact fork count is what carries that claim.
+{
+  echo "## Success criteria"
+  _rw2_i=1
+  while [ "$_rw2_i" -le 60 ]; do
+    printf -- '- [ ] R-%02d — item %d\n' "$_rw2_i" "$_rw2_i"
+    _rw2_i=$((_rw2_i + 1))
+  done
+} >"$TMP/rw2.spec.md"
+{
+  printf '### Task 1 — cover everything ('
+  _rw2_i=1
+  while [ "$_rw2_i" -le 60 ]; do
+    printf 'R-%02d' "$_rw2_i"
+    [ "$_rw2_i" -lt 60 ] && printf ', '
+    _rw2_i=$((_rw2_i + 1))
+  done
+  printf ')\n'
+} >"$TMP/rw2-plan.md"
+mkdir -p "$TMP/rw2-tests"
+_rw2_i=1
+while [ "$_rw2_i" -le 300 ]; do
+  _rw2_mod=$(( (_rw2_i % 60) + 1 ))
+  printf '# covers R-%02d\n' "$_rw2_mod" >"$TMP/rw2-tests/file$_rw2_i.test.sh"
+  _rw2_i=$((_rw2_i + 1))
+done
+
+SECONDS=0
+run_scov --spec "$TMP/rw2.spec.md" --plan "$TMP/rw2-plan.md" --tests-root "$TMP/rw2-tests"
+RW2_ELAPSED=$SECONDS
+if [ "$RC" -eq 0 ] && [ "$RW2_ELAPSED" -le 30 ]; then
+  ok "RW2 (secondary wall-clock guard, generous, flaky-if-red — investigate, do not treat as an automatic regression): 60 ids x 300 files completed in ${RW2_ELAPSED}s (<= 30s ceiling)"
+else
+  bad "RW2: 60 ids x 300 files took ${RW2_ELAPSED}s (ceiling 30s) or exited non-zero (rc=$RC) — investigate before treating this as a confirmed regression (RW1 is the exact pin)"
 fi
 
 echo "----"
