@@ -13,7 +13,12 @@ set -u
 unset CLAUDE_CODE_SESSION_ID
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
+# hook-verify-workflow.sh is a zone anomaly (issue #212, sync-to-claude.sh PAIRS): staging keeps
+# it flat here, but deployment remaps it to skills/concept-to-code/scripts/ while this test stays
+# in hooks/tests/. The flat sibling path resolves in staging; the fallback resolves once deployed
+# (issue #553 — the test was reading the pre-remap sibling path and getting exit 127 on every case).
 V="$SCRIPTS/hook-verify-workflow.sh"
+[ -f "$V" ] || V=$(cd "$SCRIPTS/../skills/concept-to-code/scripts" && pwd)/hook-verify-workflow.sh
 SKILL_MD=$(cd "$SCRIPTS/../skills/concept-to-code" && pwd)/SKILL.md
 # VCS-047/ADR-0174: Step 5's exit-code documentation moved into references/step5-implementation.md.
 STEP5_REF=$(cd "$SCRIPTS/../skills/concept-to-code" && pwd)/references/step5-implementation.md
