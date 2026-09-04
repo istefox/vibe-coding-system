@@ -662,50 +662,106 @@ HALF2_DROPPED_N=$(count_re . "$HALF2_DROPPED")
 OWNED_N=$(count_re . "$TESTFILES_OWNED")
 UNSCOPED_POP_N=$(count_re . "$UNSCOPED_POP")
 
-# A file is admitted to scope as a WHOLE (ADR-0138/0154) but a single R-NN token inside it is not
-# automatically this feature's (VCS-035). A matching LINE that carries a foreign claim token
-# ($CLAIM_LINE_RE — "#<n>" or "ADR-NNNN") and does NOT carry an own-key ($OWN_LINE_RE) on that same
-# line is not coverage — it is another feature's requirement id, quoted inside a file that happens
-# to belong to this one too. A line carrying BOTH (the RZ2 shape: "carried over from issue #999, now
-# this feature's own harness, see <plan-basename>") is KEPT: ownership beats a foreign claim at line
-# granularity exactly as it already does at file granularity. A line carrying NO claim token at all
-# is KEPT unconditionally — the ordinary case, 864 of 972 R-NN mentions in this repo (measured
-# 2026-08-24), which is why a same-line-STRICT design (require an own-key on every covering line)
-# was rejected: it would have discarded that majority.
-grep_boundary_test() {
-  _id="$1"
-  [ -s "$TESTFILES_SCOPED" ] || return 1
-  _gbt_lines=$(tr '\n' '\0' <"$TESTFILES_SCOPED" \
-    | xargs -0 grep -hE "(^|[^A-Za-z0-9_])${_id}([^0-9]|\$)" 2>/dev/null)
-  [ -n "$_gbt_lines" ] || return 1
-  printf '%s\n' "$_gbt_lines" | grep -vE "$CLAIM_LINE_RE" | grep -q '[^[:space:]]' && return 0
-  printf '%s\n' "$_gbt_lines" | grep -E "$CLAIM_LINE_RE" | grep -qE "$OWN_LINE_RE" && return 0
-  return 1
+# PERFORMANCE — a ONE-TIME, single-pass precompute of the two boundary predicates below, replacing
+# what used to be two functions (grep_boundary_test / grep_boundary_test_claimed) that each forked
+# `xargs -0 grep -hE "<id-anchored-pattern>"` over the WHOLE scoped/unscoped test-file population,
+# called ONCE PER DECLARED ID inside the main loop below — O(ids x population) forks, measured as
+# the dominant cost of a 3-15 minute Step 5 -> Step 6 gate on a real project. The MEANING of both
+# predicates is UNCHANGED (see each population's own comment below); only how often the underlying
+# scan runs. The main loop now reads $COVERED_IDS / $CLAIMED_IDS with the SAME `grep -qxF`
+# fixed-string idiom this file already uses for $PLAN_TOKENS/$NOTEST.
+#
+# extract_tokens() — loaded as its own awk program below, composed the same way $PREDICATE is — is a
+# COPY of plan_parse.awk's function of the same name above. It implements the exact scan-anywhere,
+# exactly-two-digit R-NN shape that matches $IDS's own strict_ok predicate. Kept in lockstep by
+# hand: a divergence here would silently disagree with what $IDS actually contains.
+cat >"$TMPD/extract_tokens.awk" <<'AWKEOF'
+function extract_tokens(l,    i, p, pos, cb, leftok, d1, d2, after, rightok, tok) {
+  i = 1
+  while (1) {
+    p = index(substr(l, i), "R-")
+    if (p == 0) break
+    pos = i + p - 1
+    if (pos == 1) leftok = 1
+    else {
+      cb = substr(l, pos - 1, 1)
+      leftok = (cb !~ /[A-Za-z0-9_]/)
+    }
+    d1 = substr(l, pos + 2, 1)
+    d2 = substr(l, pos + 3, 1)
+    if (leftok && d1 ~ /[0-9]/ && d2 ~ /[0-9]/) {
+      after = substr(l, pos + 4, 1)
+      rightok = (after == "" || after !~ /[0-9]/)
+      if (rightok) {
+        tok = substr(l, pos, 4)
+        print tok >> TOKENS_FILE
+      }
+    }
+    i = pos + 2
+  }
 }
+AWKEOF
 
-# The unscoped counterpart — reads $UNSCOPED_POP, the half-1 ∪ owned union built above: every
-# discovered file that either the plan names or that claims this feature. Used only to tell UNCOVERED
-# apart from UNSCOPED — ADR-0138 §D3's two-row table, with ADR-0157 §D1's correction to WHICH
-# population that question is asked of.
-#
-# It read the FULL discovered population until issue #487, and the name said so. That is why it is
-# renamed rather than quietly repointed: a helper called `_all` that reads a filtered set is the kind
-# of half-true name a later reader trusts. Both halves of the answer now come from files that claim
-# this feature, so the two verdicts finally mean what their remedies say — UNSCOPED "this feature has
-# a test for it, name the file in your plan", UNCOVERED "no test of this feature mentions it".
-#
-# VCS-035 — deliberately NOT given the line filter grep_boundary_test() above carries. Two reasons.
-# First, membership: RZ3 pins that half-1 (the plan names the file) is UNCONDITIONAL — filtering
-# here would drop a file from $UNSCOPED_POP for a line-level reason, which changes MEMBERSHIP, not
-# just a verdict, and breaks that guarantee. Second, harm: this helper only decides UNSCOPED vs.
-# UNCOVERED, and both already mean "not proven" — there is no false-COVERED here to correct, so
-# filtering buys no correctness on the axis VCS-035 exists to fix, only a smaller blast radius to
-# manage for no gain.
-grep_boundary_test_claimed() {
-  _id="$1"
-  [ -s "$UNSCOPED_POP" ] || return 1
-  tr '\n' '\0' <"$UNSCOPED_POP" | xargs -0 grep -qE "(^|[^A-Za-z0-9_])${_id}([^0-9]|\$)" 2>/dev/null
+COVERED_IDS="$TMPD/covered_ids.txt"; : >"$COVERED_IDS"
+CLAIMED_IDS="$TMPD/claimed_ids.txt"; : >"$CLAIMED_IDS"
+if [ -n "$TROOT" ]; then
+  # COVERED_IDS (replaces grep_boundary_test()). A file is admitted to scope as a WHOLE
+  # (ADR-0138/0154) but a single R-NN token inside it is not automatically this feature's
+  # (VCS-035). A LINE qualifies as coverage evidence exactly when it carries no foreign-claim token
+  # ($CLAIM_LINE_RE — "#<n>" or "ADR-NNNN") at all, OR it carries one AND also carries this
+  # feature's own-key ($OWN_LINE_RE) on that SAME line — the exact OR of grep_boundary_test()'s two
+  # former branches (a line carrying BOTH, the RZ2 shape: "carried over from issue #999, now this
+  # feature's own harness, see <plan-basename>", qualifies: ownership beats a foreign claim at line
+  # granularity exactly as it already does at file granularity), now evaluated once per LINE instead
+  # of once per (line x id). A line carrying no claim token at all is KEPT unconditionally — the
+  # ordinary case, 864 of 972 R-NN mentions in this repo (measured 2026-08-24), which is why a
+  # same-line-STRICT design (require an own-key on every covering line) was rejected: it would have
+  # discarded that majority. Every id-shaped token on a qualifying line is covered; a line that does
+  # not qualify contributes nothing — the id may still be covered via a different, qualifying line
+  # elsewhere in scope.
+  if [ -s "$TESTFILES_SCOPED" ]; then
+    COVERED_IDS_RAW="$TMPD/covered_ids_raw.txt"; : >"$COVERED_IDS_RAW"
+    # $CLAIM_LINE_RE/$OWN_LINE_RE reach awk via ENVIRON, NOT `-v`: $OWN_LINE_RE can carry a
+    # backslash-escaped literal (PLAN_BN_ESC's `\.` etc, folded into its key set) and POSIX
+    # `-v var=value` processes backslash escapes the same way a string literal does — measured on
+    # this machine's BWK awk, `-v RE='a\.b'` silently drops the backslash and the `.` becomes a
+    # wildcard, not a literal dot. `ENVIRON[]` is a plain, unprocessed copy of the value.
+    cat >"$TMPD/covered_ids_scan.awk" <<'AWKEOF'
+{
+  is_claim = ($0 ~ ENVIRON["CLAIM_LINE_RE"])
+  if (!is_claim || (is_claim && ($0 ~ ENVIRON["OWN_LINE_RE"]))) extract_tokens($0)
 }
+AWKEOF
+    tr '\n' '\0' <"$TESTFILES_SCOPED" \
+      | CLAIM_LINE_RE="$CLAIM_LINE_RE" OWN_LINE_RE="$OWN_LINE_RE" \
+        xargs -0 awk -v TOKENS_FILE="$COVERED_IDS_RAW" \
+          -f "$TMPD/extract_tokens.awk" -f "$TMPD/covered_ids_scan.awk" 2>/dev/null
+    sort -u "$COVERED_IDS_RAW" >"$COVERED_IDS" 2>/dev/null || : >"$COVERED_IDS"
+  fi
+
+  # CLAIMED_IDS (replaces grep_boundary_test_claimed()) — reads $UNSCOPED_POP, the half-1 ∪ owned
+  # union built above: every discovered file that either the plan names or that claims this
+  # feature. Used only to tell UNCOVERED apart from UNSCOPED — ADR-0138 §D3's two-row table, with
+  # ADR-0157 §D1's correction to WHICH population that question is asked of.
+  #
+  # UNFILTERED, deliberately — VCS-035 does NOT apply here, unchanged from the function this
+  # replaces. Two reasons. First, membership: RZ3 pins that half-1 (the plan names the file) is
+  # UNCONDITIONAL — filtering here would drop a file from $UNSCOPED_POP for a line-level reason,
+  # which changes MEMBERSHIP, not just a verdict, and breaks that guarantee. Second, harm: this
+  # predicate only decides UNSCOPED vs. UNCOVERED, and both already mean "not proven" — there is no
+  # false-COVERED here to correct, so filtering buys no correctness on the axis VCS-035 exists to
+  # fix, only a smaller blast radius to manage for no gain.
+  if [ -s "$UNSCOPED_POP" ]; then
+    CLAIMED_IDS_RAW="$TMPD/claimed_ids_raw.txt"; : >"$CLAIMED_IDS_RAW"
+    cat >"$TMPD/claimed_ids_scan.awk" <<'AWKEOF'
+{ extract_tokens($0) }
+AWKEOF
+    tr '\n' '\0' <"$UNSCOPED_POP" \
+      | xargs -0 awk -v TOKENS_FILE="$CLAIMED_IDS_RAW" \
+          -f "$TMPD/extract_tokens.awk" -f "$TMPD/claimed_ids_scan.awk" 2>/dev/null
+    sort -u "$CLAIMED_IDS_RAW" >"$CLAIMED_IDS" 2>/dev/null || : >"$CLAIMED_IDS"
+  fi
+fi
 
 OUT="$TMPD/out.txt"; : >"$OUT"
 STALEWAIVER="$TMPD/stalewaiver.txt"; : >"$STALEWAIVER"
@@ -724,7 +780,7 @@ while IFS="$TAB" read -r id _text; do
   # below: an exempted id that is ALSO plan-missing must still surface
   # `UNCOVERED<TAB>R-NN<TAB>plan`, never read as covered by omission.
   if grep -qxF "$id" "$NOTEST" 2>/dev/null; then
-    if [ -n "$TROOT" ] && grep_boundary_test "$id"; then
+    if [ -n "$TROOT" ] && grep -qxF "$id" "$COVERED_IDS" 2>/dev/null; then
       # The reverse check (CLAUDE.md rule 9, ADR-0081/0084, RX5) — an exemption whose id IS found
       # in the SCOPED test set protects nothing; it is a stale waiver, not a documentation
       # requirement. Structural, exit 3, and deliberately NOT auto-repaired (ADR-0072's
@@ -734,9 +790,9 @@ while IFS="$TAB" read -r id _text; do
       continue
     fi
   elif [ -n "$TROOT" ]; then
-    if grep_boundary_test "$id"; then
+    if grep -qxF "$id" "$COVERED_IDS" 2>/dev/null; then
       :
-    elif grep_boundary_test_claimed "$id"; then
+    elif grep -qxF "$id" "$CLAIMED_IDS" 2>/dev/null; then
       # D3: mentioned somewhere in the discovered population, but not in scope. A distinct token on
       # the SAME exit-1 channel (no new exit code) — the remedy differs from UNCOVERED's ("write a
       # test") because a test already exists; it just isn't cited from the file this feature wrote.

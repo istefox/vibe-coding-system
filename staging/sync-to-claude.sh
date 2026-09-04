@@ -114,6 +114,7 @@ fi
 # deployed-only: auto-learning — symlink into a foreign repository (steve-skills/auto-learning) carrying its own git remote and history; same class as website-auditor below, and vendoring it would duplicate a project that is already versioned elsewhere (ADR-0024/0025's drift).
 # deployed-only: daily-close — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365).
 # deployed-only: daily-open — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365), same class as daily-close.
+# deployed-only: project-tasks — symlink into a foreign repository (Developer/Skills/tasks, github.com/istefox/Skills) carrying its own git remote, history and PR-based workflow; migrated out of this repo's vendored surface after ADR-0153, ratified by ADR-0191, same class as auto-learning/website-auditor above.
 # deployed-only: vibiso-intake — front end of a different project's intake contract (vibiso-system ADR-002).
 # deployed-only: website-auditor — symlink into a foreign repository (steve-skills/website_auditor); moves ADR-0024 section 2.1's exclusion out of prose.
 PAIRS="
@@ -160,15 +161,6 @@ plugin/skills/project-conductor/references/steps-4-7-chain-execution.md|skills/p
 plugin/skills/project-conductor/scripts/conductor-args.sh|skills/project-conductor/scripts/conductor-args.sh
 plugin/skills/project-conductor/scripts/h16-direction-check.sh|skills/project-conductor/scripts/h16-direction-check.sh
 plugin/skills/project-conductor/scripts/mark-roadmap-skipped.sh|skills/project-conductor/scripts/mark-roadmap-skipped.sh
-plugin/skills/project-tasks/SKILL.md|skills/project-tasks/SKILL.md
-plugin/skills/project-tasks/scripts/scan.sh|skills/project-tasks/scripts/scan.sh
-plugin/skills/project-tasks/scripts/selftest.sh|skills/project-tasks/scripts/selftest.sh
-plugin/skills/project-tasks/reference/file-format.md|skills/project-tasks/reference/file-format.md
-plugin/skills/project-tasks/reference/capture-sources.md|skills/project-tasks/reference/capture-sources.md
-plugin/skills/project-tasks/reference/chain-integration.md|skills/project-tasks/reference/chain-integration.md
-plugin/skills/project-tasks/templates/TODO.template.md|skills/project-tasks/templates/TODO.template.md
-plugin/skills/project-tasks/scripts/gh-issues.sh|skills/project-tasks/scripts/gh-issues.sh
-plugin/skills/project-tasks/scripts/ledger-merge.sh|skills/project-tasks/scripts/ledger-merge.sh
 project-templates/ci/ci.yml|templates/ci.yml
 plugin/scripts/detect-test-cmd.sh|hooks/detect-test-cmd.sh
 plugin/scripts/roadmap-from-issues.sh|hooks/roadmap-from-issues.sh
