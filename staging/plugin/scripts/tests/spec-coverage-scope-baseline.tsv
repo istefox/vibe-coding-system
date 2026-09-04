@@ -170,6 +170,28 @@
 #   222-vendor-deployed-only-skills  R-07 (UNCOVERED -> UNSCOPED)
 #   404-stop-gate-trigger-granularity  R-04 (UNCOVERED -> UNSCOPED)
 #
+# 2026-09-04 — REGENERATED UNDER ADR-0191 (project-tasks migrated to istefox/Skills). ADR-0191
+# deleted this repo's vendored project-tasks/ implementation (9 skill files plus its 30-assertion
+# harness, project-tasks-ledger.test.sh) because the skill had already been living, independently
+# maintained, in github.com/istefox/Skills for some time — this repo's copy was dead code the
+# migration never retired. That deletion is a genuine drift signal of the kind this file's header
+# already anticipates: "a later feature adding or renaming a test file that shifts an ALREADY-
+# frozen pair's scope — RS7 reporting that red is the mechanism working, not a false alarm to
+# silence by re-freezing blindly." The SPEC and its plan are NOT touched (rule 14: the SPEC is a
+# correct historical record of the 2026-08-17 vendoring decision); only the implementation it cited
+# is gone, so every id whose only in-population evidence lived in the removed files stops being
+# COVERED and reads UNSCOPED or UNCOVERED against a population that no longer contains it.
+#
+# RE-DERIVED via spec-coverage-baseline-rows.sh --rows (CLAUDE.md rule 13, not hand-invented):
+# 24 ids, 4 COVERED (R-05, R-09, R-22, R-23 — evidence outside the deleted tree), 14 UNCOVERED,
+# 6 UNSCOPED. 17 of the 24 rows flip from the 2026-08-24 freeze:
+#   R-01, R-02, R-03, R-04, R-06, R-07                    COVERED -> UNSCOPED
+#   R-08, R-10, R-11, R-12, R-13, R-14, R-15, R-18, R-19,
+#   R-20, R-24                                            COVERED -> UNCOVERED
+# R-05, R-09, R-16, R-17, R-21, R-22, R-23 are unchanged (R-16/R-17/R-21 were already UNCOVERED).
+# No other pair's rows are touched; RS_PAIR_N (23) is unaffected — the (spec, plan) pair itself
+# still resolves, only its per-id verdicts against the now-smaller test population changed.
+#
 # COLUMN FORMAT.
 #   COVERED row:   <spec-basename><TAB><R-NN><TAB>COVERED
 #   UNSCOPED row:  <spec-basename><TAB><R-NN><TAB>UNSCOPED<TAB><class><TAB><reason>
@@ -355,30 +377,30 @@ spec-coverage-scope-back-reference.spec.md	R-09	COVERED
 spec-coverage-scope-back-reference.spec.md	R-10	COVERED
 spec-coverage-scope-back-reference.spec.md	R-11	COVERED
 spec-coverage-scope-back-reference.spec.md	R-12	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-01	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-02	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-03	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-04	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-01	UNSCOPED
+project-tasks-vendored-bilateral-ledger.spec.md	R-02	UNSCOPED
+project-tasks-vendored-bilateral-ledger.spec.md	R-03	UNSCOPED
+project-tasks-vendored-bilateral-ledger.spec.md	R-04	UNSCOPED
 project-tasks-vendored-bilateral-ledger.spec.md	R-05	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-06	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-07	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-08	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-06	UNSCOPED
+project-tasks-vendored-bilateral-ledger.spec.md	R-07	UNSCOPED
+project-tasks-vendored-bilateral-ledger.spec.md	R-08	UNCOVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-09	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-10	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-11	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-12	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-13	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-14	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-15	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-10	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-11	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-12	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-13	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-14	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-15	UNCOVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-16	UNCOVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-17	UNCOVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-18	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-19	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-20	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-18	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-19	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-20	UNCOVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-21	UNCOVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-22	COVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-23	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-24	COVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-24	UNCOVERED
 commit-outcome-backstop-hook.spec.md	R-01	COVERED
 commit-outcome-backstop-hook.spec.md	R-02	COVERED
 commit-outcome-backstop-hook.spec.md	R-03	COVERED

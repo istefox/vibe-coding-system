@@ -245,3 +245,27 @@ Consequence: a correction written by `auto-learning` (or any edit to CLAUDE.md/r
 mid-session never reaches a session or subagent already running — the hierarchy is read
 once, at that entity's own startup, so the correction applies only to the *next* dispatch or
 session, never the current one.
+
+## github-raw-default-branch
+
+A `raw.githubusercontent.com/<owner>/<repo>/main/<path>` URL built by guessing the branch
+name 404'd because the target repo's default branch was still `master`, not `main` —
+guessing cost a failed fetch and a second round-trip to re-derive the right URL. The fix is
+to never guess: `gh api repos/<owner>/<repo> --jq '.default_branch'` first, then interpolate
+that answer into the raw URL. Landed in `~/.claude/rules/tools.md` via auto-learning on
+2026-09-03/04 but never backported to this repo's `staging/user/rules/tools.md` at the time,
+which is the drift ADR-0191's audit (`sync-to-claude.sh` dry run) surfaced and this repo's
+own catch-up commit (`769d5c3`) resolved.
+
+## agent-registry-snapshot-mid-session
+
+A custom subagent's `.claude/agents/<name>.md` symlink was found broken and repaired
+mid-session, but `Agent(subagent_type: "<name>")` still answered "Agent type '<name>' not
+found" for the rest of that same session — the dispatchable-agent-type list is snapshotted
+at session start, not re-read live, so a symlink fixed after start never becomes
+dispatchable-by-name until a fresh session picks it up. Workaround used: read the target
+agent's own `.md` definition directly with Read and dispatch `general-purpose` in its place,
+pasting the full definition (role, boundaries, tool restrictions) into the prompt so the
+stand-in honors the same contract even where the harness does not enforce it. Landed in
+`~/.claude/rules/tools.md` via auto-learning on 2026-09-03/04, backported here the same way
+as `github-raw-default-branch` above.
