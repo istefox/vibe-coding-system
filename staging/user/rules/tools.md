@@ -150,3 +150,16 @@ when the reason here isn't enough, don't restate it here.
   built-in `Explore`/`Plan` agents, which skip it entirely** — custom subagents are not
   exempt. A correction written mid-session never reaches an already-running session or
   subagent; it applies only to the next dispatch. → #subagent-claude-md-load-timing
+
+- **A `raw.githubusercontent.com` URL guessed with `main` can 404 on a repo whose default
+  branch is still `master`.** Don't retry variations blind: `gh api repos/<owner>/<repo>
+  --jq '.default_branch'` first, then build the raw URL from the answer. → #github-raw-default-branch
+
+- **Repairing a broken custom-agent symlink mid-session does not make it dispatchable by
+  name in that same session** — `Agent(subagent_type: "<name>")` still answers "Agent type
+  '<name>' not found", because the dispatchable-agent-type list was snapshotted at session
+  start, not re-read live. Read the target agent's `.md` definition directly and dispatch
+  `general-purpose` instead, pasting the full definition into the prompt so it stands in
+  under the same contract (role, boundaries, and any tool restriction honored as a hard
+  self-imposed rule even where not enforced by the grant). A fresh session picks up the
+  repaired symlink normally. → #agent-registry-snapshot-mid-session
