@@ -257,6 +257,17 @@ This finding validates the reason the original plan called for a live probe rath
 stub-based testing alone (rule 13 — measure the premise): the premise here ("the schemas are
 already OpenAI-structured-output-compliant") was untested and wrong.
 
+## Superseded in part (2026-09-05)
+
+The gate-placement decision in this ADR's Context/Decision — **"one gate, once, at chain
+start"** — is superseded by ADR-0193 (VCS-063): the ask moves to each dispatch mechanism's own
+entry point (RTF Step 0 item 6; a pre-dispatch ask immediately before Step 5) instead of a single
+chain-start gate. Everything else this ADR established is unchanged: the `use_codex_review`
+manifest field and its schema-1.4 validation, `codex-reviewer.sh`'s contract and availability
+cascade, the never-silent fallback-ask convention at every site, and Site 4's Workflow-path
+deviation. This section is a forward pointer only, per this repo's rule 14 — the narrative above
+is left exactly as it was decided and verified on 2026-09-01/02.
+
 ## References
 
 - `AGENTS.md` — rewritten
