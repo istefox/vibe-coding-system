@@ -212,6 +212,42 @@ AskUserQuestion:
 
 If "Abort": stop cleanly, no further action.
 
+### HITL Gate 0-CDX — Audit engine (Codex or Claude)
+
+`USE_CODEX_AUDIT` is a run-local variable, resolved once per invocation, before Phase 1. It is
+**not** `manifest.use_codex_review` and **not** a manifest field: `deep-refactor` runs standalone
+with no manifest at all — its own documented Branch A condition (see "Conditions for Branch A"
+below) — so the flag cannot live in a file that need not exist.
+
+**Unattended inheritance rule, stated first.** Under `manifest.autopilot = true`, no question is
+asked. When a project manifest is present, `USE_CODEX_AUDIT` takes the value of
+`manifest.use_codex_review`, read through `manifest-field-state.sh` — never a bare field read.
+ABSENT, INVALID and UNREADABLE all resolve to `false`: absence must equal the pre-feature
+behaviour; with no manifest present, `USE_CODEX_AUDIT` is `false` — there is nothing to inherit and
+nobody to ask.
+
+**Attended** (standalone, or Gate 5.1 without autopilot): ask once, before Phase 1.
+
+```
+AskUserQuestion:
+  question: |
+    deep-refactor — Audit engine
+
+    Use Codex CLI for the 4 audit dimensions (dead-code, perf, structure, security)? A dimension
+    where Codex is unavailable falls back automatically to Claude's reviewer agent for that
+    dimension only; the other dimensions stay on Codex.
+  options:
+    - "No — Claude only (current behaviour) (Recommended)"
+    - "Yes — use Codex for the 4 audit dimensions, with per-dimension fallback"
+```
+
+When `USE_CODEX_AUDIT` is false, every downstream behaviour in this skill is byte-identical to
+before this feature — what an operator who hits Enter on the default gets.
+
+**Naming note.** This gate is `Gate 0-CDX`, not `Gate 0c`: `Gate 0c` is a retired identifier in
+`concept-to-code`'s namespace, and this repo's convention does not reuse retired names, even across
+a different skill's own namespace.
+
 ---
 
 ## Phase 1 — Audit dispatch
@@ -223,6 +259,29 @@ Dispatch 4 `reviewer` dimension agents (dead-code, perf, structure, security).
 **Dispatch split — two branches, both must be documented:**
 
 **Branch A — Workflow dispatch (default):**
+
+**IF `USE_CODEX_AUDIT = true`:**
+
+Still a parallel fan-out, one call per dimension, now over `codex-reviewer.sh` instead of the
+Claude `reviewer` agent. For each of the four dimensions (dead-code, perf, structure, security),
+in parallel, run:
+
+```sh
+bash ~/.claude/hooks/codex-reviewer.sh --mode audit --dimension <d> --out <tmp-<d>.json>
+```
+
+- Exit `0` → parse `<tmp-<d>.json>` as the `FINDINGS_SCHEMA` array for that dimension and fold it
+  into the same in-memory findings shape the ELSE branch below produces, so merge/dedup/sort and
+  Gate 1 are untouched by which engine ran.
+- Exit `3` (DID-NOT-RUN) → that one dimension only falls back to the Claude `reviewer` `agent()`
+  call for that dimension, pinning `model` and `effort` exactly as the ELSE branch below does
+  (`opus` / `high`). The other three dimensions stay on Codex — one dimension's fallback never
+  touches the other three.
+- Exit `2` → **not** a fallback. It means a defect in this dispatch site's own arguments (unknown
+  flag, bad `--dimension`, missing `--out`), so stop and report it rather than silently reverting
+  to Claude.
+
+**ELSE (`USE_CODEX_AUDIT = false` — today's behaviour):**
 
 Use Workflow dispatch to fan-out the 4 reviewer agents in parallel. The audit phase is pure
 fan-out with no mid-run HITL — the canonical Workflow use case. Each agent only Reads (no Edits),
@@ -241,10 +300,31 @@ Conditions for Branch A:
 
 **Branch B — Sequential Agent-tool fallback (only when `hook_verified: false` explicitly set):**
 
+**IF `USE_CODEX_AUDIT = true`:**
+
+The identical substitution, sequential, in this branch's already-fixed order dead-code → perf →
+structure → security. For each dimension, in that order, run:
+
+```sh
+bash ~/.claude/hooks/codex-reviewer.sh --mode audit --dimension <d> --out <tmp-<d>.json>
+```
+
+- Exit `0` → parse and fold in, identically to Branch A's IF half above.
+- Exit `3` → that one dimension falls back to the sequential Claude `reviewer` `agent()` call for
+  that dimension, with the same `model`/`effort` pin as the ELSE branch below; the remaining
+  dimensions in the sequence continue on Codex.
+- Exit `2` → not a fallback, same as Branch A above: stop and report the dispatch-site defect.
+
+**ELSE (`USE_CODEX_AUDIT = false` — today's behaviour):**
+
 <!-- dispatch-site: deep-refactor-reviewers class=inline exempt: the reviewer grant carries no Write tool so no completion fact is producible, and this is the report-only audit half which fixes nothing -->
 Dispatch the 4 reviewer agents sequentially using the `Agent` tool at `model: opus`. Only active
 when the project manifest explicitly contains `hook_verified: false` (manual override to force
 sequential mode). Document in the Gate 1 summary that sequential mode was used.
+
+**Engine record.** Whichever half ran for a dimension, Codex or the Claude fallback, record which
+one served it. HITL Gate 1 below renders this per-dimension record when `USE_CODEX_AUDIT` was true
+for the run.
 
 ### Mandatory guard 1 — Dead-code reviewer instruction
 
@@ -319,6 +399,13 @@ AskUserQuestion:
     [If audit dispatch used sequential fallback (hook_verified: false explicitly set):]
     NOTE: Audit ran in sequential mode (hook_verified=false override active). Results are correct;
     sequential mode is slower but complete.
+
+    [If USE_CODEX_AUDIT was true for this run:]
+    Audit engine per dimension:
+      dead-code: <Codex | Claude (fallback)>
+      perf:      <Codex | Claude (fallback)>
+      structure: <Codex | Claude (fallback)>
+      security:  <Codex | Claude (fallback)>
   options:
     - "Fix all routable findings"
     - "Report only — no auto-fix"
@@ -329,6 +416,11 @@ If "Report only": skip Phase 2, go directly to Phase 3 (security section) then P
 If "Abort": stop cleanly. No report committed.
 If "Fix all routable findings" AND `BASELINE=RED`: override to "Report only" — auto-fix is
 blocked when the baseline is RED regardless of user selection. Explain the override.
+
+`Claude (fallback)` on a dimension means Codex returned DID-NOT-RUN (exit `3`) for that dimension
+only and the run continued unblocked; nothing about the findings themselves differs between
+engines, and engine attribution is display-only here, not a `FINDINGS_SCHEMA` field (ADR-0193
+§D8).
 
 ---
 
