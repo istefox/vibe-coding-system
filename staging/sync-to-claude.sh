@@ -114,6 +114,7 @@ fi
 # deployed-only: auto-learning — symlink into a foreign repository (steve-skills/auto-learning) carrying its own git remote and history; same class as website-auditor below, and vendoring it would duplicate a project that is already versioned elsewhere (ADR-0024/0025's drift).
 # deployed-only: daily-close — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365).
 # deployed-only: daily-open — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365), same class as daily-close.
+# deployed-only: impeccable — third-party skill installed as a static local copy (not a symlinked repo, not a plugin); cited in ADR-0172 as the reference-split scale proof, never vendored here.
 # deployed-only: project-tasks — symlink into a foreign repository (Developer/Skills/tasks, github.com/istefox/Skills) carrying its own git remote, history and PR-based workflow; migrated out of this repo's vendored surface after ADR-0153, ratified by ADR-0191, same class as auto-learning/website-auditor above.
 # deployed-only: vibiso-intake — front end of a different project's intake contract (vibiso-system ADR-002).
 # deployed-only: website-auditor — symlink into a foreign repository (steve-skills/website_auditor); moves ADR-0024 section 2.1's exclusion out of prose.
