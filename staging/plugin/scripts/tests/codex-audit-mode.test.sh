@@ -13,7 +13,7 @@
 # Covers SPEC.md's eleven directly-testable requirement ids, individually cited beside the CX
 # blocks below that assert them. SPEC.md itself marks three of its fourteen declared ids
 # `(no-test: ...)` — two plant-existence ids and one ADR/documentation id — and this file
-# deliberately never writes any of those three as a literal token: spec-coverage.sh's own
+# deliberately never writes any of those three as a literal token — spec-coverage.sh's own
 # STALE-WAIVER check (ADR-0154 §D8) treats a waived id's token appearing in a scoped test file as
 # the waiver no longer protecting anything, which would block the Step 5 -> Step 6 gate for no
 # reason connected to this feature's actual state.
