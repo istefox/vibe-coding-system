@@ -223,7 +223,7 @@ below) — so the flag cannot live in a file that need not exist.
 asked. When a project manifest is present, `USE_CODEX_AUDIT` takes the value of
 `manifest.use_codex_review`, read through `manifest-field-state.sh` — never a bare field read.
 ABSENT, INVALID and UNREADABLE all resolve to `false`: absence must equal the pre-feature
-behaviour; with no manifest present, `USE_CODEX_AUDIT` is `false` — there is nothing to inherit and
+behaviour; absent any manifest, `USE_CODEX_AUDIT` is `false` — there is nothing to inherit and
 nobody to ask.
 
 **Attended** (standalone, or Gate 5.1 without autopilot): ask once, before Phase 1.
@@ -258,9 +258,7 @@ Dispatch 4 `reviewer` dimension agents (dead-code, perf, structure, security).
 
 **Dispatch split — two branches, both must be documented:**
 
-**Branch A — Workflow dispatch (default):**
-
-**IF `USE_CODEX_AUDIT = true`:**
+**Branch A — Workflow dispatch (default): IF USE_CODEX_AUDIT = true:**
 
 Still a parallel fan-out, one call per dimension, now over `codex-reviewer.sh` instead of the
 Claude `reviewer` agent. For each of the four dimensions (dead-code, perf, structure, security),

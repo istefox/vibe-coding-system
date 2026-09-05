@@ -79,11 +79,17 @@ if [ -z "$OUT" ]; then
   exit 2
 fi
 
-if [ "$MODE" = "review" ]; then
-  case "$DIFF_SCOPE" in
+# Shared by review mode (mandatory) and audit mode (optional) — rule 6: both call sites answer
+# the SAME question, so they call the same validator rather than each carrying its own copy.
+validate_diff_scope() {
+  case "$1" in
     uncommitted|base:*|commit:*) ;;
-    *) echo "codex-reviewer: --diff-scope must be 'uncommitted', 'base:<ref>', or 'commit:<sha>' (got '$DIFF_SCOPE')" >&2; exit 2 ;;
+    *) echo "codex-reviewer: --diff-scope must be 'uncommitted', 'base:<ref>', or 'commit:<sha>' (got '$1')" >&2; exit 2 ;;
   esac
+}
+
+if [ "$MODE" = "review" ]; then
+  validate_diff_scope "$DIFF_SCOPE"
   if [ -n "$CARRY_FORWARD" ] && [ ! -r "$CARRY_FORWARD" ]; then
     echo "codex-reviewer: --carry-forward file not readable: $CARRY_FORWARD" >&2
     exit 2
@@ -101,12 +107,9 @@ if [ "$MODE" = "audit" ]; then
     *) echo "codex-reviewer: --dimension must be 'dead-code', 'perf', 'structure', or 'security' (got '$DIMENSION')" >&2; exit 2 ;;
   esac
   # --diff-scope is OPTIONAL in audit mode (ADR-0193 §D2): empty means whole-tree, deep-refactor's
-  # own documented scope. When given, it is validated by the same case arm review mode uses.
+  # own documented scope. When given, it is validated by the same validator review mode uses.
   if [ -n "$DIFF_SCOPE" ]; then
-    case "$DIFF_SCOPE" in
-      uncommitted|base:*|commit:*) ;;
-      *) echo "codex-reviewer: --diff-scope must be 'uncommitted', 'base:<ref>', or 'commit:<sha>' (got '$DIFF_SCOPE')" >&2; exit 2 ;;
-    esac
+    validate_diff_scope "$DIFF_SCOPE"
   fi
 fi
 
