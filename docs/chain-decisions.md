@@ -5632,3 +5632,21 @@ Key architectural decisions:
   question; this repo's only job was to stop claiming a copy it no longer maintains.
 
 Detail: `docs/architecture/ADR-0191-project-tasks-migrated-to-istefox-skills.md`.
+
+## Decisions from the coder working discipline rewrite (ADR-0192)
+
+Request made directly in chat ("a more performant coder"); no GitHub issue for the rewrite. The
+premise was measured first (rule 13) on 69 coder dispatches from this repo's own transcripts.
+`coder.md` at `staging/plugin/agents/`; harness `coder-discipline.test.sh`.
+
+Key architectural decisions:
+- **Cost is turns times context, not the system prompt.** `coder.md` was ~2.6k tokens against an average turn of ~159k; cache reads were ~69% of a run's cost. Shortening the prompt changes salience, not spend. The levers are fewer turns (no blocked Edits, no wrong-tree writes) and smaller tool results.
+- **The two largest turn losses were instruction-following failures whose instructions sat at the bottom of the file.** 54 of 83 enforce-hook blocks had no `PATTERN:` header at all; 23 Edits went by absolute path into the shared checkout. Both rules now open the file in a six-line `## Hard rules` block, each one a rule a hook or the orchestrator enforces.
+- **Memory is consumed, not only produced (rule 17).** Shards were written by 2 dispatches, read back by hand in 3 runs, and no index was ever curated. Process step 1 now lists `.claude/agent-memory/coder/topics/` and reads the matching shards. The orchestrator-side curation gap (`step5-implementation.md` sub-step 7b) is filed as an issue, not fixed here.
+- **Verification hygiene is the context lever.** 11.9 test executions per run, 135 tool results over 20k characters, the same command re-run four or more times. Full suite at most twice, every command through `2>&1 | tail -n 40` or `grep -c '^FAIL'`, never an unchanged command re-run.
+- **An instruction to call an absent tool is a wasted turn on every dispatch.** context7 and LSP were called once each in 69 runs (ADR-0038: LSP does not register in subagents on native builds); eslint never. The step is now conditional on the tools being in the tool list, with an explicit skip branch.
+- **A definition-of-done pass replaces "confirm it passes".** `git diff` read hunk by hunk against the plan's sub-steps; each sub-step maps to a hunk or an explicit "left out because"; the Output Format gains a **Sub-steps** line.
+- **Not changed, with reasons:** the enforce hook's 20-block window (a wider window weakens ADR-0001's per-edit declaration and does not touch the 54 never-emitted cases), `maxTurns` (Step 5 has no partial-result handler), the model (ADR-0130), `experimental.cacheTtl` (billing mode not verifiable).
+- **Instruction, not enforcement (rule 16).** The harness pins that the clauses are in the prompt. The pre-registered success criterion is a re-measurement over the next 30 or more dispatches: never-emitted headers well below 54 of 83, absolute-path rejections near zero.
+
+Detail: `docs/architecture/ADR-0192-coder-working-discipline.md`.
