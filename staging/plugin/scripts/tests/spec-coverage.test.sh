@@ -1996,7 +1996,7 @@ cat >"$TMP/rz6-tests/alpha.test.sh" <<'EOF'
 # names the plan back: rz6-plan.md
 # covers R-01 — this belongs to issue #999, not this feature
 EOF
-# plant: RZ6 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | ($0 ~ OWN_RE) | (1)
+# plant: RZ6 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | ($0 ~ ENVIRON["OWN_LINE_RE"]) | (1)
 run_scov --spec "$TMP/rz6.spec.md" --plan "$TMP/rz6-plan.md" --tests-root "$TMP/rz6-tests"
 if [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "^UNSCOPED${TAB}R-01${TAB}1\$"; then
   ok "RZ6 (VCS-035): a matching line carrying a foreign claim (#999) and no own-key on that line is not coverage -> UNSCOPED	R-01	1, exit 1. Pre-fix this exact fixture reported COVERED, exit 0."
@@ -2019,7 +2019,7 @@ EOF
 cat >"$TMP/rz7-tests/alpha.test.sh" <<'EOF'
 # covers R-01 — carried over from issue #999, now this feature's own harness, see rz7-plan.md
 EOF
-# plant: RZ7 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | ($0 ~ OWN_RE) | ($0 ~ "NEVERMATCH_RZ7")
+# plant: RZ7 | plugin/skills/concept-to-code/scripts/spec-coverage.sh | ($0 ~ ENVIRON["OWN_LINE_RE"]) | ($0 ~ "NEVERMATCH_RZ7")
 run_scov --spec "$TMP/rz7.spec.md" --plan "$TMP/rz7-plan.md" --tests-root "$TMP/rz7-tests"
 if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "^COVERED${TAB}R-01\$"; then
   ok "RZ7 (positive twin of RZ6, CLAUDE.md rule 8): a line carrying BOTH a foreign claim and this feature's own-key -> COVERED, exit 0. Without this twin, RZ6 is satisfiable by a filter that discards every claim-bearing line regardless of ownership."
