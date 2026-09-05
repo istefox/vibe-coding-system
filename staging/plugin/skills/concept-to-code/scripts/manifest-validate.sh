@@ -387,6 +387,18 @@ if grep -q '^use_codex_review:' "$MANIFEST"; then
   fi
 fi
 
+# Invariant 25 (conditional, schema 1.4): if step5_codex_review_asked field present, must be
+# true or false. Absent = valid (retrocompat 1.0-1.3 / pre-VCS-063 1.4 manifests), same shape
+# as Invariant 24. Distinguishes "the Step 5 pre-dispatch ask has not yet fired on this
+# manifest" (absent or false) from "it fired and was answered" (true, set once regardless of
+# which answer was given) — use_codex_review alone cannot carry that distinction because it is
+# seeded false and a declined ask leaves it false too (ADR-0193 correction, found 2026-09-05).
+if grep -q '^step5_codex_review_asked:' "$MANIFEST"; then
+  if ! grep -Eq '^step5_codex_review_asked: (true|false)$' "$MANIFEST"; then
+    fail "step5_codex_review_asked field present but value is not 'true' or 'false'"
+  fi
+fi
+
 if [ "$ERRORS" != "0" ]; then
   exit 1
 fi

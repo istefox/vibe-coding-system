@@ -254,7 +254,12 @@ fi
 # --- Execute --------------------------------------------------------------------------------------
 
 CODEX_STDERR=$(mktemp)
-codex exec --sandbox read-only --output-schema "$SCHEMA_FILE" -o "$RAW_OUT" \
+# Cost pin (2026-09-05): review dispatch is automated and high-volume, unlike Stefano's
+# interactive Codex sessions — it does not need his global config's top-tier
+# model/effort (gpt-5.6-sol, xhigh). Pinned here, not in ~/.codex/config.toml, so the
+# interactive default is untouched. -m/-c override the global config for this call only.
+codex exec -m gpt-5.6-terra -c model_reasoning_effort=medium \
+  --sandbox read-only --output-schema "$SCHEMA_FILE" -o "$RAW_OUT" \
   "$(cat "$PROMPT_FILE")" >/dev/null 2>"$CODEX_STDERR"
 CODEX_RC=$?
 CODEX_ERR_TEXT=$(cat "$CODEX_STDERR" 2>/dev/null)
@@ -265,12 +270,20 @@ if [ "$CODEX_RC" -ne 0 ]; then
   exit 3
 fi
 
-if printf '%s' "$CODEX_ERR_TEXT" | grep -Eqi 'usage limit|rate limit|quota exceeded|\b429\b'; then
+# A non-empty $RAW_OUT means codex exec actually completed and wrote a result — a real
+# rate/quota rejection produces no output, so a valid file here outranks anything the
+# rate-limit-vocabulary grep below might match. That grep runs on the FULL stderr, which
+# includes codex's own echo of the prompt it was given; when the reviewed diff itself
+# contains one of the matched words (e.g. editing this file's own rate-limit check), the
+# echoed prompt satisfies the grep and a completed, paid-for review was discarded as
+# DID-NOT-RUN (found during the 2026-09-05 dry run). Checking for real output first closes
+# that false positive without weakening the real rate-limit detection below.
+if [ -s "$RAW_OUT" ]; then
+  : # completed successfully — fall through to formatting below
+elif printf '%s' "$CODEX_ERR_TEXT" | grep -Eqi 'usage limit|rate limit|quota exceeded|\b429\b'; then
   echo "codex-reviewer: DID-NOT-RUN: codex exec reported a rate/quota limit — $(printf '%s' "$CODEX_ERR_TEXT" | head -1)" >&2
   exit 3
-fi
-
-if [ ! -s "$RAW_OUT" ]; then
+else
   echo "codex-reviewer: DID-NOT-RUN: codex exec produced no output at $RAW_OUT" >&2
   exit 3
 fi
