@@ -5650,3 +5650,43 @@ Key architectural decisions:
 - **Instruction, not enforcement (rule 16).** The harness pins that the clauses are in the prompt. The pre-registered success criterion is a re-measurement over the next 30 or more dispatches: never-emitted headers well below 54 of 83, absolute-path rejections near zero.
 
 Detail: `docs/architecture/ADR-0192-coder-working-discipline.md`.
+
+## Decisions from the Codex-vs-Claude review gate extended to deep-refactor chain (ADR-0193)
+
+Extends ADR-0187 (the Codex-vs-Claude review substitution gate for concept-to-code/RTF), which had
+explicitly deferred `deep-refactor` as out of scope. `deep-refactor/SKILL.md` and
+`staging/plugin/scripts/codex-reviewer.sh` at `staging/plugin/`; new plant coverage in
+`staging/plugin/scripts/tests/`.
+
+Key architectural decisions:
+- **A skill-local flag, not a `concept-to-code` manifest field.** `deep-refactor` is invocable
+  standalone with no manifest to read; a schema bump would carry a boolean meaningless outside the
+  chain. Attended runs get their own `Gate 0-CDX` (default "No"); unattended runs with a manifest
+  present inherit `manifest.use_codex_review` directly, a deliberate widening of ADR-0187's own
+  "never under autopilot" boundary, argued because the per-dimension fallback degrades to
+  ADR-0187's own behaviour rather than to a skipped review.
+- **A third `codex-reviewer.sh` mode, `--mode audit`, not a reused one.** `deep-refactor`'s
+  `risk_level`/`fix_type` taxonomy answers a different question than `reviewer.md`'s
+  BLOCKER/MAJOR/MINOR/NIT (ADR-0187's own rule-6 refusal to merge them, held again here).
+  `--diff-scope` is optional in this mode only — omitted, the audit covers the whole tracked source
+  tree, `deep-refactor`'s own documented scope, which none of the three locked diff-scope values
+  expresses.
+- **Fallback is per dimension, resolved once, never mid-run.** One dimension's Codex call returning
+  DID-NOT-RUN (exit 3) falls only that dimension back to Claude's `reviewer`; the other three stay
+  on Codex. Gate 1's findings summary names which engine served each dimension when the flag was on.
+- **The two mandatory report-only guards (dead-code's ObjC/reflection carve-out, perf's concurrency
+  carve-out) move from prose-only to embedded-in-the-prompt**, and the embedding is drift-checked:
+  the harness extracts both strings from `SKILL.md` itself and asserts they appear, whitespace-
+  flattened, inside `codex-reviewer.sh` — the first automated coupling check between a Claude-side
+  contract and its Codex hand-port; ADR-0187 shipped that duplication with no such check at all.
+- **`fix_type: report-only` for security findings is wrapper-enforced, not trusted from Codex.**
+  Rule 16: the mechanical post-process is the enforcement, the prompt sentence is not.
+- **`codex-reviewer-schema.test.sh`'s ordinal schema extraction is repaired to all-blocks in the
+  same pass**, since adding a third `SCHEMA_EOF` block before the diagnose block would otherwise
+  silently repoint the "diagnose" check onto the new audit schema and stop checking diagnose at all
+  (rule 18).
+- **ADR-0187's own deferral sentence is not edited** (rule 14): this ADR supersedes it going
+  forward for the `deep-refactor` half only; Gate 5.06, `security-audit` and autopilot review
+  substitution elsewhere remain exactly as deferred.
+
+Detail: `docs/architecture/ADR-0193-codex-review-gate-deep-refactor.md`.
