@@ -1841,6 +1841,14 @@ Run in an isolated worktree to avoid conflicts with other parallel coders.
 > it ever persisted past the dispatch. The 2026-05-29 note above is left as the historical record of
 > what was believed and shipped at the time; it is superseded, not corrected in place. Coder's
 > cross-batch continuity is its return report, as it was in practice regardless of this field.
+> **Deployment note (2026-09-04, ADR-0191):** the deployed `coder.md` body was rewritten after
+> measuring 69 real dispatches. A `## Hard rules` block now opens the file (PATTERN header in the
+> same message as the tool call, `pwd` once and relative paths only, never commit, hook block =
+> stop and report, plan gap = stop and report, never weaken a test); Process reads the coder's own
+> `.claude/agent-memory/coder/topics/` shards before editing, bounds reconnaissance, caps full-suite
+> runs at two with `tail -n 40` piping, makes the context7/LSP/eslint steps conditional on the tools
+> being present, and ends with a hunk-by-hunk definition-of-done pass. Frontmatter unchanged. The
+> block above stays as the historical record. Pinned by `coder-discipline.test.sh`.
 
 ### 3.3 reviewer
 
