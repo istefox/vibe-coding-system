@@ -19,9 +19,16 @@
 #            (Stefano's own policy: never a silent fallback). An empty diff is NOT exit 3 — it
 #            mirrors reviewer.md's own "no detectable changes" edge case (exit 0, report says so).
 #
-# TWO MODES, matching the two shapes the Claude `reviewer` agent is used in today:
+# THREE MODES, matching the two shapes the Claude `reviewer` agent is used in today, plus the
+# `deep-refactor` audit mode added by ADR-0193:
 #   --mode review   --diff-scope uncommitted|base:<ref>|commit:<sha> [--carry-forward <file>] --out <file>
 #   --mode diagnose --finding "<text>" --out <file>
+#   --mode audit    --dimension dead-code|perf|structure|security
+#                   [--diff-scope uncommitted|base:<ref>|commit:<sha>] --out <file>
+#
+# The exit contract above (0/2/3) is unchanged across all three modes. Audit-mode output at --out
+# is FINDINGS_SCHEMA-shaped JSON — a JSON array of findings (ADR-0193 §D4) — never the markdown
+# review and diagnose modes produce.
 #
 # PROMPT DUPLICATION, DECLARED (rule 6/12). The review-mode prompt below is hand-ported from
 # `staging/plugin/agents/reviewer.md`'s Quality Standards / Confidence Filter / Output Format /
@@ -48,6 +55,7 @@ DIFF_SCOPE=""
 CARRY_FORWARD=""
 FINDING=""
 OUT=""
+DIMENSION=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -56,13 +64,14 @@ while [ "$#" -gt 0 ]; do
     --carry-forward) CARRY_FORWARD="${2:-}"; shift 2 ;;
     --finding) FINDING="${2:-}"; shift 2 ;;
     --out) OUT="${2:-}"; shift 2 ;;
+    --dimension) DIMENSION="${2:-}"; shift 2 ;;
     *) echo "codex-reviewer: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
 
 case "$MODE" in
-  review|diagnose) ;;
-  *) echo "codex-reviewer: --mode must be 'review' or 'diagnose' (got '$MODE')" >&2; exit 2 ;;
+  review|diagnose|audit) ;;
+  *) echo "codex-reviewer: --mode must be 'review', 'diagnose', or 'audit' (got '$MODE')" >&2; exit 2 ;;
 esac
 
 if [ -z "$OUT" ]; then
@@ -84,6 +93,21 @@ fi
 if [ "$MODE" = "diagnose" ] && [ -z "$FINDING" ]; then
   echo "codex-reviewer: --finding is required in diagnose mode" >&2
   exit 2
+fi
+
+if [ "$MODE" = "audit" ]; then
+  case "$DIMENSION" in
+    dead-code|perf|structure|security) ;;
+    *) echo "codex-reviewer: --dimension must be 'dead-code', 'perf', 'structure', or 'security' (got '$DIMENSION')" >&2; exit 2 ;;
+  esac
+  # --diff-scope is OPTIONAL in audit mode (ADR-0193 §D2): empty means whole-tree, deep-refactor's
+  # own documented scope. When given, it is validated by the same case arm review mode uses.
+  if [ -n "$DIFF_SCOPE" ]; then
+    case "$DIFF_SCOPE" in
+      uncommitted|base:*|commit:*) ;;
+      *) echo "codex-reviewer: --diff-scope must be 'uncommitted', 'base:<ref>', or 'commit:<sha>' (got '$DIFF_SCOPE')" >&2; exit 2 ;;
+    esac
+  fi
 fi
 
 # --- Availability cascade (steps 1-3), never silent (rule 4) ------------------------------------
@@ -111,14 +135,27 @@ if [ "$AUTH_STATUS" != "ok" ]; then
   exit 3
 fi
 
-if [ "$MODE" = "review" ] && ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+# Audit mode only (ADR-0193 §D3): the file list is derived from deep-refactor's own helper, never
+# re-listed here (rule 6 — one question, one answer). Missing/unreadable is exit 3 DID-NOT-RUN,
+# never a silent fall-back onto a duplicated exclusion list. The two existing modes gain no new
+# failure path.
+if [ "$MODE" = "audit" ]; then
+  ENUM="$SCRIPT_DIR/../skills/deep-refactor/scripts/enumerate-sources.sh"
+  if [ ! -r "$ENUM" ]; then
+    echo "codex-reviewer: DID-NOT-RUN: enumerate-sources.sh not found at $ENUM" >&2
+    exit 3
+  fi
+fi
+
+if { [ "$MODE" = "review" ] || [ "$MODE" = "audit" ]; } && ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "codex-reviewer: DID-NOT-RUN: not a git repository" >&2
   exit 3
 fi
 
-# --- Compute the diff (review mode) or use the finding text (diagnose mode) ---------------------
+# --- Compute the diff (review mode), the finding text (diagnose mode), or the audit file list ---
 
 DIFF_CONTENT=""
+FILE_LIST=""
 if [ "$MODE" = "review" ]; then
   case "$DIFF_SCOPE" in
     uncommitted)
@@ -144,6 +181,42 @@ if [ "$MODE" = "review" ]; then
       echo ""
       echo "**Verdict:** safe to merge (nothing to review)."
     } > "$OUT"
+    exit 0
+  fi
+elif [ "$MODE" = "audit" ]; then
+  # Whole-tree by default (ADR-0193 §D2/§D3) — the file list is DERIVED, never re-listed: the same
+  # question ("which files are this project's source") answered once, by enumerate-sources.sh.
+  ALL_FILES=$("$ENUM" "$(git rev-parse --show-toplevel)")
+
+  if [ -n "$DIFF_SCOPE" ]; then
+    CHANGED_FILES=""
+    case "$DIFF_SCOPE" in
+      uncommitted)
+        CHANGED_FILES=$(git diff HEAD --name-only 2>/dev/null)
+        ;;
+      base:*)
+        _ref="${DIFF_SCOPE#base:}"
+        CHANGED_FILES=$(git diff "$_ref"...HEAD --name-only 2>/dev/null)
+        ;;
+      commit:*)
+        _sha="${DIFF_SCOPE#commit:}"
+        CHANGED_FILES=$(git show --name-only --pretty=format: "$_sha" 2>/dev/null)
+        ;;
+    esac
+    ALL_FILES_FILE=$(mktemp)
+    CHANGED_FILES_FILE=$(mktemp)
+    printf '%s\n' "$ALL_FILES" > "$ALL_FILES_FILE"
+    printf '%s\n' "$CHANGED_FILES" > "$CHANGED_FILES_FILE"
+    FILE_LIST=$(grep -Fxf "$CHANGED_FILES_FILE" "$ALL_FILES_FILE" 2>/dev/null)
+    rm -f "$ALL_FILES_FILE" "$CHANGED_FILES_FILE"
+  else
+    FILE_LIST="$ALL_FILES"
+  fi
+
+  # An empty result is exit 0 with an empty findings array written to --out, mirroring review
+  # mode's own empty-diff precedent immediately above — never exit 3 (ADR-0193 §D3).
+  if [ -z "$FILE_LIST" ]; then
+    printf '[]\n' > "$OUT"
     exit 0
   fi
 fi
@@ -229,7 +302,7 @@ DIFF TO REVIEW:
 $DIFF_CONTENT
 PROMPT_EOF
 
-else
+elif [ "$MODE" = "diagnose" ]; then
   cat > "$SCHEMA_FILE" <<'SCHEMA_EOF'
 {
   "type": "object",
@@ -248,6 +321,94 @@ what is the smallest fix. Be direct — no filler, no restating the finding back
 
 FINDING:
 $FINDING
+PROMPT_EOF
+
+else
+  # MODE = audit. FINDINGS_SCHEMA-shaped JSON (ADR-0193 §D4) — nine fields, additionalProperties
+  # false on root AND item, every property also in required (OpenAI structured-output has no
+  # optional properties; nullability on "line" is how "may be absent" is expressed).
+  #
+  # NOTE for the next mode added after this one: codex-reviewer-schema.test.sh reads every
+  # SCHEMA_EOF block in this file and pins the block count against the mode count (ADR-0193 §D7).
+  # Adding a fourth mode means bumping that count deliberately, not by accident.
+  cat > "$SCHEMA_FILE" <<'SCHEMA_EOF'
+{
+  "type": "object",
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "dimension": {"type": "string", "enum": ["dead-code", "perf", "structure", "security"]},
+          "severity": {"type": "string", "enum": ["P1", "P2", "P3"]},
+          "risk_level": {"type": "string", "enum": ["low", "high"]},
+          "file": {"type": "string"},
+          "line": {"type": ["integer", "null"]},
+          "description": {"type": "string"},
+          "fix_type": {"type": "string", "enum": ["coder", "refactorer", "debugger", "report-only"]},
+          "suggested_fix": {"type": "string"}
+        },
+        "required": ["id", "dimension", "severity", "risk_level", "file", "line", "description", "fix_type", "suggested_fix"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["findings"],
+  "additionalProperties": false
+}
+SCHEMA_EOF
+
+  DIM_SCOPE=""
+  case "$DIMENSION" in
+    dead-code) DIM_SCOPE="Unused functions, imports, variables, unreachable branches, dead #if blocks" ;;
+    perf) DIM_SCOPE="Unnecessary allocations, redundant recomputations, inefficient collection patterns, force-casts, sync I/O on main thread" ;;
+    structure) DIM_SCOPE="Oversized files (>400 lines), oversized functions (>60 lines), tangled dependencies, duplicated logic blocks" ;;
+    security) DIM_SCOPE="Hardcoded secrets/tokens, unsafe API usage, missing input validation, unguarded URL construction" ;;
+  esac
+
+  # The two mandatory guards (SKILL.md's own text, embedded verbatim — ADR-0193 §D6). Each in its
+  # own dimension's branch, never the other's; structure/security carry no guard.
+  GUARD_BLOCK=""
+  if [ "$DIMENSION" = "dead-code" ]; then
+    GUARD_BLOCK='Tag as risk_level: high → fix_type: report-only any @objc, dynamic var/func, protocol conformances used only in as? casts, #selector(...), NSNotification.Name/string-typed ObjC bridge identifiers, reflection-reachable, protocol-witness symbols.'
+  fi
+  if [ "$DIMENSION" = "perf" ]; then
+    GUARD_BLOCK='Tag as risk_level: high → fix_type: report-only any finding touching async/await/actor/DispatchQueue/Sendable/nonisolated. Auto-fix only synchronous perf patterns.'
+  fi
+
+  SECURITY_NOTE=""
+  if [ "$DIMENSION" = "security" ]; then
+    SECURITY_NOTE="Every finding for this dimension is fix_type: report-only, regardless of risk_level or severity — security findings are never auto-fixed."
+  fi
+
+  cat > "$PROMPT_FILE" <<PROMPT_EOF
+You are auditing a codebase for the "$DIMENSION" dimension of a whole-codebase health audit. You
+are reporting only — you make no changes. You are sandboxed to read-only; read each file below by
+its path, do not assume its contents from the path alone.
+
+Scope for this dimension: $DIM_SCOPE.
+
+Severity rubric:
+- P1: a definite bug, security issue, or explicit rule violation with clear, verifiable impact.
+- P2: a real issue, but of moderate impact or lower certainty.
+- P3: a minor issue or nitpick, backed by a project convention.
+
+risk_level: high is a hard skip in the automated fix loop, regardless of fix_type. Tag a finding
+risk_level: high whenever you are not confident an automated fix is safe — it is always routed to
+a report-only section for a human, never auto-fixed.
+$GUARD_BLOCK
+$SECURITY_NOTE
+
+For each finding, give: dimension ("$DIMENSION"), severity (P1/P2/P3), risk_level (low/high), file
+(the path, as given below), line (an integer, or null when the finding is not line-specific), a
+concise one-line description, fix_type (coder/refactorer/debugger/report-only), and a 1-2 line
+suggested_fix. If there is nothing worth reporting, return an empty findings array — never invent
+an issue to have something to report.
+
+FILES TO AUDIT (read each by path; nothing else is in scope):
+$FILE_LIST
 PROMPT_EOF
 fi
 
@@ -340,7 +501,7 @@ with open(os.environ['CR_OUT'], 'w') as out:
     echo "codex-reviewer: DID-NOT-RUN: formatting the review output failed (exit $FORMAT_RC)" >&2
     exit 3
   fi
-else
+elif [ "$MODE" = "diagnose" ]; then
   RAW_OUT="$RAW_OUT" CR_OUT="$OUT" python3 -c "
 import json, os, sys
 
@@ -358,6 +519,92 @@ with open(os.environ['CR_OUT'], 'w') as out:
 " 2>&1
   FORMAT_RC=$?
   if [ "$FORMAT_RC" -ne 0 ]; then
+    exit 3
+  fi
+else
+  # MODE = audit. Writes --out as a JSON ARRAY (not the schema's {"findings": ...} wrapper — the
+  # deep-refactor skill merges the four dimensions' arrays). Three fields are wrapper-enforced and
+  # never trusted from the model (ADR-0193 §D4, rule 16): dimension, id, and fix_type-for-security.
+  RAW_OUT="$RAW_OUT" CR_OUT="$OUT" DIMENSION="$DIMENSION" python3 -c "
+import hashlib
+import json, os, sys
+
+path = os.environ['RAW_OUT']
+try:
+    with open(path) as f:
+        data = json.load(f)
+except Exception as e:
+    sys.stderr.write('codex-reviewer: DID-NOT-RUN: output at %s did not parse against the schema (%s)\n' % (path, e))
+    sys.exit(3)
+
+DIMENSION = os.environ.get('DIMENSION', '')
+findings = data.get('findings', [])
+if not isinstance(findings, list):
+    findings = []
+
+VALID_FIX_TYPES = ('coder', 'refactorer', 'debugger', 'report-only')
+VALID_SEVERITIES = ('P1', 'P2', 'P3')
+VALID_RISK_LEVELS = ('low', 'high')
+
+result = []
+for f in findings:
+    if not isinstance(f, dict):
+        continue
+
+    # 1. dimension is forced to the --dimension argument, unconditionally — never the model's own.
+    dimension = DIMENSION
+
+    file_val = f.get('file') or ''
+    line_val = f.get('line', None)
+    description_val = f.get('description') or ''
+
+    # 2. id is synthesised, never trusted from the model's own 'id' — deterministic across runs on
+    # the same input, since the dedup and report stages key on it.
+    digest = hashlib.sha256((file_val + str(line_val) + description_val).encode('utf-8')).hexdigest()
+    hash3 = digest[:3]
+    basename = os.path.basename(file_val) if file_val else 'unknown'
+    fid = '%s-%s-%s' % (dimension, basename, hash3)
+
+    # 3. fix_type: security forces report-only on every finding, unconditionally. Otherwise the
+    # model's value passes through, defaulted to report-only if not one of the four legal values —
+    # an unrecognised value must never route a fix agent.
+    fix_type = f.get('fix_type')
+    if fix_type not in VALID_FIX_TYPES:
+        fix_type = 'report-only'
+    if dimension == 'security':
+        fix_type = 'report-only'
+
+    # 4. everything else passes through, each with a safe default so a partial object cannot crash
+    # the formatter.
+    severity = f.get('severity')
+    if severity not in VALID_SEVERITIES:
+        severity = 'P3'
+    risk_level = f.get('risk_level')
+    if risk_level not in VALID_RISK_LEVELS:
+        risk_level = 'low'
+    suggested_fix = f.get('suggested_fix') or ''
+
+    result.append({
+        'id': fid,
+        'dimension': dimension,
+        'severity': severity,
+        'risk_level': risk_level,
+        'file': file_val,
+        'line': line_val,
+        'description': description_val,
+        'fix_type': fix_type,
+        'suggested_fix': suggested_fix,
+    })
+
+with open(os.environ['CR_OUT'], 'w') as out:
+    json.dump(result, out, indent=2)
+    out.write('\n')
+" 2>&1
+  FORMAT_RC=$?
+  if [ "$FORMAT_RC" -eq 3 ]; then
+    exit 3
+  elif [ "$FORMAT_RC" -ne 0 ]; then
+    echo "codex-reviewer: DID-NOT-RUN: formatting the audit output failed (exit $FORMAT_RC)" >&2
     exit 3
   fi
 fi
