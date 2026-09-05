@@ -45,7 +45,7 @@ cd "$ROOT" || exit 2
 
 # A directory with no VCS, no manifest and no source files is almost certainly
 # not a project root. Fail loud rather than emit a confidently empty scan.
-if [ ! -d .git ] \
+if [ ! -e .git ] \
    && [ -z "$(ls -1 package.json pyproject.toml requirements.txt Package.swift Cargo.toml go.mod Makefile 2>/dev/null)" ] \
    && [ -z "$(find . -maxdepth 2 -type f \( -name '*.ts' -o -name '*.js' -o -name '*.py' -o -name '*.swift' -o -name '*.go' -o -name '*.rs' \) -print -quit 2>/dev/null)" ]; then
   printf 'scan.sh: %s does not look like a project root (no .git, no manifest, no sources)\n' "$ROOT" >&2
