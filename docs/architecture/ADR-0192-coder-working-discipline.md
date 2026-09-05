@@ -1,4 +1,4 @@
-# ADR-0191 — The coder agent gets a hard-rules block, memory read-before-write, bounded reconnaissance, verification hygiene and a definition-of-done pass
+# ADR-0192 — The coder agent gets a hard-rules block, memory read-before-write, bounded reconnaissance, verification hygiene and a definition-of-done pass
 
 - **Status:** Accepted
 - **Date:** 2026-09-04

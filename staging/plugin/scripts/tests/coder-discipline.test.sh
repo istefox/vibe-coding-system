@@ -2,7 +2,7 @@
 # coder-discipline.test.sh — offline, hermetic, no network, no $HOME dependency.
 # Bash 3.2 clean. Run: bash coder-discipline.test.sh
 #
-# Covers ADR-0191: the coder agent's working discipline, rewritten after measuring 69 real coder
+# Covers ADR-0192: the coder agent's working discipline, rewritten after measuring 69 real coder
 # dispatches (turns x context is the cost lever; the two largest self-inflicted losses were a
 # never-emitted PATTERN header and edits by absolute path into the shared checkout). Every
 # assertion here pins an INSTRUCTION, not an enforcement (rule 16): a green run says the clause
@@ -44,7 +44,7 @@ fi
 
 # ==============================================================================================
 # CD0. A `## Hard rules` section exists and sits BEFORE `## When to invoke`: the rules a hook or
-# the orchestrator enforces are the first thing after the role line, not the last (ADR-0191 §D1).
+# the orchestrator enforces are the first thing after the role line, not the last (ADR-0192 §D1).
 # Line-wise (rule 3: a heading is structure). Position is asserted because salience is the point:
 # the measured never-emitted PATTERN header sat 750 tokens deep in the old layout.
 # ==============================================================================================
@@ -61,7 +61,7 @@ PROC=$(section "Process" "$CODER")
 
 # ==============================================================================================
 # CD1. The PATTERN header must be in the SAME MESSAGE as the tool call, and that rule lives in
-# Hard rules (ADR-0191 §D1). Measured: 54 of 83 blocked edits had no header at all in the window.
+# Hard rules (ADR-0192 §D1). Measured: 54 of 83 blocked edits had no header at all in the window.
 # ==============================================================================================
 # plant: CD1 | plugin/agents/coder.md | in the same message as the tool call
 if printf '%s' "$HARD" | grep -q 'same message'; then
@@ -73,7 +73,7 @@ fi
 # ==============================================================================================
 # CD2. Relative-path discipline: Hard rules name `pwd` and 'relative path only'. The plant INVERTS
 # the rule (relative -> absolute) rather than deleting it, because an inverted rule is the exact
-# failure the 23 rejected absolute-path edits came from (ADR-0068 §D11, ADR-0191 §D1).
+# failure the 23 rejected absolute-path edits came from (ADR-0068 §D11, ADR-0192 §D1).
 # ==============================================================================================
 # plant: CD2 | plugin/agents/coder.md | by relative path only | by absolute path only
 if printf '%s' "$HARD" | grep -q 'pwd' && printf '%s' "$HARD" | grep -q 'relative path only'; then
@@ -85,7 +85,7 @@ fi
 # ==============================================================================================
 # CD3. Memory is CONSUMED, not only produced (rule 17): Process reads the coder's own topics/
 # shards before editing. Measured: shards written in 2 runs, read back by hand in 3 of 69, no
-# index ever curated (ADR-0191 §D2).
+# index ever curated (ADR-0192 §D2).
 # ==============================================================================================
 # plant: CD3 | plugin/agents/coder.md | read every shard whose name matches this task's id, slug or files
 if printf '%s' "$PROC" | grep -q 'agent-memory/coder/topics/' && printf '%s' "$PROC" | grep -q 'read every shard whose name matches'; then
@@ -96,7 +96,7 @@ fi
 
 # ==============================================================================================
 # CD4. Verification hygiene: a bound on full-suite runs and a tail pipe on every verification
-# command (ADR-0191 §D4). Measured: 11.9 test executions per run on average, 135 tool results
+# command (ADR-0192 §D4). Measured: 11.9 test executions per run on average, 135 tool results
 # over 20k characters.
 # ==============================================================================================
 # plant: CD4 | plugin/agents/coder.md | at most twice | as often as needed
@@ -108,7 +108,7 @@ fi
 
 # ==============================================================================================
 # CD5. Definition of done: the diff is read hunk by hunk against the plan's sub-steps
-# (ADR-0191 §D5).
+# (ADR-0192 §D5).
 # ==============================================================================================
 # plant: CD5 | plugin/agents/coder.md | read it hunk by hunk against the plan's sub-steps
 if printf '%s' "$PROC" | grep -q 'hunk by hunk' && printf '%s' "$PROC" | grep -q 'sub-step'; then
@@ -121,7 +121,7 @@ fi
 # CD6. Conditional tooling: the context7/LSP step says what to do when the tools are ABSENT
 # (skip). Measured: 1 context7 call and 1 LSP call across 69 runs; LSP does not register in
 # subagents on native builds (ADR-0038). An unconditional instruction to call an absent tool is
-# a turn wasted on every dispatch (ADR-0191 §D6).
+# a turn wasted on every dispatch (ADR-0192 §D6).
 # ==============================================================================================
 # plant: CD6 | plugin/agents/coder.md | skip this step without comment
 if printf '%s' "$PROC" | grep -q 'skip this step'; then
@@ -132,7 +132,7 @@ fi
 
 # ==============================================================================================
 # CD7. The eslint instruction is conditional on the tool being available. Measured: 0 eslint MCP
-# calls, no eslint MCP server configured on this machine (ADR-0191 §D6). Scoped to the line(s)
+# calls, no eslint MCP server configured on this machine (ADR-0192 §D6). Scoped to the line(s)
 # that name the tool, so prose elsewhere saying 'available' cannot satisfy it (rule 1).
 # ==============================================================================================
 # plant: CD7 | plugin/agents/coder.md | If `mcp__eslint__check_file` is available, run it | Run `mcp__eslint__check_file`

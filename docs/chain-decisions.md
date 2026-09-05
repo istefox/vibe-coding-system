@@ -5604,7 +5604,36 @@ Key architectural decisions:
 
 Detail: `docs/architecture/ADR-0190-spec-coverage-o1-forks-and-parallel-step5-6-gates.md`.
 
-## Decisions from the coder working discipline rewrite (ADR-0191)
+## Decisions from project-tasks' migration to istefox/Skills, recorded after the fact (ADR-0191)
+
+Surfaced while auditing `staging/sync-to-claude.sh`'s dry run before deploying ADR-0187's Codex
+review gate — not a bug in the gate itself, a pre-existing gap the audit happened to walk over.
+
+Key architectural decisions:
+- **The ADR records a decision that had already shipped, not one being proposed.** `readlink` on
+  `~/.claude/skills/project-tasks` showed a symlink into `/Users/stefer/Developer/Skills/tasks`, a
+  separate git repository (`istefox/Skills`) with its own PR history reaching the day of writing.
+  Nothing in this repo recorded that move: no ADR, no `chain-decisions.md` block, no
+  `sync-to-claude.sh` edit. This ADR is a ratification, not a design session — the interesting part
+  is what it had to measure to be sure the live state was real and not a local one-off (the
+  destination's own remote, its own merged PRs closing the same `SK-0NN` ids this repo's stale copy
+  still referenced) before writing anything down.
+- **The batch that restores a `deployed-only` waiver and the batch that removes the matching PAIRS
+  entries must be the same commit.** ADR-0153 stated this rule for the opposite transition
+  (vendoring); ADR-0191 needed it again for the reverse one, since `pairs-completeness.test.sh`'s
+  DO2 flags a stale waiver in one direction and a dangling PAIRS-to-nowhere in the other, and a
+  batch boundary between the two would show one of those reds for no reason connected to the actual
+  edit.
+- **The dead vendored tree is deleted outright, not archived or left commented out.** The real,
+  current files live in the destination repo; a second, frozen copy here answers no question a
+  reader would ask and just adds a place the next audit has to re-discover as stale.
+- **What this ADR explicitly declines to answer**: whether `istefox/Skills` itself has adequate
+  ADRs, tests or review discipline for `project-tasks` going forward. That repository now owns that
+  question; this repo's only job was to stop claiming a copy it no longer maintains.
+
+Detail: `docs/architecture/ADR-0191-project-tasks-migrated-to-istefox-skills.md`.
+
+## Decisions from the coder working discipline rewrite (ADR-0192)
 
 Request made directly in chat ("a more performant coder"); no GitHub issue for the rewrite. The
 premise was measured first (rule 13) on 69 coder dispatches from this repo's own transcripts.
@@ -5620,4 +5649,4 @@ Key architectural decisions:
 - **Not changed, with reasons:** the enforce hook's 20-block window (a wider window weakens ADR-0001's per-edit declaration and does not touch the 54 never-emitted cases), `maxTurns` (Step 5 has no partial-result handler), the model (ADR-0130), `experimental.cacheTtl` (billing mode not verifiable).
 - **Instruction, not enforcement (rule 16).** The harness pins that the clauses are in the prompt. The pre-registered success criterion is a re-measurement over the next 30 or more dispatches: never-emitted headers well below 54 of 83, absolute-path rejections near zero.
 
-Detail: `docs/architecture/ADR-0191-coder-working-discipline.md`.
+Detail: `docs/architecture/ADR-0192-coder-working-discipline.md`.
