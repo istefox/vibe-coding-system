@@ -158,6 +158,21 @@
 # guard entirely, which is what CX40 pins the presence of) -- both legal per plant-check.sh's own
 # rule that a needle match is scoped to its own isolated sandbox run, never shared across
 # declarations.
+#
+# AND AGAIN 2026-09-06, after every paragraph above (rule 14 — each is a correct snapshot of its own
+# moment and none of them is rewritten): CX41, regression cover for the LAST unguarded write in audit
+# mode — the `printf '[]' > "$OUT"` on the empty-scope short circuit itself, the branch that CX28,
+# CX31, CX33 and CX34 pin the paths INTO. Before the fix, an --out that could not be written exited 0
+# having created no file at all, which deep-refactor/SKILL.md's own "Exit 0 -> parse <tmp-<d>.json>"
+# consumer reads as a clean, zero-finding dimension. Measured GREEN against the code as it stands the
+# day it was added, so a RED in it is a regression in codex-reviewer.sh, never an unfinished task.
+# Z1's floor and its frozen-identity-set sentence were re-derived a sixth time by running this file
+# (rule 10, rule 13): 41 -> 42.
+#
+# The plant-declaration count grows by one, from thirty-one across twenty-eight ids to THIRTY-TWO
+# across TWENTY-NINE. It is quoted from code already on disk, not a projection, and its needle spans
+# the guard's condition together with the first words of its message: the bare condition line has
+# three copies in that file now, and plant-check.sh requires exactly one match.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -1764,15 +1779,107 @@ else
 fi
 # plant: CX40 | plugin/scripts/codex-reviewer.sh | if not ALLOWED_FILES: | if False:
 
+# CX41 (R-01) — the empty-scope short circuit's OWN write to --out, the last unguarded write in
+# audit mode and the one every path CX28, CX31, CX33 and CX34 pin drains INTO: each of those, when
+# it failed silently, arrived at this branch and was reported here as a clean audit. Its
+# `printf '[]' > "$OUT"` captured no status until the fix this pins, so an --out that could not be
+# written exited 0 having created NO ARTIFACT AT ALL. Measured before the fix: the sole evidence was
+# bash's own "Permission denied" redirection line on stderr, which this file's CHECKER contract says
+# callers never branch on. deep-refactor/SKILL.md's audit dispatch is what makes that load-bearing —
+# "Exit 0 -> parse <tmp-<d>.json> as the FINDINGS_SCHEMA array", against a file that is not there
+# (rule 17: a producer and a consumer specified apart, with nothing checking they meet).
+#
+# THE FIXTURE IS THE SIMPLEST IN THIS BLOCK, deliberately: no shim at all. CX30's healthy repository
+# is CLEAN, so `--diff-scope uncommitted` yields a legitimately empty intersection and this branch is
+# reached by the front door — CX33's own control run already asserts exactly that (exit 0 with `[]`).
+# The single injected condition is an --out inside a `chmod 555` directory: the same read-only-
+# directory trick CX34 hands to its mktemp shim one step earlier, applied here to the real --out.
+#
+# WHICH WRITE FAILED IS ASSERTED, NEVER ASSUMED. This script writes --out at four sites (this one
+# and the three python formatters) and all four fail identically against an unwritable path, so
+# `rc -eq 3` pins nothing on its own (CX32's lesson) and neither does "no artifact". Two things
+# isolate this one: the message tail "empty findings array", which no other site emits, and the stub
+# codex's PROMPT LOG staying empty, which proves the run short-circuited BEFORE `codex exec` and so
+# cannot have died in a formatter.
+#
+# BOTH DIRECTIONS (rule 8): the same fixture and the same empty scope with a WRITABLE --out must
+# still be exit 0 with `[]`. Without that half, the cheap way to satisfy the failure arm is to make
+# the empty-scope branch exit 3 unconditionally — precisely what ADR-0193 §D3 forbids.
+CX41_RODIR="$WORK/cx41-readonly"
+mkdir -p "$CX41_RODIR"
+chmod 555 "$CX41_RODIR"
+CX41_BADOUT="$CX41_RODIR/cx41-nowrite.json"
+
+# Denominator guards (rule 7) — each is a way the arms below could pass for a reason unrelated to
+# the mechanism they name.
+CX41_FIXTURE_OK=1
+git -C "$CX30_HEALTHY_REPO" rev-parse --verify HEAD >/dev/null 2>&1 || CX41_FIXTURE_OK=0
+# A clean tree is what makes the intersection genuinely empty, so the branch under test is reached
+# because there is nothing to audit and not because some derivation broke on the way.
+[ -z "$(git -C "$CX30_HEALTHY_REPO" status --porcelain 2>/dev/null)" ] || CX41_FIXTURE_OK=0
+# The read-only directory must really be unwritable. On a runner where it is not (root, or a
+# filesystem ignoring the mode) the failure arm exercises nothing, and that must read as a FAILURE
+# here, never as a pass.
+if ( : > "$CX41_RODIR/cx41-probe" ) 2>/dev/null; then
+  CX41_FIXTURE_OK=0
+  rm -f "$CX41_RODIR/cx41-probe"
+fi
+
+CX41_PROMPT="$WORK/cx41-prompt.txt"
+CX41_ERRF="$WORK/cx41.err"
+rm -f "$CX41_PROMPT" "$CX41_ERRF"
+set_stub "$MINIMAL_PAYLOAD" "$CX41_PROMPT"
+( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" \
+    bash "$CR" --mode audit --dimension structure --diff-scope uncommitted --out "$CX41_BADOUT" ) \
+    >/dev/null 2>"$CX41_ERRF"
+CX41_RC=$?
+CX41_ERR=$(cat "$CX41_ERRF")
+
+CX41_CTL_OUT="$WORK/cx41-control.json"
+CX41_CTL_ERRF="$WORK/cx41-control.err"
+CX41_CTL_PROMPT="$WORK/cx41-control-prompt.txt"
+rm -f "$CX41_CTL_OUT" "$CX41_CTL_ERRF" "$CX41_CTL_PROMPT"
+set_stub "$MINIMAL_PAYLOAD" "$CX41_CTL_PROMPT"
+( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" \
+    bash "$CR" --mode audit --dimension structure --diff-scope uncommitted --out "$CX41_CTL_OUT" ) \
+    >/dev/null 2>"$CX41_CTL_ERRF"
+CX41_CTL_RC=$?
+CX41_CTL_ERR=$(cat "$CX41_CTL_ERRF")
+CX41_CTL_EMPTY_ARRAY=0
+if [ -s "$CX41_CTL_OUT" ] && grep -q -F '[]' "$CX41_CTL_OUT"; then CX41_CTL_EMPTY_ARRAY=1; fi
+# Restored so the suite's own EXIT trap can remove $WORK; both arms are finished with it.
+chmod 755 "$CX41_RODIR"
+
+CX41_WHY=""
+[ "$CX41_RC" -eq 3 ] || CX41_WHY="$CX41_WHY rc=$CX41_RC(want-3)"
+printf '%s' "$CX41_ERR" | grep -q -F 'DID-NOT-RUN' || CX41_WHY="$CX41_WHY no-DID-NOT-RUN"
+printf '%s' "$CX41_ERR" | grep -q -F 'could not write the empty findings array' \
+  || CX41_WHY="$CX41_WHY wrong-write-named"
+printf '%s' "$CX41_ERR" | grep -q -F 'printf exit' || CX41_WHY="$CX41_WHY status-not-reported"
+[ ! -e "$CX41_BADOUT" ] || CX41_WHY="$CX41_WHY artifact-written"
+[ ! -s "$CX41_PROMPT" ] || CX41_WHY="$CX41_WHY reached-codex-exec"
+[ ! -s "$CX41_CTL_PROMPT" ] || CX41_WHY="$CX41_WHY control-reached-codex-exec"
+
+if [ "$CX41_FIXTURE_OK" -eq 1 ] && [ -z "$CX41_WHY" ] && [ "$CX41_CTL_RC" -eq 0 ] \
+   && [ "$CX41_CTL_EMPTY_ARRAY" -eq 1 ]; then
+  ok "CX41: audit mode — an unwritable --out on the EMPTY-SCOPE short circuit exits 3 (DID-NOT-RUN) naming the empty-findings-array write and its captured printf status, writes no artifact and never reaches codex exec; with --out writable the same empty scope still exits 0 with [] (ADR-0193 §D3 intact)"
+else
+  bad "CX41: empty-scope --out write guard — fixture-ok=$CX41_FIXTURE_OK$CX41_WHY rc=$CX41_RC control-rc=$CX41_CTL_RC (want 0) control-empty-array=$CX41_CTL_EMPTY_ARRAY control-stderr=${CX41_CTL_ERR:-none} — $CX41_ERR"
+fi
+# The needle spans the guard's condition AND the first words of its message: the bare condition line
+# now has three copies in that file (the two intersection writes plus this one) and would match more
+# than once, which plant-check.sh rejects as a malformed plant.
+# plant: CX41 | plugin/scripts/codex-reviewer.sh | if [ "$_write_rc" -ne 0 ]; then echo "codex-reviewer: DID-NOT-RUN: could not write the empty findings array | if false; then echo "codex-reviewer: DID-NOT-RUN: could not write the empty findings array
+
 # =====================================================================================
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 41 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 41) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX40 are the frozen identity set"
+if [ "$_total" -ge 42 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 42) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX41 are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 41; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 42; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]

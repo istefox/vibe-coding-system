@@ -355,9 +355,22 @@ elif [ "$MODE" = "audit" ]; then
   fi
 
   # An empty result is exit 0 with an empty findings array written to --out, mirroring review
-  # mode's own empty-diff precedent immediately above — never exit 3 (ADR-0193 §D3).
+  # mode's own empty-diff precedent immediately above — never exit 3 (ADR-0193 §D3). That contract
+  # is about the empty RESULT, not about the write that carries it: exit 0 PROMISES the caller a
+  # parseable --out artifact, so a write that fails still owes it a DID-NOT-RUN (rule 4), captured
+  # exactly like the two intersection writes above. Measured before this guard existed: an
+  # unwritable --out on this path exited 0 having created no file at all, with bash's own
+  # "Permission denied" redirection diagnostic as the only evidence — on stderr, which this file's
+  # CHECKER contract says callers never branch on. deep-refactor/SKILL.md's audit dispatch then
+  # does what it is told for exit 0, "parse <tmp-<d>.json> as the FINDINGS_SCHEMA array", against
+  # a file that is not there: a write failure reads as a clean, zero-finding dimension.
   if [ -z "$FILE_LIST" ]; then
     printf '[]\n' > "$OUT"
+    _write_rc=$?
+    if [ "$_write_rc" -ne 0 ]; then
+      echo "codex-reviewer: DID-NOT-RUN: could not write the empty findings array to the --out file '$OUT' (printf exit $_write_rc)" >&2
+      exit 3
+    fi
     exit 0
   fi
 fi
