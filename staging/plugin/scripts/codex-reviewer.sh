@@ -81,8 +81,30 @@ fi
 
 # Shared by review mode (mandatory) and audit mode (optional) — rule 6: both call sites answer
 # the SAME question, so they call the same validator rather than each carrying its own copy.
+#
+# `base:` and `commit:` with NOTHING after the colon are rejected here, before any git call. The
+# documented grammar is `base:<ref>` / `commit:<sha>`, so an absent value is a malformed scope, the
+# same class the fall-through arm below already rejects — but the two prefixes fail DIFFERENTLY
+# when left to git, and only one of the two failures is visible. Measured on git 2.50.1 (Apple
+# Git-155) against this script's own four arms:
+#   git diff ""...HEAD  -> exit 0, EMPTY diff. The shell collapses the quoted empty ref and the
+#     suffix into the single token `...HEAD`, and gitrevisions specifies an omitted side of
+#     `..`/`...` as defaulting to HEAD — so the range is `HEAD...HEAD`, legitimately empty.
+#     Measured end to end before this guard: `--diff-scope base:` exited 0 with "safe to merge
+#     (nothing to review)" in review mode and 0 with `[]` in audit mode. A FALSE CLEAN, byte-
+#     identical to a genuinely reviewed empty diff — the caller cannot tell it never ran.
+#   git show --end-of-options ""  -> exit 128 ("ambiguous argument ''"), which the commit: arms
+#     turn into exit 3 DID-NOT-RUN. Not a false clean, but the wrong CLASS: exit 3 is the ONE
+#     signal callers gate the fallback-to-Claude AskUserQuestion on, spent on a caller error. A
+#     malformed argument is exit 2 (rule 20 — the code belongs to this script's own caller
+#     contract), the same code and voice validate_ref_no_leading_dash uses for the sibling defect.
+# Both prefixes are rejected on one line because "does this scope name a ref at all" is ONE
+# question (rule 6), not because git treats them alike — measured, it does not.
 validate_diff_scope() {
   case "$1" in
+    # Must precede the pattern arm below: `*` matches the empty string, so `base:*` would swallow
+    # a bare `base:` and this arm would never be reached.
+    base:|commit:) echo "codex-reviewer: --diff-scope ref/sha must not be empty (got '$1')" >&2; exit 2 ;;
     uncommitted|base:*|commit:*) ;;
     *) echo "codex-reviewer: --diff-scope must be 'uncommitted', 'base:<ref>', or 'commit:<sha>' (got '$1')" >&2; exit 2 ;;
   esac

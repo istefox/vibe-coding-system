@@ -213,6 +213,27 @@
 # the allow-set, and the `os.sep` that decides what "under the root" means — a naive string prefix
 # admits a SIBLING directory `<root>-other`, which is the second of the assertion's two escape
 # shapes). Both are quoted from code already on disk, neither is a projection.
+#
+# AND AGAIN 2026-09-06, after every paragraph above (rule 14 — each is a correct snapshot of its own
+# moment and none of them is rewritten): CX44 and CX45, regression cover for the EMPTY ref/sha
+# rejection added to `validate_diff_scope`. A `base:` or `commit:` scope with nothing after the colon
+# was uncovered by everything above — CX06 pins the three forms ACCEPTED, CX30/CX31 drive refs that
+# do not RESOLVE, CX35/CX36 drive DASH-SHAPED ones. Measured against the script before the fix, in
+# the same healthy fixture: `base:` exited 0 with "safe to merge (nothing to review)" in review mode
+# and 0 with `[]` in audit mode — a FALSE CLEAN, because the shell collapses `""...HEAD` to the token
+# `...HEAD` and gitrevisions defaults an omitted side of `...` to HEAD; `commit:` exited 3
+# DID-NOT-RUN, not a false clean but the wrong CLASS for a caller error. Both are exit 2 now, and
+# both assertions pin the class rather than mere non-zero-ness, since "non-zero" was already true of
+# the commit: half of the defect. Measured GREEN after the fix, so a RED in either is a regression in
+# codex-reviewer.sh, never an unfinished task. Z1's floor and its frozen-identity-set sentence were
+# re-derived a ninth time by running this file (rule 10, rule 13): 44 -> 46.
+#
+# The plant-declaration count grows by two, from thirty-six across thirty-one ids to THIRTY-EIGHT
+# across THIRTY-THREE. CX44 and CX45 SHARE one needle — the new case arm — for the same reason
+# CX35/CX36 share theirs: removing it breaks each independently in its own isolated mutation run.
+# The needle is quoted from code already on disk, not a projection, and it spans the arm's pattern
+# together with its whole message and exit, because the bare pattern alone would not be unique
+# against the pattern arm immediately below it.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -2191,14 +2212,128 @@ fi
 # plant: CX43 | plugin/scripts/codex-reviewer.sh | _root_prefix = _repo_root_real + os.sep | _root_prefix = _repo_root_real
 
 # =====================================================================================
+# CX44-CX45 (R-01) — regression coverage for the EMPTY ref/sha rejection in `validate_diff_scope`.
+# `base:` and `commit:` with nothing after the colon passed every check in this file before it:
+# CX06 only ever showed the three FORMS accepted, CX30/CX31 drove refs that do not RESOLVE, and
+# CX35/CX36 drove DASH-SHAPED ones — none of them empty, so the whole malformed-but-prefixed shape
+# was uncovered.
+#
+# THE TWO PREFIXES FAILED DIFFERENTLY, WHICH IS WHY BOTH ARE DRIVEN (rule 8 in the other axis —
+# the same input class through both arms, not one arm assumed to stand for the other). Measured
+# against the script before the fix, in this same healthy fixture:
+#   base:   -> exit 0, "safe to merge (nothing to review)" in review mode and `[]` in audit mode.
+#              The shell collapses `""...HEAD` to the single token `...HEAD` and gitrevisions
+#              defaults an omitted side of `...` to HEAD, so git diffs HEAD against itself: a FALSE
+#              CLEAN, byte-identical to a genuinely reviewed empty diff.
+#   commit: -> exit 3 DID-NOT-RUN (git show "" exits 128). Not a false clean, but the wrong CLASS —
+#              exit 3 is the one signal callers gate the fallback-to-Claude prompt on, spent on a
+#              caller error.
+# So each arm below checks the CLASS, not merely a non-zero code: a bare "rc != 0" would have been
+# satisfied by the commit: half of the defect itself, and `[ ! -e ]` (not `! -s`) on --out is what
+# separates "rejected before git ran" from the base: half's zero-byte-report false clean.
+#
+# BOTH DIRECTIONS (rule 8): the cheap way to satisfy "reject an empty ref" is to reject every
+# prefixed scope, so each block also drives `base:HEAD` and `commit:HEAD` through the same arms and
+# requires exit 0 — the same control pair CX35/CX36 use, against the same fixture.
+#
+# Same healthy, committed fixture CX30 builds and CX31/CX33/CX35/CX36 reuse; codex-reviewer.sh
+# issues bare `git ...`, never `git -C`, so each run happens inside it via a subshell `cd`.
+
+CX44_RAN=0
+CX44_BAD=""
+for _cx44_scope in base: commit:; do
+  CX44_RAN=$((CX44_RAN + 1))
+  _cx44_out="$WORK/cx44-$CX44_RAN.json"
+  _cx44_errf="$WORK/cx44-$CX44_RAN.err"
+  rm -f "$_cx44_out"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" bash "$CR" --mode review --diff-scope "$_cx44_scope" --out "$_cx44_out" ) \
+    >/dev/null 2>"$_cx44_errf"
+  _cx44_rc=$?
+  _cx44_err=$(cat "$_cx44_errf")
+  _cx44_why=""
+  [ "$_cx44_rc" -eq 2 ] || _cx44_why="$_cx44_why rc=$_cx44_rc(want-2)"
+  printf '%s' "$_cx44_err" | grep -q -F 'must not be empty' || _cx44_why="$_cx44_why no-guard-message"
+  printf '%s' "$_cx44_err" | grep -q -F "(got '$_cx44_scope')" || _cx44_why="$_cx44_why value-not-named"
+  if printf '%s' "$_cx44_err" | grep -q -F 'DID-NOT-RUN'; then
+    _cx44_why="$_cx44_why WRONG-CLASS-DID-NOT-RUN"
+  fi
+  [ ! -e "$_cx44_out" ] || _cx44_why="$_cx44_why FALSE-CLEAN-ARTIFACT-WRITTEN"
+  if [ -n "$_cx44_why" ]; then
+    CX44_BAD="$CX44_BAD [$_cx44_scope:$_cx44_why ]"
+  fi
+done
+
+CX44_NORMAL_OK=1
+for _cx44_nscope in base:HEAD commit:HEAD; do
+  _cx44_nout="$WORK/cx44-normal-$_cx44_nscope.json"
+  _cx44_nerrf="$WORK/cx44-normal-$_cx44_nscope.err"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" bash "$CR" --mode review --diff-scope "$_cx44_nscope" --out "$_cx44_nout" ) \
+    >/dev/null 2>"$_cx44_nerrf"
+  _cx44_nrc=$?
+  [ "$_cx44_nrc" -eq 0 ] || CX44_NORMAL_OK=0
+done
+
+if [ "$CX44_RAN" -eq 2 ] && [ -z "$CX44_BAD" ] && [ "$CX44_NORMAL_OK" -eq 1 ]; then
+  ok "CX44: review mode — a 'base:' or 'commit:' scope naming NO ref/sha is rejected with exit 2 (never exit 0 with a 'safe to merge' report, never exit 3 DID-NOT-RUN) naming the offending value, and writes no --out artifact at all (loop ran $CX44_RAN times); a normal ref/sha (HEAD) at both arms still exits 0"
+else
+  bad "CX44: review-mode empty-ref rejection — loop-ran=$CX44_RAN (need 2) failing-arms:${CX44_BAD:-none} normal-refs-ok=$CX44_NORMAL_OK"
+fi
+# plant: CX44 | plugin/scripts/codex-reviewer.sh | base:|commit:) echo "codex-reviewer: --diff-scope ref/sha must not be empty (got '$1')" >&2; exit 2 ;; | base:|commit:) ;;
+
+CX45_RAN=0
+CX45_BAD=""
+for _cx45_scope in base: commit:; do
+  CX45_RAN=$((CX45_RAN + 1))
+  _cx45_out="$WORK/cx45-$CX45_RAN.json"
+  _cx45_errf="$WORK/cx45-$CX45_RAN.err"
+  rm -f "$_cx45_out"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" bash "$CR" --mode audit --dimension structure --diff-scope "$_cx45_scope" --out "$_cx45_out" ) \
+    >/dev/null 2>"$_cx45_errf"
+  _cx45_rc=$?
+  _cx45_err=$(cat "$_cx45_errf")
+  _cx45_why=""
+  [ "$_cx45_rc" -eq 2 ] || _cx45_why="$_cx45_why rc=$_cx45_rc(want-2)"
+  printf '%s' "$_cx45_err" | grep -q -F 'must not be empty' || _cx45_why="$_cx45_why no-guard-message"
+  printf '%s' "$_cx45_err" | grep -q -F "(got '$_cx45_scope')" || _cx45_why="$_cx45_why value-not-named"
+  if printf '%s' "$_cx45_err" | grep -q -F 'DID-NOT-RUN'; then
+    _cx45_why="$_cx45_why WRONG-CLASS-DID-NOT-RUN"
+  fi
+  [ ! -e "$_cx45_out" ] || _cx45_why="$_cx45_why FALSE-CLEAN-ARTIFACT-WRITTEN"
+  if [ -n "$_cx45_why" ]; then
+    CX45_BAD="$CX45_BAD [$_cx45_scope:$_cx45_why ]"
+  fi
+done
+
+CX45_NORMAL_OK=1
+for _cx45_nscope in base:HEAD commit:HEAD; do
+  _cx45_nout="$WORK/cx45-normal-$_cx45_nscope.json"
+  _cx45_nerrf="$WORK/cx45-normal-$_cx45_nscope.err"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" bash "$CR" --mode audit --dimension structure --diff-scope "$_cx45_nscope" --out "$_cx45_nout" ) \
+    >/dev/null 2>"$_cx45_nerrf"
+  _cx45_nrc=$?
+  [ "$_cx45_nrc" -eq 0 ] || CX45_NORMAL_OK=0
+done
+
+if [ "$CX45_RAN" -eq 2 ] && [ -z "$CX45_BAD" ] && [ "$CX45_NORMAL_OK" -eq 1 ]; then
+  ok "CX45: audit mode — a 'base:' or 'commit:' scope naming NO ref/sha is rejected with exit 2 (never exit 0 with an empty findings array, never exit 3 DID-NOT-RUN) naming the offending value, and writes no --out artifact at all (loop ran $CX45_RAN times); a normal ref/sha (HEAD) at both arms still exits 0"
+else
+  bad "CX45: audit-mode empty-ref rejection — loop-ran=$CX45_RAN (need 2) failing-arms:${CX45_BAD:-none} normal-refs-ok=$CX45_NORMAL_OK"
+fi
+# plant: CX45 | plugin/scripts/codex-reviewer.sh | base:|commit:) echo "codex-reviewer: --diff-scope ref/sha must not be empty (got '$1')" >&2; exit 2 ;; | base:|commit:) ;;
+
+# =====================================================================================
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 44 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 44) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX43 are the frozen identity set"
+if [ "$_total" -ge 46 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 46) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX45 are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 44; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 46; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]
