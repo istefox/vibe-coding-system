@@ -10,10 +10,14 @@
 # scratch diff. codex-reviewer.sh's two embedded --output-schema blocks (review mode, diagnose
 # mode) are extracted here from the real source file and checked structurally, so a future edit
 # that drops the constraint again fails fast in CI instead of only at the next live probe.
+#
+# S3 (ADR-0194, Task 1) extends this same walk to codex-tester.sh's own --output-schema block —
+# the same invalid_json_schema trap, this time for the new script this SPEC adds.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 CR="$SCRIPTS/codex-reviewer.sh"
+CT="$SCRIPTS/codex-tester.sh"
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
@@ -25,19 +29,20 @@ fi
 ok "S0: codex-reviewer.sh found"
 
 extract_schema() {
-  # $1 = 1-based ordinal of the SCHEMA_EOF block to extract (1 = review mode, 2 = diagnose mode)
-  awk -v n="$1" '
+  # $1 = file to extract from, $2 = 1-based ordinal of the SCHEMA_EOF block to extract
+  # (codex-reviewer.sh: 1 = review mode, 2 = diagnose mode; codex-tester.sh: 1 = its one block)
+  awk -v n="$2" '
     /<<.SCHEMA_EOF.$/ { count++; if (count==n) { capturing=1; next } }
     capturing && /^SCHEMA_EOF$/ { capturing=0; next }
     capturing { print }
-  ' "$CR"
+  ' "$1"
 }
 
 check_schema() {
-  # $1 = label, $2 = schema text
-  local label="$1" schema="$2"
+  # $1 = label, $2 = schema text, $3 = source file (used only in the not-found message)
+  local label="$1" schema="$2" src="${3:-$CR}"
   if [ -z "$schema" ]; then
-    bad "$label: schema block not found in codex-reviewer.sh"
+    bad "$label: schema block not found in $src"
     return
   fi
   local verdict
@@ -81,20 +86,28 @@ else:
   esac
 }
 
-REVIEW_SCHEMA=$(extract_schema 1)
-DIAGNOSE_SCHEMA=$(extract_schema 2)
+REVIEW_SCHEMA=$(extract_schema "$CR" 1)
+DIAGNOSE_SCHEMA=$(extract_schema "$CR" 2)
 
-check_schema "S1 review-mode schema" "$REVIEW_SCHEMA"
-check_schema "S2 diagnose-mode schema" "$DIAGNOSE_SCHEMA"
+check_schema "S1 review-mode schema" "$REVIEW_SCHEMA" "$CR"
+check_schema "S2 diagnose-mode schema" "$DIAGNOSE_SCHEMA" "$CR"
+
+# S3 (ADR-0194, Task 1) — codex-tester.sh's own --output-schema block, RED until Task 2 lands
+# the script (it does not exist yet, so extract_schema returns empty and check_schema reports
+# "schema block not found").
+TESTER_SCHEMA=""
+[ -f "$CT" ] && TESTER_SCHEMA=$(extract_schema "$CT" 1)
+check_schema "S3 tester schema" "$TESTER_SCHEMA" "$CT"
+# plant: S3 | plugin/scripts/codex-tester.sh | "additionalProperties": false | "additionalProperties": true
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 2 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 2)"
+if [ "$_total" -ge 3 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 3)"
   PASS=$((PASS+1))
 else
-  echo "FAIL: Z1: only $_total assertions ran (floor: 2)"
+  echo "FAIL: Z1: only $_total assertions ran (floor: 3)"
   FAIL=$((FAIL+1))
 fi
 [ "$FAIL" -eq 0 ]
