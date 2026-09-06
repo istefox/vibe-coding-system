@@ -1,93 +1,176 @@
-# SPEC — a per-file budget ceiling is parsed and then summed so one file can exceed its own
+# SPEC: Codex-vs-Claude backend choice for the tester subagent
 
-Source: GitHub issue #296
+**Topic slug:** codex-claude-choice-for-tester
 
 ## Objectives
 
-1. Report a file that exceeds its own declared ceiling, even when the task's total stays under the
-   summed budget.
-2. Leave the single-ceiling declaration form behaving exactly as it does today, proven by comparing
-   the whole corpus under both parsers.
-3. Keep the reporter contract unchanged: always exit 0, signal on stdout.
+Give the `tester` subagent the same Codex-vs-Claude backend choice already shipped for the
+`reviewer` agent (ADR-0187, ADR-0193), at its two dispatch sites in `concept-to-code` Step 5. Unlike
+the reviewer, the tester must write real test files and run the suite, not just produce a read-only
+report — so the mechanism needs a write-sandboxed Codex wrapper, not a reuse of
+`codex-reviewer.sh`. As a related, explicitly requested change, also lower the tester's default
+Claude effort pin from `xhigh` to `high` globally (frontmatter and Step 5 Workflow dispatch), to
+reduce cost on every tester dispatch regardless of backend.
 
 ## Scope
 
-In: what `diff-budget-check.sh` does with per-file ceilings after parsing them — currently summed
-into a task total and discarded — and the finding it reports when one file overruns its own
-declaration. A whole-corpus both-parsers comparison in the style of ADR-0091 §BK9.
+**In scope:**
+- A new script `codex-tester.sh` (mirrors `codex-reviewer.sh`'s structure and exit-code contract),
+  running `codex exec -s workspace-write -C <worktree>` to write test files and run the suite inside
+  a worktree it cannot write outside of.
+- A post-run `git diff --name-only` scope check inside `codex-tester.sh`: if Codex wrote to a
+  non-test file, exit 4 (new, in addition to the existing 0/2/3 contract).
+- A free-text `model_reasoning_effort` override on the codex branch (default: config.toml's current
+  value, `medium`), passed as `-c model_reasoning_effort=<value>` to `codex exec`. No `-m/--model`
+  override — the codex model itself stays whatever `~/.codex/config.toml` configures.
+- Two new `AskUserQuestion` gates, one at each Step 5 tester dispatch site
+  (`concept-to-code/references/step5-implementation.md:574-622` Workflow path, `:1769-1806`
+  Agent-tool batch path), offering `codex` / `claude-sonnet` (default) / `claude-opus` — model only,
+  no effort choice on the Claude branches (kept pinned, per the reviewer's own Step 5 precedent).
+- Two new manifest fields, `use_codex_tester` / `step5_codex_tester_asked`, additive under the
+  existing schema `1.4` (no version bump — same treatment ADR-0193 gave the reviewer's own fields),
+  new Invariants 26/27 in `manifest-validate.sh`, seeded in `manifest-init.sh`.
+- Lower the tester's default Claude effort pin from `xhigh` to `high`: `staging/plugin/agents/
+  tester.md` frontmatter, and the Step 5 Workflow dispatch site's explicit `effort: "xhigh"` pin
+  (`references/step5-implementation.md:574-622`). The Agent-tool batch path already omits `effort`
+  (the tool has no such parameter, ADR-0068 §D7) — unaffected.
+- `docs/architecture/ADR-0194-codex-tester-choice.md` moves from Proposed to Accepted once this
+  plan is approved and implemented, with any interview-driven refinements folded in.
 
-Out: the parsing of the per-file syntax itself, which ADR-0091 already fixed (the parser reads
-`a/x.md (~165 lines, new), b/y.sh (~1 line)`). The `MALFORMED` token's consumers (#295), the
-identifier model (#293), and the mode-selection question (#294).
+**Out of scope:**
+- Any change to `codex-reviewer.sh` itself, or to the `reviewer` agent's own dispatch sites.
+- A structural/automated check that Codex's report actually contains all six `tester.md` Output
+  Format sections. Parity is a prompt instruction only (same trust level as `codex-reviewer.sh`'s
+  own report-shape parity with `reviewer.md` — no parser validates that either).
+- Exposing a Codex model override (`-m`) — only `model_reasoning_effort` is exposed, because the
+  set of valid Codex model names was not confirmed live (config.toml default: `gpt-5.6-terra`; a
+  `Sol`/`Terra`/`Luna` family exists per local docs but its capability ranking was not verified).
+- Any change to `review-triage-fix` or its own codex dispatch sites.
 
-## Stack
+## Stack / architecture
 
-Bash 3.2 (macOS-portable) shell scripts under `staging/plugin/scripts/` and
-`staging/plugin/skills/*/scripts/`; Markdown SKILL.md instruction files; awk predicates; a 68-file
-`*.test.sh` harness under `staging/plugin/scripts/tests/` run by `.claude/test-cmd`; GitHub Actions
-CI (`ci`, `markdownlint`, `links`). No application runtime.
+No new runtime dependency. `codex-tester.sh` is a Bash 3.2-clean script, deployed via
+`sync-to-claude.sh`'s `PAIRS` mapping (`staging/plugin/scripts/codex-tester.sh` →
+`~/.claude/hooks/codex-tester.sh`), same shape as `codex-reviewer.sh`.
 
-## Architecture
+**Availability cascade** (mirrors `codex-reviewer.sh`): `command -v codex` → `codex doctor --json`
+→ `auth.credentials.status == "ok"` → not any of these, exit 3 (`DID-NOT-RUN`), never silent.
 
-- `staging/plugin/skills/concept-to-code/scripts/diff-budget-check.sh` — the whole change. The
-  relevant stages, in order: the awk parser that walks paren groups left to right and writes each
-  parsed declaration to `BUDGET_FILE`; the `MASTER_SCOPE` union built from `BUDGET_FILE`; and the
-  `--tasks` expansion that sums declared budgets across the selected task set. It is the last stage
-  that discards per-file granularity. Line numbers quoted by ADR-0091 will have moved; resolve them
-  by reading the file.
-- `docs/superpowers/plans/` — the corpus. ADR-0091 measured 16 budget declarations, of which the
-  per-file ones are the population R-01 acts on and R-02 must show unchanged elsewhere.
-- `staging/plugin/skills/concept-to-code/SKILL.md` — the Step 5 checkpoint block consuming the
-  reporter's stdout and recording findings into `step5-report.json`; a new per-file finding shape
-  has to land there.
-- `staging/plugin/scripts/tests/diff-budget-scope.test.sh` — the harness file, already carrying
-  ADR-0091 §BK9's both-parsers corpus comparison, which R-02 asks to repeat.
-- `staging/plugin/scripts/tests/plant-check.sh` — the plant registry runner (ADR-0108).
-- `docs/architecture/ADR-0091-246-per-file-budget-half-parse.md` and
-  `docs/architecture/ADR-0070-184-diff-budget-task-predicate.md` — the source and its predecessor.
+**Sandbox**: `codex exec -s workspace-write -C <worktree-dir>` — verified live (`codex exec --help`,
+2026-09-06) that both flags exist and compose to scope writes to exactly the given directory. This
+reuses the worktree isolation the tester dispatch already establishes
+(`isolation: "worktree"` on the Workflow path; explicit worktree write-path briefing on the
+Agent-tool batch path) rather than inventing a second isolation boundary.
 
-## Data model
+**Post-run scope check** (new, no reviewer-side precedent): after `codex exec` returns 0, run
+`git -C <worktree> diff --name-only` against the pre-dispatch baseline and classify each changed
+path by the project's own test-file convention (same file-name/path heuristic `tester.md`'s own
+framework detection already uses per stack). Any non-test-file change → exit 4, `--out` still
+written (partial), caller must surface it and never treat exit 4 as success.
 
-A budget declaration, per task, is currently reduced to a line in `BUDGET_FILE` keyed by task
-identifier. The per-file form carries, per file: a path and a line ceiling (and, in the corpus, an
-optional marker such as `new`). The change is that the per-file ceiling must survive to the
-comparison stage instead of being collapsed into one total per task.
+## Data model (manifest, schema 1.4, additive)
 
-A finding shape must be decided for "file X exceeded its own ceiling", distinct from the existing
-task-total `BUDGET` finding, and recorded in `step5-report.json` alongside the existing
-`budget_findings` entries.
+```yaml
+use_codex_tester: false          # bool, default false — mirrors use_codex_review
+step5_codex_tester_asked: false  # bool, default false — mirrors step5_codex_review_asked;
+                                  # distinguishes "never asked" from "asked, declined" (both leave
+                                  # use_codex_tester=false), same reasoning as ADR-0193's own fix
+                                  # for the equivalent reviewer-side bug.
+```
 
-## API / Interfaces
+`manifest-validate.sh` — new conditional Invariants (numbered after the existing 25):
+- **Invariant 26**: if `use_codex_tester` present, must be `true`/`false`.
+- **Invariant 27**: if `step5_codex_tester_asked` present, must be `true`/`false`.
 
-`diff-budget-check.sh --plan <file> --tasks <task-spec> < git-diff---stat-output`. Reporter
-contract: always exit 0, signal on stdout, `CLEAN` when there is nothing to report. Token grammar
-today: `BUDGET`, `SCOPE`, `MALFORMED`, `CLEAN`. Whether the per-file overrun is a new token or a
-variant of `BUDGET` is a design decision — either way it becomes part of the grammar every consumer
-enumerated by #295 reads.
+`manifest-init.sh` seeds both to `false` alongside the existing `use_codex_review`/
+`step5_codex_review_asked` lines.
 
-## UI flows
+## Dispatch flow (both Step 5 sites)
 
-None.
+1. Immediately before the tester dispatch, `AskUserQuestion`: `codex` / `claude-sonnet` (default) /
+   `claude-opus`. Skipped under `--autopilot`, same disclosed instruction-not-enforcement limit as
+   the reviewer's own Step 5 ask (rule 16). Writes the answer via `manifest-set-flag.sh` and sets
+   `step5_codex_tester_asked: true` regardless of the answer (so it never re-fires after a "no",
+   same fix ADR-0193 already made for the reviewer).
+2. **`codex` branch**: dispatch `~/.claude/hooks/codex-tester.sh --worktree <dir> --brief <file>
+   --out <file> [--effort <value>]`, brief content identical to what the Claude `tester` receives
+   (SPEC requirement IDs / Success Criteria / plan task text, never implementation files — ADR-0049
+   §D1, ADR-0088). Branch on exit code:
+   - `0` → read `--out` as the tester's report, exactly as if the Claude `tester` had produced it.
+   - `2` → bad invocation, report the stderr line, halt this dispatch.
+   - `3` → DID-NOT-RUN. `AskUserQuestion`: fallback to Claude `tester`, or halt. Never silent.
+   - `4` → wrote outside test scope. Report the offending paths from `--out`, `AskUserQuestion`:
+     fallback to Claude `tester` (recommended), or accept the write and continue, or halt.
+3. **`claude-sonnet`/`claude-opus` branch**: dispatch `tester` at that `model:`, `effort: "high"` on
+   the Workflow path (post-lowering default; see below), no `effort` on the Agent-tool path
+   (unchanged, ADR-0068 §D7).
+
+## Effort pin change (tester default, both backends)
+
+- `staging/plugin/agents/tester.md` frontmatter: `effort: xhigh` → `effort: high`.
+- `references/step5-implementation.md:574-622` (Workflow path) explicit pin: `effort: "xhigh"` →
+  `effort: "high"`.
+- Agent-tool batch path (`:1769-1806`): unaffected, already omits `effort`.
+- This applies unconditionally, independent of which Step 5 dispatch-site ask above is answered —
+  it is a default-cost change, not part of the codex/claude choice itself.
 
 ## Edge cases
 
-- A task whose total passes while one file overruns — the case R-01 names, and the only one the
-  current check misses.
-- A single-ceiling declaration, which must behave byte-identically (R-02).
-- A mixed declaration: ADR-0091 records that mixed forms work as a consequence of the one-grammar
-  left-to-right walk, not as a special case.
-- A file in the declared set with zero changed lines in the diff.
-- A changed file not named in any declaration — the existing `SCOPE` finding, which must not change
-  meaning.
-- `git diff --stat` path elision and right-aligned counts: ADR-0070 defects 3 and 4, both of which
-  corrupt per-file attribution and are the reason `--stat=999` is used at both call sites.
-- A malformed declaration coexisting with a well-formed one in the same task.
-- Per the standing rules in the issue footer, both directions per contract, and a reporter never
-  branches on an exit code.
+- **Codex unavailable (exit 3) mid-chain, after already writing some files in a prior attempt on
+  the same worktree**: not possible in this design — `codex-tester.sh`'s availability cascade runs
+  before any `codex exec` invocation, so exit 3 is always a no-op with respect to the filesystem.
+- **Codex writes a file that is ambiguous between test and production** (e.g. a shared fixture
+  file): classified by the same heuristic `tester.md`'s own framework detection already uses; a
+  false positive here is a caller-visible exit 4, not a silent pass — the operator decides via the
+  fallback `AskUserQuestion` in step 2 above.
+- **`model_reasoning_effort` override rejected by Codex** (invalid value): `codex exec` itself fails
+  non-zero; `codex-tester.sh` propagates this as exit 3 or 2 per its own availability-cascade /
+  bad-invocation classification (not a new state) — the failure is visible, not silently ignored.
+- **Autopilot run**: both new Step 5 asks skipped, `use_codex_tester` stays `false`, `tester`
+  dispatches on Claude exactly as it does today (minus the effort-pin lowering, which applies
+  unconditionally).
 
 ## Success criteria
 
-- [ ] R-01 — a file exceeding its own ceiling is reported even when the task total passes.
-- [ ] R-02 — the single-ceiling form keeps its current behaviour exactly; prove it by comparing the
-      whole corpus under both parsers, as ADR-0091 §BK9 did.
-- [ ] R-03 — the reporter contract is unchanged: always exit 0, signal on stdout.
+- [ ] R-01 — A new script `staging/plugin/scripts/codex-tester.sh` exists, deployable via
+      `sync-to-claude.sh`'s `PAIRS` mapping to `~/.claude/hooks/codex-tester.sh`.
+- [ ] R-02 — `codex-tester.sh` runs `codex exec -s workspace-write -C <worktree>`, never
+      `-s read-only` and never `danger-full-access`.
+- [ ] R-03 — `codex-tester.sh` implements the same availability cascade as `codex-reviewer.sh`
+      (codex CLI present, `codex doctor --json` auth check), exiting 3 with a `DID-NOT-RUN` stderr
+      line on any failure of that cascade.
+- [ ] R-04 — `codex-tester.sh` exits 0 on success with the report written to `--out` in
+      `tester.md`'s six-field Output Format shape (no-test: this is a prompt-authoring requirement
+      verified by reading the script's embedded prompt text, not something a harness assertion can
+      mechanically confirm without inventing an unwanted structural parser).
+- [ ] R-05 — `codex-tester.sh` runs a post-run `git diff --name-only` scope check and exits 4 with
+      the offending file paths on stderr when a non-test file was modified.
+- [ ] R-06 — `codex-tester.sh` accepts an optional `--effort <value>` flag, passed through as
+      `-c model_reasoning_effort=<value>` to `codex exec`; omitted entirely when not provided (uses
+      `~/.codex/config.toml`'s own default).
+- [ ] R-07 — `concept-to-code/references/step5-implementation.md`'s Workflow-path tester dispatch
+      (currently lines 574-622) is preceded by an `AskUserQuestion` offering `codex` /
+      `claude-sonnet` (default) / `claude-opus`, skipped under `--autopilot`.
+- [ ] R-08 — `concept-to-code/references/step5-implementation.md`'s Agent-tool batch-path tester
+      dispatch (currently lines 1769-1806) is preceded by the same `AskUserQuestion` as R-07.
+- [ ] R-09 — On the `codex` branch at either site, exit 0 from `codex-tester.sh` is consumed as the
+      tester's report; exit 2 halts that dispatch and reports stderr; exit 3 triggers a
+      fallback-or-halt `AskUserQuestion`, never a silent fallback; exit 4 triggers a
+      fallback-accept-or-halt `AskUserQuestion` naming the offending files.
+- [ ] R-10 — `manifest-init.sh` seeds `use_codex_tester: false` and
+      `step5_codex_tester_asked: false`.
+- [ ] R-11 — `manifest-validate.sh` gains conditional Invariants 26 and 27 validating those two
+      fields are boolean when present, schema stays `1.4` (no version bump).
+- [ ] R-12 — Each Step 5 ask sets `step5_codex_tester_asked: true` unconditionally once it fires,
+      regardless of the answer chosen, so it never re-prompts on a later run of the same manifest
+      after a decline.
+- [ ] R-13 — `staging/plugin/agents/tester.md` frontmatter `effort:` changes from `xhigh` to
+      `high`.
+- [ ] R-14 — `concept-to-code/references/step5-implementation.md`'s Workflow-path dispatch pin
+      changes from `effort: "xhigh"` to `effort: "high"`; the Agent-tool batch path is left
+      unchanged (it already omits `effort`).
+- [ ] R-15 — `docs/architecture/ADR-0194-codex-tester-choice.md` is updated to Accepted status,
+      reflecting any interview-driven refinements above (workspace-write sandbox confirmed live,
+      effort-override mechanism, effort-pin lowering) that were not yet settled when it was
+      drafted as Proposed (no-test: this is a documentation-state requirement, not something a
+      test can assert without inventing a doc-content parser).
