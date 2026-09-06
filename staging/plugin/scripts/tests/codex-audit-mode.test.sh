@@ -102,6 +102,62 @@
 # (plant-check.sh's own rule). The last ten (CX28, CX29, CX30, CX31, CX32, CX33's two and CX34's
 # three) are not projections at all: they were written against code already on disk, so their
 # needles are quoted from it.
+#
+# AND AGAIN 2026-09-06, after two more security fixes landed (commits 93e5767 and 31cdc68, rule 14
+# -- every paragraph above is a correct snapshot of its own moment and is not rewritten):
+#
+# SIX ASSERTIONS BROKE, CORRECTLY, when 31cdc68's audit file-scope validation shipped: CX11, CX12,
+# CX13, CX18, CX19 and CX29 all named fabricated fixture files (src/A.swift, src/B.swift,
+# src/Sec.swift, /already/absolute/src/B.swift) that do not exist in this repository's own tracked
+# tree, and the new validation correctly rejects a finding whose file resolves outside the audited
+# scope. All six are repaired here to name REAL, always git-tracked, hyphen-free-basename files
+# (SPEC.md, CLAUDE.md -- the latter constraint from CX13's own id-shape regex, which needs
+# os.path.basename(file) to contain no hyphen) that this suite's own whole-tree audit runs (no
+# --diff-scope, so FILE_LIST is every tracked file under this repository) always include. CX29's
+# expected-value computation also moved from a raw string join to
+# os.path.realpath(os.path.join(top, rel)), matching the normalisation codex-reviewer.sh itself now
+# applies, so the assertion survives a symlinked checkout prefix rather than merely this
+# repository's own, currently unsymlinked, location. Measured with a control build (HEAD's script
+# against identical scratch checkouts): baseline (pre-31cdc68) PASS=35 FAIL=0, HEAD PASS=29 FAIL=6
+# (exactly these six) -- the fixtures were the defect, not the validation.
+#
+# CX35 and CX36 close a ZERO-COVERAGE gap on validate_ref_no_leading_dash (commit 93e5767, the git
+# ref/sha argument-injection guard) at all four call sites (review base:/commit:, audit
+# base:/commit:): nothing before them drove a leading-dash ref/sha through any of the four arms, so
+# a regression deleting the guard entirely would have gone unnoticed by CX06/CX30/CX31's own
+# accepted/rejected-scope coverage, none of which is dash-shaped. Both directions in one assertion
+# per arm (rule 8): the malicious --output=<path> shape from the guard's own header comment is
+# rejected (exit 2, message, no --out artifact, and on the base:/git-diff arm -- which the guard's
+# own header comment documents as carrying no second layer -- no file created at the attacker's
+# target path either), and a normal HEAD ref/sha at the same arm still exits 0.
+#
+# CX37-CX40 close the remaining gap on 31cdc68's file-scope validation ITSELF, which only CX29
+# (repaired above) had ever touched, and only on the survivor's path-normalisation, never the
+# rejection mechanism: CX37 pins a MIXED payload (one in-scope finding survives, one out-of-scope
+# one is dropped and named on stderr by its original, unresolved value); CX38 pins the ALL-rejected
+# case (exit 3 DID-NOT-RUN naming the exact rejected count, no --out artifact -- never collapsed
+# into the same exit 0 a genuinely clean audit gets, rule 4/7); CX39 pins the ZERO-findings case
+# staying exactly as clean as before the validation existed (exit 0, [], given a genuinely
+# non-empty audited scope); CX40 pins the empty-ALLOWED_FILES denominator guard itself, which the
+# shell-level empty-FILE_LIST short-circuit makes unreachable by any ordinary invocation --
+# exercised instead by a content-selective python3 shim (same family as CX33/CX34's caller/flag-
+# selective mktemp/grep shims) that strips FILE_LIST from only the audit formatter's own subprocess,
+# simulating the wiring defect the guard's own source comment names, never a contorted end-to-end
+# fixture.
+#
+# Z1's floor and its frozen-identity-set sentence were re-derived a fifth time by running this file
+# (rule 10, rule 13): 35 -> 41.
+#
+# The plant-declaration count above (rule 2) grows from twenty-five across twenty-two ids to
+# THIRTY-ONE across TWENTY-EIGHT ids: one new declaration each for CX35, CX36, CX37, CX38, CX39 and
+# CX40, all six quoted from code already on disk (none are projections) -- CX35 and CX36 share one
+# needle (validate_ref_no_leading_dash's own guard line) since removing it breaks both
+# independently in their own isolated mutation runs; CX39 and CX40 share the empty-ALLOWED_FILES
+# guard's condition line with opposite replacements (if True: makes even a genuinely clean,
+# non-empty-scope run trip the guard, which is what CX39 pins the absence of; if False: disables the
+# guard entirely, which is what CX40 pins the presence of) -- both legal per plant-check.sh's own
+# rule that a needle match is scoped to its own isolated sandbox run, never shared across
+# declarations.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -427,11 +483,21 @@ fi
 rm -rf "$CX10_DIR"
 # plant: CX10 | plugin/scripts/codex-reviewer.sh | "file", "line", "description", "fix_type", "suggested_fix"] | "file", "line", "description", "fix_type"]
 
+# FILE VALUES MUST BE REAL, IN-SCOPE PATHS (2026-09-06, commit 31cdc68's file-scope validation).
+# CX11/CX12/CX13/CX18/CX19/CX29 below all run audit mode with no --diff-scope, so FILE_LIST is the
+# WHOLE-TREE list enumerate-sources.sh derives from this suite's own repository (`cr()` never `cd`s
+# away from it) — the audit formatter now DROPS any finding whose 'file' does not resolve, via
+# realpath, to a member of that set (codex-reviewer.sh's ALLOWED_FILES/REJECTED-finding block). A
+# fabricated path like the former "src/A.swift" is therefore no longer a valid fixture: it is
+# correctly rejected, which is the new validation working, not a bug. SPEC.md and CLAUDE.md are
+# used because they are real, always git-tracked, root-level files with hyphen-free basenames (the
+# latter also satisfies CX13's id-shape regex below) that are in no realistic danger of being
+# removed from this repository.
 CX11_PAYLOAD="$WORK/cx11-payload.json"
 cat > "$CX11_PAYLOAD" <<'JSON'
 {"findings": [
-  {"id":"STUB-JUNK","dimension":"structure","severity":"P2","risk_level":"low","file":"src/A.swift","line":10,"description":"d1","fix_type":"coder","suggested_fix":"s1"},
-  {"id":"STUB-JUNK2","dimension":"structure","severity":"P1","risk_level":"high","file":"src/B.swift","line":null,"description":"d2","fix_type":"refactorer","suggested_fix":"s2"}
+  {"id":"STUB-JUNK","dimension":"structure","severity":"P2","risk_level":"low","file":"SPEC.md","line":10,"description":"d1","fix_type":"coder","suggested_fix":"s1"},
+  {"id":"STUB-JUNK2","dimension":"structure","severity":"P1","risk_level":"high","file":"CLAUDE.md","line":null,"description":"d2","fix_type":"refactorer","suggested_fix":"s2"}
 ]}
 JSON
 CX11_OUT="$WORK/cx11-out.json"
@@ -567,11 +633,13 @@ fi
 
 # =====================================================================================
 # CX18-CX19 (R-04) — security forces fix_type: report-only; the forcing does not leak elsewhere.
+# Same real-in-scope-path requirement as CX11's block above (no --diff-scope here either, so
+# FILE_LIST is this suite's own whole-tree list) — SPEC.md again, a real, always-tracked file.
 
 CX18_PAYLOAD="$WORK/cx18-payload.json"
 cat > "$CX18_PAYLOAD" <<'JSON'
 {"findings": [
-  {"id":"STUB-SEC","dimension":"security","severity":"P1","risk_level":"high","file":"src/Sec.swift","line":5,"description":"secret","fix_type":"coder","suggested_fix":"remove it"}
+  {"id":"STUB-SEC","dimension":"security","severity":"P1","risk_level":"high","file":"SPEC.md","line":5,"description":"secret","fix_type":"coder","suggested_fix":"remove it"}
 ]}
 JSON
 CX18_OUT="$WORK/cx18-out.json"
@@ -794,15 +862,22 @@ fi
 # for the invocation. The root asserted against is derived from that same CWD by the same command
 # codex-reviewer.sh itself uses, so the two sides answer one question from one place (rule 6),
 # rather than hard-coding a checkout path this suite would then only pass in.
+#
+# FILE VALUES MUST BE REAL, IN-SCOPE PATHS (2026-09-06, commit 31cdc68's file-scope validation —
+# see CX11's block above for the full rationale). This also means the "already absolute" input can
+# no longer be a bare fabricated string: it must resolve, via realpath, to a member of the
+# whole-tree FILE_LIST, so it is built from $CX29_TOPLEVEL itself — computed FIRST, below, with the
+# identical `git rev-parse --show-toplevel` command codex-reviewer.sh's own REPO_ROOT uses, so the
+# input and the expected value are the same root by construction rather than by coincidence.
+CX29_TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null)
 CX29_PAYLOAD="$WORK/cx29-payload.json"
-cat > "$CX29_PAYLOAD" <<'JSON'
+cat > "$CX29_PAYLOAD" <<JSON
 {"findings": [
-  {"id":"STUB-JUNK-REL","dimension":"perf","severity":"P2","risk_level":"low","file":"src/A.swift","line":10,"description":"cx29-relative","fix_type":"coder","suggested_fix":"s1"},
-  {"id":"STUB-JUNK-ABS","dimension":"perf","severity":"P1","risk_level":"high","file":"/already/absolute/src/B.swift","line":3,"description":"cx29-already-absolute","fix_type":"coder","suggested_fix":"s2"}
+  {"id":"STUB-JUNK-REL","dimension":"perf","severity":"P2","risk_level":"low","file":"SPEC.md","line":10,"description":"cx29-relative","fix_type":"coder","suggested_fix":"s1"},
+  {"id":"STUB-JUNK-ABS","dimension":"perf","severity":"P1","risk_level":"high","file":"$CX29_TOPLEVEL/CLAUDE.md","line":3,"description":"cx29-already-absolute","fix_type":"coder","suggested_fix":"s2"}
 ]}
 JSON
 CX29_OUT="$WORK/cx29-out.json"
-CX29_TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null)
 set_stub "$CX29_PAYLOAD" ""
 cr "$STUB_PATH" --mode audit --dimension structure --out "$CX29_OUT"
 if [ -z "$CX29_TOPLEVEL" ]; then
@@ -822,16 +897,21 @@ if not isinstance(data, list) or len(data) != 2:
 by_desc = dict((el.get("description"), el.get("file")) for el in data)
 rel_out = by_desc.get("cx29-relative")
 abs_out = by_desc.get("cx29-already-absolute")
-want_rel = os.path.join(top, "src/A.swift")
+# realpath, not a raw string join (rule: a symlinked checkout prefix, e.g. macOS /tmp ->
+# /private/tmp, must not make this assertion fail for a reason unrelated to the mechanism it pins)
+# — this is the SAME normalisation codex-reviewer.sh itself applies to file_out before comparing
+# against ALLOWED_FILES, so the two sides compare like with like.
+want_rel = os.path.realpath(os.path.join(top, "SPEC.md"))
+want_abs = os.path.realpath(os.path.join(top, "CLAUDE.md"))
 problems = []
 if not isinstance(rel_out, str) or not rel_out.startswith("/"):
     problems.append("relative-input-not-absolutised:%r" % (rel_out,))
-elif not rel_out.endswith("/src/A.swift"):
+elif not rel_out.endswith("/SPEC.md"):
     problems.append("relative-suffix-lost:%r" % (rel_out,))
 elif rel_out != want_rel:
     problems.append("wrong-root:%r want %r" % (rel_out, want_rel))
-if abs_out != "/already/absolute/src/B.swift":
-    problems.append("already-absolute-double-prefixed-or-altered:%r" % (abs_out,))
+if abs_out != want_abs:
+    problems.append("already-absolute-double-prefixed-or-altered:%r want %r" % (abs_out, want_abs))
 print("OK" if not problems else "; ".join(problems))
 ')
 fi
@@ -1401,14 +1481,298 @@ fi
 # plant: CX34 | plugin/scripts/codex-reviewer.sh | if [ "$_grep_rc" -gt 1 ]; then | if false; then
 
 # =====================================================================================
+# CX35-CX36 (R-01) — regression coverage for `validate_ref_no_leading_dash` (commit 93e5767, the
+# git ref/sha argument-injection guard). ZERO coverage existed for it before this pair: CX06/CX30/
+# CX31 only ever drove KNOWN-GOOD or KNOWN-BAD-BUT-NOT-DASH-SHAPED refs through the four call sites
+# (review base:/commit:, audit base:/commit:), so a regression that deleted the guard entirely would
+# have gone unnoticed by everything already in this file.
+#
+# THE ATTACK SHAPE IS QUOTED FROM THE GUARD'S OWN HEADER COMMENT (rule 12), not invented here:
+# `--output=<path>` is the value git absorbs an unguarded ref into, per the three measurements the
+# comment records. Each malicious value below is exactly that shape, and the assertion checks not
+# only codex-reviewer.sh's own exit code and message but that the ATTACKER'S TARGET FILE was never
+# created — proof the guard exits before git is ever invoked with the value, not merely that
+# codex-reviewer.sh's own --out is empty. The `...HEAD` suffix on the base: arm's target path is the
+# `git diff` absorption shape the header comment measures; the commit: arm's `git show` call carries
+# a SECOND, independent layer (`--end-of-options`), so a removed guard there still cannot create the
+# file — the exit code and message are what this guard, specifically, is responsible for on that arm.
+#
+# BOTH DIRECTIONS (rule 8): the cheap way to satisfy "reject a leading dash" is to reject every ref,
+# so each block also drives a normal ref (`HEAD`) through the same two arms and requires exit 0.
+#
+# Same healthy, committed fixture CX30 builds and CX31/CX33 reuse — HEAD resolves and the tree is
+# clean, so the only variable across every run below is the ref/sha named on the command line.
+# codex-reviewer.sh issues bare `git ...`, never `git -C`, so each run happens inside that fixture
+# via a subshell `cd`, exactly as CX28/CX30/CX31/CX33/CX34 do it; `cr()` itself never changes
+# directory and is not reused here for that reason.
+
+CX35_RAN=0
+CX35_BAD=""
+for _cx35_case in base commit; do
+  case "$_cx35_case" in
+    base)   _cx35_scope="base:--output=$WORK/cx35-base-pwn.tmp"; _cx35_target="$WORK/cx35-base-pwn.tmp...HEAD" ;;
+    commit) _cx35_scope="commit:--output=$WORK/cx35-commit-pwn.tmp"; _cx35_target="$WORK/cx35-commit-pwn.tmp" ;;
+  esac
+  CX35_RAN=$((CX35_RAN + 1))
+  rm -f "$_cx35_target"
+  _cx35_out="$WORK/cx35-$_cx35_case-out.json"
+  _cx35_errf="$WORK/cx35-$_cx35_case.err"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" bash "$CR" --mode review --diff-scope "$_cx35_scope" --out "$_cx35_out" ) \
+    >/dev/null 2>"$_cx35_errf"
+  _cx35_rc=$?
+  _cx35_err=$(cat "$_cx35_errf")
+  _cx35_why=""
+  [ "$_cx35_rc" -eq 2 ] || _cx35_why="$_cx35_why rc=$_cx35_rc(want-2)"
+  printf '%s' "$_cx35_err" | grep -q -F "must not start with '-'" || _cx35_why="$_cx35_why no-guard-message"
+  printf '%s' "$_cx35_err" | grep -q -F -- "--output=$WORK" || _cx35_why="$_cx35_why value-not-named"
+  [ ! -s "$_cx35_out" ] || _cx35_why="$_cx35_why out-artifact-written"
+  [ ! -e "$_cx35_target" ] || _cx35_why="$_cx35_why INJECTION-FILE-CREATED"
+  if [ -n "$_cx35_why" ]; then
+    CX35_BAD="$CX35_BAD [$_cx35_case:$_cx35_why ]"
+  fi
+done
+
+CX35_NORMAL_OK=1
+for _cx35_nscope in base:HEAD commit:HEAD; do
+  _cx35_nout="$WORK/cx35-normal-$_cx35_nscope.json"
+  _cx35_nerrf="$WORK/cx35-normal-$_cx35_nscope.err"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" bash "$CR" --mode review --diff-scope "$_cx35_nscope" --out "$_cx35_nout" ) \
+    >/dev/null 2>"$_cx35_nerrf"
+  _cx35_nrc=$?
+  [ "$_cx35_nrc" -eq 0 ] || CX35_NORMAL_OK=0
+done
+
+if [ "$CX35_RAN" -eq 2 ] && [ -z "$CX35_BAD" ] && [ "$CX35_NORMAL_OK" -eq 1 ]; then
+  ok "CX35: review mode — validate_ref_no_leading_dash rejects a git-option-shaped ref/sha (--output=<path>) at both base: and commit: with exit 2 naming the offending value, writes no --out artifact, and (base: arm) creates no file at the attacker's target path (loop ran $CX35_RAN times); a normal ref (HEAD) at both arms still exits 0"
+else
+  bad "CX35: review-mode ref-injection guard — loop-ran=$CX35_RAN (need 2) failing-arms:${CX35_BAD:-none} normal-refs-ok=$CX35_NORMAL_OK"
+fi
+# plant: CX35 | plugin/scripts/codex-reviewer.sh | -*) echo "codex-reviewer: --diff-scope ref/sha must not start with '-' (got '$1')" >&2; exit 2 ;; | -*) ;;
+
+CX36_RAN=0
+CX36_BAD=""
+for _cx36_case in base commit; do
+  case "$_cx36_case" in
+    base)   _cx36_scope="base:--output=$WORK/cx36-base-pwn.tmp"; _cx36_target="$WORK/cx36-base-pwn.tmp...HEAD" ;;
+    commit) _cx36_scope="commit:--output=$WORK/cx36-commit-pwn.tmp"; _cx36_target="$WORK/cx36-commit-pwn.tmp" ;;
+  esac
+  CX36_RAN=$((CX36_RAN + 1))
+  rm -f "$_cx36_target"
+  _cx36_out="$WORK/cx36-$_cx36_case-out.json"
+  _cx36_errf="$WORK/cx36-$_cx36_case.err"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" bash "$CR" --mode audit --dimension structure --diff-scope "$_cx36_scope" --out "$_cx36_out" ) \
+    >/dev/null 2>"$_cx36_errf"
+  _cx36_rc=$?
+  _cx36_err=$(cat "$_cx36_errf")
+  _cx36_why=""
+  [ "$_cx36_rc" -eq 2 ] || _cx36_why="$_cx36_why rc=$_cx36_rc(want-2)"
+  printf '%s' "$_cx36_err" | grep -q -F "must not start with '-'" || _cx36_why="$_cx36_why no-guard-message"
+  printf '%s' "$_cx36_err" | grep -q -F -- "--output=$WORK" || _cx36_why="$_cx36_why value-not-named"
+  [ ! -s "$_cx36_out" ] || _cx36_why="$_cx36_why out-artifact-written"
+  [ ! -e "$_cx36_target" ] || _cx36_why="$_cx36_why INJECTION-FILE-CREATED"
+  if [ -n "$_cx36_why" ]; then
+    CX36_BAD="$CX36_BAD [$_cx36_case:$_cx36_why ]"
+  fi
+done
+
+CX36_NORMAL_OK=1
+for _cx36_nscope in base:HEAD commit:HEAD; do
+  _cx36_nout="$WORK/cx36-normal-$_cx36_nscope.json"
+  _cx36_nerrf="$WORK/cx36-normal-$_cx36_nscope.err"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" bash "$CR" --mode audit --dimension structure --diff-scope "$_cx36_nscope" --out "$_cx36_nout" ) \
+    >/dev/null 2>"$_cx36_nerrf"
+  _cx36_nrc=$?
+  [ "$_cx36_nrc" -eq 0 ] || CX36_NORMAL_OK=0
+done
+
+if [ "$CX36_RAN" -eq 2 ] && [ -z "$CX36_BAD" ] && [ "$CX36_NORMAL_OK" -eq 1 ]; then
+  ok "CX36: audit mode — validate_ref_no_leading_dash rejects a git-option-shaped ref/sha (--output=<path>) at both base: and commit: with exit 2 naming the offending value, writes no --out artifact, and (base: arm) creates no file at the attacker's target path (loop ran $CX36_RAN times); a normal ref (HEAD) at both arms still exits 0"
+else
+  bad "CX36: audit-mode ref-injection guard — loop-ran=$CX36_RAN (need 2) failing-arms:${CX36_BAD:-none} normal-refs-ok=$CX36_NORMAL_OK"
+fi
+# plant: CX36 | plugin/scripts/codex-reviewer.sh | -*) echo "codex-reviewer: --diff-scope ref/sha must not start with '-' (got '$1')" >&2; exit 2 ;; | -*) ;;
+
+# =====================================================================================
+# CX37-CX40 (R-02) — regression coverage for the audit file-scope validation itself (commit
+# 31cdc68). Before this pair, only CX29 (fixed above) touched this mechanism at all, and only on the
+# "how is a survivor's file normalised" question — never on the rejection behaviour, the all-rejected
+# DID-NOT-RUN branch, or the zero-findings path staying unaffected by it.
+
+# CX37 (R-02) — a MIXED payload: one finding in scope, one not. The in-scope one must survive with
+# its normalised absolute `file`; the out-of-scope one must be dropped, and named (by the ORIGINAL
+# value the model gave, not the resolved one — codex-reviewer.sh's own rationale for that choice,
+# quoted in its header comment above the rejection block) in a stderr line a human debugging a
+# rejection would need. No --diff-scope here, so FILE_LIST is this suite's own whole-tree list —
+# same context as CX11/CX18/CX29 above. SPEC.md is real and in scope; "nope/does-not-exist.swift" is
+# guaranteed absent from this repository's tracked tree.
+CX37_PAYLOAD="$WORK/cx37-payload.json"
+cat > "$CX37_PAYLOAD" <<'JSON'
+{"findings": [
+  {"id":"STUB-INSCOPE","dimension":"structure","severity":"P2","risk_level":"low","file":"SPEC.md","line":1,"description":"cx37-inscope","fix_type":"coder","suggested_fix":"s1"},
+  {"id":"STUB-OUTSCOPE","dimension":"structure","severity":"P1","risk_level":"high","file":"nope/does-not-exist.swift","line":2,"description":"cx37-outscope","fix_type":"coder","suggested_fix":"s2"}
+]}
+JSON
+CX37_OUT="$WORK/cx37-out.json"
+set_stub "$CX37_PAYLOAD" ""
+cr "$STUB_PATH" --mode audit --dimension structure --out "$CX37_OUT"
+if [ "$CR_RC" -eq 0 ] && [ -s "$CX37_OUT" ]; then
+  CX37_VERDICT=$(OUTFILE="$CX37_OUT" python3 -c '
+import json, os
+data = json.load(open(os.environ["OUTFILE"]))
+if not isinstance(data, list) or len(data) != 1:
+    print("EXPECTED-1-SURVIVOR-GOT:%r" % (len(data) if isinstance(data, list) else type(data).__name__))
+elif data[0].get("description") != "cx37-inscope":
+    print("WRONG-SURVIVOR:%r" % (data[0].get("description"),))
+else:
+    print("OK")
+')
+else
+  CX37_VERDICT="NO-OUTPUT rc=$CR_RC out-non-empty=$([ -s "$CX37_OUT" ] && echo yes || echo no) err=$CR_ERR"
+fi
+CX37_STDERR_NAMES=0
+printf '%s' "$CR_ERR" | grep -q -F "REJECTED finding: file 'nope/does-not-exist.swift'" && CX37_STDERR_NAMES=1
+case "$CX37_VERDICT" in
+  OK) [ "$CX37_STDERR_NAMES" -eq 1 ] \
+        && ok "CX37: a mixed audit payload survives partially — the in-scope finding (SPEC.md) is emitted, the out-of-scope one (nope/does-not-exist.swift) is dropped and named on stderr" \
+        || bad "CX37: survivor correct but stderr did not name the rejected file — $CR_ERR" ;;
+  *) bad "CX37: mixed-payload rejection failed — $CX37_VERDICT (stderr-names-rejected=$CX37_STDERR_NAMES)" ;;
+esac
+# plant: CX37 | plugin/scripts/codex-reviewer.sh | if file_out not in ALLOWED_FILES: | if False:
+
+# CX38 (R-02) — an ALL-rejected payload: every finding names a file outside the audited scope. The
+# run must be DID-NOT-RUN (exit 3), never exit 0 with an empty array — the two have different causes
+# (rule 4, rule 7 one level down: "the model found nothing" and "everything the model said was
+# outside the tree it was asked to audit" are not the same outcome, and codex-reviewer.sh's own
+# header comment on this branch says so explicitly) — with the message naming the exact rejected
+# count, and no --out artifact written at all.
+CX38_PAYLOAD="$WORK/cx38-payload.json"
+cat > "$CX38_PAYLOAD" <<'JSON'
+{"findings": [
+  {"id":"STUB-OUT1","dimension":"structure","severity":"P2","risk_level":"low","file":"nope/one.swift","line":1,"description":"cx38-out1","fix_type":"coder","suggested_fix":"s1"},
+  {"id":"STUB-OUT2","dimension":"structure","severity":"P1","risk_level":"high","file":"nope/two.swift","line":2,"description":"cx38-out2","fix_type":"coder","suggested_fix":"s2"}
+]}
+JSON
+CX38_OUT="$WORK/cx38-out.json"
+set_stub "$CX38_PAYLOAD" ""
+cr "$STUB_PATH" --mode audit --dimension structure --out "$CX38_OUT"
+CX38_WHY=""
+[ "$CR_RC" -eq 3 ] || CX38_WHY="$CX38_WHY rc=$CR_RC(want-3)"
+printf '%s' "$CR_ERR" | grep -q -F 'DID-NOT-RUN' || CX38_WHY="$CX38_WHY no-DID-NOT-RUN"
+printf '%s' "$CR_ERR" | grep -q -F 'all 2 finding(s) resolved outside the audited scope' || CX38_WHY="$CX38_WHY count-not-named"
+[ ! -s "$CX38_OUT" ] || CX38_WHY="$CX38_WHY artifact-written"
+if [ -z "$CX38_WHY" ]; then
+  ok "CX38: an all-rejected audit payload (2/2 findings out of scope) exits 3 (DID-NOT-RUN) naming the exact rejected count, and writes no --out artifact"
+else
+  bad "CX38: all-rejected audit payload —$CX38_WHY — rc=$CR_RC err=$CR_ERR"
+fi
+# plant: CX38 | plugin/scripts/codex-reviewer.sh | if not result and rejected: | if False:
+
+# CX39 (R-02) — a ZERO-findings audit run stays exactly as clean as it was before the file-scope
+# validation existed: exit 0, `[]` at --out. This is the "unaffected by the new logic" direction
+# (rule 8's counterpart to CX37/CX38): the denominator guard the new logic adds must not fire just
+# because there happened to be nothing to check, as long as the audited scope itself (FILE_LIST) was
+# genuinely non-empty — which it is here, same whole-tree context as CX11/CX18/CX29/CX37/CX38, never
+# the separate empty-FILE_LIST short-circuit path this shares nothing with.
+CX39_OUT="$WORK/cx39-out.json"
+set_stub "$MINIMAL_PAYLOAD" ""
+cr "$STUB_PATH" --mode audit --dimension dead-code --out "$CX39_OUT"
+CX39_WHY=""
+[ "$CR_RC" -eq 0 ] || CX39_WHY="$CX39_WHY rc=$CR_RC(want-0)"
+if [ -s "$CX39_OUT" ]; then
+  CX39_BODY=$(cat "$CX39_OUT")
+  case "$CX39_BODY" in
+    '[]'|$'[]\n') ;;
+    *) CX39_WHY="$CX39_WHY body-not-empty-array:$CX39_BODY" ;;
+  esac
+else
+  CX39_WHY="$CX39_WHY out-empty-or-missing"
+fi
+if [ -z "$CX39_WHY" ]; then
+  ok "CX39: a zero-findings audit run (non-empty whole-tree scope) stays exit 0 with [] at --out, unaffected by the new file-scope validation"
+else
+  bad "CX39: zero-findings audit run —$CX39_WHY — err=$CR_ERR"
+fi
+# plant: CX39 | plugin/scripts/codex-reviewer.sh | if not ALLOWED_FILES: | if True:
+
+# CX40 (R-02) — the empty-ALLOWED_FILES denominator guard (rule 7), isolated from the shell-level
+# empty-FILE_LIST short-circuit that would otherwise always fire first and make this branch
+# unreachable by any normal invocation: this suite's own audit runs above never have an empty
+# FILE_LIST (the whole-tree list is never empty in this repository), so the ONLY way to exercise
+# the guard without editing codex-reviewer.sh is to simulate the wiring defect its own comment names
+# — "the in-scope file list did not reach the audit formatter" — from OUTSIDE the script, by
+# stripping FILE_LIST from the environment of ONLY the audit formatter's own python3 subprocess.
+#
+# A content-selective python3 SHIM, in the same family as CX33/CX34's caller/flag-selective mktemp
+# and grep shims above: it inspects the `-c` script text itself (present as a single argument) for
+# `ALLOWED_FILES`, a string unique to the audit formatter among this script's three python3 call
+# sites (the doctor/auth-status parse carries no such text and passes through unaltered), and only
+# on that one call unsets FILE_LIST before handing off to the real interpreter. A FIRED marker
+# proves the shim actually intercepted the formatter call (rule 7's denominator guard) rather than
+# the run failing for an unrelated reason.
+CX40_PYDIR="$WORK/cx40-pyshim"
+mkdir -p "$CX40_PYDIR"
+CX40_REAL_PY=$(command -v python3 2>/dev/null)
+cat > "$CX40_PYDIR/python3" <<'CX40_PY_SHIM_EOF'
+#!/bin/bash
+# Content-selective python3 shim for CX40 in codex-audit-mode.test.sh. Placed first on a PATH
+# handed ONLY to the codex-reviewer.sh subprocess under test, never exported into this suite's own
+# environment. Every call is passed through to the real python3 unaltered UNLESS its own `-c`
+# script text contains "ALLOWED_FILES" (the audit formatter, and nothing else this script runs).
+set -u
+for _cx40_a in "$@"; do
+  case "$_cx40_a" in
+    *ALLOWED_FILES*)
+      printf 'fired\n' > "$CX40_FIRED"
+      unset FILE_LIST
+      exec "$CX40_PY_REAL" "$@"
+      ;;
+  esac
+done
+exec "$CX40_PY_REAL" "$@"
+CX40_PY_SHIM_EOF
+chmod +x "$CX40_PYDIR/python3"
+CX40_PATH="$CX40_PYDIR:$STUB_PATH"
+
+CX40_FIXTURE_OK=1
+[ -z "$CX40_REAL_PY" ] && CX40_FIXTURE_OK=0
+git -C "$CX30_HEALTHY_REPO" rev-parse --verify HEAD >/dev/null 2>&1 || CX40_FIXTURE_OK=0
+
+CX40_OUT="$WORK/cx40-out.json"
+CX40_ERRF="$WORK/cx40.err"
+CX40_FIREDF="$WORK/cx40.fired"
+rm -f "$CX40_OUT" "$CX40_ERRF" "$CX40_FIREDF"
+set_stub "$MINIMAL_PAYLOAD" ""
+( cd "$CX30_HEALTHY_REPO" && PATH="$CX40_PATH" CX40_PY_REAL="$CX40_REAL_PY" CX40_FIRED="$CX40_FIREDF" \
+    bash "$CR" --mode audit --dimension structure --out "$CX40_OUT" ) >/dev/null 2>"$CX40_ERRF"
+CX40_RC=$?
+CX40_ERR=$(cat "$CX40_ERRF")
+CX40_WHY=""
+[ -f "$CX40_FIREDF" ] || CX40_WHY="$CX40_WHY shim-never-fired"
+[ "$CX40_RC" -eq 3 ] || CX40_WHY="$CX40_WHY rc=$CX40_RC(want-3)"
+printf '%s' "$CX40_ERR" | grep -q -F 'DID-NOT-RUN' || CX40_WHY="$CX40_WHY no-DID-NOT-RUN"
+printf '%s' "$CX40_ERR" | grep -q -F 'the in-scope file list did not reach the audit formatter' \
+  || CX40_WHY="$CX40_WHY wrong-message"
+[ ! -s "$CX40_OUT" ] || CX40_WHY="$CX40_WHY artifact-written"
+if [ "$CX40_FIXTURE_OK" -eq 1 ] && [ -z "$CX40_WHY" ]; then
+  ok "CX40: the empty-ALLOWED_FILES denominator guard fires (exit 3, DID-NOT-RUN, naming that the scope did not reach the formatter, no --out artifact) when FILE_LIST is stripped from only the audit formatter's own subprocess, simulating the wiring defect the guard's own comment names"
+else
+  bad "CX40: empty-ALLOWED_FILES denominator guard — fixture-ok=$CX40_FIXTURE_OK$CX40_WHY — rc=$CX40_RC err=$CX40_ERR"
+fi
+# plant: CX40 | plugin/scripts/codex-reviewer.sh | if not ALLOWED_FILES: | if False:
+
+# =====================================================================================
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 35 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 35) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX34 are the frozen identity set"
+if [ "$_total" -ge 41 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 41) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX40 are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 35; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 41; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]

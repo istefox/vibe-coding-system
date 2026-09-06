@@ -18,3 +18,8 @@ the 200-line/25KB injection cap; the topic files do not.
   the Nth `mktemp`/`git`/`grep` call when an earlier helper uses it too: shim by `ps -o args= -p
   $PPID` or by flag signature, the succeeding shim that fails the NEXT step, control-pass
   denominator guards, prompt-log-as-evidence, and 2-3 plants under one assertion id
+- [Audit file-scope fixtures and scratch plant verification](topics/audit-file-scope-fixtures-and-scratch-plant-verify.md)
+  — whole-tree audit FILE_LIST is every git-tracked file (fabricated fixture paths get REJECTED),
+  hyphen-free-basename + realpath fixture fix, content-selective python3 shim for an otherwise
+  unreachable denominator guard, a manual scratch-copy plant-verify procedure, and a worktree-git-
+  guardrail trigger fixed by using literal (non-`$VAR`) absolute paths
