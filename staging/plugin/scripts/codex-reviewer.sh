@@ -177,6 +177,12 @@ fi
 
 DIFF_CONTENT=""
 FILE_LIST=""
+# The directory the `codex exec` subprocess is run FROM, further down. Default: the caller's own
+# cwd, which is exactly what that process inherits today — review and diagnose mode keep it and are
+# byte-identical to before, since neither hands codex a PATH to resolve (review embeds the diff
+# text, diagnose the finding text). Audit mode overwrites it, for the reason recorded at that
+# assignment.
+CODEX_CWD="$PWD"
 if [ "$MODE" = "review" ]; then
   # Every arm captures its git exit status, none excepted. An unresolvable scope is DID-NOT-RUN
   # (rule 4): stderr is discarded here, so a failing git call — unborn repository, unknown base ref,
@@ -247,6 +253,20 @@ elif [ "$MODE" = "audit" ]; then
     echo "codex-reviewer: DID-NOT-RUN: could not resolve the repository root (git exit $_root_rc)" >&2
     exit 3
   fi
+  # Used a THIRD time, for the same one-answer reason: as the directory `codex exec` itself is run
+  # from. Every path this mode puts in the prompt is REPO-RELATIVE (enumerate-sources.sh emits
+  # `git ls-files` output), so the base directory they resolve against is part of the prompt's
+  # meaning and has to travel with it. Nothing made it travel: `codex exec` inherits the CALLER'S
+  # cwd, and this script is reached from a nested subdirectory as a matter of course —
+  # deep-refactor/SKILL.md dispatches it as `bash ~/.claude/hooks/codex-reviewer.sh` from wherever
+  # the session happens to sit, never necessarily the repository root. Measured 2026-09-06 on
+  # codex-cli 0.153.4: with cwd outside a git repository `codex exec` refuses with "Not inside a
+  # trusted directory", so its working root IS derived from the process cwd. Measured on this
+  # script before the fix, from `<repo>/sub/deep` with a two-file tracked tree: 2 of 2 audited paths
+  # resolved to files that do not exist, and the run still exited 0 with an empty findings array —
+  # a FALSE CLEAN audit, indistinguishable from a genuinely clean dimension, which is worse than a
+  # DID-NOT-RUN because deep-refactor/SKILL.md records the dimension as audited.
+  CODEX_CWD="$REPO_ROOT"
 
   # Whole-tree by default (ADR-0193 §D2/§D3) — the file list is DERIVED, never re-listed: the same
   # question ("which files are this project's source") answered once, by enumerate-sources.sh.
@@ -569,8 +589,17 @@ fi
 # --- Execute --------------------------------------------------------------------------------------
 
 CODEX_STDERR=$(mktemp)
-codex exec --sandbox read-only --output-schema "$SCHEMA_FILE" -o "$RAW_OUT" \
-  "$(cat "$PROMPT_FILE")" >/dev/null 2>"$CODEX_STDERR"
+# Run from CODEX_CWD, never from wherever the caller happened to stand: in audit mode that is
+# REPO_ROOT, the base the prompt's repo-relative paths are meant to resolve against (the assignment
+# above records what a nested cwd measurably does); in review and diagnose mode it is the caller's
+# own cwd, so those two modes gain no new behaviour and no new failure path. The subshell is what
+# keeps the change local — every path this command touches ($SCHEMA_FILE, $RAW_OUT, $PROMPT_FILE)
+# is an absolute mktemp path, while --out and the formatters below stay resolved against the
+# caller's cwd exactly as before. A `cd` that fails short-circuits the &&, so the subshell's
+# non-zero status lands in the DID-NOT-RUN branch below with bash's own cd diagnostic captured in
+# CODEX_STDERR and quoted in the message: never a run that silently proceeds in the wrong tree.
+( cd "$CODEX_CWD" && codex exec --sandbox read-only --output-schema "$SCHEMA_FILE" -o "$RAW_OUT" \
+  "$(cat "$PROMPT_FILE")" ) >/dev/null 2>"$CODEX_STDERR"
 CODEX_RC=$?
 CODEX_ERR_TEXT=$(cat "$CODEX_STDERR" 2>/dev/null)
 rm -f "$CODEX_STDERR"

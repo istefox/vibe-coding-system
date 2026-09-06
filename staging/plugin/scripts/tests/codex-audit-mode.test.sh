@@ -173,6 +173,27 @@
 # across TWENTY-NINE. It is quoted from code already on disk, not a projection, and its needle spans
 # the guard's condition together with the first words of its message: the bare condition line has
 # three copies in that file now, and plant-check.sh requires exactly one match.
+#
+# AND AGAIN 2026-09-06, after every paragraph above (rule 14 — each is a correct snapshot of its own
+# moment and none of them is rewritten): CX42, regression cover for the DIRECTORY `codex exec` is run
+# from. Every assertion above this one invokes codex-reviewer.sh from a repository root, so nothing
+# in this file had ever distinguished "the audited paths are correct" from "the audited paths are
+# correct RELATIVE TO SOMEWHERE" — audit mode's prompt is repo-relative and the subprocess inherited
+# the caller's cwd. Measured against the script before the fix, from `<repo>/sub/deep`: 2 of 2
+# audited paths unresolvable, exit 0, empty findings array — a false CLEAN audit, not a crash.
+# Measured GREEN after it, so a RED in it is a regression in codex-reviewer.sh, never an unfinished
+# task. Z1's floor and its frozen-identity-set sentence were re-derived a seventh time by running
+# this file (rule 10, rule 13): 42 -> 43.
+#
+# The stub `codex` grows a third optional log alongside the payload and the prompt — the working
+# directory it was invoked in — because that directory is the other half of what a repo-relative
+# path in the prompt means, and no existing log could show it. Every pre-existing `set_stub` call
+# passes two arguments and therefore CLEARS it, so no assertion above CX42 changes behaviour.
+#
+# The plant-declaration count grows by two, from thirty-two across twenty-nine ids to THIRTY-FOUR
+# across THIRTY: CX42 carries one per moving part of the fix (the `cd` that carries the working
+# directory, and the assignment that decides which directory it is), so neither half rests on the
+# other's evidence. Both are quoted from code already on disk, neither is a projection.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -288,8 +309,15 @@ trap 'rm -rf "$WORK" "$STUBROOT"; rm -f "$CR_ERR_FILE"' EXIT
 
 build_stub_codex() {
   # $1 = directory to hold the stub `codex`. `doctor --json` reports auth ok; `exec` writes
-  # $STUB_PAYLOAD (if set and readable) to the file named after `-o`, and tees the prompt it
-  # received to $STUB_PROMPT_LOG (if set) — never a live call, always this cooperative fake.
+  # $STUB_PAYLOAD (if set and readable) to the file named after `-o`, tees the prompt it
+  # received to $STUB_PROMPT_LOG (if set), and records its OWN working directory to $STUB_CWD_LOG
+  # (if set) — never a live call, always this cooperative fake.
+  #
+  # The cwd record exists because the prompt's audited paths are REPO-RELATIVE, so the directory
+  # the real `codex exec` process runs in is half of what those paths mean (CX42). `pwd -P`, not
+  # $PWD: the fixtures live under `mktemp -d`, which on macOS hands back a /var/... path symlinked
+  # to /private/var/..., and `git rev-parse --show-toplevel` resolves it — two spellings of one
+  # directory would fail the comparison for a reason that has nothing to do with the mechanism.
   mkdir -p "$1"
   cat > "$1/codex" <<'STUB_EOF'
 #!/bin/bash
@@ -311,6 +339,9 @@ case "${1:-}" in
         *) PROMPT="$1"; shift ;;
       esac
     done
+    if [ -n "${STUB_CWD_LOG:-}" ]; then
+      pwd -P > "$STUB_CWD_LOG"
+    fi
     if [ -n "${STUB_PROMPT_LOG:-}" ]; then
       printf '%s' "$PROMPT" > "$STUB_PROMPT_LOG"
     fi
@@ -361,10 +392,14 @@ cr() {
 }
 
 set_stub() {
-  # $1 = payload file (or ""), $2 = prompt-log file (or ""). Exported so the stub subprocess sees
-  # them; codex-reviewer.sh itself never reads either variable, so no leakage into real behaviour.
+  # $1 = payload file (or ""), $2 = prompt-log file (or ""), $3 = cwd-log file (or "", default "").
+  # Exported so the stub subprocess sees them; codex-reviewer.sh itself never reads any of the
+  # three, so no leakage into real behaviour. The third is defaulted rather than required so that
+  # every existing two-argument call CLEARS it — each block owns the logs it asked for, and none
+  # inherits a stale one from the block before it.
   export STUB_PAYLOAD="$1"
   export STUB_PROMPT_LOG="$2"
+  export STUB_CWD_LOG="${3:-}"
 }
 
 MINIMAL_PAYLOAD="$WORK/minimal-payload.json"
@@ -1872,14 +1907,136 @@ fi
 # plant: CX41 | plugin/scripts/codex-reviewer.sh | if [ "$_write_rc" -ne 0 ]; then echo "codex-reviewer: DID-NOT-RUN: could not write the empty findings array | if false; then echo "codex-reviewer: DID-NOT-RUN: could not write the empty findings array
 
 # =====================================================================================
+# CX42 (R-01) — the DIRECTORY `codex exec` is run from. Every path audit mode puts in the prompt is
+# repo-relative (enumerate-sources.sh emits `git ls-files` output) and the prompt says "read each
+# file below by its path", so the base directory those paths resolve against is half of what the
+# prompt MEANS — and nothing made it travel with them: the subprocess inherited whatever cwd the
+# caller stood in. deep-refactor/SKILL.md dispatches this script as
+# `bash ~/.claude/hooks/codex-reviewer.sh` from wherever the session sits, which is not necessarily
+# the repository root.
+#
+# WHY IT IS A FALSE CLEAN AUDIT AND NOT A CRASH, which is what makes it worth an assertion: a model
+# that cannot read a single file it was handed has nothing to report, so the run ends exit 0 with an
+# empty findings array — the same answer a genuinely clean dimension gives (rule 4/7 again, one
+# level up: the derivation is intact and the READING of it is broken). Measured against the script
+# before the fix, invoked from `<repo>/sub/deep` on a two-file tracked tree: stub-codex cwd was the
+# nested directory and 2 of 2 audited paths resolved to files that do not exist, rc 0.
+#
+# THE ASSERTION IS ON THE PROPERTY, NOT ONLY ON THE MECHANISM. Its core is "every path the prompt
+# hands the model resolves against the directory codex was ACTUALLY run in", checked against the
+# cwd the stub itself recorded — an absolute-path implementation would satisfy it too (the loop
+# takes a leading `/` as already-resolved). The cwd equality is asserted alongside it because that
+# is the shape this repository chose, and a run that drifted back to the caller's cwd while still
+# resolving would mean the fixture, not the fix, was doing the work.
+#
+# BOTH DIRECTIONS (rule 8): the same audit invoked from the repository ROOT must still be exit 0
+# with the same resolvable list. Without that half the cheap way to satisfy the nested arm is to
+# hard-code a cd that breaks the ordinary invocation, which is every caller this script has today.
+CX42_REPO="$WORK/cx42-nested-repo"
+mkdir -p "$CX42_REPO/sub/deep"
+git init -q "$CX42_REPO" >/dev/null 2>&1
+printf 'let cx42a = 1\n' > "$CX42_REPO/cx42-root.swift"
+printf 'let cx42b = 2\n' > "$CX42_REPO/sub/deep/cx42-nested.swift"
+git -C "$CX42_REPO" add cx42-root.swift sub/deep/cx42-nested.swift >/dev/null 2>&1
+git -C "$CX42_REPO" -c user.email=cx42@example.invalid -c user.name=cx42 \
+    -c commit.gpgsign=false commit -q -m "cx42 fixture" >/dev/null 2>&1
+CX42_NESTED="$CX42_REPO/sub/deep"
+# Physical form on both sides of the comparison below: $WORK is a `mktemp -d` path, /var/... on
+# macOS and a symlink to /private/var/..., which `git rev-parse --show-toplevel` resolves.
+CX42_ROOT_P=$(cd "$CX42_REPO" 2>/dev/null && pwd -P)
+
+# Denominator guards (rule 7) — each is a way the two arms below could pass for a reason unrelated
+# to the mechanism they name.
+CX42_FIXTURE_OK=1
+git -C "$CX42_REPO" rev-parse --verify HEAD >/dev/null 2>&1 || CX42_FIXTURE_OK=0
+[ -n "$CX42_ROOT_P" ] || CX42_FIXTURE_OK=0
+CX42_NESTED_P=$(cd "$CX42_NESTED" 2>/dev/null && pwd -P)
+# The nested directory must really be BELOW the root and not equal to it, or the wrong-base-directory
+# state this pins cannot exist in the first place and the nested arm passes vacuously.
+[ -n "$CX42_NESTED_P" ] && [ "$CX42_NESTED_P" != "$CX42_ROOT_P" ] || CX42_FIXTURE_OK=0
+# EXACTLY the two tracked paths, one at the root and one two levels down. The nested path is what
+# makes the failure unambiguous: a root-level path alone resolves wrong by one level, while
+# `sub/deep/...` read from `<repo>/sub/deep` looks for `sub/deep/sub/deep/...` and cannot collide
+# with anything real by accident.
+CX42_TRACKED=$(git -C "$CX42_REPO" ls-files 2>/dev/null | tr '\n' ' ')
+[ "$CX42_TRACKED" = "cx42-root.swift sub/deep/cx42-nested.swift " ] || CX42_FIXTURE_OK=0
+
+CX42_RAN=0
+CX42_BAD=""
+for _cx42_case in nested root; do
+  case "$_cx42_case" in
+    nested) _cx42_from="$CX42_NESTED" ;;
+    *)      _cx42_from="$CX42_REPO" ;;
+  esac
+  CX42_RAN=$((CX42_RAN + 1))
+  _cx42_out="$WORK/cx42-$_cx42_case.json"
+  _cx42_errf="$WORK/cx42-$_cx42_case.err"
+  _cx42_prompt="$WORK/cx42-$_cx42_case-prompt.txt"
+  _cx42_cwdf="$WORK/cx42-$_cx42_case-cwd.txt"
+  _cx42_listf="$WORK/cx42-$_cx42_case-list.txt"
+  rm -f "$_cx42_out" "$_cx42_errf" "$_cx42_prompt" "$_cx42_cwdf" "$_cx42_listf"
+  set_stub "$MINIMAL_PAYLOAD" "$_cx42_prompt" "$_cx42_cwdf"
+  # No --diff-scope: the whole-tree shape deep-refactor actually dispatches, so FILE_LIST is the
+  # fixture's two tracked paths and nothing depends on a diff resolving.
+  ( cd "$_cx42_from" && PATH="$STUB_PATH" \
+      bash "$CR" --mode audit --dimension structure --out "$_cx42_out" ) \
+      >/dev/null 2>"$_cx42_errf"
+  _cx42_rc=$?
+  _cx42_err=$(cat "$_cx42_errf")
+  _cx42_cwd=$(cat "$_cx42_cwdf" 2>/dev/null)
+  _cx42_why=""
+  [ "$_cx42_rc" -eq 0 ] || _cx42_why="$_cx42_why rc=$_cx42_rc(want-0,stderr:${_cx42_err:-none})"
+  [ -s "$_cx42_prompt" ] || _cx42_why="$_cx42_why never-reached-codex-exec"
+  [ "$_cx42_cwd" = "$CX42_ROOT_P" ] \
+    || _cx42_why="$_cx42_why codex-cwd=${_cx42_cwd:-none}(want-$CX42_ROOT_P)"
+  # The prompt's file list is taken from the prompt's own "FILES TO AUDIT" marker, never from a line
+  # number: if that heading is reworded the count below reads 0 and this arm fails loudly rather
+  # than checking nothing.
+  awk '/^FILES TO AUDIT/ {f=1; next} f {print}' "$_cx42_prompt" > "$_cx42_listf" 2>/dev/null
+  _cx42_listed=0
+  _cx42_unres=0
+  while IFS= read -r _cx42_p; do
+    [ -n "$_cx42_p" ] || continue
+    _cx42_listed=$((_cx42_listed + 1))
+    case "$_cx42_p" in
+      /*) _cx42_abs="$_cx42_p" ;;
+      *)  _cx42_abs="$_cx42_cwd/$_cx42_p" ;;
+    esac
+    [ -e "$_cx42_abs" ] || _cx42_unres=$((_cx42_unres + 1))
+  done < "$_cx42_listf"
+  # Counted, not merely checked: "nothing unresolvable" is satisfied by an EMPTY list, which is the
+  # exact shape a broken prompt build would leave behind (rule 7).
+  [ "$_cx42_listed" -eq 2 ] || _cx42_why="$_cx42_why paths-listed=$_cx42_listed(want-2)"
+  [ "$_cx42_unres" -eq 0 ] \
+    || _cx42_why="$_cx42_why unresolvable-against-codex-cwd=$_cx42_unres(want-0)"
+  [ -s "$_cx42_out" ] || _cx42_why="$_cx42_why no-out-artifact"
+  if [ -n "$_cx42_why" ]; then
+    CX42_BAD="$CX42_BAD [$_cx42_case:$_cx42_why ]"
+  fi
+done
+
+if [ "$CX42_FIXTURE_OK" -eq 1 ] && [ "$CX42_RAN" -eq 2 ] && [ -z "$CX42_BAD" ]; then
+  ok "CX42: audit mode — codex exec runs in the repository root whether the script is invoked from the root or from a nested subdirectory, so all 2 repo-relative paths in its prompt resolve against the directory it actually ran in (both arms exit 0 with an --out artifact)"
+else
+  bad "CX42: audit-mode codex exec working directory — fixture-ok=$CX42_FIXTURE_OK loop-ran=$CX42_RAN (need 2) tracked=${CX42_TRACKED:-none} root=${CX42_ROOT_P:-none} failing-cases:${CX42_BAD:-none}"
+fi
+# Two declarations, one per moving part, so neither half rests on the other's evidence: the cd that
+# carries the working directory, and the assignment that decides WHICH directory it is. The second
+# replacement is `$PWD` rather than a deletion because deleting it would leave the variable holding
+# the caller's cwd anyway — the same defect, but reached by an unset variable rather than by the
+# wrong value, and `set -u` would then decide the outcome instead of the mechanism.
+# plant: CX42 | plugin/scripts/codex-reviewer.sh | ( cd "$CODEX_CWD" && codex exec --sandbox read-only | ( codex exec --sandbox read-only
+# plant: CX42 | plugin/scripts/codex-reviewer.sh | CODEX_CWD="$REPO_ROOT" | CODEX_CWD="$PWD"
+
+# =====================================================================================
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 42 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 42) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX41 are the frozen identity set"
+if [ "$_total" -ge 43 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 43) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX42 are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 42; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 43; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]
