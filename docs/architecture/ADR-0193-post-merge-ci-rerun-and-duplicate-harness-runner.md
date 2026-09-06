@@ -1,11 +1,12 @@
 # ADR-0193 — The post-merge CI re-run is deleted, and the harness suite runs in exactly one job
 
-- **Status:** Partially Accepted — D1 (Phase 1, this commit) is accepted and implemented. D2-D4
-  (Phase 2: deleting `ci.yml`, consolidating the duplicate 102-test run, updating the sixteen
-  stale guards, the branch-protection change) are Proposed, pending separate HITL approval and
-  execution.
+- **Status:** Partially Accepted — D1 (Phase 1) and D2/D3 (Phase 2 code changes: `ci.yml` deleted,
+  the sixteen stale guards replaced by `CI3`) are accepted and implemented. The one remaining
+  Phase 2 step — removing `ci` from `main`'s required status checks on GitHub — is a separate,
+  already-approved HITL action (D2's own text below), executed immediately after this ADR's PR
+  merges, per the plan's stated ordering (a gap here makes every PR unmergeable, per Consequences).
 - **Date:** 2026-09-06
-- **Issues:** none filed yet; file one before accepting D2-D4
+- **Issues:** none filed yet
 - **Related:** ADR-0180 (`ci-tier` selection — one Decision clause is amended forward by D2, not
   yet executed), ADR-0151 (sharding the plant registry — its §D8 topology is preserved unchanged;
   its §D10 cost trade-off is out of scope by instruction and is named as the dominant residual),
@@ -58,8 +59,7 @@ Two structural facts behind those numbers:
    the named list, 102 on disk, 0 unique to either side.** Rule 6 is exactly on point — two copies
    answering *one* question, whose disagreement would be a defect. (`plant-shard`'s mutation run
    is a third pass and is **not** a duplicate: it re-runs declaring harnesses under mutation to
-   prove their assertions fire. Different question, stays.) This half (D2-D4) is not yet
-   implemented — see Status.
+   prove their assertions fire. Different question, stays.) This half is implemented — see Status.
 
 ### What made the duplicate survive review
 
@@ -75,7 +75,7 @@ Worse, and measured: **nine of those sixteen use the needle
 `grep -qE 'tests/\*\.test\.sh|scripts/tests'`.** The `scripts/tests` alternation matches any
 mention of the path — including a comment. Nine of the sixteen guards protecting the mechanism
 would pass against a `ci.yml` with the mechanism deleted. Rule 1, in the assertions written to
-enforce rule 1. (Fixed in D3, not yet implemented.)
+enforce rule 1. (Fixed in D3 — see Status.)
 
 ## Decision
 
@@ -106,7 +106,7 @@ a suspicious merge, a human runs the full validation on `main` on demand, at zer
 Verified locally 2026-09-06: full 102-file harness suite green after this change (no test asserts
 on the trigger/condition blocks touched here).
 
-### D2 — `.github/workflows/ci.yml` is deleted; `shell-tests` is the sole harness runner — PROPOSED
+### D2 — `.github/workflows/ci.yml` is deleted; `shell-tests` is the sole harness runner — ACCEPTED, IMPLEMENTED (file deletion); branch-protection change PENDING
 
 This **amends ADR-0180's Decision**, which states that `ci.yml`'s `ci` job keeps its `Decide CI
 tier` step and its test loop, "preserving the literal glob line `for t in
@@ -140,20 +140,24 @@ divergent copy goes.
 
 `ci` is removed from `main`'s required status checks, leaving `markdownlint`, `links`,
 `shell-tests` — all three still produced by `docs-ci.yml`. This is a change to repository settings
-on GitHub and is a human gate, not an agent action.
+on GitHub and is a human gate, not an agent action — **pending, to execute immediately after this
+ADR's PR merges** (Consequences §Negative names the gap this leaves open in between).
 
-### D3 — Sixteen weak guards become one canonical assertion — PROPOSED
+### D3 — Sixteen weak guards become one canonical assertion — ACCEPTED, IMPLEMENTED
 
-The sixteen per-file guards are to be **deleted**, each leaving the rule-19 comment where it stood
-naming this ADR and the issue. They are not rewritten in place: sixteen rewrites are sixteen fresh
-opportunities to write a needle that pins nothing, and nine of the current sixteen already are one.
+The sixteen per-file guards are **deleted**, each leaving the rule-19 comment where it stood naming
+this ADR. They are not rewritten in place: sixteen rewrites are sixteen fresh opportunities to
+write a needle that pins nothing, and nine of the current sixteen already are one.
 
 They are replaced by **one** assertion, `CI3`, in `pairs-completeness.test.sh` — the file that
 already owns the CI-registration question (CI0/CI0b/CI1/CI2, ADR-0113):
 
-> **CI3 — exactly one job across `.github/workflows/*.yml` executes the harness suite.**
+> **CI3 — exactly one workflow file executes the harness suite.**
 
-with a count guard on the workflow-file denominator (rule 7: zero candidate workflow files and
+Landed RED first against the still-present `ci.yml` (2 hits, expected 1), then GREEN once the
+file was deleted — the RED→GREEN transition this file's other CI assertions cannot get from
+`plant-check.sh` (see below). With a count guard on the workflow-file denominator (rule 7: zero
+candidate workflow files and
 zero duplicate runners are indistinguishable from outside). CI3 is the assertion that would have
 caught this duplication when it was introduced, and it is the assertion that stops it returning.
 It carries the same declared no-plant note CI1 already carries in that file: `plant-check.sh`
@@ -242,20 +246,19 @@ runs nothing, dressed as a check that runs something.
 
 ### Positive
 
-- **D1 alone: 970 of 2567 measured billed minutes removed (37.8%), already in effect.** D2+D3
-  would remove a further 182 (7.1%), for 1152/2567 (44.9%) total — projected ~12 800 → ~7 100
-  min/month.
-- (Once D2-D4 land) The harness suite runs in exactly one place, and CI3 keeps it that way. A
-  future duplicate is a red assertion, not a billing surprise six weeks later.
-- (Once D2-D4 land) Sixteen assertions that read as load-bearing and were not are gone, with a
-  comment at each site saying so. Nine of them could not have failed against a broken mechanism;
-  that class is removed rather than relocated.
-- (Once D2-D4 land) A false claim is deleted: this repository's `ci.yml` documented itself as an
-  instantiation of a template it stopped matching, parameterised by a `.claude/test-cmd` that does
-  not exist.
+- **D1+D2+D3, all now implemented: 1152 of 2567 measured billed minutes removed (44.9%)** —
+  projected ~12 800 → ~7 100 min/month. (D1 alone was 970/2567, 37.8%.)
+- The harness suite runs in exactly one place, and CI3 keeps it that way. A future duplicate is a
+  red assertion, not a billing surprise six weeks later.
+- Sixteen assertions that read as load-bearing and were not are gone, with a comment at each site
+  saying so. Nine of them could not have failed against a broken mechanism; that class is removed
+  rather than relocated.
+- A false claim is deleted: this repository's `ci.yml` documented itself as an instantiation of a
+  template it stopped matching, parameterised by a `.claude/test-cmd` that does not exist.
 - `workflow_dispatch` (D1, in effect) gives on-demand full validation of `main` — a capability the
   repository did not have before, at zero standing cost.
-- (Once D2-D4 land) The required-context set shrinks to three checks that all verify something.
+- (Once the pending branch-protection change lands) The required-context set shrinks to three
+  checks that all verify something.
 
 ### Negative
 
@@ -263,16 +266,17 @@ runs nothing, dressed as a check that runs something.
   and ADR-0127 §D4's fork-from-prep topology this is a real exposure, not a theoretical one.
   Detection moves to the next PR's run, where it is attributed to the wrong change. The mitigation
   is a manual `workflow_dispatch`, which someone has to remember to run.
-- **This does not bring the repository under the free allowance**, even with D2-D4. ~7100
-  projected min/month against 3000. The residual is named in §D4 and needs its own issue.
-- **A branch-protection change is required (D2)** and cannot be scripted away as part of the code
-  change. Between merging that PR and updating protection, `ci` is a required context with no
-  producer and every PR is unmergeable. The ordering is a human gate with a stated sequence, not a
-  detail.
-- **`ci-tier-workflow-decide.test.sh` would lose a third of its population (D2).** It executed the
-  `Decide CI tier` body from three real call sites; two would remain. The coverage is genuinely
-  reduced, and its CTW0 message must stop saying "all three" — a wording that would otherwise be a
-  lie in a passing assertion.
+- **This does not bring the repository under the free allowance**, even with D1+D2+D3 implemented.
+  ~7100 projected min/month against 3000. The residual is named in §D4 and needs its own issue.
+- **The branch-protection change (D2) is still pending** and cannot be scripted away as part of the
+  code change. Between merging this ADR's PR and updating protection, `ci` is a required context
+  with no producer and every PR is unmergeable. The ordering is a human gate with a stated
+  sequence, executed immediately after merge, not a detail to defer.
+- **`ci-tier-workflow-decide.test.sh` lost a third of its population (D2, implemented).** It used
+  to execute the `Decide CI tier` body from three real call sites; two remain, with a `CTW-SITES`
+  count guard added so a further silent collapse of the site list cannot pass unnoticed. Its CTW0
+  message no longer says "all three" — that wording would otherwise be a lie in a passing
+  assertion.
 - **The `push` arm of the `Decide CI tier` bodies is already dead in production after D1.** No
   Decide-carrying job runs on `push` after D1. Its test coverage (CTW2) still executes it, so the
   code stays tested but nothing reaches it live — a producer/consumer asymmetry (rule 17) that is
@@ -281,13 +285,17 @@ runs nothing, dressed as a check that runs something.
 
 ### Neutral
 
-- `staging/project-templates/ci/ci.yml` is untouched (D2, when implemented); ADR-0022 §D8's
-  contract for target repos is unaffected, as are `secret-dep-gate.test.sh`'s F5/F6, which assert
-  against the template.
+- `staging/project-templates/ci/ci.yml` is untouched (D2); ADR-0022 §D8's contract for target
+  repos is unaffected, as are `secret-dep-gate.test.sh`'s F5/F6, which assert against the template.
 - ADR-0151's sharding, its baseline pass and §D10's cost trade-off are untouched by instruction.
-- `required-checks-audit.test.sh`'s R-block fixture would be re-recorded, not corrected, when D2
-  lands: the 2026-08-01 snapshot stays as the historical record and a dated 2026-09-06 snapshot is
-  added beside it (rule 14).
+- `required-checks-audit.test.sh`'s R-block fixture is deliberately **not yet touched**: its mocked
+  branch protection (`PROTR`) and mocked observed check-runs (`RUNSR`) still include `ci`, matching
+  live GitHub branch protection as of this commit — `ci` has not been removed from the required set
+  yet (that is the pending D2 branch-protection step above). Editing this fixture now would record
+  a state that is not yet true, which rule 13 (measure the premise before designing) forbids just
+  as much as an unmeasured premise does. It is re-recorded, not corrected in place, once the
+  branch-protection change lands: the 2026-08-01 snapshot stays as the historical record and a
+  dated snapshot is added beside it (rule 14).
 - TODO.md's VCS-029 (a stacked PR whose base is not `main` runs zero checks) is neither fixed nor
   worsened by D1; it is a different consequence of the same `branches: [main]` filter and is named
   here only so the two are not read as one.

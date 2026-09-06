@@ -482,12 +482,11 @@ else
   bad "CG1b: project-ci-checks is not positioned after interface-immutability in the loop list"
 fi
 
-CI_YML="$REPO/.github/workflows/ci.yml"
-if [ -f "$CI_YML" ] && grep -qE 'tests/\*\.test\.sh|scripts/tests' "$CI_YML"; then
-  ok "CG2: this repo's own ci.yml discovers *.test.sh via a glob (automatic registration, forward guard)"
-else
-  bad "CG2: ci.yml does not appear to glob staging/plugin/scripts/tests/*.test.sh — check the workflow"
-fi
+# CG2 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (CG1/CG1b) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite. This repo's own ci.yml is distinct from
+# CITPL (the ADR-0022 §D8 template at staging/project-templates/ci/ci.yml, still checked above by
+# CF1/CF2) — deleting the former does not touch the latter.
 
 SYNCSH="$STAGING/sync-to-claude.sh"
 awk '/^PAIRS="$/{f=1; next} /^"$/{f=0} f' "$SYNCSH" >"$TMP/pairs"

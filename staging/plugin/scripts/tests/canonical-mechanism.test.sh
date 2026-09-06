@@ -33,7 +33,6 @@ DETECTOR="$STAGING/plugin/skills/project-init/scripts/detect-canonical-mechanism
 ADR="$REPO/docs/architecture/ADR-0063-117-canonical-mechanism-conformance.md"
 SYNCSH="$STAGING/sync-to-claude.sh"
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
-CIYML="$REPO/.github/workflows/ci.yml"
 
 awk '/^PAIRS="$/{f=1; next} /^"$/{f=0} f' "$SYNCSH" > "$TMP/pairs"
 
@@ -240,8 +239,7 @@ else
 fi
 
 # ==============================================================================================
-# MF. Registration in both CI registries (plan Task 5). ci.yml is glob-automatic (forward guard);
-# docs-ci.yml's explicit named list needs the manual append after litter-discipline.
+# MF. Registration in docs-ci.yml (plan Task 5), now the only CI registry (ADR-0193).
 # ==============================================================================================
 DOCSCI_LOOP=$(grep 'for t in ' "$DOCSCI" 2>/dev/null | head -1)
 if printf '%s' "$DOCSCI_LOOP" | grep -qE 'litter-discipline[[:space:]]+canonical-mechanism[[:space:];]'; then
@@ -250,11 +248,9 @@ else
   bad "MF1: canonical-mechanism is not appended after litter-discipline in docs-ci.yml's shell-tests loop"
 fi
 
-if grep -qF 'staging/plugin/scripts/tests/*.test.sh' "$CIYML" 2>/dev/null; then
-  ok "MF2: ci.yml still uses the automatic glob over staging/plugin/scripts/tests/*.test.sh (forward guard)"
-else
-  bad "MF2: ci.yml no longer uses the automatic *.test.sh glob"
-fi
+# MF2 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (MF1) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 pairs_ok=1
 grep -qxF 'plugin/agents/reviewer.md|agents/reviewer.md' "$TMP/pairs" || pairs_ok=0
