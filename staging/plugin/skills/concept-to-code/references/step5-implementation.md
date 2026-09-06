@@ -503,6 +503,48 @@ so a later attended run on the same manifest still gets asked once). The gate fi
 manifest, the same shape as the `hook_verified` gate immediately above: silent on every
 subsequent Step 5 run on the same manifest.
 
+#### Codex tester backend for Step 5 dispatch (ADR-0194, both paths)
+
+**Unlike the review ask above, this one is not conditional on `manifest.step5_review_mode`** —
+the tester dispatch itself is unconditional on both dispatch paths (Workflow and Agent-tool), so
+the ask that decides its backend is unconditional too.
+
+**Gate on `manifest.step5_codex_tester_asked`, not on `use_codex_tester` itself**, the same
+three-state reasoning as `step5_codex_review_asked` above: `use_codex_tester` is seeded `false` by
+`manifest-init.sh`, the same value a declined ask would also leave it at, so the field alone
+cannot tell "never asked" apart from "asked and the answer was no". `step5_codex_tester_asked`
+exists solely to record that the ask happened, independent of which way it was answered.
+
+If `manifest.step5_codex_tester_asked` is `true`: skip straight to dispatch, reading
+`manifest.use_codex_tester` as already decided. Otherwise (`false` or the field absent):
+
+Ask once, in the orchestrator's own live turn, **before the Workflow/Agent-tool branch below, so
+one ask covers both dispatch paths** — the same placement the review ask above uses.
+`AskUserQuestion` options:
+- `[claude-sonnet]` "Claude tester at sonnet (current behaviour) (Recommended)"
+- `[codex]` "Codex CLI, sandboxed to the worktree, with a gate if it is unavailable"
+- `[claude-opus]` "Claude tester at opus"
+
+- `[codex]` → set it via
+  `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> use_codex_tester true`.
+- `[claude-sonnet]` and `[claude-opus]` → leave `manifest.use_codex_tester` at its seeded `false`.
+
+**Either way**, then
+`~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> step5_codex_tester_asked true` —
+this write is **unconditional on the answer**, which is what makes the gate fire ONCE per manifest
+rather than once per decline.
+
+The Claude model choice (`[claude-sonnet]` vs `[claude-opus]`) is **turn-local**: it governs this
+Step 5 run only, is not persisted anywhere in the manifest, and a later resumed run on the same
+manifest does not re-ask (`step5_codex_tester_asked` is already `true`) and dispatches the Claude
+tester at `sonnet`. This is a disclosed limit, not a hidden one — its remedy is a
+`step5_tester_model` field (ADR-0194 §R8), not added here.
+
+The ask does not fire under `--autopilot`: unattended runs keep `manifest.use_codex_tester` at its
+seeded `false` and leave `manifest.step5_codex_tester_asked` at its seeded `false` too, so a later
+attended run on the same manifest still gets asked once. This is an instruction, not an
+enforcement (rule 16) — say so rather than implying a guarantee that is not there.
+
 #### Workflow dispatch path — Step 5 implementation (hook_verified = true)
 
 **CONSTRAINT — NO inline source code in the generated workflow script:**
@@ -580,7 +622,40 @@ every Edit operation. Auto mode active. No intermediate HITL. `.claude/test-cmd`
 never read, write, or modify it. If the test command needs changing, stop and report it to the
 orchestrator.
 
-**Stage 1 — tester.** Pin `agentType: "tester"`, `model: "sonnet"`, `effort: "xhigh"`, and
+#### Codex tester exit-code handling (ADR-0194)
+
+One resolution site for the Codex tester's exit contract, referenced by both dispatch paths below
+(the Workflow Stage 1 codex branch and the Agent-tool Tester batch dispatch codex branch) — the
+same "stated once, referenced twice" idiom as `#### Merge-back and base-fork audit`.
+
+- exit `0` → read `--out` as the tester's report, exactly as if the Claude `tester` had produced it.
+- exit `2` → bad invocation. Report the stderr line and halt this dispatch; it is a defect in the
+  orchestrator's own arguments, never a reason to fall back.
+- exit `3` → DID-NOT-RUN. `AskUserQuestion`: "Fallback to the Claude `tester` at `sonnet`
+  (Recommended)" / "Halt the chain". **Never a silent fallback.**
+- exit `4` → wrote outside test scope. Name the offending paths from stderr, then
+  `AskUserQuestion`: "Fallback to the Claude `tester`, discarding Codex's work (Recommended)" /
+  "Accept the out-of-scope write and continue" / "Halt the chain". The heuristic can false-positive
+  on a shared fixture; the operator decides, not the script.
+
+A Workflow `pipeline()` stage has no `AskUserQuestion` hook at all — that is **why** both branches
+below run in the orchestrator's own live turn rather than inside a stage callback.
+
+**If the Step 5 tester backend ask above resolved to `codex` (`manifest.use_codex_tester = true`,
+ADR-0194):** do **not** put a tester stage in `pipeline()` at all. Before writing the workflow
+script, for each task group in turn, in this same live turn: materialize the brief with
+`step5-brief.sh` exactly as below; `git worktree add` a worktree for the group; run
+`~/.claude/hooks/codex-tester.sh --worktree <wt> --brief <brief> --out <report>`; branch per
+`#### Codex tester exit-code handling` above (ADR-0194); then run `#### Merge-back and base-fork
+audit` with `$WT`/`$WB` taken from the `git worktree add` you just issued. Only then write the
+workflow script, with stages **coder** (plus the optional reviewer), one fewer stage than the
+default. This is sequential where the Claude branch is parallel: a real wall-clock cost, taken
+deliberately, because a tester that cannot report its own failure is worse than a slow one
+(ADR-0194 §Refinements R5).
+
+**Otherwise (default — `use_codex_tester` absent or `false`):**
+
+**Stage 1 — tester.** Pin `agentType: "tester"`, `model: "sonnet"`, `effort: "high"`, and
 `isolation: "worktree"` explicitly on this `agent()` call — the effort table above is
 documentation, not a binding, and an omitted `effort` silently inherits this session's `high`
 (ADR-0018 addendum; ADR-0049 §D6 applies the same rule to this new dispatch site). `tester` has
@@ -787,8 +862,8 @@ calibration. Pass the agent's own frontmatter value on every `agent()` call:
 
 | agentType | effort |
 | --- | --- |
-| `architect`, `coder`, `tester` | `xhigh` |
-| `reviewer`, `debugger` | `high` |
+| `architect`, `coder` | `xhigh` |
+| `reviewer`, `debugger`, `tester` | `high` |
 | `refactorer` | `medium` |
 | `doc-writer`, `researcher` | `low` |
 
@@ -1765,6 +1840,15 @@ signal, not "nothing to brief". Fall back to today's full-plan instructions for 
 before dispatching — this script does not decide that silently, it only says why (rule 4: an
 unrun check must not read as a clean pass). Any other non-zero exit (2: bad invocation) is a
 defect in the orchestrator's own invocation — fix the arguments, do not fall back.
+
+**If the Step 5 tester backend ask above resolved to `codex`:** create the batch worktree with
+`git worktree add`, run `~/.claude/hooks/codex-tester.sh --worktree <wt> --brief <brief> --out
+<report>`, branch per `#### Codex tester exit-code handling` above (ADR-0194), merge back via the
+same block with `$WT`/`$WB` from the `git worktree add`. Both branches carry the same brief the
+Claude tester receives, and neither passes implementation files (ADR-0049 §D1, ADR-0088 —
+generator/verifier separation applies to Codex identically).
+
+**Otherwise (default):**
 
 <!-- dispatch-site: step5-batch-tester class=isolated exempt: its completion is already gated by the merge-back block that must run before the coder forks, so an early advance conflicts rather than passes -->
 **Tester batch dispatch template** (dispatched BEFORE this batch's coder — ADR-0049 §D1; pin
