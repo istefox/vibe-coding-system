@@ -88,6 +88,24 @@ validate_diff_scope() {
   esac
 }
 
+# Shared by all four arms that hand a caller-supplied ref/sha to git as its own argument (rule 6:
+# one question, one copy). Git parses an argument beginning with `-` as an OPTION, not a revision,
+# so an untrusted --diff-scope value turns this read-only review into an arbitrary file write.
+# Measured on git 2.50.1 against all four shapes, none excepted:
+#   git diff "--output=/tmp/P"...HEAD                       -> exit 0, creates /tmp/P...HEAD
+#   git show "--output=/tmp/P"                              -> exit 0, creates /tmp/P
+#   git show --name-only --pretty=format: "--output=/tmp/P" -> exit 0, creates /tmp/P
+# The `...HEAD` suffix does NOT bind the ref into a safe single token: git absorbs it into the
+# option's VALUE, so the diff arms are exactly as injectable as the show arms. This guard, not the
+# range syntax, is what closes them. Exit 2, not 3 (rule 20 — the code belongs to this script's own
+# caller contract): a malformed value is a caller error, the same class and code validate_diff_scope
+# already uses for a malformed scope keyword.
+validate_ref_no_leading_dash() {
+  case "$1" in
+    -*) echo "codex-reviewer: --diff-scope ref/sha must not start with '-' (got '$1')" >&2; exit 2 ;;
+  esac
+}
+
 if [ "$MODE" = "review" ]; then
   validate_diff_scope "$DIFF_SCOPE"
   if [ -n "$CARRY_FORWARD" ] && [ ! -r "$CARRY_FORWARD" ]; then
@@ -179,6 +197,7 @@ if [ "$MODE" = "review" ]; then
       ;;
     base:*)
       _ref="${DIFF_SCOPE#base:}"
+      validate_ref_no_leading_dash "$_ref"
       DIFF_CONTENT=$(git diff "$_ref"...HEAD 2>/dev/null)
       _git_rc=$?
       if [ "$_git_rc" -ne 0 ]; then
@@ -188,7 +207,12 @@ if [ "$MODE" = "review" ]; then
       ;;
     commit:*)
       _sha="${DIFF_SCOPE#commit:}"
-      DIFF_CONTENT=$(git show "$_sha" 2>/dev/null)
+      validate_ref_no_leading_dash "$_sha"
+      # --end-of-options is defense in depth BEHIND the guard above (git >= 2.24), for a future
+      # caller path that reaches this line without validating. Placement is not free: it must sit
+      # after every option and immediately before the operand, because git reads anything following
+      # it as a non-option (measured: `--end-of-options --name-only` exits 128 on a valid sha).
+      DIFF_CONTENT=$(git show --end-of-options "$_sha" 2>/dev/null)
       _git_rc=$?
       if [ "$_git_rc" -ne 0 ]; then
         echo "codex-reviewer: DID-NOT-RUN: could not resolve diff-scope '$DIFF_SCOPE' (git exit $_git_rc)" >&2
@@ -254,6 +278,7 @@ elif [ "$MODE" = "audit" ]; then
         ;;
       base:*)
         _ref="${DIFF_SCOPE#base:}"
+        validate_ref_no_leading_dash "$_ref"
         CHANGED_FILES=$(git diff "$_ref"...HEAD --name-only 2>/dev/null)
         _git_rc=$?
         if [ "$_git_rc" -ne 0 ]; then
@@ -263,7 +288,10 @@ elif [ "$MODE" = "audit" ]; then
         ;;
       commit:*)
         _sha="${DIFF_SCOPE#commit:}"
-        CHANGED_FILES=$(git show --name-only --pretty=format: "$_sha" 2>/dev/null)
+        validate_ref_no_leading_dash "$_sha"
+        # --end-of-options goes LAST here, after --name-only and --pretty=format:, for the placement
+        # reason spelled out on the review-mode arm above — putting it first breaks the happy path.
+        CHANGED_FILES=$(git show --name-only --pretty=format: --end-of-options "$_sha" 2>/dev/null)
         _git_rc=$?
         if [ "$_git_rc" -ne 0 ]; then
           echo "codex-reviewer: DID-NOT-RUN: could not resolve diff-scope '$DIFF_SCOPE' (git exit $_git_rc)" >&2
