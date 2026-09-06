@@ -191,12 +191,9 @@ if grep 'for t in ' "$DOCSCI" 2>/dev/null | head -1 | grep -qE '[[:space:]]macos
 else
   bad "M30: macos-detect is not in docs-ci.yml's explicit harness list — a new test needs BOTH registries"
 fi
-CI_YML="$REPO/.github/workflows/ci.yml"
-if [ -f "$CI_YML" ] && grep -qE 'tests/\*\.test\.sh|scripts/tests' "$CI_YML"; then
-  ok "M31: ci.yml discovers *.test.sh via a glob (automatic registration)"
-else
-  bad "M31: ci.yml does not glob staging/plugin/scripts/tests/*.test.sh"
-fi
+# M31 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (M30) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 # Z1 — assertion-count floor (ADR-0083 §D3).
 Z1_TOTAL=$((PASS + FAIL))

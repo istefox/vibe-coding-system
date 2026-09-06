@@ -20,7 +20,6 @@ STEP5_REF="$STAGING/plugin/skills/concept-to-code/references/step5-implementatio
 HITL_REF="$STAGING/plugin/skills/concept-to-code/references/hitl-gates.md"
 ADR="$REPO/docs/architecture/ADR-0066-120-accessibility-i18n.md"
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
-CIYML="$REPO/.github/workflows/ci.yml"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
@@ -337,8 +336,8 @@ else
 fi
 
 # ==================================================================================================
-# AIH. Registration in both CI registries (ci.yml glob automatic; docs-ci.yml explicit named
-# list needs a manual append after licence-provenance).
+# AIH. Registration in docs-ci.yml (explicit named list needs a manual append after
+# licence-provenance, now the only CI registry per ADR-0193).
 # ==================================================================================================
 if [ -f "$DOCSCI" ]; then
   ok "AIH0: docs-ci.yml is where this harness expects it"
@@ -359,14 +358,9 @@ else
   bad "AIH1b: accessibility-i18n is present but not positioned immediately after licence-provenance"
 fi
 
-# AIH2: ci.yml's glob is automatic and untouched by this feature — verify it still globs the
-# tests directory rather than naming files explicitly (a regression here would mean every prior
-# feature's "ci.yml glob automatic" note was quietly falsified).
-if [ -f "$CIYML" ] && grep -qF 'staging/plugin/scripts/tests/*.test.sh' "$CIYML"; then
-  ok "AIH2: ci.yml still globs staging/plugin/scripts/tests/*.test.sh (no manual registration needed there)"
-else
-  bad "AIH2: ci.yml no longer globs the tests directory — this feature's test may not run there"
-fi
+# AIH2 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (AIH1/AIH1b) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 # AIH3: no fixture path this test writes under $TMP targets a denied secrets-shaped substring
 # (protect-files.sh denies any path containing 'secrets', plural). This test creates exactly one

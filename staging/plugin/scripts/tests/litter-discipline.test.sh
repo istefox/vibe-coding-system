@@ -31,7 +31,6 @@ TBR="$STAGING/plugin/skills/vibe-status/scripts/temp-branch-reconcile.sh"
 AGG="$STAGING/plugin/skills/vibe-status/scripts/aggregate.sh"
 SYNCSH="$STAGING/sync-to-claude.sh"
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
-CIYML="$REPO/.github/workflows/ci.yml"
 
 awk '/^PAIRS="$/{f=1; next} /^"$/{f=0} f' "$SYNCSH" > "$TMP/pairs"
 
@@ -199,8 +198,7 @@ for name in coder debugger refactorer; do
 done
 
 # ==============================================================================================
-# LG. Registration in both CI registries (plan Task 5). ci.yml is glob-automatic (forward guard);
-# docs-ci.yml's explicit named list needs the manual append after human-gate-coverage. PAIRS
+# LG. Registration in docs-ci.yml (plan Task 5), now the only CI registry (ADR-0193). PAIRS
 # verification for the three agent files (already added by ADR-0043, checked here rather than
 # assumed) plus the new script's own entry; no PAIRS entry for the test file itself.
 # ==============================================================================================
@@ -211,11 +209,9 @@ else
   bad "LG1: litter-discipline is not appended after human-gate-coverage in docs-ci.yml's shell-tests loop"
 fi
 
-if grep -qF 'staging/plugin/scripts/tests/*.test.sh' "$CIYML" 2>/dev/null; then
-  ok "LG2: ci.yml still uses the automatic glob over staging/plugin/scripts/tests/*.test.sh (forward guard)"
-else
-  bad "LG2: ci.yml no longer uses the automatic *.test.sh glob"
-fi
+# LG2 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (LG1) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 pairs_ok=1
 grep -qxF 'plugin/agents/coder.md|agents/coder.md'           "$TMP/pairs" || pairs_ok=0

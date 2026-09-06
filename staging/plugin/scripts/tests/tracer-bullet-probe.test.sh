@@ -422,12 +422,9 @@ else
   bad "TBH1b: tracer-bullet-probe is not placed immediately after sast-security-audit in the docs-ci.yml list"
 fi
 
-CI_YML="$REPO/.github/workflows/ci.yml"
-if [ -f "$CI_YML" ] && grep -qE 'tests/\*\.test\.sh|scripts/tests' "$CI_YML"; then
-  ok "TBH2: ci.yml discovers *.test.sh via a glob (automatic registration, no per-file edit needed)"
-else
-  bad "TBH2: ci.yml does not appear to glob staging/plugin/scripts/tests/*.test.sh — check the workflow"
-fi
+# TBH2 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (TBH1/TBH1b) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 SYNCSH="$STAGING/sync-to-claude.sh"
 awk '/^PAIRS="$/{f=1; next} /^"$/{f=0} f' "$SYNCSH" >"$TMP/pairs"

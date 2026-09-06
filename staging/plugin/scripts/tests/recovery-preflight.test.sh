@@ -373,7 +373,6 @@ fi
 # distinguishable from a check finding nothing — applied here to the CI wiring itself).
 # ==============================================================================================
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
-CIYML="$REPO/.github/workflows/ci.yml"
 SYNCSH="$STAGING/sync-to-claude.sh"
 
 DOCSCI_LOOP=$(grep 'for t in ' "$DOCSCI" 2>/dev/null | head -1)
@@ -389,11 +388,9 @@ else
   bad "RG2: recovery-preflight is not positioned immediately after test-write-scope in docs-ci.yml's list"
 fi
 
-if grep -qF 'staging/plugin/scripts/tests/*.test.sh' "$CIYML" 2>/dev/null; then
-  ok "RG3: ci.yml still runs the automatic glob over staging/plugin/scripts/tests/*.test.sh (forward guard — no manual edit needed there)"
-else
-  bad "RG3: ci.yml no longer uses the automatic *.test.sh glob"
-fi
+# RG3 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (RG1/RG2) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 awk '/^PAIRS="$/{f=1; next} /^"$/{f=0} f' "$SYNCSH" >"$TMP/pairs" 2>/dev/null
 if grep -q 'recovery-preflight' "$TMP/pairs" 2>/dev/null; then

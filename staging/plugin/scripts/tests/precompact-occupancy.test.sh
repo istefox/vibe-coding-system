@@ -29,7 +29,6 @@ HINT="$SCRIPTS/usage-daily-hint.sh"
 SYNCSH="$STAGING/sync-to-claude.sh"
 SETTINGSJSON="$STAGING/user/settings.json"
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
-CI_YML="$REPO/.github/workflows/ci.yml"
 SYNC_MANUAL_TEST="$SCRIPTS/tests/sync-manual-steps.test.sh"
 
 TMP=$(mktemp -d)
@@ -417,11 +416,9 @@ else
   bad "XH1b: precompact-occupancy is not positioned right after tracer-bullet-probe in docs-ci.yml's list"
 fi
 
-if grep -qE 'for t in staging/plugin/scripts/tests/\*\.test\.sh' "$CI_YML" 2>/dev/null; then
-  ok "XH2: ci.yml discovers *.test.sh via a glob (automatic registration, no per-file edit needed)"
-else
-  bad "XH2: ci.yml does not appear to glob staging/plugin/scripts/tests/*.test.sh — check the workflow"
-fi
+# XH2 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (XH1/XH1b) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
