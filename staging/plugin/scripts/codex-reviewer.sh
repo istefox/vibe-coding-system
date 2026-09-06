@@ -144,8 +144,8 @@ fi
 # failure path.
 if [ "$MODE" = "audit" ]; then
   ENUM="$SCRIPT_DIR/../skills/deep-refactor/scripts/enumerate-sources.sh"
-  if [ ! -r "$ENUM" ]; then
-    echo "codex-reviewer: DID-NOT-RUN: enumerate-sources.sh not found at $ENUM" >&2
+  if [ ! -r "$ENUM" ] || [ ! -x "$ENUM" ]; then
+    echo "codex-reviewer: DID-NOT-RUN: enumerate-sources.sh not found or not executable at $ENUM" >&2
     exit 3
   fi
 fi
@@ -190,6 +190,14 @@ elif [ "$MODE" = "audit" ]; then
   # Whole-tree by default (ADR-0193 §D2/§D3) — the file list is DERIVED, never re-listed: the same
   # question ("which files are this project's source") answered once, by enumerate-sources.sh.
   ALL_FILES=$("$ENUM" "$(git rev-parse --show-toplevel)")
+  _enum_rc=$?
+  # A non-zero helper exit is DID-NOT-RUN (rule 4), never an empty list: without this the derived
+  # population collapses to zero and the run reports an empty findings array with exit 0 — a
+  # broken derivation and a clean audit are indistinguishable from outside (rule 7).
+  if [ "$_enum_rc" -ne 0 ]; then
+    echo "codex-reviewer: DID-NOT-RUN: enumerate-sources.sh failed (exit $_enum_rc)" >&2
+    exit 3
+  fi
 
   if [ -n "$DIFF_SCOPE" ]; then
     CHANGED_FILES=""
@@ -198,12 +206,26 @@ elif [ "$MODE" = "audit" ]; then
         CHANGED_FILES=$(git diff HEAD --name-only 2>/dev/null)
         ;;
       base:*)
+        # An unresolvable ref is DID-NOT-RUN (rule 4): stderr is discarded, so a silent empty
+        # CHANGED_FILES would intersect to nothing and report a clean audit of a scope that was
+        # never evaluated. `uncommitted` above is left unguarded — `git diff HEAD` is not expected
+        # to fail once the is-inside-work-tree check has passed.
         _ref="${DIFF_SCOPE#base:}"
         CHANGED_FILES=$(git diff "$_ref"...HEAD --name-only 2>/dev/null)
+        _git_rc=$?
+        if [ "$_git_rc" -ne 0 ]; then
+          echo "codex-reviewer: DID-NOT-RUN: could not resolve diff-scope '$DIFF_SCOPE' (git exit $_git_rc)" >&2
+          exit 3
+        fi
         ;;
       commit:*)
         _sha="${DIFF_SCOPE#commit:}"
         CHANGED_FILES=$(git show --name-only --pretty=format: "$_sha" 2>/dev/null)
+        _git_rc=$?
+        if [ "$_git_rc" -ne 0 ]; then
+          echo "codex-reviewer: DID-NOT-RUN: could not resolve diff-scope '$DIFF_SCOPE' (git exit $_git_rc)" >&2
+          exit 3
+        fi
         ;;
     esac
     ALL_FILES_FILE=$(mktemp)
