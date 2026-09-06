@@ -290,9 +290,37 @@ elif [ "$MODE" = "audit" ]; then
       rm -f "$ALL_FILES_FILE"
       exit 3
     fi
+    # The two writes and the intersection itself are captured for the same reason the mktemp calls
+    # above are (rule 4): a printf that fails AFTER a successful mktemp — a filesystem that fills
+    # between the two writes — and a grep that fails for any reason other than "no match" both leave
+    # FILE_LIST empty, and the empty-result branch below reports that as a clean audit with exit 0.
+    # A broken intersection and a genuinely empty diff must not be indistinguishable from outside
+    # (rule 7). grep's own contract makes exit 0 (matched) and exit 1 (no match) both legitimate and
+    # silent, so only a status ABOVE 1 — typically an I/O error — is a failure here; its stderr is
+    # discarded on the line itself, which leaves the status as the only evidence the intersection
+    # was never computed. Every one of these paths removes both temp files: this block runs before
+    # the EXIT trap installed further down, so nothing else would clean them up.
     printf '%s\n' "$ALL_FILES" > "$ALL_FILES_FILE"
+    _write_rc=$?
+    if [ "$_write_rc" -ne 0 ]; then
+      echo "codex-reviewer: DID-NOT-RUN: could not write the whole-tree list to its temporary file (printf exit $_write_rc)" >&2
+      rm -f "$ALL_FILES_FILE" "$CHANGED_FILES_FILE"
+      exit 3
+    fi
     printf '%s\n' "$CHANGED_FILES" > "$CHANGED_FILES_FILE"
+    _write_rc=$?
+    if [ "$_write_rc" -ne 0 ]; then
+      echo "codex-reviewer: DID-NOT-RUN: could not write the changed-paths list to its temporary file (printf exit $_write_rc)" >&2
+      rm -f "$ALL_FILES_FILE" "$CHANGED_FILES_FILE"
+      exit 3
+    fi
     FILE_LIST=$(grep -Fxf "$CHANGED_FILES_FILE" "$ALL_FILES_FILE" 2>/dev/null)
+    _grep_rc=$?
+    if [ "$_grep_rc" -gt 1 ]; then
+      echo "codex-reviewer: DID-NOT-RUN: could not intersect the whole-tree and changed-paths lists (grep exit $_grep_rc)" >&2
+      rm -f "$ALL_FILES_FILE" "$CHANGED_FILES_FILE"
+      exit 3
+    fi
     rm -f "$ALL_FILES_FILE" "$CHANGED_FILES_FILE"
   else
     FILE_LIST="$ALL_FILES"
