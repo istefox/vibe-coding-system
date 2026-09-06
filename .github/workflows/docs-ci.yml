@@ -5,18 +5,28 @@ name: Docs CI
 # check. Internal links (relative paths + anchors) block the build; external links run as a
 # warning only to avoid rate-limit false fails.
 # Actions are pinned to commit SHAs (same discipline as the other istefox repos).
+#
+# ADR-0193: `plant-shard` and `shell-tests` no longer run on `push` to `main` — that event fires
+# after the merge has already landed, so the run can only ever be a diagnostic re-check, never a
+# gate. `markdownlint` and `links` keep running on every push (cheap, and `links` is genuinely
+# cross-PR: a merge can combine two individually-green PRs into a dead link). `workflow_dispatch`
+# is the manual escape hatch to re-run full validation against `main` on demand.
 
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch: {}
 
 # Cancel a run only when a later push to the SAME pull request has superseded it. A run on `main`
 # is never cancelled: two merges landing close together would otherwise leave the earlier one
 # unvalidated, and "a check that did not run looks exactly like a check that found nothing" is the
 # failure this repository keeps recording. Measured 2026-08-03: 21 pull_request events over 17
 # branches, so 4 superseded runs in three days.
+# ADR-0193: this still applies to markdownlint/links, the only jobs that still run on `push` — the
+# heavy jobs (plant-shard, shell-tests) are gated off `push` entirely (see their own `if:` below),
+# so there's nothing left on `main` for this rule to protect for them.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -40,6 +50,12 @@ jobs:
   plant-shard:
     name: plant-shard
     runs-on: ubuntu-latest
+    # ADR-0193: skipped on `push` — that event fires after the merge already landed, so this leg
+    # can only ever be a diagnostic re-check. `shell-tests` below carries the EXACT same condition
+    # on purpose: its `--require-legs` step fails the job on a `skipped` shard result, so a
+    # mismatch here would turn `shell-tests` red on every merge. Re-run on demand via
+    # `workflow_dispatch`.
+    if: github.event_name != 'push'
     strategy:
       fail-fast: false          # one broken plant must not cancel the other three and hide the rest
       matrix:
@@ -165,8 +181,12 @@ jobs:
     name: shell-tests
     runs-on: ubuntu-latest
     needs: [plant-shard]
-    if: always()            # a failed shard must not skip the union: a required context that never
-                             # reports leaves the pull request pending forever (ADR-0151 §D8)
+    # a failed shard must not skip the union: a required context that never reports leaves the
+    # pull request pending forever (ADR-0151 §D8). ADR-0193: `&& github.event_name != 'push'` MUST
+    # match plant-shard's own `if:` above exactly — plant-shard reports `skipped` on `push`, and
+    # `--require-legs` below fails this job on a `skipped` shard result, so a mismatch here would
+    # turn shell-tests red on every merge instead of skipped.
+    if: always() && github.event_name != 'push'
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
