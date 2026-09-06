@@ -664,11 +664,17 @@ with open(os.environ['CR_OUT'], 'w') as out:
   fi
 else
   # MODE = audit. Writes --out as a JSON ARRAY (not the schema's {"findings": ...} wrapper — the
-  # deep-refactor skill merges the four dimensions' arrays). Three fields are wrapper-enforced and
-  # never trusted from the model (ADR-0193 §D4, rule 16): dimension, id, and fix_type-for-security.
-  # `file` is not one of those three — it passes through, normalised from the repo-relative form the
-  # prompt handed the model into the absolute path deep-refactor/SKILL.md's finding schema declares.
-  RAW_OUT="$RAW_OUT" CR_OUT="$OUT" DIMENSION="$DIMENSION" REPO_ROOT="$REPO_ROOT" python3 -c "
+  # deep-refactor skill merges the four dimensions' arrays). FOUR fields are wrapper-enforced and
+  # never trusted from the model (ADR-0193 §D4, rule 16): dimension, id, fix_type-for-security, and
+  # `file` — normalised from the repo-relative form the prompt handed the model into the absolute
+  # path deep-refactor/SKILL.md's finding schema declares, AND validated against the audited scope.
+  # FILE_LIST is passed in for that validation and for no other purpose: deep-refactor/SKILL.md
+  # hands a finding's `file` straight into an edit-capable coder/refactorer dispatch prompt without
+  # re-validating it, so a hallucinated, prompt-injected or malicious path accepted here becomes an
+  # autonomous edit to an arbitrary path on disk. The model's `file` is an untrusted input like any
+  # other model output, and the only authority on what was in scope is the list this script itself
+  # enumerated and put in the prompt.
+  RAW_OUT="$RAW_OUT" CR_OUT="$OUT" DIMENSION="$DIMENSION" REPO_ROOT="$REPO_ROOT" FILE_LIST="$FILE_LIST" python3 -c "
 import hashlib
 import json, os, sys
 
@@ -691,7 +697,28 @@ VALID_FIX_TYPES = ('coder', 'refactorer', 'debugger', 'report-only')
 VALID_SEVERITIES = ('P1', 'P2', 'P3')
 VALID_RISK_LEVELS = ('low', 'high')
 
+# The audited scope, canonicalised once: exactly the paths the prompt offered the model, joined
+# onto REPO_ROOT and resolved with realpath so the membership test below compares like with like
+# (a '..' segment or a symlinked directory must not let two spellings of one path disagree).
+# FILE_LIST covers BOTH audit shapes with no branch here — the --diff-scope intersection and the
+# whole-tree list are the same variable by the time the prompt is built.
+ALLOWED_FILES = set()
+for _rel in os.environ.get('FILE_LIST', '').split('\n'):
+    if not _rel:
+        continue
+    ALLOWED_FILES.add(os.path.realpath(os.path.join(REPO_ROOT, _rel)))
+
+# Denominator guard (rule 7): the audit branch exits 0 early on an empty FILE_LIST, so an empty
+# allow-set HERE means the list never reached this formatter — a wiring defect in this script, not
+# an untrustworthy model. Without this, every finding would be rejected below and the run would
+# report the model as entirely bogus, which is the wrong diagnosis and sends the caller to a
+# fallback engine that will hit the same wiring defect.
+if not ALLOWED_FILES:
+    sys.stderr.write('codex-reviewer: DID-NOT-RUN: the in-scope file list did not reach the audit formatter, so no finding could be validated against it\n')
+    sys.exit(3)
+
 result = []
+rejected = 0
 for f in findings:
     if not isinstance(f, dict):
         continue
@@ -742,6 +769,19 @@ for f in findings:
     else:
         file_out = file_val
 
+    # 6. and then it is CHECKED against the audited scope, because normalising a path is not
+    # validating it: '../../etc/passwd' and an arbitrary absolute path both normalise perfectly.
+    # realpath collapses '..' traversal and symlinks so the comparison cannot be defeated by
+    # spelling; a finding that lands outside the enumerated set is DROPPED, never emitted, since
+    # deep-refactor/SKILL.md forwards this value to an edit-capable agent unchecked. The rejection
+    # is reported on stderr with the ORIGINAL value the model gave, not the resolved one — what the
+    # model actually said is what a human debugging a rejection needs to see.
+    file_out = os.path.realpath(file_out)
+    if file_out not in ALLOWED_FILES:
+        sys.stderr.write('codex-reviewer: REJECTED finding: file \'%s\' resolves outside the audited scope (FILE_LIST/REPO_ROOT)\n' % file_val)
+        rejected += 1
+        continue
+
     result.append({
         'id': fid,
         'dimension': dimension,
@@ -754,10 +794,28 @@ for f in findings:
         'suggested_fix': suggested_fix,
     })
 
+# An empty result has two causes that must NOT collapse into one exit code (rule 4, rule 7).
+# rejected == 0: the model genuinely found nothing — unchanged, exit 0 with an empty array, the
+# same clean-audit answer the empty-FILE_LIST branch gives. rejected > 0 with nothing surviving:
+# every single thing the model said pointed outside the tree it was asked to audit, so the output
+# is not a clean audit but an untrustworthy one, and no --out artifact is written. The caller
+# (deep-refactor/SKILL.md) routes exit 3 to the Claude reviewer for that dimension; exit 0 would
+# instead record a dimension audited and clean, which is the failure this whole branch exists to
+# prevent. A PARTIAL rejection is deliberately NOT this case: one surviving finding means the run
+# produced real results, and the stderr lines above are how a caller sees what was dropped.
+if not result and rejected:
+    sys.stderr.write('codex-reviewer: DID-NOT-RUN: all %d finding(s) resolved outside the audited scope; audit output is not trustworthy\n' % rejected)
+    sys.exit(3)
+
 with open(os.environ['CR_OUT'], 'w') as out:
     json.dump(result, out, indent=2)
     out.write('\n')
-" 2>&1
+"
+  # No `2>&1` here, unlike the review and diagnose invocations above: this formatter's stderr is
+  # now load-bearing (the REJECTED lines and the two DID-NOT-RUN lines), and merging it into stdout
+  # sends it to a stream this script's own CHECKER contract says it never uses — the exit code is
+  # the signal, --out is the artifact, and every diagnostic in this file goes to stderr. Restoring
+  # the merge would silently make a rejected finding invisible to any caller reading stderr.
   FORMAT_RC=$?
   if [ "$FORMAT_RC" -eq 3 ]; then
     exit 3
