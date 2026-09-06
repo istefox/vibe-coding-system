@@ -51,8 +51,8 @@ alone pins nothing — assert the MESSAGE, quoted from the source, not paraphras
 the plant, not by reasoning: the probe printed `rc=3 (want 3) message-ok=0`, which is the whole
 argument in one line.
 
-**Known pre-existing red, re-confirmed 2026-09-06:** a full `plant-check.sh` run (now 684
-declarations, ~25 min at 8 workers) ends `PASS=690 FAIL=1` on `FAIL: PC5 ... spec-coverage.test.sh
+**Known pre-existing red, re-confirmed 2026-09-06 (twice, latest at 686 declarations):** a full
+`plant-check.sh` run (~25-30 min at 8 workers) ends `PASS=<n> FAIL=1` on `FAIL: PC5 ... spec-coverage.test.sh
 [RS7] — already RED in the unmutated sandbox`, because `RS7` itself fails at HEAD (8 of 201 frozen
 baseline rows diverge — the `spec-coverage-scope-baseline.tsv` bump lag this repo has hit before).
 Cheapest confirmation that it is not yours: run `spec-coverage.test.sh` directly and read the

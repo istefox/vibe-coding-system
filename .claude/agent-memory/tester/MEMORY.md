@@ -14,3 +14,6 @@ the 200-line/25KB injection cap; the topic files do not.
   — why a git-driven end-to-end assertion still works in plant-check's `.git`-less sandbox, the
   unborn-repo fixture, the two absorption shapes (`os.path.join`; a second exit-3 path — assert the
   message, not just `rc -eq 3`), and the known pre-existing RS7 red
+- [Caller-identifying utility shim](topics/selective-mktemp-shim-fixture.md) — isolating a guard on
+  the Nth `mktemp`/`git`/`curl` call when an earlier helper uses it too: shim by `ps -o args= -p
+  $PPID`, control-pass denominator guard, and two plants under one assertion id

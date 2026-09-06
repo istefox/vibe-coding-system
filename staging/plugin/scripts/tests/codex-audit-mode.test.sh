@@ -65,16 +65,29 @@
 # frozen-identity-set sentence were re-derived a second time by running this file, not computed
 # (rule 10, rule 13): 30 -> 33.
 #
-# TWENTY `# plant:` declarations sit beside CX02, CX05, CX10, CX12, CX13, CX14, CX15, CX17, CX18,
-# CX20, CX21, CX22, CX23, CX24, CX26, CX28, CX29, CX30, CX31 and CX32 (rule 2 — an assertion
-# nobody planted pins nothing). The ones targeting Task 2's argument surface (CX02, CX05) and the SKILL.md prose
+# AND AGAIN 2026-09-06, after the paragraph above (rule 14 — that paragraph is a correct snapshot of
+# its moment and is not rewritten): CX33, regression cover for the mktemp-failure guards just added
+# to audit mode's diff-scope intersection block. Before that fix a failed `mktemp` fell through to an
+# empty FILE_LIST and reported exit 0 with `[]`, indistinguishable from a genuinely empty diff; the
+# assertion drives a real, selectively-failing `mktemp` end to end and requires exit 3 with the
+# message naming WHICH temp file could not be created. Measured GREEN against the code as it stands
+# the day it was added, so a RED in it is a regression in codex-reviewer.sh. Z1's floor and its
+# frozen-identity-set sentence were re-derived a third time by running this file (rule 10, rule 13):
+# 33 -> 34.
+#
+# TWENTY-TWO `# plant:` declarations sit beside CX02, CX05, CX10, CX12, CX13, CX14, CX15, CX17, CX18,
+# CX20, CX21, CX22, CX23, CX24, CX26, CX28, CX29, CX30, CX31, CX32 and CX33 (rule 2 — an assertion
+# nobody planted pins nothing) — twenty-two against twenty-one ids because CX33 carries TWO, one per
+# mktemp guard, so neither half rests on the other's evidence. The ones targeting Task 2's argument
+# surface (CX02, CX05) and the SKILL.md prose
 # Tasks 6-8 add (CX20-CX24, CX26) are grounded in literal text the plan or the source files already
 # state verbatim. The ones targeting Task 3/4's not-yet-written `codex-reviewer.sh` internals (CX10,
 # CX12, CX13, CX17, CX18) are best-effort projections of that code's expected shape, following the
 # file's own existing style; Task 9's plant run is explicitly budgeted (~10 lines) to repair a
 # needle that turns out BADPLANT once the real code lands — "fix the needle, never the assertion"
-# (plant-check.sh's own rule). The last five (CX28, CX29, CX30, CX31 and CX32) are not projections
-# at all: they were written against code already on disk, so their needles are quoted from it.
+# (plant-check.sh's own rule). The last seven (CX28, CX29, CX30, CX31, CX32 and CX33's two) are not
+# projections at all: they were written against code already on disk, so their needles are quoted
+# from it.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -975,15 +988,160 @@ fi
 rm -rf "$CX32_TMP"
 # plant: CX32 | plugin/scripts/codex-reviewer.sh | [ ! -x "$ENUM" ] | false
 
+# CX33 (R-01) — the two `mktemp` calls that back audit mode's diff-scope INTERSECTION, neither of
+# which captured its exit status until the fix this pins. A failed `mktemp` left the variable empty,
+# the `printf` that follows wrote nowhere, and `grep -Fxf` — whose stderr is already discarded —
+# yielded an empty FILE_LIST, which the empty-result branch reports as a clean audit: exit 0 with
+# `[]` at --out. A broken intersection and a genuinely empty diff were indistinguishable from
+# outside (rule 7), the same shape CX28 and CX31 pin one step earlier in the same block.
+#
+# THE FIXTURE, AND WHY A BROKEN TMPDIR IS NOT IT. audit mode runs enumerate-sources.sh BEFORE this
+# block to derive the whole-tree list, and that helper calls `mktemp` twice itself — so anything
+# breaking mktemp process-wide trips the pre-existing enumerate guard ("enumerate-sources.sh failed
+# (exit N)") and never reaches the two calls under test. Measured with a logging shim rather than
+# assumed (rule 13): the whole run makes exactly four `mktemp` calls, two from enumerate-sources.sh's
+# own process and then the two here.
+#
+# So the shim fails SELECTIVELY, and it selects by CALLER, not by a global call ordinal: it reads its
+# parent's command line (`ps -o args= -p $PPID`) and counts only the invocations whose parent is
+# codex-reviewer.sh, failing on the Nth of those. A global "fail the 3rd mktemp" counter would
+# silently start targeting a call inside enumerate-sources.sh the day that helper allocates a third
+# temp file, and the assertion would then be pinning a guard it does not name.
+#
+# THE MESSAGE IS ASSERTED, NEVER JUST THE CODE. This script has many exit-3 paths, so `rc -eq 3`
+# alone pins nothing (CX32's own lesson): each arm below requires the tail that names WHICH temp
+# file could not be created — "whole-tree list" for the first call, "changed-paths list" for the
+# second — which is also the only proof the shim isolated the call the arm claims it did.
+#
+# BOTH DIRECTIONS (rule 8), via the control run: the same fixture, the same shim, no injected
+# failure, must still exit 0 with an empty findings array. Without it the cheap way to satisfy the
+# new failure path would be to fail the whole intersection block. The control run doubles as the
+# denominator guard (rule 7): it asserts the shim is really being invoked by codex-reviewer.sh and
+# that exactly TWO calls originate there, so "call 1" and "call 2" below are the two guards named
+# and not something further up the run.
+CX33_SHIMDIR="$WORK/cx33-shim"
+mkdir -p "$CX33_SHIMDIR"
+CX33_REAL_MKTEMP=$(command -v mktemp 2>/dev/null)
+cat > "$CX33_SHIMDIR/mktemp" <<'CX33_SHIM_EOF'
+#!/bin/bash
+# Counting mktemp shim for CX33 in codex-audit-mode.test.sh. Placed first on a PATH handed ONLY to
+# the codex-reviewer.sh subprocess under test, never exported into this suite's own environment.
+set -u
+_cx33_parent=$(ps -o args= -p $PPID 2>/dev/null)
+case "$_cx33_parent" in
+  *codex-reviewer.sh*)
+    _cx33_n=0
+    if [ -f "${CX33_MK_COUNT:-/nonexistent}" ]; then _cx33_n=$(cat "$CX33_MK_COUNT"); fi
+    _cx33_n=$((_cx33_n + 1))
+    printf '%s\n' "$_cx33_n" > "$CX33_MK_COUNT"
+    if [ "$_cx33_n" = "${CX33_MK_FAIL_NTH:-0}" ]; then
+      printf '%s\n' "$_cx33_n" > "$CX33_MK_FIRED"
+      printf 'cx33 mktemp shim: deliberate failure on codex-reviewer.sh call %s\n' "$_cx33_n" >&2
+      exit 1
+    fi
+    # Not `exec`: the path handed back is logged, so the arm below can check that a temp file which
+    # WAS created before the failing call is removed on the way out rather than leaked.
+    _cx33_made=$("$CX33_MK_REAL" "$@")
+    _cx33_rc=$?
+    printf '%s\n' "$_cx33_made"
+    printf '%s\n' "$_cx33_made" >> "$CX33_MK_PATHLOG"
+    exit $_cx33_rc
+    ;;
+esac
+exec "$CX33_MK_REAL" "$@"
+CX33_SHIM_EOF
+chmod +x "$CX33_SHIMDIR/mktemp"
+CX33_PATH="$CX33_SHIMDIR:$STUB_PATH"
+
+# Same healthy fixture CX30 builds and CX31 reuses — HEAD resolves and the tree is clean, so every
+# git call in the run succeeds and the mktemp failure is the only thing wrong. codex-reviewer.sh
+# issues bare `git ...`, never `git -C`, so the run happens inside that fixture; `cr()` never
+# changes directory, so the `cd` is confined to a subshell exactly as CX28/CX30/CX31 do it.
+CX33_FIXTURE_OK=1
+if [ -z "$CX33_REAL_MKTEMP" ] || [ ! -x "$CX33_REAL_MKTEMP" ]; then CX33_FIXTURE_OK=0; fi
+git -C "$CX30_HEALTHY_REPO" rev-parse --verify HEAD >/dev/null 2>&1 || CX33_FIXTURE_OK=0
+if [ -n "$(git -C "$CX30_HEALTHY_REPO" status --porcelain 2>/dev/null)" ]; then CX33_FIXTURE_OK=0; fi
+
+CX33_CTL_OUT="$WORK/cx33-control.json"
+CX33_CTL_ERRF="$WORK/cx33-control.err"
+CX33_CTL_COUNTF="$WORK/cx33-control.count"
+rm -f "$CX33_CTL_OUT" "$CX33_CTL_COUNTF" "$WORK/cx33-control.fired"
+: > "$WORK/cx33-control.paths"
+set_stub "$MINIMAL_PAYLOAD" ""
+( cd "$CX30_HEALTHY_REPO" && PATH="$CX33_PATH" CX33_MK_REAL="$CX33_REAL_MKTEMP" \
+    CX33_MK_COUNT="$CX33_CTL_COUNTF" CX33_MK_FIRED="$WORK/cx33-control.fired" \
+    CX33_MK_PATHLOG="$WORK/cx33-control.paths" CX33_MK_FAIL_NTH=0 \
+    bash "$CR" --mode audit --dimension structure --diff-scope uncommitted --out "$CX33_CTL_OUT" ) \
+    >/dev/null 2>"$CX33_CTL_ERRF"
+CX33_CTL_RC=$?
+CX33_CTL_ERR=$(cat "$CX33_CTL_ERRF")
+CX33_CTL_N=0
+[ -f "$CX33_CTL_COUNTF" ] && CX33_CTL_N=$(cat "$CX33_CTL_COUNTF")
+CX33_CTL_EMPTY_ARRAY=0
+if [ -s "$CX33_CTL_OUT" ] && grep -q -F '[]' "$CX33_CTL_OUT"; then CX33_CTL_EMPTY_ARRAY=1; fi
+
+CX33_RAN=0
+CX33_BAD=""
+for _cx33_nth in 1 2; do
+  case "$_cx33_nth" in
+    1) _cx33_tail="whole-tree list"; _cx33_want_made=0 ;;
+    *) _cx33_tail="changed-paths list"; _cx33_want_made=1 ;;
+  esac
+  CX33_RAN=$((CX33_RAN + 1))
+  _cx33_out="$WORK/cx33-$_cx33_nth.json"
+  _cx33_errf="$WORK/cx33-$_cx33_nth.err"
+  _cx33_countf="$WORK/cx33-$_cx33_nth.count"
+  _cx33_firedf="$WORK/cx33-$_cx33_nth.fired"
+  _cx33_pathsf="$WORK/cx33-$_cx33_nth.paths"
+  rm -f "$_cx33_out" "$_cx33_countf" "$_cx33_firedf"
+  : > "$_cx33_pathsf"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX30_HEALTHY_REPO" && PATH="$CX33_PATH" CX33_MK_REAL="$CX33_REAL_MKTEMP" \
+      CX33_MK_COUNT="$_cx33_countf" CX33_MK_FIRED="$_cx33_firedf" \
+      CX33_MK_PATHLOG="$_cx33_pathsf" CX33_MK_FAIL_NTH="$_cx33_nth" \
+      bash "$CR" --mode audit --dimension structure --diff-scope uncommitted --out "$_cx33_out" ) \
+      >/dev/null 2>"$_cx33_errf"
+  _cx33_rc=$?
+  _cx33_err=$(cat "$_cx33_errf")
+  _cx33_made=$(wc -l < "$_cx33_pathsf" | tr -d ' ')
+  _cx33_why=""
+  [ -f "$_cx33_firedf" ] || _cx33_why="$_cx33_why shim-never-fired"
+  [ "$_cx33_rc" -eq 3 ] || _cx33_why="$_cx33_why rc=$_cx33_rc(want-3)"
+  printf '%s' "$_cx33_err" | grep -q -F 'DID-NOT-RUN' || _cx33_why="$_cx33_why no-DID-NOT-RUN"
+  printf '%s' "$_cx33_err" | grep -q -F 'could not create the temporary file' \
+    || _cx33_why="$_cx33_why no-mktemp-reason"
+  printf '%s' "$_cx33_err" | grep -q -F "for the $_cx33_tail" \
+    || _cx33_why="$_cx33_why wrong-call-isolated(want:$_cx33_tail)"
+  [ ! -s "$_cx33_out" ] || _cx33_why="$_cx33_why artifact-written"
+  [ "$_cx33_made" = "$_cx33_want_made" ] \
+    || _cx33_why="$_cx33_why temp-files-created=$_cx33_made(want-$_cx33_want_made)"
+  while IFS= read -r _cx33_p; do
+    [ -n "$_cx33_p" ] || continue
+    if [ -e "$_cx33_p" ]; then _cx33_why="$_cx33_why leaked-temp-file"; fi
+  done < "$_cx33_pathsf"
+  if [ -n "$_cx33_why" ]; then
+    CX33_BAD="$CX33_BAD [call-$_cx33_nth:$_cx33_why ]"
+  fi
+done
+
+if [ "$CX33_FIXTURE_OK" -eq 1 ] && [ "$CX33_CTL_RC" -eq 0 ] && [ "$CX33_CTL_N" = "2" ] \
+   && [ "$CX33_CTL_EMPTY_ARRAY" -eq 1 ] && [ "$CX33_RAN" -eq 2 ] && [ -z "$CX33_BAD" ]; then
+  ok "CX33: audit mode — a failing mktemp for the whole-tree list, and one for the changed-paths list, each exit 3 (DID-NOT-RUN) naming which temp file could not be created, write no --out artifact and leak no temp file (loop ran $CX33_RAN times); with mktemp healthy the same fixture still exits 0 with an empty findings array"
+else
+  bad "CX33: audit-mode mktemp failure handling — fixture-ok=$CX33_FIXTURE_OK control-rc=$CX33_CTL_RC (want 0) control-mktemp-calls-from-codex-reviewer=$CX33_CTL_N (want 2) control-empty-array=$CX33_CTL_EMPTY_ARRAY control-stderr=${CX33_CTL_ERR:-none} loop-ran=$CX33_RAN (need 2) failing-calls:${CX33_BAD:-none}"
+fi
+# plant: CX33 | plugin/scripts/codex-reviewer.sh | if [ "$_mktemp_rc" -ne 0 ] || [ -z "$ALL_FILES_FILE" ]; then | if false; then
+# plant: CX33 | plugin/scripts/codex-reviewer.sh | if [ "$_mktemp_rc" -ne 0 ] || [ -z "$CHANGED_FILES_FILE" ]; then | if false; then
+
 # =====================================================================================
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 33 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 33) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX32 are the frozen identity set"
+if [ "$_total" -ge 34 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 34) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX33 are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 33; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 34; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]
