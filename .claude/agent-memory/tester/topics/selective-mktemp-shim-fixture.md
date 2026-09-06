@@ -1,6 +1,6 @@
 ---
 name: selective-mktemp-shim-fixture
-description: How to isolate a guard on the Nth call of a common utility (mktemp, git, curl) when earlier callers in the same run use it too — a caller-identifying PATH shim, its denominator guard, and the two-plants-one-id rule
+description: How to isolate a guard on the Nth call of a common utility (mktemp, git, grep) when earlier callers in the same run use it too — caller-identifying and flag-identifying PATH shims, the succeeding shim that fails the NEXT step, their denominator guards, and the many-plants-one-id rule
 metadata:
   type: project
 ---
@@ -48,7 +48,37 @@ independent proof the fixture isolated the right call. Neutralise a whole guard 
 fields on `" | "` (space-pipe-space) and `] || [` does not contain it — but check it with the real
 `awk -F' \\| '` before trusting it.
 
-**Current registry cost, re-derived 2026-09-06:** 686 declarations, ~30 min at 8 workers, ending
-`PASS=692 FAIL=1` on the same standing `PC5 … spec-coverage.test.sh [RS7]` vacuous plant (RS7 fails at
-HEAD: 8 of 201 frozen baseline rows diverge). See [[task1-codex-audit-mode-slug]] for the
-stub-`codex`-on-isolated-PATH pattern this fixture layers on top of.
+**A shim that SUCCEEDS is how you reach the step after the one it fakes** (CX34, same file, next
+day). To fail a `printf … > "$tmpfile"` rather than the `mktemp` before it, the same caller-selective
+shim prints a path inside a `chmod 555` directory and exits **0**: the upstream mktemp guard passes
+(status 0, variable non-empty) and bash's redirection is what fails. Keep it as a SECOND shim beside
+CX33's failing one rather than merging them behind a mode flag — they answer different questions
+(rule 6) and a shared one that broke would disable both assertions. Two measured details: bash's own
+`line NNN: <path>: Permission denied` reaches stderr beside the DID-NOT-RUN line, so assert stderr by
+CONTAINMENT, never equality; and always guard the fixture by probing that the read-only directory is
+really unwritable (`if ( : > "$dir/probe" ) 2>/dev/null; then FIXTURE_OK=0`), because as root it is
+not and both arms would then exercise nothing.
+
+**Failing one call site of a ubiquitous filter: select on the FLAG SIGNATURE, not a counter.**
+`grep -Fxf` is issued exactly once in that whole process tree, so a `grep` shim that scans `"$@"`
+for the literal `-Fxf`, exits 2 when armed and `exec`s the real grep otherwise leaves every other
+grep in the run (a helper's `grep -v -E`, the script's own rate-limit scan) untouched. Count the
+`-Fxf` hits in the control run and assert exactly 1 — that is the denominator guard proving the call
+site is unique and reached, rather than assuming it.
+
+**When both the good and the bad path write the same artifact, the artifact cannot be the evidence.**
+An audit whose intersection collapses writes `[]` to `--out`; an audit that really intersects and
+finds nothing writes `[]` too. The stub CLI's PROMPT LOG is where they differ. Fixture: a repo with
+one MODIFIED tracked file and one untouched one, then assert the prompt names the changed file and
+does NOT name the untouched one — that single pair distinguishes a real intersection from both a
+whole-tree fallback and a collapsed one.
+
+**Current registry cost, re-derived 2026-09-06 (second run, same day):** 689 declarations, ~45 min at
+8 workers, ending `PASS=695 FAIL=1` on the same standing `PC5 … spec-coverage.test.sh [RS7]` vacuous
+plant (RS7 fails at HEAD: 8 of 201 frozen baseline rows diverge) — the only red, and it is not
+caused by anything in `codex-audit-mode.test.sh`. Budget closer to 45 min than 30: the tail is
+dominated by four harnesses (`diff-budget-scope`, `plant-registry-parallel`, `spec-coverage`,
+`worktree-isolation-contract`), and progress is readable live as
+`ls $WORKROOT/res | wc -l` / 2 against `wc -l $WORKROOT/decls` rather than from the mostly-buffered
+stdout. See [[task1-codex-audit-mode-slug]] for the stub-`codex`-on-isolated-PATH pattern this
+fixture layers on top of.

@@ -75,19 +75,33 @@
 # frozen-identity-set sentence were re-derived a third time by running this file (rule 10, rule 13):
 # 33 -> 34.
 #
-# TWENTY-TWO `# plant:` declarations sit beside CX02, CX05, CX10, CX12, CX13, CX14, CX15, CX17, CX18,
-# CX20, CX21, CX22, CX23, CX24, CX26, CX28, CX29, CX30, CX31, CX32 and CX33 (rule 2 — an assertion
-# nobody planted pins nothing) — twenty-two against twenty-one ids because CX33 carries TWO, one per
-# mktemp guard, so neither half rests on the other's evidence. The ones targeting Task 2's argument
+# AND AGAIN 2026-09-06, after the paragraph above (rule 14 — that paragraph too is a correct
+# snapshot of its moment and is not rewritten): CX34, regression cover for the write and
+# intersection guards added to the SAME diff-scope block one step past the mktemp pair CX33 pins.
+# Before that fix a `printf` that failed after a successful `mktemp`, or a `grep -Fxf` that failed
+# for an I/O reason, fell through to an empty FILE_LIST and reported exit 0 with `[]` —
+# indistinguishable from a genuinely empty diff. The assertion drives all three failures end to end
+# (an unwritable path handed back by a succeeding mktemp; a grep shim that exits 2 only on `-Fxf`)
+# and requires exit 3 with the message naming WHICH step failed, plus the opposite direction: a
+# repository with one modified file must still reach a real, non-empty intersection. Measured GREEN
+# against the code as it stands the day it was added, so a RED in it is a regression in
+# codex-reviewer.sh. Z1's floor and its frozen-identity-set sentence were re-derived a fourth time
+# by running this file (rule 10, rule 13): 34 -> 35.
+#
+# TWENTY-FIVE `# plant:` declarations sit beside CX02, CX05, CX10, CX12, CX13, CX14, CX15, CX17,
+# CX18, CX20, CX21, CX22, CX23, CX24, CX26, CX28, CX29, CX30, CX31, CX32, CX33 and CX34 (rule 2 — an
+# assertion nobody planted pins nothing) — twenty-five against twenty-two ids because CX33 carries
+# TWO, one per mktemp guard, and CX34 carries THREE, one per failure path (the two writes and the
+# intersection), so no half of either rests on the other's evidence. The ones targeting Task 2's argument
 # surface (CX02, CX05) and the SKILL.md prose
 # Tasks 6-8 add (CX20-CX24, CX26) are grounded in literal text the plan or the source files already
 # state verbatim. The ones targeting Task 3/4's not-yet-written `codex-reviewer.sh` internals (CX10,
 # CX12, CX13, CX17, CX18) are best-effort projections of that code's expected shape, following the
 # file's own existing style; Task 9's plant run is explicitly budgeted (~10 lines) to repair a
 # needle that turns out BADPLANT once the real code lands — "fix the needle, never the assertion"
-# (plant-check.sh's own rule). The last seven (CX28, CX29, CX30, CX31, CX32 and CX33's two) are not
-# projections at all: they were written against code already on disk, so their needles are quoted
-# from it.
+# (plant-check.sh's own rule). The last ten (CX28, CX29, CX30, CX31, CX32, CX33's two and CX34's
+# three) are not projections at all: they were written against code already on disk, so their
+# needles are quoted from it.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -1133,15 +1147,268 @@ fi
 # plant: CX33 | plugin/scripts/codex-reviewer.sh | if [ "$_mktemp_rc" -ne 0 ] || [ -z "$ALL_FILES_FILE" ]; then | if false; then
 # plant: CX33 | plugin/scripts/codex-reviewer.sh | if [ "$_mktemp_rc" -ne 0 ] || [ -z "$CHANGED_FILES_FILE" ]; then | if false; then
 
+# CX34 (R-01) — the two `printf` WRITES and the `grep -Fxf` INTERSECTION that follow the mktemp pair
+# CX33 pins, none of which captured its exit status until the fix this pins. This is exactly the
+# residual CX33's own fixture cannot reach: a `mktemp` that SUCCEEDS and a write that fails
+# afterwards (the filesystem filling between the two calls), or an intersection that fails for an
+# I/O reason. Each of the three left FILE_LIST empty, and the empty-result branch reported that as a
+# clean audit — exit 0 with `[]` at --out, indistinguishable from a genuinely empty diff (rule 7),
+# the same shape CX28, CX31 and CX33 pin at three earlier points in this one block.
+#
+# THREE ARMS, THREE INJECTIONS, because the three steps fail for different reasons and no single
+# injection produces all three:
+#   - the two writes fail because their target PATH is unwritable, never because mktemp failed. The
+#     shim hands back a syntactically fine path inside a `chmod 555` directory and EXITS 0, so the
+#     mktemp guard above passes (status 0, variable non-empty) and bash's redirection is what fails.
+#     That is deliberately the OPPOSITE of CX33's shim, which fails mktemp itself; the two are kept
+#     as separate shims rather than merged because they answer different questions (rule 6) and a
+#     shared one that broke would disable both assertions at once.
+#   - the intersection fails through a `grep` shim that exits 2 ONLY when it sees the literal `-Fxf`
+#     flag this call site uses, passing straight through to the real grep otherwise so nothing else
+#     in the run changes behaviour. grep's own contract makes exit 0 (matched) and exit 1 (no match)
+#     legitimate silent successes, so a status ABOVE 1 is the only one that may be treated as a
+#     failure — and the control run below asserts the `-Fxf` invocation count is exactly 1 rather
+#     than assuming the call site is unique (rule 7).
+# The mktemp shim selects its victim by CALLER and not by a global ordinal, for the reason spelled
+# out at CX33: enumerate-sources.sh runs first and calls mktemp twice on its own account.
+#
+# THE MESSAGE IS ASSERTED, NEVER JUST THE CODE. All three arms exit 3 and this script has many
+# exit-3 paths, so `rc -eq 3` alone pins nothing (CX32's lesson): each arm requires the tail naming
+# WHICH step failed — "write the whole-tree list" / "write the changed-paths list" / "intersect the
+# whole-tree and changed-paths lists" — plus the captured-status token ("printf exit" / "grep exit")
+# that only exists because the status was captured. The tail is also the only proof the injection
+# isolated the step the arm claims: with the wrong step failing, the run still exits 3.
+#
+# stderr is asserted by CONTAINMENT, never equality, and the asymmetry behind that is measured, not
+# assumed: on a failed write bash's own "<path>: Permission denied" redirection diagnostic reaches
+# stderr beside the DID-NOT-RUN line, while on a failed intersection the shim's stderr is swallowed
+# by the `2>/dev/null` on that line, leaving the script's own message as the sole evidence.
+#
+# BOTH DIRECTIONS (rule 8) via the control run, which is NOT a duplicate of CX33's: CX33's control
+# proves an EMPTY diff still exits 0 with `[]`, this one proves a NON-EMPTY intersection is really
+# computed. Its fixture is a repository with one MODIFIED tracked file and one untouched one, so the
+# prompt handed to the stub `codex` must name the changed file and must NOT name the untouched one —
+# a whole-tree fallback and a collapsed intersection each fail that. The --out artifact cannot carry
+# this evidence: with an empty findings payload the real path writes `[]`, byte-identical to what
+# the empty-result short circuit writes, so the PROMPT is the only place the two outcomes differ.
+CX34_SHIMDIR="$WORK/cx34-shim"
+mkdir -p "$CX34_SHIMDIR"
+CX34_REAL_MKTEMP=$(command -v mktemp 2>/dev/null)
+CX34_REAL_GREP=$(command -v grep 2>/dev/null)
+cat > "$CX34_SHIMDIR/mktemp" <<'CX34_MK_SHIM_EOF'
+#!/bin/bash
+# Caller-selective mktemp shim for CX34 in codex-audit-mode.test.sh. Unlike CX33's it always
+# SUCCEEDS: on the Nth call made by codex-reviewer.sh itself it prints a path inside a read-only
+# directory and exits 0, so the mktemp guard passes and the WRITE that follows is what fails.
+# Placed first on a PATH handed ONLY to the codex-reviewer.sh subprocess under test.
+set -u
+_cx34_parent=$(ps -o args= -p $PPID 2>/dev/null)
+case "$_cx34_parent" in
+  *codex-reviewer.sh*)
+    _cx34_n=0
+    if [ -f "${CX34_MK_COUNT:-/nonexistent}" ]; then _cx34_n=$(cat "$CX34_MK_COUNT"); fi
+    _cx34_n=$((_cx34_n + 1))
+    printf '%s\n' "$_cx34_n" > "$CX34_MK_COUNT"
+    if [ "$_cx34_n" = "${CX34_MK_BAD_NTH:-0}" ]; then
+      printf '%s\n' "$_cx34_n" > "$CX34_MK_FIRED"
+      printf '%s\n' "$CX34_MK_BADPATH"
+      exit 0
+    fi
+    # Not `exec`: the real path handed back is logged, so the arms below can check that a temp file
+    # created BEFORE the failing step is removed on the way out rather than leaked.
+    _cx34_made=$("$CX34_MK_REAL" "$@")
+    _cx34_rc=$?
+    printf '%s\n' "$_cx34_made"
+    printf '%s\n' "$_cx34_made" >> "$CX34_MK_PATHLOG"
+    exit $_cx34_rc
+    ;;
+esac
+exec "$CX34_MK_REAL" "$@"
+CX34_MK_SHIM_EOF
+chmod +x "$CX34_SHIMDIR/mktemp"
+cat > "$CX34_SHIMDIR/grep" <<'CX34_GREP_SHIM_EOF'
+#!/bin/bash
+# Flag-selective grep shim for CX34. Every invocation carrying the literal `-Fxf` is COUNTED (the
+# control run's denominator), and failed with exit 2 only when armed. Everything else — including
+# enumerate-sources.sh's own `grep -v -E` and codex-reviewer.sh's rate-limit scan — passes straight
+# through to the real grep, so nothing outside the call site under test changes behaviour.
+set -u
+for _cx34_arg in "$@"; do
+  if [ "$_cx34_arg" = "-Fxf" ]; then
+    printf 'Fxf\n' >> "$CX34_GREP_SEEN"
+    if [ "${CX34_GREP_FAIL:-0}" = "1" ]; then
+      printf 'Fxf\n' > "$CX34_GREP_FIRED"
+      printf 'cx34 grep shim: deliberate exit 2 on the -Fxf intersection\n' >&2
+      exit 2
+    fi
+    break
+  fi
+done
+exec "$CX34_GREP_REAL" "$@"
+CX34_GREP_SHIM_EOF
+chmod +x "$CX34_SHIMDIR/grep"
+CX34_PATH="$CX34_SHIMDIR:$STUB_PATH"
+
+# A repository with ONE modified tracked file and one untouched one. CX30's healthy fixture cannot
+# serve here: it is deliberately CLEAN, and CX31 and CX33 both assert that cleanliness.
+CX34_REPO="$WORK/cx34-changed-repo"
+mkdir -p "$CX34_REPO"
+git init -q "$CX34_REPO" >/dev/null 2>&1
+printf 'let cx34a = 1\n' > "$CX34_REPO/cx34-changed.swift"
+printf 'let cx34b = 2\n' > "$CX34_REPO/cx34-untouched.swift"
+git -C "$CX34_REPO" add cx34-changed.swift cx34-untouched.swift >/dev/null 2>&1
+git -C "$CX34_REPO" -c user.email=cx34@example.invalid -c user.name=cx34 \
+    -c commit.gpgsign=false commit -q -m "cx34 fixture" >/dev/null 2>&1
+printf 'let cx34a = 2\n' > "$CX34_REPO/cx34-changed.swift"
+
+CX34_RODIR="$WORK/cx34-readonly"
+mkdir -p "$CX34_RODIR"
+chmod 555 "$CX34_RODIR"
+CX34_BADPATH="$CX34_RODIR/cx34-nowrite.tmp"
+
+# Denominator guards (rule 7) — each one is a way the arms below could pass or fail for a reason
+# unrelated to the mechanism they name.
+CX34_FIXTURE_OK=1
+if [ -z "$CX34_REAL_MKTEMP" ] || [ ! -x "$CX34_REAL_MKTEMP" ]; then CX34_FIXTURE_OK=0; fi
+if [ -z "$CX34_REAL_GREP" ] || [ ! -x "$CX34_REAL_GREP" ]; then CX34_FIXTURE_OK=0; fi
+git -C "$CX34_REPO" rev-parse --verify HEAD >/dev/null 2>&1 || CX34_FIXTURE_OK=0
+# EXACTLY one changed path, and it is the one the control run expects to find in the prompt: with no
+# changes "a non-empty intersection" would be vacuous, and with two the "untouched file is absent"
+# half would pass for the wrong reason.
+CX34_DIFF_NAMES=$(git -C "$CX34_REPO" diff HEAD --name-only 2>/dev/null)
+[ "$CX34_DIFF_NAMES" = "cx34-changed.swift" ] || CX34_FIXTURE_OK=0
+# The read-only directory must really be unwritable. On a runner where it is not (root, or a
+# filesystem ignoring the mode) the two write arms would exercise nothing, and that must read as a
+# FAILURE here, never as a pass.
+if ( : > "$CX34_RODIR/cx34-probe" ) 2>/dev/null; then
+  CX34_FIXTURE_OK=0
+  rm -f "$CX34_RODIR/cx34-probe"
+fi
+
+CX34_CTL_OUT="$WORK/cx34-control.json"
+CX34_CTL_ERRF="$WORK/cx34-control.err"
+CX34_CTL_COUNTF="$WORK/cx34-control.count"
+CX34_CTL_PROMPT="$WORK/cx34-control-prompt.txt"
+CX34_CTL_SEENF="$WORK/cx34-control.grepseen"
+rm -f "$CX34_CTL_OUT" "$CX34_CTL_COUNTF" "$CX34_CTL_PROMPT" \
+      "$WORK/cx34-control.mkfired" "$WORK/cx34-control.grepfired"
+: > "$WORK/cx34-control.paths"
+: > "$CX34_CTL_SEENF"
+set_stub "$MINIMAL_PAYLOAD" "$CX34_CTL_PROMPT"
+( cd "$CX34_REPO" && PATH="$CX34_PATH" CX34_MK_REAL="$CX34_REAL_MKTEMP" \
+    CX34_GREP_REAL="$CX34_REAL_GREP" CX34_MK_COUNT="$CX34_CTL_COUNTF" \
+    CX34_MK_FIRED="$WORK/cx34-control.mkfired" CX34_MK_PATHLOG="$WORK/cx34-control.paths" \
+    CX34_MK_BADPATH="$CX34_BADPATH" CX34_MK_BAD_NTH=0 CX34_GREP_SEEN="$CX34_CTL_SEENF" \
+    CX34_GREP_FIRED="$WORK/cx34-control.grepfired" CX34_GREP_FAIL=0 \
+    bash "$CR" --mode audit --dimension structure --diff-scope uncommitted --out "$CX34_CTL_OUT" ) \
+    >/dev/null 2>"$CX34_CTL_ERRF"
+CX34_CTL_RC=$?
+CX34_CTL_ERR=$(cat "$CX34_CTL_ERRF")
+CX34_CTL_FXF=$(wc -l < "$CX34_CTL_SEENF" | tr -d ' ')
+CX34_CTL_MK_N=0
+[ -f "$CX34_CTL_COUNTF" ] && CX34_CTL_MK_N=$(cat "$CX34_CTL_COUNTF")
+CX34_CTL_PROMPT_OK=0
+if [ -s "$CX34_CTL_PROMPT" ] && grep -q -F 'cx34-changed.swift' "$CX34_CTL_PROMPT" \
+   && ! grep -q -F 'cx34-untouched.swift' "$CX34_CTL_PROMPT"; then
+  CX34_CTL_PROMPT_OK=1
+fi
+
+CX34_RAN=0
+CX34_BAD=""
+for _cx34_case in write-whole-tree write-changed-paths intersect; do
+  # `want_made` is the number of REAL temp files the run allocates before it dies: the write arms
+  # substitute an unwritable path for one of the two, the intersect arm allocates both.
+  case "$_cx34_case" in
+    write-whole-tree)
+      _cx34_nth=1; _cx34_gfail=0; _cx34_want_made=1; _cx34_status_token="printf exit"
+      _cx34_tail="could not write the whole-tree list to its temporary file" ;;
+    write-changed-paths)
+      _cx34_nth=2; _cx34_gfail=0; _cx34_want_made=1; _cx34_status_token="printf exit"
+      _cx34_tail="could not write the changed-paths list to its temporary file" ;;
+    *)
+      _cx34_nth=0; _cx34_gfail=1; _cx34_want_made=2; _cx34_status_token="grep exit"
+      _cx34_tail="could not intersect the whole-tree and changed-paths lists" ;;
+  esac
+  CX34_RAN=$((CX34_RAN + 1))
+  _cx34_out="$WORK/cx34-$_cx34_case.json"
+  _cx34_errf="$WORK/cx34-$_cx34_case.err"
+  _cx34_countf="$WORK/cx34-$_cx34_case.count"
+  _cx34_mkfiredf="$WORK/cx34-$_cx34_case.mkfired"
+  _cx34_gfiredf="$WORK/cx34-$_cx34_case.grepfired"
+  _cx34_pathsf="$WORK/cx34-$_cx34_case.paths"
+  _cx34_seenf="$WORK/cx34-$_cx34_case.grepseen"
+  rm -f "$_cx34_out" "$_cx34_countf" "$_cx34_mkfiredf" "$_cx34_gfiredf"
+  : > "$_cx34_pathsf"
+  : > "$_cx34_seenf"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX34_REPO" && PATH="$CX34_PATH" CX34_MK_REAL="$CX34_REAL_MKTEMP" \
+      CX34_GREP_REAL="$CX34_REAL_GREP" CX34_MK_COUNT="$_cx34_countf" \
+      CX34_MK_FIRED="$_cx34_mkfiredf" CX34_MK_PATHLOG="$_cx34_pathsf" \
+      CX34_MK_BADPATH="$CX34_BADPATH" CX34_MK_BAD_NTH="$_cx34_nth" CX34_GREP_SEEN="$_cx34_seenf" \
+      CX34_GREP_FIRED="$_cx34_gfiredf" CX34_GREP_FAIL="$_cx34_gfail" \
+      bash "$CR" --mode audit --dimension structure --diff-scope uncommitted --out "$_cx34_out" ) \
+      >/dev/null 2>"$_cx34_errf"
+  _cx34_rc=$?
+  _cx34_err=$(cat "$_cx34_errf")
+  _cx34_made=$(wc -l < "$_cx34_pathsf" | tr -d ' ')
+  _cx34_mkn=0
+  [ -f "$_cx34_countf" ] && _cx34_mkn=$(cat "$_cx34_countf")
+  # WHICH shim fired is asserted in both directions: a run that died at the other injection point
+  # would also exit 3, and must not be credited to this arm.
+  if [ "$_cx34_gfail" = "1" ]; then
+    _cx34_wantfired="$_cx34_gfiredf"; _cx34_notfired="$_cx34_mkfiredf"
+  else
+    _cx34_wantfired="$_cx34_mkfiredf"; _cx34_notfired="$_cx34_gfiredf"
+  fi
+  _cx34_why=""
+  [ -f "$_cx34_wantfired" ] || _cx34_why="$_cx34_why shim-never-fired"
+  [ ! -f "$_cx34_notfired" ] || _cx34_why="$_cx34_why wrong-shim-fired"
+  [ "$_cx34_rc" -eq 3 ] || _cx34_why="$_cx34_why rc=$_cx34_rc(want-3)"
+  printf '%s' "$_cx34_err" | grep -q -F 'DID-NOT-RUN' || _cx34_why="$_cx34_why no-DID-NOT-RUN"
+  printf '%s' "$_cx34_err" | grep -q -F "$_cx34_tail" \
+    || _cx34_why="$_cx34_why wrong-step-named(want:$_cx34_tail)"
+  printf '%s' "$_cx34_err" | grep -q -F "$_cx34_status_token" \
+    || _cx34_why="$_cx34_why status-not-reported(want:$_cx34_status_token)"
+  [ ! -s "$_cx34_out" ] || _cx34_why="$_cx34_why artifact-written"
+  [ "$_cx34_mkn" = "2" ] || _cx34_why="$_cx34_why mktemp-calls-from-codex-reviewer=$_cx34_mkn(want-2)"
+  [ "$_cx34_made" = "$_cx34_want_made" ] \
+    || _cx34_why="$_cx34_why real-temp-files-created=$_cx34_made(want-$_cx34_want_made)"
+  while IFS= read -r _cx34_p; do
+    [ -n "$_cx34_p" ] || continue
+    if [ -e "$_cx34_p" ]; then _cx34_why="$_cx34_why leaked-temp-file"; fi
+  done < "$_cx34_pathsf"
+  if [ -n "$_cx34_why" ]; then
+    CX34_BAD="$CX34_BAD [$_cx34_case:$_cx34_why ]"
+  fi
+done
+# Restored so the suite's own EXIT trap can remove $WORK; the arms above are finished with it.
+chmod 755 "$CX34_RODIR"
+
+# `CX34_CTL_MK_N -ge 2` is a VACUITY guard only and is deliberately not an exact count (rule 10):
+# the control run reaches `codex exec`, so it allocates the schema/prompt/raw-output temp files too
+# and an exact number here would pin codex-reviewer.sh's downstream internals, which this assertion
+# is not about. The exact per-run count that matters — two mktemp calls before the guard fires — is
+# asserted inside each arm, where the run stops at the step being pinned.
+if [ "$CX34_FIXTURE_OK" -eq 1 ] && [ "$CX34_CTL_RC" -eq 0 ] && [ "$CX34_CTL_PROMPT_OK" -eq 1 ] \
+   && [ "$CX34_CTL_FXF" = "1" ] && [ "$CX34_CTL_MK_N" -ge 2 ] && [ "$CX34_RAN" -eq 3 ] \
+   && [ -z "$CX34_BAD" ]; then
+  ok "CX34: audit mode — a failed write of the whole-tree list, a failed write of the changed-paths list and a failed grep -Fxf intersection each exit 3 (DID-NOT-RUN) naming which step failed and its captured status, write no --out artifact and leak no temp file (loop ran $CX34_RAN times); with all three healthy the same fixture computes a real intersection, exits 0 and hands codex a prompt naming the changed file and not the untouched one"
+else
+  bad "CX34: audit-mode write/intersection failure handling — fixture-ok=$CX34_FIXTURE_OK control-rc=$CX34_CTL_RC (want 0) control-prompt-is-the-intersection=$CX34_CTL_PROMPT_OK control-Fxf-invocations=$CX34_CTL_FXF (want 1) control-mktemp-calls-from-codex-reviewer=$CX34_CTL_MK_N (want >= 2) control-stderr=${CX34_CTL_ERR:-none} loop-ran=$CX34_RAN (need 3) failing-steps:${CX34_BAD:-none}"
+fi
+# plant: CX34 | plugin/scripts/codex-reviewer.sh | if [ "$_write_rc" -ne 0 ]; then echo "codex-reviewer: DID-NOT-RUN: could not write the whole-tree list | if false; then echo "codex-reviewer: DID-NOT-RUN: could not write the whole-tree list
+# plant: CX34 | plugin/scripts/codex-reviewer.sh | if [ "$_write_rc" -ne 0 ]; then echo "codex-reviewer: DID-NOT-RUN: could not write the changed-paths list | if false; then echo "codex-reviewer: DID-NOT-RUN: could not write the changed-paths list
+# plant: CX34 | plugin/scripts/codex-reviewer.sh | if [ "$_grep_rc" -gt 1 ]; then | if false; then
+
 # =====================================================================================
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 34 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 34) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX33 are the frozen identity set"
+if [ "$_total" -ge 35 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 35) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX34 are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 34; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 35; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]
