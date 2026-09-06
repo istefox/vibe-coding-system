@@ -160,22 +160,46 @@ fi
 DIFF_CONTENT=""
 FILE_LIST=""
 if [ "$MODE" = "review" ]; then
+  # Every arm captures its git exit status, none excepted. An unresolvable scope is DID-NOT-RUN
+  # (rule 4): stderr is discarded here, so a failing git call — unborn repository, unknown base ref,
+  # unknown sha — leaves DIFF_CONTENT empty, which is indistinguishable from a genuinely empty diff
+  # and falls into the "nothing to review, safe to merge" branch below with exit 0. Measured: in an
+  # unborn repository `git diff HEAD` exits 128 while `git rev-parse --is-inside-work-tree` above
+  # still exits 0, so the "not a git repository" guard does not catch it. Audit mode's arms below
+  # carry the identical guard; review mode was never updated to match until ADR-0193's cycle-3
+  # review found the gap.
   case "$DIFF_SCOPE" in
     uncommitted)
       DIFF_CONTENT=$(git diff HEAD 2>/dev/null)
+      _git_rc=$?
+      if [ "$_git_rc" -ne 0 ]; then
+        echo "codex-reviewer: DID-NOT-RUN: could not resolve diff-scope '$DIFF_SCOPE' (git exit $_git_rc)" >&2
+        exit 3
+      fi
       ;;
     base:*)
       _ref="${DIFF_SCOPE#base:}"
       DIFF_CONTENT=$(git diff "$_ref"...HEAD 2>/dev/null)
+      _git_rc=$?
+      if [ "$_git_rc" -ne 0 ]; then
+        echo "codex-reviewer: DID-NOT-RUN: could not resolve diff-scope '$DIFF_SCOPE' (git exit $_git_rc)" >&2
+        exit 3
+      fi
       ;;
     commit:*)
       _sha="${DIFF_SCOPE#commit:}"
       DIFF_CONTENT=$(git show "$_sha" 2>/dev/null)
+      _git_rc=$?
+      if [ "$_git_rc" -ne 0 ]; then
+        echo "codex-reviewer: DID-NOT-RUN: could not resolve diff-scope '$DIFF_SCOPE' (git exit $_git_rc)" >&2
+        exit 3
+      fi
       ;;
   esac
 
   # Step 4: empty diff is NOT a failure (mirrors reviewer.md's own "no detectable changes" edge
-  # case) — exit 0, report says so, in the same markdown shape as every other outcome.
+  # case) — exit 0, report says so, in the same markdown shape as every other outcome. Reached only
+  # when the git call above exited 0, so an empty DIFF_CONTENT here really is an empty diff.
   if [ -z "$DIFF_CONTENT" ]; then
     {
       echo "## Review"
