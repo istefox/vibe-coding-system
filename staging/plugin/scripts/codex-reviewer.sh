@@ -187,9 +187,22 @@ if [ "$MODE" = "review" ]; then
     exit 0
   fi
 elif [ "$MODE" = "audit" ]; then
+  # Resolved once and used twice on purpose: as enumerate-sources.sh's root (so every path it emits
+  # is relative to it) and, in the formatter below, as the prefix those paths are joined back onto.
+  # Two independent derivations could disagree about which tree the paths belong to (rule 6).
+  # Measured: in a BARE repository `git rev-parse --is-inside-work-tree` above prints "false" and
+  # exits 0, so the guard passes and this can still fail — a failure is DID-NOT-RUN (rule 4), never
+  # an empty root silently handed on.
+  REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+  _root_rc=$?
+  if [ "$_root_rc" -ne 0 ] || [ -z "$REPO_ROOT" ]; then
+    echo "codex-reviewer: DID-NOT-RUN: could not resolve the repository root (git exit $_root_rc)" >&2
+    exit 3
+  fi
+
   # Whole-tree by default (ADR-0193 §D2/§D3) — the file list is DERIVED, never re-listed: the same
   # question ("which files are this project's source") answered once, by enumerate-sources.sh.
-  ALL_FILES=$("$ENUM" "$(git rev-parse --show-toplevel)")
+  ALL_FILES=$("$ENUM" "$REPO_ROOT")
   _enum_rc=$?
   # A non-zero helper exit is DID-NOT-RUN (rule 4), never an empty list: without this the derived
   # population collapses to zero and the run reports an empty findings array with exit 0 — a
@@ -201,15 +214,21 @@ elif [ "$MODE" = "audit" ]; then
 
   if [ -n "$DIFF_SCOPE" ]; then
     CHANGED_FILES=""
+    # Every arm captures its git exit status, none excepted. An unresolvable scope is DID-NOT-RUN
+    # (rule 4): stderr is discarded here, so a silent empty CHANGED_FILES would intersect to nothing
+    # and report a clean audit of a scope that was never evaluated. `uncommitted` is no exception —
+    # measured: in an unborn repository (no commits, HEAD unresolvable) `git diff HEAD` exits 128
+    # while `git rev-parse --is-inside-work-tree` above still exits 0.
     case "$DIFF_SCOPE" in
       uncommitted)
         CHANGED_FILES=$(git diff HEAD --name-only 2>/dev/null)
+        _git_rc=$?
+        if [ "$_git_rc" -ne 0 ]; then
+          echo "codex-reviewer: DID-NOT-RUN: could not resolve diff-scope '$DIFF_SCOPE' (git exit $_git_rc)" >&2
+          exit 3
+        fi
         ;;
       base:*)
-        # An unresolvable ref is DID-NOT-RUN (rule 4): stderr is discarded, so a silent empty
-        # CHANGED_FILES would intersect to nothing and report a clean audit of a scope that was
-        # never evaluated. `uncommitted` above is left unguarded — `git diff HEAD` is not expected
-        # to fail once the is-inside-work-tree check has passed.
         _ref="${DIFF_SCOPE#base:}"
         CHANGED_FILES=$(git diff "$_ref"...HEAD --name-only 2>/dev/null)
         _git_rc=$?
@@ -550,7 +569,9 @@ else
   # MODE = audit. Writes --out as a JSON ARRAY (not the schema's {"findings": ...} wrapper — the
   # deep-refactor skill merges the four dimensions' arrays). Three fields are wrapper-enforced and
   # never trusted from the model (ADR-0193 §D4, rule 16): dimension, id, and fix_type-for-security.
-  RAW_OUT="$RAW_OUT" CR_OUT="$OUT" DIMENSION="$DIMENSION" python3 -c "
+  # `file` is not one of those three — it passes through, normalised from the repo-relative form the
+  # prompt handed the model into the absolute path deep-refactor/SKILL.md's finding schema declares.
+  RAW_OUT="$RAW_OUT" CR_OUT="$OUT" DIMENSION="$DIMENSION" REPO_ROOT="$REPO_ROOT" python3 -c "
 import hashlib
 import json, os, sys
 
@@ -563,6 +584,8 @@ except Exception as e:
     sys.exit(3)
 
 DIMENSION = os.environ.get('DIMENSION', '')
+# Non-empty by construction: the audit branch exits 3 above if the repository root does not resolve.
+REPO_ROOT = os.environ.get('REPO_ROOT', '')
 findings = data.get('findings', [])
 if not isinstance(findings, list):
     findings = []
@@ -584,7 +607,9 @@ for f in findings:
     description_val = f.get('description') or ''
 
     # 2. id is synthesised, never trusted from the model's own 'id' — deterministic across runs on
-    # the same input, since the dedup and report stages key on it.
+    # the same input, since the dedup and report stages key on it. Keyed on the REPO-RELATIVE path,
+    # not the absolute one built below, so the same tree audited from a different checkout or
+    # worktree yields the same ids.
     digest = hashlib.sha256((file_val + str(line_val) + description_val).encode('utf-8')).hexdigest()
     hash3 = digest[:3]
     basename = os.path.basename(file_val) if file_val else 'unknown'
@@ -609,12 +634,23 @@ for f in findings:
         risk_level = 'low'
     suggested_fix = f.get('suggested_fix') or ''
 
+    # 5. file is emitted ABSOLUTE. deep-refactor/SKILL.md's finding schema declares 'file' as
+    # '<absolute path>', and Gate 1 merges this array with the Claude-reviewer-sourced findings that
+    # already honour it, deduping on file + line + description — a repo-relative value here would
+    # never match its Claude-side twin. FILE_LIST is relative to REPO_ROOT (both come from
+    # enumerate-sources.sh's git ls-files), so join it back on. A value that is already absolute is
+    # left alone rather than prefixed twice, in case a future caller supplies one.
+    if file_val and not os.path.isabs(file_val):
+        file_out = os.path.join(REPO_ROOT, file_val)
+    else:
+        file_out = file_val
+
     result.append({
         'id': fid,
         'dimension': dimension,
         'severity': severity,
         'risk_level': risk_level,
-        'file': file_val,
+        'file': file_out,
         'line': line_val,
         'description': description_val,
         'fix_type': fix_type,
