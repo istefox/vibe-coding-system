@@ -2,6 +2,6 @@
   "name": "stefano-vibe-coding",
   "version": "0.1.0",
   "description": "Stefano Ferri's vibe coding system: subagents, skills, hooks and MCP for concept-to-code workflow.",
-  "author": { "name": "Stefano Ferri", "email": "stefano@stefer.it" },
+  "author": { "name": "Stefano Ferri" },
   "keywords": ["workflow", "subagents", "skills", "vibe-coding"]
 }
