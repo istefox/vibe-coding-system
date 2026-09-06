@@ -1,6 +1,6 @@
 ---
 name: plant-sandbox-git-and-guard-absorption
-description: How a git-dependent end-to-end assertion still works inside plant-check.sh's .git-less sandbox, and the class of plant that a library call silently absorbs (os.path.join vs an isabs guard)
+description: How a git-dependent end-to-end assertion still works inside plant-check.sh's .git-less sandbox, the two ways a plant gets absorbed (os.path.join over an isabs guard; a second exit-3 path over a deleted guard), and the standing RS7 red
 metadata:
   type: project
 ---
@@ -42,11 +42,21 @@ mutated code still produces the same output by accident — and confirm by apply
 `cp -R` sandbox and reading the actual FAIL line, which costs one harness run and is much faster
 than the ~30 min full `plant-check.sh` sweep (681 declarations at 8 workers).
 
-**Known pre-existing red as of 2026-09-06, verify before blaming your change:** a full
-`plant-check.sh` run ends `PASS=687 FAIL=1` on `FAIL: PC5 ... spec-coverage.test.sh [RS7] — already
-RED in the unmutated sandbox`, because `RS7` itself fails at HEAD (8 of 201 frozen baseline rows
-diverge — the `spec-coverage-scope-baseline.tsv` bump lag this repo has hit before). Confirm
-independence the cheap way rather than assuming: `cp -R` staging+docs to a sandbox, overwrite your
-edited file with `git show HEAD:<path>`, re-run the harness, and compare the exact failure line.
-Identical output on both sides is the evidence. See [[task1-codex-audit-mode-slug]] for the
+**A DID-NOT-RUN assertion that reads only the exit code can be absorbed the same way.** Second
+instance of the absorption class, found adding CX32 (2026-09-06): deleting the `[ ! -x "$ENUM" ]`
+half of a guard does not change the exit code, because execution then reaches the non-executable
+helper and fails *later* with a different exit-3 DID-NOT-RUN ("… failed (exit 126)" instead of
+"… not found or not executable"). Whenever a script has several exit-3 paths, an `rc -eq 3` check
+alone pins nothing — assert the MESSAGE, quoted from the source, not paraphrased. Verify by running
+the plant, not by reasoning: the probe printed `rc=3 (want 3) message-ok=0`, which is the whole
+argument in one line.
+
+**Known pre-existing red, re-confirmed 2026-09-06:** a full `plant-check.sh` run (now 684
+declarations, ~25 min at 8 workers) ends `PASS=690 FAIL=1` on `FAIL: PC5 ... spec-coverage.test.sh
+[RS7] — already RED in the unmutated sandbox`, because `RS7` itself fails at HEAD (8 of 201 frozen
+baseline rows diverge — the `spec-coverage-scope-baseline.tsv` bump lag this repo has hit before).
+Cheapest confirmation that it is not yours: run `spec-coverage.test.sh` directly and read the
+`FAIL: RS7` line; it is a different harness from the one you edited. For a same-harness suspicion,
+`cp -R` staging+docs to a sandbox, overwrite your edited file with `git show HEAD:<path>`, re-run,
+and compare the exact failure line. See [[task1-codex-audit-mode-slug]] for the
 stub-`codex`-on-isolated-PATH pattern these assertions reuse.

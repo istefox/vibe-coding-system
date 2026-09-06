@@ -52,16 +52,29 @@
 # Z1's floor and its frozen-identity-set sentence were re-derived by running this file, not
 # computed (rule 10, rule 13).
 #
-# SEVENTEEN `# plant:` declarations sit beside CX02, CX05, CX10, CX12, CX13, CX14, CX15, CX17,
-# CX18, CX20, CX21, CX22, CX23, CX24, CX26, CX28 and CX29 (rule 2 — an assertion nobody planted
-# pins nothing). The ones targeting Task 2's argument surface (CX02, CX05) and the SKILL.md prose
+# ALSO ADDED 2026-09-06, by the coverage-gap pass of that same RTF cycle and after the paragraph
+# above was written (rule 14 — that paragraph is a correct snapshot of its moment and is not
+# rewritten): CX30, CX31 and CX32. CX30 pins REVIEW mode's three diff-scope arms, which carried the
+# same failing-git-call defect CX28 pins in audit mode and were fixed alongside it — and pins the
+# opposite direction too, that a genuinely empty diff is still exit 0 "safe to merge" (rule 8).
+# CX31 closes the gap CX06 left: the audit `base:`/`commit:` arms were only ever shown to be
+# ACCEPTED, never driven through a genuinely failing git call. CX32 closes the gap CX08 left,
+# covering the `[ ! -x ]` half of the enumerate-sources.sh guard where CX08 covers only `[ ! -r ]`.
+# All three were measured GREEN against the code as it stands the day they were added, so a RED in
+# any of them is a regression in codex-reviewer.sh, never an unfinished task. Z1's floor and its
+# frozen-identity-set sentence were re-derived a second time by running this file, not computed
+# (rule 10, rule 13): 30 -> 33.
+#
+# TWENTY `# plant:` declarations sit beside CX02, CX05, CX10, CX12, CX13, CX14, CX15, CX17, CX18,
+# CX20, CX21, CX22, CX23, CX24, CX26, CX28, CX29, CX30, CX31 and CX32 (rule 2 — an assertion
+# nobody planted pins nothing). The ones targeting Task 2's argument surface (CX02, CX05) and the SKILL.md prose
 # Tasks 6-8 add (CX20-CX24, CX26) are grounded in literal text the plan or the source files already
 # state verbatim. The ones targeting Task 3/4's not-yet-written `codex-reviewer.sh` internals (CX10,
 # CX12, CX13, CX17, CX18) are best-effort projections of that code's expected shape, following the
 # file's own existing style; Task 9's plant run is explicitly budgeted (~10 lines) to repair a
 # needle that turns out BADPLANT once the real code lands — "fix the needle, never the assertion"
-# (plant-check.sh's own rule). The last two (CX28, CX29) are not projections at all: they were
-# written against code already on disk, so their needles are quoted from it.
+# (plant-check.sh's own rule). The last five (CX28, CX29, CX30, CX31 and CX32) are not projections
+# at all: they were written against code already on disk, so their needles are quoted from it.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -802,14 +815,175 @@ esac
 # plant: CX29 | plugin/scripts/codex-reviewer.sh | if file_val and not os.path.isabs(file_val): file_out = os.path.join(REPO_ROOT, file_val) | if file_val:\n        file_out = REPO_ROOT + file_val
 
 # =====================================================================================
+# CX30-CX32 (R-01) — three further regression assertions, added 2026-09-06 by the coverage-gap pass
+# of the same RTF cycle that added CX28/CX29. Each drives a REAL git or filesystem failure end to
+# end against the stub `codex`; none is a structural grep on codex-reviewer.sh's own source.
+
+# CX30 (R-01) — REVIEW mode's three diff-scope arms. CX28 pins the AUDIT `uncommitted` arm; review
+# mode carried the identical defect and was fixed in the same cycle: a failing git call left
+# DIFF_CONTENT empty, indistinguishable from a genuinely empty diff, and fell into the "nothing to
+# review, safe to merge" branch with exit 0 — a scope that was never evaluated reported as a clean
+# review (rule 4, and rule 7 one level down).
+#
+# BOTH DIRECTIONS IN ONE ASSERTION (rule 8), because the cheap way to satisfy the new failure path
+# is to make every empty diff exit 3, which would break the "no detectable changes" contract this
+# script has documented in its own header since v1.0. So: three unresolvable scopes must be exit 3
+# naming the scope, AND a genuinely empty diff in a healthy repository must still be exit 0 with the
+# "safe to merge" report.
+#
+# TWO FIXTURES, because "the git call fails" has two different causes and one repo cannot exhibit
+# both: an UNBORN repository (`git init`, no commits — the measured case where
+# `git rev-parse --is-inside-work-tree` succeeds and `git diff HEAD` exits 128) for `uncommitted`,
+# and a HEALTHY, committed, CLEAN repository for `base:<ref that does not exist>` and
+# `commit:<sha that does not exist>`, so those two arms fail for the reason the assertion names
+# rather than for the unborn state. That same healthy fixture is the empty-diff positive case.
+# codex-reviewer.sh issues bare `git ...`, never `git -C`, so each run happens inside its fixture;
+# `cr()` never changes directory, so the `cd` is confined to a subshell exactly as CX28 does it.
+CX30_UNBORN_REPO="$WORK/cx30-unborn"
+mkdir -p "$CX30_UNBORN_REPO"
+git init -q "$CX30_UNBORN_REPO" >/dev/null 2>&1
+CX30_HEALTHY_REPO="$WORK/cx30-healthy"
+mkdir -p "$CX30_HEALTHY_REPO"
+git init -q "$CX30_HEALTHY_REPO" >/dev/null 2>&1
+printf 'let cx30 = 1\n' > "$CX30_HEALTHY_REPO/A.swift"
+git -C "$CX30_HEALTHY_REPO" add A.swift >/dev/null 2>&1
+git -C "$CX30_HEALTHY_REPO" -c user.email=cx30@example.invalid -c user.name=cx30 \
+    -c commit.gpgsign=false commit -q -m "cx30 fixture" >/dev/null 2>&1
+# Denominator guard (rule 7): both fixtures must really be what the assertion claims. A git that
+# quietly created a commit in the "unborn" one, or a dirty/HEAD-less "healthy" one, would make the
+# checks below pass or fail for a reason unrelated to the mechanism under test.
+CX30_FIXTURES_OK=1
+git -C "$CX30_UNBORN_REPO" rev-parse --git-dir >/dev/null 2>&1 || CX30_FIXTURES_OK=0
+if git -C "$CX30_UNBORN_REPO" rev-parse --verify HEAD >/dev/null 2>&1; then CX30_FIXTURES_OK=0; fi
+git -C "$CX30_HEALTHY_REPO" rev-parse --verify HEAD >/dev/null 2>&1 || CX30_FIXTURES_OK=0
+if [ -n "$(git -C "$CX30_HEALTHY_REPO" status --porcelain 2>/dev/null)" ]; then CX30_FIXTURES_OK=0; fi
+
+CX30_RAN=0
+CX30_BAD=""
+for _cx30_scope in uncommitted base:cx30-no-such-ref commit:0000000000000000000000000000000000000000; do
+  case "$_cx30_scope" in
+    uncommitted) _cx30_repo="$CX30_UNBORN_REPO" ;;
+    *) _cx30_repo="$CX30_HEALTHY_REPO" ;;
+  esac
+  CX30_RAN=$((CX30_RAN + 1))
+  _cx30_out="$WORK/cx30-$CX30_RAN.json"
+  _cx30_errf="$WORK/cx30-$CX30_RAN.err"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$_cx30_repo" && PATH="$STUB_PATH" bash "$CR" --mode review --diff-scope "$_cx30_scope" --out "$_cx30_out" ) >/dev/null 2>"$_cx30_errf"
+  _cx30_rc=$?
+  _cx30_err=$(cat "$_cx30_errf")
+  _cx30_why=""
+  [ "$_cx30_rc" -eq 3 ] || _cx30_why="$_cx30_why rc=$_cx30_rc(want-3)"
+  printf '%s' "$_cx30_err" | grep -q -F 'DID-NOT-RUN' || _cx30_why="$_cx30_why no-DID-NOT-RUN"
+  printf '%s' "$_cx30_err" | grep -q -F "could not resolve diff-scope '$_cx30_scope'" || _cx30_why="$_cx30_why scope-not-named"
+  [ ! -s "$_cx30_out" ] || _cx30_why="$_cx30_why artifact-written"
+  if [ -n "$_cx30_why" ]; then
+    CX30_BAD="$CX30_BAD [$_cx30_scope:$_cx30_why ]"
+  fi
+done
+
+CX30_CLEAN_OUT="$WORK/cx30-clean.json"
+CX30_CLEAN_ERRF="$WORK/cx30-clean.err"
+set_stub "$MINIMAL_PAYLOAD" ""
+( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" bash "$CR" --mode review --diff-scope uncommitted --out "$CX30_CLEAN_OUT" ) >/dev/null 2>"$CX30_CLEAN_ERRF"
+CX30_CLEAN_RC=$?
+CX30_CLEAN_SAFE=0
+if [ -s "$CX30_CLEAN_OUT" ] && grep -q -F 'safe to merge' "$CX30_CLEAN_OUT"; then CX30_CLEAN_SAFE=1; fi
+
+if [ "$CX30_FIXTURES_OK" -eq 1 ] && [ "$CX30_RAN" -eq 3 ] && [ -z "$CX30_BAD" ] \
+   && [ "$CX30_CLEAN_RC" -eq 0 ] && [ "$CX30_CLEAN_SAFE" -eq 1 ]; then
+  ok "CX30: review mode — each of the three diff-scope forms exits 3 (DID-NOT-RUN) naming the unresolvable scope when its git call fails (loop ran $CX30_RAN times), and a genuinely empty diff in a clean repo still exits 0 with the 'safe to merge' report"
+else
+  bad "CX30: review-mode diff-scope failure handling — fixtures-ok=$CX30_FIXTURES_OK loop-ran=$CX30_RAN (need 3) failing-arms:${CX30_BAD:-none} empty-diff-rc=$CX30_CLEAN_RC (want 0) empty-diff-says-safe-to-merge=$CX30_CLEAN_SAFE"
+fi
+# plant: CX30 | plugin/scripts/codex-reviewer.sh | DIFF_CONTENT=$(git diff HEAD 2>/dev/null) _git_rc=$? | DIFF_CONTENT=$(git diff HEAD 2>/dev/null)\n      _git_rc=0
+
+# CX31 (R-01) — AUDIT mode's `base:` and `commit:` arms, driven by a git call that genuinely fails.
+# CX06 above proves only that the three diff-scope forms are ACCEPTED (not rejected with exit 2) in
+# audit mode, and CX28 drives a real failure through the `uncommitted` arm alone: the exit-3
+# propagation in the other two arms was asserted by nothing, so a revert there would have been
+# invisible. Same healthy fixture CX30 builds — a repository where HEAD resolves and the tree is
+# clean, so the only thing wrong is the ref/sha named on the command line.
+CX31_FIXTURE_OK=0
+if git -C "$CX30_HEALTHY_REPO" rev-parse --verify HEAD >/dev/null 2>&1; then CX31_FIXTURE_OK=1; fi
+CX31_RAN=0
+CX31_BAD=""
+for _cx31_scope in base:cx31-no-such-ref commit:1111111111111111111111111111111111111111; do
+  CX31_RAN=$((CX31_RAN + 1))
+  _cx31_out="$WORK/cx31-$CX31_RAN.json"
+  _cx31_errf="$WORK/cx31-$CX31_RAN.err"
+  set_stub "$MINIMAL_PAYLOAD" ""
+  ( cd "$CX30_HEALTHY_REPO" && PATH="$STUB_PATH" bash "$CR" --mode audit --dimension structure --diff-scope "$_cx31_scope" --out "$_cx31_out" ) >/dev/null 2>"$_cx31_errf"
+  _cx31_rc=$?
+  _cx31_err=$(cat "$_cx31_errf")
+  _cx31_why=""
+  [ "$_cx31_rc" -eq 3 ] || _cx31_why="$_cx31_why rc=$_cx31_rc(want-3)"
+  printf '%s' "$_cx31_err" | grep -q -F 'DID-NOT-RUN' || _cx31_why="$_cx31_why no-DID-NOT-RUN"
+  printf '%s' "$_cx31_err" | grep -q -F "could not resolve diff-scope '$_cx31_scope'" || _cx31_why="$_cx31_why scope-not-named"
+  [ ! -s "$_cx31_out" ] || _cx31_why="$_cx31_why artifact-written"
+  if [ -n "$_cx31_why" ]; then
+    CX31_BAD="$CX31_BAD [$_cx31_scope:$_cx31_why ]"
+  fi
+done
+if [ "$CX31_FIXTURE_OK" -eq 1 ] && [ "$CX31_RAN" -eq 2 ] && [ -z "$CX31_BAD" ]; then
+  ok "CX31: audit mode — base:<unknown ref> and commit:<unknown sha> each exit 3 (DID-NOT-RUN) naming the unresolvable scope and write no --out artifact (loop ran $CX31_RAN times)"
+else
+  bad "CX31: audit-mode base:/commit: failure handling — fixture-ok=$CX31_FIXTURE_OK loop-ran=$CX31_RAN (need 2) failing-arms:${CX31_BAD:-none}"
+fi
+# plant: CX31 | plugin/scripts/codex-reviewer.sh | CHANGED_FILES=$(git diff "$_ref"...HEAD --name-only 2>/dev/null) _git_rc=$? | CHANGED_FILES=$(git diff "$_ref"...HEAD --name-only 2>/dev/null)\n        _git_rc=0
+
+# CX32 (R-01) — the OTHER half of the enumerate-sources.sh guard. CX08 covers the `[ ! -r ]` half by
+# moving the helper aside; the `[ ! -x ]` half — present, readable, execute bit gone — was covered by
+# nothing. The two halves are not interchangeable: with the `-x` test removed the guard passes and
+# the run reaches `"$ENUM" "$REPO_ROOT"`, which fails with 126 and is reported as
+# "enumerate-sources.sh failed (exit $_enum_rc)". The EXIT CODE is 3 either way, so an assertion
+# reading only the code would stay green with the mechanism deleted (rule 1 one level down); the
+# message is what distinguishes them, and it is quoted from the source rather than paraphrased.
+#
+# Same scratch-copy shape as CX08 (`cr()` always targets the real $CR, so it cannot be reused) and
+# for the same reason: the execute bit is cleared on a COPY, never on the tree this suite is run
+# from, so an interrupted run cannot leave the real helper unusable.
+CX32_TMP=$(mktemp -d)
+cp -R "$STAGING/plugin" "$CX32_TMP/plugin"
+CX32_ENUM="$CX32_TMP/plugin/skills/deep-refactor/scripts/enumerate-sources.sh"
+CX32_FIXTURE=0
+if [ -f "$CX32_ENUM" ]; then
+  chmod -x "$CX32_ENUM"
+  # Denominator guard (rule 7): readable AND non-executable is the whole point — a copy that came
+  # out unreadable would re-test CX08's half and read as coverage of this one.
+  if [ -r "$CX32_ENUM" ] && [ ! -x "$CX32_ENUM" ]; then CX32_FIXTURE=1; fi
+fi
+CX32_OUT="$CX32_TMP/out.json"
+CX32_ERR_FILE=$(mktemp)
+set_stub "$MINIMAL_PAYLOAD" ""
+PATH="$STUB_PATH" bash "$CX32_TMP/plugin/scripts/codex-reviewer.sh" --mode audit --dimension dead-code --out "$CX32_OUT" >/dev/null 2>"$CX32_ERR_FILE"
+CX32_RC=$?
+CX32_ERR=$(cat "$CX32_ERR_FILE")
+rm -f "$CX32_ERR_FILE"
+CX32_MSG=0
+if printf '%s' "$CX32_ERR" | grep -q -F 'DID-NOT-RUN' \
+   && printf '%s' "$CX32_ERR" | grep -q -F 'not found or not executable'; then
+  CX32_MSG=1
+fi
+CX32_NO_ARTIFACT=0
+[ ! -s "$CX32_OUT" ] && CX32_NO_ARTIFACT=1
+if [ "$CX32_FIXTURE" -eq 1 ] && [ "$CX32_RC" -eq 3 ] && [ "$CX32_MSG" -eq 1 ] && [ "$CX32_NO_ARTIFACT" -eq 1 ]; then
+  ok "CX32: enumerate-sources.sh present and readable but not executable -> audit mode exits 3 (DID-NOT-RUN) with the 'not found or not executable' message, and no --out artifact is written"
+else
+  bad "CX32: non-executable enumerate-sources.sh — fixture-readable-and-nonexec=$CX32_FIXTURE rc=$CX32_RC (want 3) message-ok=$CX32_MSG out-absent-or-empty=$CX32_NO_ARTIFACT — $CX32_ERR"
+fi
+rm -rf "$CX32_TMP"
+# plant: CX32 | plugin/scripts/codex-reviewer.sh | [ ! -x "$ENUM" ] | false
+
+# =====================================================================================
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 30 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 30) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX29 are the frozen identity set"
+if [ "$_total" -ge 33 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 33) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX32 are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 30; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 33; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]
