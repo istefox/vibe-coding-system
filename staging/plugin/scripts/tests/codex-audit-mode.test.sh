@@ -194,6 +194,25 @@
 # across THIRTY: CX42 carries one per moving part of the fix (the `cd` that carries the working
 # directory, and the assignment that decides which directory it is), so neither half rests on the
 # other's evidence. Both are quoted from code already on disk, neither is a projection.
+#
+# AND AGAIN 2026-09-06, after every paragraph above (rule 14 — each is a correct snapshot of its own
+# moment and none of them is rewritten): CX43, regression cover for a PATH-SCOPE ESCAPE in the
+# allow-set that CX37-CX40's file-scope validation is built on. `FILE_LIST` is `git ls-files` output,
+# which lists TRACKED SYMLINKS beside regular files, and `ALLOWED_FILES` resolved each entry with
+# `os.path.realpath` — which follows them out of the tree — so a tracked `evil -> ../outside/secret`
+# admitted an EXTERNAL path to the allow-set and a finding naming it then passed the scope check by
+# construction. Measured against the script before the fix, on a five-file scratch repository with
+# two escaping tracked symlinks: rc 0, EMPTY stderr, and both out-of-tree absolute paths emitted as
+# findings' `file` values — the value deep-refactor/SKILL.md hands to an edit-capable dispatch.
+# Measured GREEN after it, so a RED in it is a regression in codex-reviewer.sh, never an unfinished
+# task. Z1's floor and its frozen-identity-set sentence were re-derived an eighth time by running
+# this file (rule 10, rule 13): 43 -> 44.
+#
+# The plant-declaration count grows by two again, from thirty-four across thirty ids to THIRTY-SIX
+# across THIRTY-ONE: CX43 carries one per moving part (the containment test that admits an entry to
+# the allow-set, and the `os.sep` that decides what "under the root" means — a naive string prefix
+# admits a SIBLING directory `<root>-other`, which is the second of the assertion's two escape
+# shapes). Both are quoted from code already on disk, neither is a projection.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -2028,15 +2047,158 @@ fi
 # plant: CX42 | plugin/scripts/codex-reviewer.sh | ( cd "$CODEX_CWD" && codex exec --sandbox read-only | ( codex exec --sandbox read-only
 # plant: CX42 | plugin/scripts/codex-reviewer.sh | CODEX_CWD="$REPO_ROOT" | CODEX_CWD="$PWD"
 
+# CX43 (R-02) — the audited SCOPE ITSELF cannot be widened by a TRACKED SYMLINK that leaves the
+# repository. Everything CX37-CX40 pin sits downstream of ALLOWED_FILES; nothing had ever asked
+# whether ALLOWED_FILES is trustworthy in the first place. FILE_LIST is git ls-files output, which
+# lists tracked symlinks beside regular files, and the set was built with os.path.realpath — which
+# FOLLOWS them out of the tree. A repository carrying a tracked "evil -> ../outside/secret" put that
+# EXTERNAL path in the allow-set, so a finding naming the symlink passed the scope check BY
+# CONSTRUCTION and was emitted with an absolute file value outside the repository — exactly the
+# value deep-refactor/SKILL.md forwards to an edit-capable coder/refactorer dispatch, which is what
+# made the same downstream consumer's earlier gap (CX37's own finding, ad0a3fd5) high-severity.
+# Measured against the pre-fix script on the fixture below: rc 0, EMPTY stderr, and both escaping
+# paths emitted as findings with out-of-tree absolute file values.
+#
+# TWO ESCAPE SHAPES, because they defeat two different halves of the containment test (rule 8 turned
+# on the guard's own internals): a plain parent-directory escape, and a SIBLING directory whose path
+# carries the repository root as a naive STRING prefix (<root>-other). The second passes any
+# startswith() written without the separator, which is why the check compares against root + os.sep
+# and not root alone — measured on this fixture, not assumed.
+#
+# AND THE OPPOSITE DIRECTION (rule 8 again), which is what stops the guard from degenerating into
+# "reject every symlink": a tracked symlink whose target IS inside the repository is legitimate and
+# must still be audited, as must an ordinary file. A fix that dropped every symlink would satisfy
+# both arms above and silently shrink the audited scope of every real repository that uses one.
+#
+# The EXCLUDED-from-scope stderr diagnostic the guard also emits is DELIBERATELY NOT pinned here: it
+# is signal for a human reading a shrunken scope, and the property that actually matters — the
+# finding is rejected and never emitted — is asserted through the pre-existing REJECTED path, which
+# is the same rejection this suite already pins for an ordinary out-of-scope finding.
+CX43_REPO="$WORK/cx43-repo"
+# Sibling, NOT nested: its path has "$WORK/cx43-repo" as a string prefix without being under it.
+CX43_SIBLING="$WORK/cx43-repo-other"
+CX43_OUTSIDE="$WORK/cx43-outside"
+mkdir -p "$CX43_REPO" "$CX43_SIBLING" "$CX43_OUTSIDE"
+git init -q "$CX43_REPO" >/dev/null 2>&1
+printf 'secret\n' > "$CX43_OUTSIDE/secret.md"
+printf 'sneak\n' > "$CX43_SIBLING/sneak.md"
+printf '# real\n' > "$CX43_REPO/cx43real.md"
+printf '# target\n' > "$CX43_REPO/cx43target.md"
+ln -s ../cx43-outside/secret.md "$CX43_REPO/cx43evil.md"
+ln -s ../cx43-repo-other/sneak.md "$CX43_REPO/cx43sneak.md"
+ln -s cx43target.md "$CX43_REPO/cx43inlink.md"
+git -C "$CX43_REPO" add cx43real.md cx43target.md cx43evil.md cx43sneak.md cx43inlink.md >/dev/null 2>&1
+git -C "$CX43_REPO" -c user.email=cx43@example.invalid -c user.name=cx43 \
+    -c commit.gpgsign=false commit -q -m "cx43 fixture" >/dev/null 2>&1
+CX43_ROOT_P=$(cd "$CX43_REPO" 2>/dev/null && pwd -P)
+
+# Denominator guards (rule 7) — four ways this could pass while pinning nothing.
+CX43_FIXTURE_OK=1
+git -C "$CX43_REPO" rev-parse --verify HEAD >/dev/null 2>&1 || CX43_FIXTURE_OK=0
+[ -n "$CX43_ROOT_P" ] || CX43_FIXTURE_OK=0
+CX43_TRACKED=$(git -C "$CX43_REPO" ls-files 2>/dev/null | tr '\n' ' ')
+[ "$CX43_TRACKED" = "cx43evil.md cx43inlink.md cx43real.md cx43sneak.md cx43target.md " ] \
+  || CX43_FIXTURE_OK=0
+# git must have stored the three links as SYMLINKS (mode 120000). On a checkout with
+# core.symlinks=false they become ordinary files holding their target's text, every path resolves
+# inside the tree, and all three arms below pass against a fixture with no symlink in it at all.
+CX43_LINKMODES=$(git -C "$CX43_REPO" ls-files -s 2>/dev/null | awk '$1=="120000" {print $4}' | tr '\n' ' ')
+[ "$CX43_LINKMODES" = "cx43evil.md cx43inlink.md cx43sneak.md " ] || CX43_FIXTURE_OK=0
+# The geometry the two escape arms depend on, asserted rather than assumed: both escapes really
+# resolve outside the root, the sibling really IS a naive-string-prefix match (so the separator half
+# of the check is genuinely exercised), and the legitimate link really resolves inside.
+CX43_GEOM=$(CX43R="$CX43_ROOT_P" python3 -c '
+import os
+r = os.environ["CX43R"]
+def real(p):
+    return os.path.realpath(os.path.join(r, p))
+evil, sneak, inl = real("cx43evil.md"), real("cx43sneak.md"), real("cx43inlink.md")
+checks = {
+    "evil-escapes": not evil.startswith(r + os.sep),
+    "sneak-escapes": not sneak.startswith(r + os.sep),
+    "sneak-is-naive-prefix-match": sneak.startswith(r),
+    "inlink-stays-inside": inl.startswith(r + os.sep),
+}
+bad = [k for k, v in checks.items() if not v]
+print("OK" if not bad else "BAD:" + ",".join(bad))
+' 2>/dev/null)
+[ "$CX43_GEOM" = "OK" ] || CX43_FIXTURE_OK=0
+
+CX43_PAYLOAD="$WORK/cx43-payload.json"
+cat > "$CX43_PAYLOAD" <<'JSON'
+{"findings": [
+  {"id":"STUB-EVIL","dimension":"structure","severity":"P1","risk_level":"high","file":"cx43evil.md","line":1,"description":"cx43-escape-parent","fix_type":"coder","suggested_fix":"s1"},
+  {"id":"STUB-SNEAK","dimension":"structure","severity":"P1","risk_level":"high","file":"cx43sneak.md","line":2,"description":"cx43-escape-sibling","fix_type":"coder","suggested_fix":"s2"},
+  {"id":"STUB-INLINK","dimension":"structure","severity":"P2","risk_level":"low","file":"cx43inlink.md","line":3,"description":"cx43-inrepo-symlink","fix_type":"coder","suggested_fix":"s3"},
+  {"id":"STUB-REAL","dimension":"structure","severity":"P3","risk_level":"low","file":"cx43real.md","line":4,"description":"cx43-ordinary-file","fix_type":"coder","suggested_fix":"s4"}
+]}
+JSON
+CX43_OUT="$WORK/cx43-out.json"
+CX43_ERRF="$WORK/cx43.err"
+# No --diff-scope: the whole-tree shape deep-refactor actually dispatches, so FILE_LIST is exactly
+# the fixture's five tracked paths and nothing depends on a diff resolving.
+set_stub "$CX43_PAYLOAD" ""
+( cd "$CX43_REPO" && PATH="$STUB_PATH" \
+    bash "$CR" --mode audit --dimension structure --out "$CX43_OUT" ) \
+    >/dev/null 2>"$CX43_ERRF"
+CX43_RC=$?
+CX43_ERR=$(cat "$CX43_ERRF")
+
+CX43_WHY=""
+# Partial rejection, so exit 0 with an artifact — the two legitimate findings are real results and
+# codex-reviewer.sh's own header comment reserves exit 3 for the all-rejected case (CX38).
+[ "$CX43_RC" -eq 0 ] || CX43_WHY="$CX43_WHY rc=$CX43_RC(want-0)"
+if [ -s "$CX43_OUT" ]; then
+  # The survivors are checked BY IDENTITY and the emitted paths by CONTAINMENT, not by count: a
+  # count alone is satisfied by two survivors that happen to be the wrong two.
+  CX43_VERDICT=$(OUTFILE="$CX43_OUT" CX43R="$CX43_ROOT_P" python3 -c '
+import json, os
+data = json.load(open(os.environ["OUTFILE"]))
+root = os.environ["CX43R"]
+if not isinstance(data, list):
+    print("NOT-A-LIST")
+else:
+    descs = sorted(str(f.get("description")) for f in data)
+    outside = [str(f.get("file")) for f in data
+               if not str(f.get("file")).startswith(root + os.sep)]
+    if outside:
+        print("EMITTED-OUTSIDE-ROOT:" + ",".join(outside))
+    elif descs != ["cx43-inrepo-symlink", "cx43-ordinary-file"]:
+        print("WRONG-SURVIVORS:" + ",".join(descs))
+    else:
+        print("OK")
+' 2>/dev/null)
+else
+  CX43_VERDICT="NO-ARTIFACT"
+fi
+[ "$CX43_VERDICT" = "OK" ] || CX43_WHY="$CX43_WHY survivors=$CX43_VERDICT"
+printf '%s' "$CX43_ERR" | grep -q -F "REJECTED finding: file 'cx43evil.md'" \
+  || CX43_WHY="$CX43_WHY parent-escape-not-rejected"
+printf '%s' "$CX43_ERR" | grep -q -F "REJECTED finding: file 'cx43sneak.md'" \
+  || CX43_WHY="$CX43_WHY sibling-escape-not-rejected"
+
+if [ "$CX43_FIXTURE_OK" -eq 1 ] && [ -z "$CX43_WHY" ]; then
+  ok "CX43: a tracked symlink cannot widen the audited scope — findings naming one that escapes to a parent directory or to a naive-string-prefix sibling are both rejected by the existing out-of-scope path, while a tracked symlink resolving INSIDE the repository and an ordinary file are still audited and emitted"
+else
+  bad "CX43: tracked-symlink scope escape — fixture-ok=$CX43_FIXTURE_OK geometry=$CX43_GEOM tracked=${CX43_TRACKED:-none} symlink-modes=${CX43_LINKMODES:-none} why:${CX43_WHY:-none} rc=$CX43_RC err=$CX43_ERR"
+fi
+# Two declarations, one per moving part, so neither half rests on the other's evidence: the
+# containment test that admits an entry to the allow-set at all, and the SEPARATOR that decides what
+# "under the root" means. The second replacement is the naive prefix rather than a deletion, because
+# deleting the line would leave _root_prefix unbound and kill the formatter with a NameError — a
+# crash is not the defect being pinned, and any assertion goes red against a crash.
+# plant: CX43 | plugin/scripts/codex-reviewer.sh | if _abs != _repo_root_real and not _abs.startswith(_root_prefix): | if False:
+# plant: CX43 | plugin/scripts/codex-reviewer.sh | _root_prefix = _repo_root_real + os.sep | _root_prefix = _repo_root_real
+
 # =====================================================================================
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 43 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 43) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX42 are the frozen identity set"
+if [ "$_total" -ge 44 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 44) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX43 are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 43; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 44; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]

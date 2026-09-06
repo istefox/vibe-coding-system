@@ -744,11 +744,35 @@ VALID_RISK_LEVELS = ('low', 'high')
 # (a '..' segment or a symlinked directory must not let two spellings of one path disagree).
 # FILE_LIST covers BOTH audit shapes with no branch here — the --diff-scope intersection and the
 # whole-tree list are the same variable by the time the prompt is built.
+#
+# AND EVERY RESOLVED PATH IS CHECKED BACK AGAINST THE ROOT before it is admitted, because realpath
+# follows symlinks all the way through and FILE_LIST is git ls-files output, which lists TRACKED
+# SYMLINKS beside regular files. A tracked 'evil.py -> ../../outside/secret.py' resolves to a path
+# outside the tree; admitting it here admits it to the membership test below, so a finding naming
+# 'evil.py' passes the scope check BY CONSTRUCTION and is emitted with an absolute file value
+# pointing anywhere on the filesystem — which deep-refactor/SKILL.md forwards to an edit-capable
+# agent unchecked. Measured against this loop without the check, on a scratch repo carrying such a
+# symlink: exit 0, nothing rejected, the out-of-tree target emitted as the finding's file.
+# The separator is load-bearing, not defensive dressing: a bare startswith(_repo_root_real) also
+# admits a SIBLING directory named <root>-other, measured with the same fixture, so the test is
+# equality with the root or a prefix that ends at a path boundary.
+# (No backticks anywhere above: this whole formatter is a double-quoted python3 -c body, so a
+# backtick in a COMMENT is still command substitution run by the shell before python sees it.)
+_repo_root_real = os.path.realpath(REPO_ROOT)
+_root_prefix = _repo_root_real + os.sep
 ALLOWED_FILES = set()
 for _rel in os.environ.get('FILE_LIST', '').split('\n'):
     if not _rel:
         continue
-    ALLOWED_FILES.add(os.path.realpath(os.path.join(REPO_ROOT, _rel)))
+    _abs = os.path.realpath(os.path.join(REPO_ROOT, _rel))
+    if _abs != _repo_root_real and not _abs.startswith(_root_prefix):
+        # Informational, never fatal: a tracked symlink leaving the tree is a hygiene defect in the
+        # repository being audited, not a reason to abandon the audit of every other file. It is
+        # named because a path silently dropped from the audited scope is otherwise
+        # indistinguishable from one that was never tracked at all (rule 7 — the denominator moved).
+        sys.stderr.write('codex-reviewer: EXCLUDED from the audited scope: \'%s\' resolves outside the repository root (tracked symlink?)\n' % _rel)
+        continue
+    ALLOWED_FILES.add(_abs)
 
 # Denominator guard (rule 7): the audit branch exits 0 early on an empty FILE_LIST, so an empty
 # allow-set HERE means the list never reached this formatter — a wiring defect in this script, not
