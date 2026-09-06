@@ -405,12 +405,9 @@ else
   bad "PG2: proportional-audit-depth is not positioned after project-ci-checks in docs-ci.yml's list"
 fi
 
-CI_YML="$REPO/.github/workflows/ci.yml"
-if [ -f "$CI_YML" ] && grep -qE 'tests/\*\.test\.sh|scripts/tests' "$CI_YML"; then
-  ok "PG3: this repo's own ci.yml discovers *.test.sh via a glob (automatic registration, forward guard)"
-else
-  bad "PG3: ci.yml does not appear to glob staging/plugin/scripts/tests/*.test.sh — check the workflow"
-fi
+# PG3 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (PG1/PG2) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 # ==================================================================================================
 echo "----------------------------------------"

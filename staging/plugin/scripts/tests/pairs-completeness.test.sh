@@ -406,5 +406,31 @@ done < "$CI_LIST"
 [ -z "$_ci_stale" ] && ok "CI2: every name in the docs-ci.yml list resolves to a harness file" \
                     || bad "CI2: listed but absent from staging —$_ci_stale"
 
+# CI3 (ADR-0193, issue: duplicate harness runner) — exactly one job across ALL workflow files
+# actually EXECUTES the harness suite. This is the failure CI0-CI2 above cannot see: they only ever
+# looked at docs-ci.yml's own list, so a second workflow independently globbing and running the same
+# 102 files was invisible to every one of them, and to the 16 other assertions that separately
+# pinned "ci.yml globs the tests dir" — 9 of those used a needle loose enough
+# (`tests/\*\.test\.sh|scripts/tests`) to match a prose mention rather than the executing construct,
+# which is the exact rule-1 mistake this assertion exists not to repeat.
+#
+# The needle matches the invocation itself — `bash "...$t..."` — not a path or a comment. Both
+# known shapes hit it: ci.yml's `for t in .../*.test.sh; do bash "$t" ...` and docs-ci.yml's
+# hardcoded-list `bash "staging/plugin/scripts/tests/$t.test.sh"`. A comment merely mentioning the
+# tests directory (e.g. accessibility-i18n.test.sh's own prose about ci.yml) does not contain
+# `bash "..."` and does not match.
+CIWF_DIR=$(dirname "$CIWF")
+
+# CI3a — count guard on the denominator (rule 7): a workflow dir with zero .yml files would make
+# CI3 below pass vacuously (0 hits parsed as "not >1", read as compliant).
+_ci3_wf_total=$(ls "$CIWF_DIR"/*.yml 2>/dev/null | wc -l | tr -d ' ')
+[ "$_ci3_wf_total" -ge 1 ] && ok "CI3a: found $_ci3_wf_total workflow file(s) under $CIWF_DIR (guard: >= 1)" \
+                            || bad "CI3a: found 0 workflow files under $CIWF_DIR — CI3 would pass vacuously"
+
+_ci3_hit_files=$(grep -lE 'bash "[^"]*\$t[^"]*"' "$CIWF_DIR"/*.yml 2>/dev/null)
+_ci3_hits=$(printf '%s\n' "$_ci3_hit_files" | sed '/^$/d' | wc -l | tr -d ' ')
+[ "$_ci3_hits" -eq 1 ] && ok "CI3: exactly one workflow file executes the harness suite (ADR-0193)" \
+                       || bad "CI3: $_ci3_hits workflow file(s) execute the harness suite via \`bash \"\$t...\"\` (expected exactly 1) —$(printf '%s' "$_ci3_hit_files" | tr '\n' ' ')"
+
 printf '\nPASS=%s FAIL=%s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

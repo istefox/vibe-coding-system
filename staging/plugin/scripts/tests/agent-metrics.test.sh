@@ -442,12 +442,9 @@ else
   bad "GG1b: agent-metrics is present but not positioned immediately after canonical-mechanism"
 fi
 
-CI_YML="$REPO/.github/workflows/ci.yml"
-if [ -f "$CI_YML" ] && grep -qE 'tests/\*\.test\.sh|scripts/tests' "$CI_YML"; then
-  ok "GG2: ci.yml discovers *.test.sh via a glob (automatic registration, no per-file edit needed)"
-else
-  bad "GG2: ci.yml does not appear to glob staging/plugin/scripts/tests/*.test.sh — check the workflow"
-fi
+# GG2 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (GG1/GG1b) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 SYNCSH="$STAGING/sync-to-claude.sh"
 awk '/^PAIRS="$/{f=1; next} /^"$/{f=0} f' "$SYNCSH" >"$TMP/pairs"

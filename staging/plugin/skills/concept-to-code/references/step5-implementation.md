@@ -461,6 +461,48 @@ wait for a human. If `hook_verified` is `true`, take the Workflow path; otherwis
 unattended run from stalling on the smoke-test prompt, and never takes the Workflow path unless hooks
 were already verified true.]**
 
+#### Codex review backend for Step 5 checkpoints (ADR-0193, conditional, replaces the former chain-start Gate CDX)
+
+**[IF `manifest.step5_review_mode = checkpoint` (ADR-0039 D5-D9) — otherwise skip this block
+entirely; the two checkpoint sites below stay unreached and this ask never fires:]**
+
+**Gate on `manifest.step5_codex_review_asked`, not on `use_codex_review` itself** (correction,
+2026-09-05): `use_codex_review` is seeded `false` by `manifest-init.sh`, the same value a
+declined ask would also leave it at — so the field alone cannot tell "never asked" apart from
+"asked and the answer was no", and a naive re-check of `use_codex_review` would re-prompt on
+every Step 5 run after a "no" answer. `step5_codex_review_asked` exists solely to record that the
+ask already happened, independent of which way it was answered — the same three-state shape as
+`hook_verified` above, but as its own field because `use_codex_review`'s two legal values are
+both already spoken for.
+
+If `manifest.step5_codex_review_asked` is `true`: skip straight to dispatch, reading
+`manifest.use_codex_review` as already decided. Otherwise (`false` or the field absent):
+
+Ask once, in the orchestrator's own live turn, immediately before dispatch (either path — this
+runs before the Workflow/Agent-tool branch below, so it covers both): `AskUserQuestion`: "Use
+Codex instead of Claude for this Step 5's checkpoint reviews? (Backend only — the model for a
+Claude checkpoint reviewer is fixed by `reviewer.md`'s own frontmatter, unaffected by this
+choice.)" Options: `[no]` "No — Claude only (current behaviour)" / `[yes]` "Yes — use Codex, with
+a gate if it's unavailable".
+- `[no]` → `manifest.use_codex_review` stays `false` (already seeded by `manifest-init.sh`).
+- `[yes]` → set it via
+  `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> use_codex_review true`.
+
+Either answer, then record that the ask happened via
+`~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> step5_codex_review_asked true` —
+this write is unconditional on the answer, which is what makes the gate fire ONCE per manifest
+rather than once per "no".
+
+Backend only, never a model choice, here: `manifest-set-flag.sh` accepts exactly `true`/`false`,
+and the Workflow dispatch path below has no `AskUserQuestion` hook to ask per-checkpoint — it can
+only read the manifest field the way it always has. **Decision is exclusively the user's: never
+auto-applied**, and this ask does not fire under `--autopilot` — unattended runs keep
+`manifest.use_codex_review` at its seeded `false`, identically to today, and leave
+`step5_codex_review_asked` at its seeded `false` too (an autopilot run never marks the ask done,
+so a later attended run on the same manifest still gets asked once). The gate fires ONCE per
+manifest, the same shape as the `hook_verified` gate immediately above: silent on every
+subsequent Step 5 run on the same manifest.
+
 #### Workflow dispatch path — Step 5 implementation (hook_verified = true)
 
 **CONSTRAINT — NO inline source code in the generated workflow script:**
@@ -759,7 +801,7 @@ Extend the tester → coder pipeline() above with a third stage: reviewer.
 Do NOT use parallel() as a barrier between the stages — task B must keep implementing while
 task A is under review. Wall-clock is the slowest single-task chain, not sum-of-slowest-per-stage.
 
-**If `manifest.use_codex_review = true` (Gate CDX):** Stage 3 runs
+**If `manifest.use_codex_review = true` (set by the pre-dispatch ask above, ADR-0193):** Stage 3 runs
 `codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>` (the deployed
 copy at `~/.claude/hooks/codex-reviewer.sh`) scoped to the files Stage 2 (coder) reported for that
 task, INSTEAD of dispatching `agentType "reviewer"`, via `agent()`'s own `Bash`-equivalent
@@ -1654,7 +1696,7 @@ stderr.
 
    <!-- dispatch-site: step5-checkpoint-reviewer class=inline exempt: the reviewer grant carries no Write tool so no completion fact is producible, and its findings are carried forward as advice that halts nothing -->
    **[IF `manifest.step5_review_mode = checkpoint` (ADR-0039 D5-D9) — otherwise skip:]**
-   At this same checkpoint: **if `manifest.use_codex_review = true` (Gate CDX):** run
+   At this same checkpoint: **if `manifest.use_codex_review = true` (set by the pre-dispatch ask above, ADR-0193):** run
    `~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>`
    scoped to the diff of the batch that just closed.
    - exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report; continue

@@ -564,12 +564,9 @@ else
   bad "HH1: reward-hack-detectors is not in docs-ci.yml's explicit harness list — append it after recovery-preflight"
 fi
 
-CI_YML="$REPO/.github/workflows/ci.yml"
-if [ -f "$CI_YML" ] && grep -qE 'tests/\*\.test\.sh|scripts/tests' "$CI_YML"; then
-  ok "HH2: ci.yml discovers *.test.sh via a glob (automatic registration, no per-file edit needed)"
-else
-  bad "HH2: ci.yml does not appear to glob staging/plugin/scripts/tests/*.test.sh — check the workflow"
-fi
+# HH2 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (HH1) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"

@@ -10,11 +10,21 @@
 # pull_request events, so REQUESTED was always empty and every PR ran at tier `full` regardless
 # of its `CI: <tier>` trailer, undetected until read directly off live job logs.
 #
-# This harness extracts the actual `run:` body of the `Decide CI tier` step from the three real
-# call sites (docs-ci.yml's plant-shard and shell-tests jobs, ci.yml's ci job — never a copy typed
-# into this file) and EXECUTES it in an isolated git sandbox that reproduces the real failure
-# shape: a shallow clone checked out at a synthetic merge commit, with the real PR head commit
-# reachable only by absolute SHA (rule 16 — an instruction is not an enforcement).
+# This harness extracts the actual `run:` body of the `Decide CI tier` step from the real call
+# sites (docs-ci.yml's plant-shard and shell-tests jobs — never a copy typed into this file) and
+# EXECUTES it in an isolated git sandbox that reproduces the real failure shape: a shallow clone
+# checked out at a synthetic merge commit, with the real PR head commit reachable only by absolute
+# SHA (rule 16 — an instruction is not an enforcement).
+#
+# ADR-0193 Correction (2026-09-06): a third call site, ci.yml's `ci` job, existed until this repo's
+# own ci.yml was deleted as the duplicate harness runner (rule 14 — this note records the change
+# forward rather than rewriting the paragraph above). CTW2's push-event case is now checking a path
+# that Phase 1 of ADR-0193 also made dead in production: docs-ci.yml's plant-shard and shell-tests
+# jobs both carry `if: ... && github.event_name != 'push'`, so their own "Decide CI tier" step no
+# longer runs on a real push either. It stays asserted here because the step body is a portable
+# bash script this harness extracts and can run standalone regardless of the job's `if:` — proving
+# the trailer-read logic itself still behaves correctly on a push event costs nothing, and dropping
+# it would leave a silent gap if a future job ever re-enables running this step on push.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -22,7 +32,6 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO=$(cd "$STAGING/.." && pwd)
 CT="$SCRIPTS/ci-tier.sh"
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
-CIYML="$REPO/.github/workflows/ci.yml"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
@@ -67,10 +76,18 @@ extract_decide_body() {  # <file> <job-key> -> prints the dedented run: body on 
 }
 
 # ==================================================================================================
-# CTW0. Extraction sanity: all three call sites must yield a non-empty body that parses as bash,
-# and must reference $PR_HEAD_SHA in the trailer-read branch — never HEAD^2 (VCS-053's bug).
+# CTW0. Extraction sanity: every call site must yield a non-empty body that parses as bash, and
+# must reference $PR_HEAD_SHA in the trailer-read branch — never HEAD^2 (VCS-053's bug).
 # ==================================================================================================
-SITES="$DOCSCI:plant-shard:docs-ci.yml/plant-shard $DOCSCI:shell-tests:docs-ci.yml/shell-tests $CIYML:ci:ci.yml/ci"
+SITES="$DOCSCI:plant-shard:docs-ci.yml/plant-shard $DOCSCI:shell-tests:docs-ci.yml/shell-tests"
+
+# CTW-SITES: count guard on the site list itself (rule 7) — ci.yml's `ci` job was a third site
+# until ADR-0193 deleted the file; a SITES derivation that silently collapsed further (e.g. a typo
+# dropping shell-tests too) would make every loop below run zero times and read as a clean pass.
+_nsites=$(printf '%s\n' $SITES | wc -l | tr -d ' ')
+[ "$_nsites" -eq 2 ] && ok "CTW-SITES: exactly 2 Decide-CI-tier call sites (docs-ci.yml's plant-shard, shell-tests — ci.yml's removed by ADR-0193)" \
+                     || bad "CTW-SITES: expected exactly 2 call sites, found $_nsites — every CTW assertion below would run on the wrong set"
+
 _site_bodies_ok=1
 for _site in $SITES; do
   _file=${_site%%:*}; _rest=${_site#*:}; _job=${_rest%%:*}; _label=${_rest#*:}
@@ -88,7 +105,7 @@ for _site in $SITES; do
   printf '%s' "$_body" | grep -q 'PR_HEAD_SHA' \
     || { bad "CTW0: $_label's trailer-read branch never references \$PR_HEAD_SHA"; _site_bodies_ok=0; }
 done
-[ "$_site_bodies_ok" -eq 1 ] && ok "CTW0: all three Decide-CI-tier bodies extracted non-empty, parse as bash, and read the trailer via \$PR_HEAD_SHA (never HEAD^2)"
+[ "$_site_bodies_ok" -eq 1 ] && ok "CTW0: both Decide-CI-tier bodies extracted non-empty, parse as bash, and read the trailer via \$PR_HEAD_SHA (never HEAD^2)"
 
 # ==================================================================================================
 # Sandbox fixtures. A bare "origin", a base commit, a divergent head commit carrying a real
