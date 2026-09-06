@@ -10,3 +10,6 @@ the 200-line/25KB injection cap; the topic files do not.
 - [Ordinal-to-enumeration harness repair](topics/task5-schema-test-allblocks-slug.md) — the
   Z*-floor-vs-SC*-exact-equality distinction, re-derive-by-running procedure, bash 3.2 `grep -c`
   population-count pattern, learned repairing codex-reviewer-schema.test.sh (ADR-0193 §D7)
+- [Plant sandbox git semantics and guard absorption](topics/plant-sandbox-git-and-guard-absorption.md)
+  — why a git-driven end-to-end assertion still works in plant-check's `.git`-less sandbox, the
+  unborn-repo fixture, the plant `os.path.join` absorbs, and the known pre-existing RS7 red

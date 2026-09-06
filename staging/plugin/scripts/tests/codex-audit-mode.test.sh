@@ -43,15 +43,25 @@
 #     ALREADY-PRESENT guard prose, and four literals byte-preserved in text nothing has edited yet.
 #     Recorded here so a reader does not "fix" the test to force any of the five red.
 #
-# FIFTEEN `# plant:` declarations sit beside CX02, CX05, CX10, CX12, CX13, CX14, CX15, CX17, CX18,
-# CX20, CX21, CX22, CX23, CX24 and CX26 (rule 2 — an assertion nobody planted pins nothing). The
-# ones targeting Task 2's argument surface (CX02, CX05) and the SKILL.md prose Tasks 6-8 add
-# (CX20-CX24, CX26) are grounded in literal text the plan or the source files already state
-# verbatim. The ones targeting Task 3/4's not-yet-written `codex-reviewer.sh` internals (CX10,
+# ADDED LATER, not part of the block above (rule 14 — the dated record above is a correct snapshot
+# of 2026-09-05 and is not rewritten): CX28 and CX29 were added on 2026-09-06 as regression cover
+# for two fixes that had landed in codex-reviewer.sh after this file was written and that nothing
+# pinned — the `uncommitted` diff-scope arm's own git-exit guard, and the absolute-path
+# normalisation of a finding's `file`. Both were measured GREEN against the code as it stands the
+# day they were added; a RED in either is a regression in that code, never an unfinished task.
+# Z1's floor and its frozen-identity-set sentence were re-derived by running this file, not
+# computed (rule 10, rule 13).
+#
+# SEVENTEEN `# plant:` declarations sit beside CX02, CX05, CX10, CX12, CX13, CX14, CX15, CX17,
+# CX18, CX20, CX21, CX22, CX23, CX24, CX26, CX28 and CX29 (rule 2 — an assertion nobody planted
+# pins nothing). The ones targeting Task 2's argument surface (CX02, CX05) and the SKILL.md prose
+# Tasks 6-8 add (CX20-CX24, CX26) are grounded in literal text the plan or the source files already
+# state verbatim. The ones targeting Task 3/4's not-yet-written `codex-reviewer.sh` internals (CX10,
 # CX12, CX13, CX17, CX18) are best-effort projections of that code's expected shape, following the
 # file's own existing style; Task 9's plant run is explicitly budgeted (~10 lines) to repair a
 # needle that turns out BADPLANT once the real code lands — "fix the needle, never the assertion"
-# (plant-check.sh's own rule).
+# (plant-check.sh's own rule). The last two (CX28, CX29) are not projections at all: they were
+# written against code already on disk, so their needles are quoted from it.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
@@ -683,14 +693,123 @@ else
 fi
 
 # =====================================================================================
+# CX28-CX29 (R-01, R-02) — regression coverage for two behaviours in codex-reviewer.sh that
+# landed AFTER the CX01-CX27 set above was written and that nothing here pinned: the
+# `uncommitted` diff-scope arm's own git-exit guard, and the absolute-path normalisation of a
+# finding's `file` field. Both are behavioural end-to-end checks driven by the same stub `codex`
+# every other CX block uses — never a live call.
+
+# CX28 (R-01) — an UNBORN repository (`git init`, no commits) is the measured case where
+# `git rev-parse --is-inside-work-tree` succeeds and `git diff HEAD` still exits 128, so the
+# earlier "not a git repository" guard does not catch it. The `uncommitted` arm must report
+# DID-NOT-RUN (exit 3, rule 4), never a silent empty CHANGED_FILES that intersects to nothing and
+# reads as a clean audit of a scope that was never evaluated (rule 7 — the same failure one level
+# down, a derived population collapsing to zero and looking like a result).
+#
+# codex-reviewer.sh issues bare `git ...`, never `git -C`, so the repository it audits is whatever
+# its CWD is and this run has to be made from inside the scratch repo. `cr()` never changes
+# directory, so it cannot be reused; the `cd` is confined to a subshell instead, leaving the
+# suite's own CWD untouched for every assertion after this one (CX29 below depends on that).
+CX28_REPO="$WORK/cx28-unborn"
+mkdir -p "$CX28_REPO"
+git init -q "$CX28_REPO" >/dev/null 2>&1
+# Denominator guard (rule 7): assert the fixture really is unborn — a git that quietly created a
+# commit, or no git at all, would make the assertion below pass or fail for the wrong reason.
+CX28_UNBORN=0
+if git -C "$CX28_REPO" rev-parse --git-dir >/dev/null 2>&1 \
+   && ! git -C "$CX28_REPO" rev-parse --verify HEAD >/dev/null 2>&1; then
+  CX28_UNBORN=1
+fi
+CX28_OUT="$WORK/cx28-out.json"
+CX28_ERR_FILE=$(mktemp)
+set_stub "$MINIMAL_PAYLOAD" ""
+( cd "$CX28_REPO" && PATH="$STUB_PATH" bash "$CR" --mode audit --dimension structure --diff-scope uncommitted --out "$CX28_OUT" ) >/dev/null 2>"$CX28_ERR_FILE"
+CX28_RC=$?
+CX28_ERR=$(cat "$CX28_ERR_FILE")
+rm -f "$CX28_ERR_FILE"
+CX28_MSG=0
+if printf '%s' "$CX28_ERR" | grep -q -F 'DID-NOT-RUN' \
+   && printf '%s' "$CX28_ERR" | grep -q -F "could not resolve diff-scope 'uncommitted'"; then
+  CX28_MSG=1
+fi
+CX28_NO_ARTIFACT=0
+[ ! -s "$CX28_OUT" ] && CX28_NO_ARTIFACT=1
+if [ "$CX28_UNBORN" -eq 1 ] && [ "$CX28_RC" -eq 3 ] && [ "$CX28_MSG" -eq 1 ] && [ "$CX28_NO_ARTIFACT" -eq 1 ]; then
+  ok "CX28: --diff-scope uncommitted in an unborn repo exits 3 (DID-NOT-RUN) naming the unresolvable scope, and no --out artifact is written"
+else
+  bad "CX28: unborn-repo uncommitted scope — fixture-unborn=$CX28_UNBORN rc=$CX28_RC (want 3) message-ok=$CX28_MSG out-absent-or-empty=$CX28_NO_ARTIFACT — $CX28_ERR"
+fi
+# plant: CX28 | plugin/scripts/codex-reviewer.sh | CHANGED_FILES=$(git diff HEAD --name-only 2>/dev/null) _git_rc=$? | CHANGED_FILES=$(git diff HEAD --name-only 2>/dev/null)\n        _git_rc=0
+
+# CX29 (R-02) — deep-refactor/SKILL.md's finding schema declares `"file": "<absolute path>"`, and
+# Gate 1 dedupes the Codex-sourced findings against the Claude-sourced ones on file + line +
+# description: a repo-relative value emitted here would never match its Claude-side twin, and the
+# duplicate would read as two independent findings. Both directions are pinned in one assertion
+# (rule 8): a relative path IS joined onto the repository root, and an already-absolute one is NOT
+# prefixed a second time — the natural defect here is string concatenation without the isabs test,
+# which breaks both at once.
+#
+# Same end-to-end shape as CX11 and the same context: $WORK for the payload and the artifact,
+# $STUB_PATH for the fake `codex`, `cr()` — whose CWD is the suite's own, i.e. this repository —
+# for the invocation. The root asserted against is derived from that same CWD by the same command
+# codex-reviewer.sh itself uses, so the two sides answer one question from one place (rule 6),
+# rather than hard-coding a checkout path this suite would then only pass in.
+CX29_PAYLOAD="$WORK/cx29-payload.json"
+cat > "$CX29_PAYLOAD" <<'JSON'
+{"findings": [
+  {"id":"STUB-JUNK-REL","dimension":"perf","severity":"P2","risk_level":"low","file":"src/A.swift","line":10,"description":"cx29-relative","fix_type":"coder","suggested_fix":"s1"},
+  {"id":"STUB-JUNK-ABS","dimension":"perf","severity":"P1","risk_level":"high","file":"/already/absolute/src/B.swift","line":3,"description":"cx29-already-absolute","fix_type":"coder","suggested_fix":"s2"}
+]}
+JSON
+CX29_OUT="$WORK/cx29-out.json"
+CX29_TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null)
+set_stub "$CX29_PAYLOAD" ""
+cr "$STUB_PATH" --mode audit --dimension structure --out "$CX29_OUT"
+if [ -z "$CX29_TOPLEVEL" ]; then
+  CX29_VERDICT="DID-NOT-RUN: this suite's CWD is not inside a git checkout, so the expected root cannot be derived"
+elif [ "$CR_RC" -ne 0 ] || [ ! -s "$CX29_OUT" ]; then
+  CX29_VERDICT="NO-OUTPUT rc=$CR_RC err=$CR_ERR"
+else
+  CX29_VERDICT=$(OUTFILE="$CX29_OUT" TOPLEVEL="$CX29_TOPLEVEL" python3 -c '
+import json, os
+data = json.load(open(os.environ["OUTFILE"]))
+top = os.environ["TOPLEVEL"]
+if not isinstance(data, list) or len(data) != 2:
+    print("EXPECTED-2-ELEMENTS-GOT:%r" % (len(data) if isinstance(data, list) else type(data).__name__))
+    raise SystemExit
+# Keyed on description, never on array position: the ids are synthesised by the wrapper, and
+# element order is not a claim this assertion is making.
+by_desc = dict((el.get("description"), el.get("file")) for el in data)
+rel_out = by_desc.get("cx29-relative")
+abs_out = by_desc.get("cx29-already-absolute")
+want_rel = os.path.join(top, "src/A.swift")
+problems = []
+if not isinstance(rel_out, str) or not rel_out.startswith("/"):
+    problems.append("relative-input-not-absolutised:%r" % (rel_out,))
+elif not rel_out.endswith("/src/A.swift"):
+    problems.append("relative-suffix-lost:%r" % (rel_out,))
+elif rel_out != want_rel:
+    problems.append("wrong-root:%r want %r" % (rel_out, want_rel))
+if abs_out != "/already/absolute/src/B.swift":
+    problems.append("already-absolute-double-prefixed-or-altered:%r" % (abs_out,))
+print("OK" if not problems else "; ".join(problems))
+')
+fi
+case "$CX29_VERDICT" in
+  OK) ok "CX29: a repo-relative finding 'file' is emitted absolute, joined onto the root git reports for this working directory; an already-absolute one passes through unprefixed" ;;
+  *) bad "CX29: audit 'file' normalisation wrong — $CX29_VERDICT" ;;
+esac
+# plant: CX29 | plugin/scripts/codex-reviewer.sh | if file_val and not os.path.isabs(file_val): file_out = os.path.join(REPO_ROOT, file_val) | if file_val:\n        file_out = REPO_ROOT + file_val
+
+# =====================================================================================
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 28 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 28) — a floor only, it absorbs its own plant (rule 10); CX01-CX27 are the frozen identity set"
+if [ "$_total" -ge 30 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 30) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX29 are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 28; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 30; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]
