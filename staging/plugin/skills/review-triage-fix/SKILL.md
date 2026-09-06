@@ -82,7 +82,7 @@ no push, no automatic iteration beyond the cycle** inside this skill.
    scope (a standalone invocation), default to `[claude-sonnet]` — RTF has no manifest-resolution
    step of its own (Step 0 items 1-5 above never read one), so this is the first point at which
    the choice exists for a standalone cycle.
-   - **`codex`** — all three sites in this cycle run `~/.claude/scripts/codex-reviewer.sh` in
+   - **`codex`** — all three sites in this cycle run `~/.claude/hooks/codex-reviewer.sh` in
      place of dispatching `reviewer`, per Steps 1/3/4 below.
    - **`claude-sonnet`** (default) — dispatch `reviewer` at `model: "sonnet"`, the agent's own
      frontmatter pin (unchanged behavior).
@@ -104,7 +104,7 @@ to it.
 
 <!-- dispatch-site: rtf-step1-reviewer class=inline exempt: reviewer produces no completion fact — its Edit/Write (via memory: project) is confined to its own memory directory by reviewer-write-scope.sh, and an empty report yields an empty triage rather than a green -->
 **If this cycle's backend (Step 0 item 6) is `codex`:** run
-`~/.claude/scripts/codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>`.
+`~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>`.
 - exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report; continue below
   unchanged.
 - exit `3` (DID-NOT-RUN) → **stop and ask, never silently fall back to Claude:**
@@ -206,7 +206,7 @@ and the project's test-cmd so the agent self-verifies.
 - **`advisor`:** for each routable finding, two `Agent`-tool calls instead of one:
   <!-- dispatch-site: rtf-advisor-pair class=inline exempt: the advisor is a reviewer with no Write tool and its own failure clause already falls back to plain opus behaviour for that one finding -->
   1. **Advisor call.** **If this cycle's backend (Step 0 item 6) is `codex`:** run
-     `~/.claude/scripts/codex-reviewer.sh --mode diagnose --finding "<finding + loc + suggested fix>" --out <tmp-diag-file>`.
+     `~/.claude/hooks/codex-reviewer.sh --mode diagnose --finding "<finding + loc + suggested fix>" --out <tmp-diag-file>`.
      - exit `0` → read `<tmp-diag-file>` as the diagnosis; proceed to the Executor call below.
      - exit `3` (DID-NOT-RUN) → **stop and ask, never silently fall back to Claude:**
        `AskUserQuestion`: "Codex advisor unavailable: `<reason from stderr>`. Fallback to Claude's
@@ -283,7 +283,7 @@ Apply the circuit breakers:
 <!-- dispatch-site: rtf-step4-rereview class=inline exempt: the reviewer grant carries no Write tool, and an early read produces fewer findings which the cross-cycle diff surfaces rather than hides -->
 **If this cycle's backend (Step 0 item 6) is `codex`:** write the previous cycle's findings as
 `sev<TAB>loc<TAB>problem` TSV to a temp file, then run
-`~/.claude/scripts/codex-reviewer.sh --mode review --diff-scope uncommitted --carry-forward <that-tsv-file> --out <tmp-review-file>`
+`~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --carry-forward <that-tsv-file> --out <tmp-review-file>`
 (`--carry-forward` embeds the wording-preservation instruction above directly in the Codex prompt,
 so it is never skipped when the dispatch is substituted).
 - exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report; continue below
