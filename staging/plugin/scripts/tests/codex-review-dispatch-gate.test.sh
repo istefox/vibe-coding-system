@@ -74,7 +74,21 @@ if [ "$SITE_COUNT" -eq 3 ]; then
 else
   bad "C1: expected exactly 3 RTF sites branching on the item-6 cycle value, found $SITE_COUNT"
 fi
-# plant: C1 | plugin/skills/review-triage-fix/SKILL.md | **If this cycle's backend (Step 0 item 6) is `codex`:** run `~/.claude/scripts/codex-reviewer.sh --mode review | **If manifest.use_codex_review (Gate CDX):** run `~/.claude/scripts/codex-reviewer.sh --mode review
+# plant: C1 | plugin/skills/review-triage-fix/SKILL.md | **If this cycle's backend (Step 0 item 6) is `codex`:** run `~/.claude/hooks/codex-reviewer.sh --mode review | **If manifest.use_codex_review (Gate CDX):** run `~/.claude/hooks/codex-reviewer.sh --mode review
+
+# C4. Producer-consumer contract (rule 17, VCS-063 live-dispatch finding 2026-09-06): the
+# script every dispatch site names must be the path sync-to-claude.sh's own PAIRS mapping
+# actually deploys (plugin/scripts/codex-reviewer.sh -> hooks/codex-reviewer.sh), not a
+# plausible-looking one nobody deploys there. Scoped to the 3 actual invocation lines
+# (each carries `--mode`), not item 6's prose description of them (line 85, no `--mode`) —
+# count guard (rule 7): all 3, not merely one — a partial fix would still look clean without this.
+HOOKS_PATH_COUNT=$(grep -F '~/.claude/hooks/codex-reviewer.sh' "$RTF" | grep -cF -- '--mode')
+if [ "$HOOKS_PATH_COUNT" -eq 3 ]; then
+  ok "C4: all 3 RTF codex dispatch invocations name the actually-deployed hooks/ path (found $HOOKS_PATH_COUNT)"
+else
+  bad "C4: expected 3 RTF invocations naming ~/.claude/hooks/codex-reviewer.sh, found $HOOKS_PATH_COUNT"
+fi
+# plant: C4 | plugin/skills/review-triage-fix/SKILL.md | `~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>` | `~/.claude/scripts/codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>`
 
 OTHERWISE_COUNT=$(grep -cF 'Otherwise (backend is `claude-sonnet` or `claude-opus`)' "$RTF")
 if [ "$OTHERWISE_COUNT" -eq 2 ]; then
@@ -188,11 +202,11 @@ fi
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 17 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 17)"
+if [ "$_total" -ge 18 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 18)"
   PASS=$((PASS+1))
 else
-  echo "FAIL: Z1: assertion count fell to $_total (floor 17) — assertions vanished"
+  echo "FAIL: Z1: assertion count fell to $_total (floor 18) — assertions vanished"
   FAIL=$((FAIL+1))
 fi
 

@@ -131,6 +131,28 @@ committed yet):
   and that the chosen branch dispatches — the first real check of the `effort`-preservation
   expectation disclosed above (rule 13).
 
+## Correction (2026-09-06)
+
+The deferred manual step above ran: a live standalone `/skill review-triage-fix` invocation,
+choosing `codex` at Step 0 item 6. It surfaced a real, pre-existing defect (not introduced by
+this ADR, never exercised live before this check) — all four Codex dispatch sites in
+`review-triage-fix/SKILL.md` (Step 0 item 6's description, Step 1, the advisor call, Step 4)
+named `~/.claude/scripts/codex-reviewer.sh`, which does not exist; `sync-to-claude.sh`'s own
+PAIRS mapping (`plugin/scripts/codex-reviewer.sh|hooks/codex-reviewer.sh`) deploys it to
+`~/.claude/hooks/codex-reviewer.sh` instead — the same path `concept-to-code/references/
+step5-implementation.md`'s own Codex dispatch sites already named correctly. Every "codex"
+backend choice in RTF failed with "No such file or directory" (exit 127), which is not the
+`exit 3` (DID-NOT-RUN) the fallback-ask clauses key off, so the intended graceful fallback never
+fired either — a rule-17 producer/consumer mismatch (a path named at the call site, deployed at
+a different one, with nothing checking they match).
+
+Fixed: all 4 references corrected to `~/.claude/hooks/codex-reviewer.sh`; the C1 plant's needle
+(which held the stale path literally) corrected to match. A new assertion, C4, pins the
+producer/consumer contract directly (count guard, rule 7: all 3 RTF dispatch sites name the
+actually-deployed path) — harness grew from 17 to 18 assertions. Re-verified live: `codex
+exec` dispatched successfully via the corrected path and returned a real review. Full
+`plant-check.sh` sweep re-run clean (681 assertions, 0 failures) after the fix.
+
 ## References
 
 - `staging/plugin/skills/concept-to-code/SKILL.md` — Gate CDX removed
