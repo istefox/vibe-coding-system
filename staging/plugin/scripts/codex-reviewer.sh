@@ -271,8 +271,25 @@ elif [ "$MODE" = "audit" ]; then
         fi
         ;;
     esac
+    # mktemp is a derivation like any other and is captured like one (rule 4). If it fails the
+    # variable is empty, the printf below writes nowhere, and `grep -Fxf` — whose stderr is already
+    # discarded — yields an empty FILE_LIST, which the empty-result branch below reports as a clean
+    # audit with exit 0. A broken intersection and a genuinely empty diff must not be
+    # indistinguishable from outside (rule 7). stderr is deliberately NOT discarded here: mktemp's
+    # own diagnostic is the only thing that says why the temp file could not be created.
     ALL_FILES_FILE=$(mktemp)
+    _mktemp_rc=$?
+    if [ "$_mktemp_rc" -ne 0 ] || [ -z "$ALL_FILES_FILE" ]; then
+      echo "codex-reviewer: DID-NOT-RUN: could not create the temporary file for the whole-tree list (mktemp exit $_mktemp_rc)" >&2
+      exit 3
+    fi
     CHANGED_FILES_FILE=$(mktemp)
+    _mktemp_rc=$?
+    if [ "$_mktemp_rc" -ne 0 ] || [ -z "$CHANGED_FILES_FILE" ]; then
+      echo "codex-reviewer: DID-NOT-RUN: could not create the temporary file for the changed-paths list (mktemp exit $_mktemp_rc)" >&2
+      rm -f "$ALL_FILES_FILE"
+      exit 3
+    fi
     printf '%s\n' "$ALL_FILES" > "$ALL_FILES_FILE"
     printf '%s\n' "$CHANGED_FILES" > "$CHANGED_FILES_FILE"
     FILE_LIST=$(grep -Fxf "$CHANGED_FILES_FILE" "$ALL_FILES_FILE" 2>/dev/null)
