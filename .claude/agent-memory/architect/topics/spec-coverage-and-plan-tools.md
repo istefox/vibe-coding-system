@@ -42,6 +42,16 @@
   `spec-coverage-baseline-bump.test.sh` (8) and `pairs-completeness.test.sh` (2) are not — refer to
   those descriptively. The census is one command; the alternative is a plan whose ids read green
   before a line of code exists.
+- **Each shipped Codex-backend harness adds a new landmine to that census, and they are the worst
+  kind: they name the ADRs a successor feature inevitably cites, so both halves of the ADR-0154
+  scope filter close on their own.** Measured 2026-09-07: the tester's dispatch-gate harness carries
+  R-01…R-14 (naming ADR-0194) and the `test-write-scope` harness carries R-11 (naming
+  ADR-0049/0068). A coder-backend SPEC waiving R-11/R-13 with `(no-test:)` detonates STALE-WAIVER,
+  exit 3, on either basename. Refer to a sibling harness by *prefix* ("the tester's own
+  dispatch-gate harness, prefix `CX`") — never by filename — and re-run the census each time, since
+  the population grows with every feature in the family. Note `plant-check.sh` stays safe for the
+  opposite reason: its basename matches no discovery pattern, so its own R-01/R-05/R-12 never
+  scope in.
 - Takes `--spec`/`--plan` flags, not positionals; a bad invocation exits 0 with a usage message on
   stdout. Always check the `COVERED` lines are actually printed, not just the exit code.
 - Run `spec-coverage.sh --spec SPEC.md --plan <plan> --tests-root .` before finishing any plan — a

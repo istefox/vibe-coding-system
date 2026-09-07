@@ -5732,3 +5732,60 @@ Key architectural decisions:
   defect.
 
 Detail: `docs/architecture/ADR-0194-codex-tester-choice.md`.
+
+## Decisions from the Codex-vs-Claude backend choice for the coder subagent (ADR-0196)
+
+Codex-vs-Claude backend choice for the `coder` subagent, extending ADR-0187/ADR-0193's reviewer-side
+and ADR-0194's tester-side pattern: `staging/plugin/scripts/codex-coder.sh` (new).
+
+Key architectural decisions:
+- **`--model` and `--effort` are both REQUIRED, the deliberate inverse of ADR-0194 §R2.** The tester
+  script silently follows `~/.codex/config.toml` when neither is given; a coder run is longer and
+  writes more, so that exposure is strictly worse here. Requiring both converts a silent inheritance
+  into an explicit decision taken at the moment the gate fires. `--model` is a closed set (`astra` |
+  `sol`, mapped to `gpt-6-astra` | `gpt-5.6-sol`); `--effort` is a passthrough to Codex's own
+  vocabulary (`-c model_reasoning_effort=<value>`).
+- **The gate re-fires on every Step 5 entry, fresh and resumed alike — no `*_asked` field exists.**
+  ADR-0193 and ADR-0194 both added a dedicated field to make their ask fire exactly once per
+  manifest; this feature's requirement is the opposite (a live choice every time), so the three-state
+  "never asked / asked and declined / asked and accepted" problem those fields solve does not arise
+  here at all. `use_codex_coder` is written on every gate answer but never read as a skip condition —
+  it is an audit record only.
+- **The post-run scope check inverts from an allowlist to a blocklist of five named classes.** A
+  tester's legitimate output is definable (test files only); a coder's is not (arbitrary production
+  paths), so "is every touched path allowed?" has no answer. The question becomes "did any touched
+  path fall into one of five classes a Claude coder is mechanically prevented from touching":
+  `TEST-CMD`, `TEST-FILE`, `MEMORY-INDEX`, `MEMORY-SHARDS` (all path-based, reusing ADR-0194 §R4's
+  exact touched-path derivation), and `NEW-COMMIT` (a `HEAD`-sha comparison, not path-based). Zero
+  touched paths is exit 0 with a `NOTE:` on stderr, never exit 4 — "wrote nothing" and "wrote only
+  in-scope files" are different facts (rule 4).
+- **Measured, not assumed: all four Claude enforcement hooks on the coder path are `PreToolUse`, none
+  `PostToolUse`.** `pre-flight-pattern-enforce.sh`, `write-scope-enforce.sh`, `test-write-scope.sh`
+  (all on `Edit|Write|MultiEdit`) plus `coder-memory-scope.sh` — none can fire on a `codex exec`
+  subprocess's internal edits, since the subprocess is one opaque `Bash` call carrying no
+  `agent_type`. This removes a preventive-gate enforcement layer; the sandbox
+  (`-s workspace-write -C <worktree>`) plus the post-hoc scope check is the accepted mitigation, not
+  a replacement of equal strength — the ADR states this trade-off explicitly rather than claiming
+  parity.
+- **On the `codex` branch the Workflow path drops the coder stage from `pipeline()` entirely,** same
+  fix as ADR-0194 §R5, for a reason stronger here: the coder stage is the long one, and a Workflow
+  stage has no `AskUserQuestion` hook to resolve exit 3/4 through. The pipeline can degenerate to
+  zero stages (both tester and coder on `codex`, checkpoint review off) — a legal state, not an
+  error.
+- **Five gaps are documented as permanent or disclosed, never silently dropped:** the four
+  PreToolUse hooks above (mitigated, not replaced); the pre-flight `PATTERN:` classifier (replaced
+  by a post-hoc, non-blocking `pattern_classification` field in Codex's structured output); `LSP`
+  (structurally absent — a native Claude Code capability, not an MCP server, so nothing exists to
+  wire into `codex mcp add` even in principle); `eslint` MCP (source not located anywhere on the
+  verifying machine — coder.md's own tool list already tolerates this class of absence gracefully);
+  `context7` MCP (Codex already has the same public server pre-registered, but shows "Not logged
+  in" — partial, unauthenticated, unverified live parity, named as a follow-up).
+- **Three new manifest fields (`use_codex_coder`, `step5_codex_coder_model`,
+  `step5_codex_coder_effort`), additive under the existing schema 1.4, no version bump** — new
+  Invariants 28/29 (28 = the boolean field, copying 24/26; 29 = the two string fields as one fact).
+- **`codex-common.sh` extraction remains deferred (ADR-0194 §R7's argument), but is now weaker at
+  three copies than it was at two** — recorded as such rather than restated as though nothing
+  changed; flagged to Stefano at Gate 2 and left as a named follow-up rather than pulled into this
+  ADR's scope.
+
+Detail: `docs/architecture/ADR-0196-codex-coder-choice.md`.

@@ -112,7 +112,8 @@ pointer to its `PROJECT.md` phase rather than a transcription of it.
 
 ## In Progress
 
-_none_
+- [ ] `VCS-076` **P2** Codex CLI backend for the `coder` subagent (Stefano's explicit request, `docs/manifests/2026-09-07-codex-coder-backend-choice.manifest.yml`, standard chain). SPEC.md, `ADR-0196-codex-coder-choice.md` and `docs/superpowers/plans/2026-09-07-codex-coder-backend-choice.md` complete and approved (Gates 1-4). Unlike ADR-0194's tester, the coder gate exposes a live Codex model choice (Astra `gpt-6-astra` / Sol `gpt-5.6-sol`, both effort low-ultra) and never skips the ask (no `*_asked` field — a fresh choice at every Step 5 entry, resumed included, per Stefano's explicit requirement). Five parity gaps documented, not silently dropped: four Claude `PreToolUse` hooks (`pre-flight-pattern-enforce.sh`, `write-scope-enforce.sh`, `test-write-scope.sh`, `coder-memory-scope.sh`) cannot fire on a `codex exec` subprocess — mitigated by `-s workspace-write` sandbox + a post-hoc 5-class blocklist scope check (new exit 4), not restored; no per-call PATTERN classifier (replaced by a post-hoc `pattern_classification` field); `LSP` structurally absent from Codex (native Claude Code capability, not an MCP server); `eslint` MCP source unlocated on the verifying machine; `context7` MCP pre-registered in Codex but unauthenticated. Remaining: Step 5 implementation (`codex-coder.sh`, IF/ELSE at both `step5-implementation.md` dispatch sites, manifest fields `use_codex_coder`/`step5_codex_coder_model`/`step5_codex_coder_effort` + Invariants 28/29, `codex-coder-dispatch-gate.test.sh`) — deferred to a fresh session per the Standard chain's own session boundary (Gate 4). <!-- src:session opened:2026-09-07 kind:roadmap -->
+- [ ] `VCS-077` **P3** `codex-common.sh` extraction: the Codex availability cascade (`codex doctor --json` check, rate-limit vocabulary regex, VCS-064's check-ordering fix) now exists independently in three scripts (`codex-reviewer.sh`, `codex-tester.sh`, and — once VCS-076 ships — `codex-coder.sh`). ADR-0194 §R7 deferred extraction at two copies; ADR-0196 §R9 flagged that the deferral argument is now weaker at three. Flagged to Stefano at ADR-0196's Gate 2, who chose to defer rather than fold it into that ADR's scope. Needs its own small ADR before extraction (rule 6: a shared source that breaks disables three consumers at once). <!-- src:session opened:2026-09-07 kind:roadmap -->
 
 ## Backlog / To Add
 
@@ -137,18 +138,18 @@ _none_
 
 ## Initiatives (multi-ADR)
 
-- [ ] `VCS-074` **P3** Mapped feasibility of delegating Codex to agents beyond `reviewer` (already substituted per ADR-0187/ADR-0193): `debugger`, `tester`, `refactorer`, `researcher`, `coder` — no decision taken yet, needs an ADR before implementation <!-- src:session opened:2026-09-07 kind:roadmap -->
+- [ ] `VCS-074` **P3** Mapped feasibility of delegating Codex to agents beyond `reviewer` (already substituted per ADR-0187/ADR-0193): `debugger`, `tester`, `refactorer`, `researcher`, `coder` — no decision taken yet, needs an ADR before implementation. **Update 2026-09-07:** `tester` decided and implemented (ADR-0194, `codex-tester.sh`); `coder` decided (ADR-0196, `VCS-076`) — ADR + plan complete and approved, Step 5 implementation (`codex-coder.sh`, dispatch-site wiring, manifest fields, test harness) deferred to a fresh session per the chain's own session boundary. `debugger`/`refactorer`/`researcher` remain undecided. <!-- src:session opened:2026-09-07 kind:roadmap -->
   - Read-only pattern (`-s read-only`, same shape as `codex-reviewer.sh`) vs write-capable pattern (`-s workspace-write`, verified live on installed codex-cli 0.153.4) determine which agents are safe to delegate without new guardrails.
   - | Agent | Pattern | Current Claude cost | Token savings | Cross-model verification value | Risk | Priority |
     |---|---|---|---|---|---|---|
     | architect | A (or side-by-side) | opus + effort xhigh, priciest single dispatch | high per dispatch, low frequency | high but delicate — mistakes propagate downstream | low (never writes code) | scope unclear: substitution vs second opinion are different goals |
     | debugger (diagnosis phase) | A | sonnet + effort high, variable | good | high and direct — independent root-cause hypotheses | low | readiest to implement, reuses `codex-reviewer.sh` shape |
-    | tester | B | sonnet + effort xhigh, most frequent dispatch | high | medium-low but real | medium (mitigated by pass/fail oracle) | best write-capable candidate |
+    | tester | B | sonnet + effort xhigh (now high, ADR-0194) | high | medium-low but real | medium (mitigated by pass/fail oracle) | **done — ADR-0194, `codex-tester.sh`** |
     | refactorer | B | sonnet + effort medium | low | near zero (snapshot harness already verifies) | high on production code | low |
     | researcher | A (already read-only) | haiku + effort low, already cheapest | minimal | low | low | low |
-    | coder | B | sonnet + effort xhigh | — | — | highest, no automated oracle | excluded (VCS-058 decision) |
-  - ADRs: none yet — candidate for a new ADR if a specific agent is chosen to proceed
-  - Phase: not-started
+    | coder | B | sonnet + effort xhigh | high (Astra/Sol, medium-ultra) | high — Stefano cares particularly about coder-generated code quality | highest of the five; sandbox + post-hoc blocklist mitigates, does not restore preventive parity | **decided — ADR-0196 (`VCS-076`), Step 5 impl pending** |
+  - ADRs: ADR-0194 (`tester`, done), ADR-0196 (`coder`, ADR+plan done, implementation pending — `VCS-076`)
+  - Phase: in-progress (2 of 5 agents decided; `debugger`/`refactorer`/`researcher` remain)
 
 ## Blocked / Decisions Needed
 

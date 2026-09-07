@@ -1,176 +1,204 @@
-# SPEC: Codex-vs-Claude backend choice for the tester subagent
+# SPEC: Codex CLI backend for the `coder` agent
 
-**Topic slug:** codex-claude-choice-for-tester
+**Topic slug:** codex-coder-backend-choice
 
 ## Objectives
 
-Give the `tester` subagent the same Codex-vs-Claude backend choice already shipped for the
-`reviewer` agent (ADR-0187, ADR-0193), at its two dispatch sites in `concept-to-code` Step 5. Unlike
-the reviewer, the tester must write real test files and run the suite, not just produce a read-only
-report — so the mechanism needs a write-sandboxed Codex wrapper, not a reuse of
-`codex-reviewer.sh`. As a related, explicitly requested change, also lower the tester's default
-Claude effort pin from `xhigh` to `high` globally (frontmatter and Step 5 Workflow dispatch), to
-reduce cost on every tester dispatch regardless of backend.
+1. Give the `coder` subagent (`staging/plugin/agents/coder.md`) a selectable backend — today's
+   Claude coder, or Codex CLI — chosen once per Step 5 run, at the same per-dispatch-site moment
+   ADR-0193 established for `reviewer` and ADR-0194 already implements for `tester`.
+2. Unlike `tester` (ADR-0194 R2/R6, which deliberately does not expose a Codex model or effort),
+   expose a live choice of **both** Codex model (Astra / Sol) and reasoning effort every time the
+   gate fires, with no silent inheritance across a resumed Step 5 run.
+3. Preserve full behavioural parity with today's Claude `coder` wherever technically possible;
+   document every place parity is structurally impossible as a named, disclosed gap, never a
+   silent omission.
 
 ## Scope
 
-**In scope:**
-- A new script `codex-tester.sh` (mirrors `codex-reviewer.sh`'s structure and exit-code contract),
-  running `codex exec -s workspace-write -C <worktree>` to write test files and run the suite inside
-  a worktree it cannot write outside of.
-- A post-run `git diff --name-only` scope check inside `codex-tester.sh`: if Codex wrote to a
-  non-test file, exit 4 (new, in addition to the existing 0/2/3 contract).
-- A free-text `model_reasoning_effort` override on the codex branch (default: config.toml's current
-  value, `medium`), passed as `-c model_reasoning_effort=<value>` to `codex exec`. No `-m/--model`
-  override — the codex model itself stays whatever `~/.codex/config.toml` configures.
-- Two new `AskUserQuestion` gates, one at each Step 5 tester dispatch site
-  (`concept-to-code/references/step5-implementation.md:574-622` Workflow path, `:1769-1806`
-  Agent-tool batch path), offering `codex` / `claude-sonnet` (default) / `claude-opus` — model only,
-  no effort choice on the Claude branches (kept pinned, per the reviewer's own Step 5 precedent).
-- Two new manifest fields, `use_codex_tester` / `step5_codex_tester_asked`, additive under the
-  existing schema `1.4` (no version bump — same treatment ADR-0193 gave the reviewer's own fields),
-  new Invariants 26/27 in `manifest-validate.sh`, seeded in `manifest-init.sh`.
-- Lower the tester's default Claude effort pin from `xhigh` to `high`: `staging/plugin/agents/
-  tester.md` frontmatter, and the Step 5 Workflow dispatch site's explicit `effort: "xhigh"` pin
-  (`references/step5-implementation.md:574-622`). The Agent-tool batch path already omits `effort`
-  (the tool has no such parameter, ADR-0068 §D7) — unaffected.
-- `docs/architecture/ADR-0194-codex-tester-choice.md` moves from Proposed to Accepted once this
-  plan is approved and implemented, with any interview-driven refinements folded in.
+**In:**
+- New script `codex-coder.sh`, structurally mirroring `codex-tester.sh` (same flag shape, same
+  availability cascade via `codex doctor --json`, same exit 0/2/3 contract, plus a new exit 4 for
+  a scope violation).
+- `--model <astra|sol>` and `--effort <low|medium|high|xhigh|max|ultra>` flags on `codex-coder.sh`,
+  mapped to `-c model="gpt-6-astra"|"gpt-5.6-sol" -c model_reasoning_effort=<value>` on the
+  underlying `codex exec` call. Both required (no silent config.toml inheritance, unlike
+  `codex-tester.sh`'s deliberate choice in ADR-0194 R2) — the whole point of this feature is a live
+  choice, not an inherited one.
+- One `AskUserQuestion` gate immediately before Step 5's coder dispatch, covering both dispatch
+  paths (Workflow `pipeline()` and Agent-tool batch), offering `claude-sonnet` (default,
+  today's behaviour) / `codex`. On `codex`, two follow-up choices in the same gate turn: model
+  (`Astra` default / `Sol`) and effort (`medium` default / `low` / `high` / `xhigh` / `max` /
+  `ultra`).
+- **The gate re-fires on every Step 5 entry, fresh and resumed alike** — no manifest field is read
+  to skip it on a resumed run. This is a deliberate divergence from `codex-tester.sh`'s
+  `step5_codex_tester_asked` pattern (ADR-0194 R8's disclosed hole), because Stefano's own
+  requirement is a fresh choice every time, not an inherited one.
+- New manifest fields, additive under schema `1.4` (no version bump, same treatment ADR-0193/0194
+  gave their own fields): `use_codex_coder` (bool, default `false`, records the LAST choice made,
+  informational only — since the gate always re-asks, this field is never read to skip the ask),
+  `step5_codex_coder_model` (string enum `astra|sol`, nullable), `step5_codex_coder_effort` (string
+  enum, nullable). No `step5_codex_coder_asked` field — its entire purpose in the tester's design is
+  to skip a re-ask, which this feature explicitly rejects. New conditional Invariants 28 and 29 in
+  `manifest-validate.sh` (next free after 26/27).
+- Sandbox: `-s workspace-write -C <worktree>` (never read-only, never danger-full-access), exactly
+  ADR-0194's mitigation for the same read-write risk `tester` already carries.
+- Post-hoc scope-check, reusing ADR-0194 R4's method verbatim (union of `git diff --name-only`,
+  `git diff --name-only --cached`, `git ls-files --others --exclude-standard` against a baseline
+  captured immediately before `codex exec` runs). A path in the post-run set and not in the
+  baseline is flagged if it is: `.claude/test-cmd`, a test file not assigned to this coder's batch,
+  or a second (or more) new file under `.claude/agent-memory/coder/topics/`, or any touch to
+  `.claude/agent-memory/coder/MEMORY.md`. A `git commit` appearing in the worktree's log since the
+  baseline is checked separately (not a path-based check). Any violation is exit 4.
+- On exit 3 (DID-NOT-RUN) or exit 4 (scope violation): ask the user — fallback to Claude coder, or
+  halt (same never-silent principle as ADR-0187/0193/0194). Exit 4 additionally offers "accept the
+  write and continue" (same as `codex-tester.sh`'s exit 4 — the scope-check is a heuristic and can
+  false-positive), per Stefano's explicit choice to keep the tester's exact behaviour here rather
+  than a stricter always-halt policy.
+- Codex's final structured message (`--output-schema`) includes a per-hunk classification
+  (ADD/REMOVE/REPLACE/MODIFY) as a documented, weaker substitute for the Claude-side PATTERN
+  header, which cannot fire pre-edit on an external, non-interactive `codex exec` run. Verified
+  only post-hoc, never blocking.
+- Same "Workflow path drops the coder stage from `pipeline()` and runs `codex-coder.sh` in the
+  orchestrator's own live turn, sequentially" structural fix as ADR-0194 R5, for the same reason:
+  a Workflow script has no `AskUserQuestion` hook, so exit 3/4 resolution is impossible from inside
+  a running pipeline stage, and a coder that silently did not run is unlivable (arguably worse than
+  R5's tester case — nothing downstream has anything to review or commit).
+- Prompt embedded in `codex-coder.sh` hand-ported from `coder.md`'s Hard rules, Process, Quality
+  Standards, Output Format, Edge Cases (rule 6/12 duplication, declared exactly as
+  `codex-reviewer.sh`/`codex-tester.sh` already declare their own ports).
+- Explicit, named documentation of every parity gap (see Documented gaps below) inside the new ADR.
 
-**Out of scope:**
-- Any change to `codex-reviewer.sh` itself, or to the `reviewer` agent's own dispatch sites.
-- A structural/automated check that Codex's report actually contains all six `tester.md` Output
-  Format sections. Parity is a prompt instruction only (same trust level as `codex-reviewer.sh`'s
-  own report-shape parity with `reviewer.md` — no parser validates that either).
-- Exposing a Codex model override (`-m`) — only `model_reasoning_effort` is exposed, because the
-  set of valid Codex model names was not confirmed live (config.toml default: `gpt-5.6-terra`; a
-  `Sol`/`Terra`/`Luna` family exists per local docs but its capability ranking was not verified).
-- Any change to `review-triage-fix` or its own codex dispatch sites.
+**Out:**
+- The `tester` substitution (ADR-0194, done), the `reviewer` substitution (ADR-0187/0193, done).
+- `debugger`, `refactorer`, `researcher` backend choice (VCS-074 maps them, undecided, separate
+  future work).
+- Any change to `codex-reviewer.sh` or `codex-tester.sh` themselves.
+- Extraction of a shared `codex-common.sh` availability-cascade module (ADR-0194 R7 already defers
+  this across two scripts; a third copy is declared duplication, not solved here).
+- Wiring a new eslint MCP server for Codex, or authenticating Codex's own `context7` MCP entry —
+  see Documented gaps: MCP parity below, deferred as a named follow-up after this session's live
+  check found the eslint side unresolvable within scope and the context7 side needing an
+  authentication step outside this feature's boundary.
+
+## Documented gaps (parity is not fully achievable — named, not silent)
+
+1. **Three Claude-hook-enforced controls do not fire on Codex's internal edits.**
+   `pre-flight-pattern-enforce.sh`, `write-scope-enforce.sh`/`test-write-scope.sh`, and
+   `coder-memory-scope.sh` are Claude PreToolUse/PostToolUse hooks; a `codex exec` subprocess's own
+   edits are invisible to them (a Bash call to `codex exec` is one opaque tool call to Claude).
+   Mitigation: sandbox containment (`-s workspace-write -C <worktree>`, real enforcement, not an
+   instruction) plus the post-hoc scope-check above (a safety net, not a preventive block — the
+   write has already happened inside the isolated worktree by the time the check runs).
+2. **The PATTERN pre-flight classifier has no per-call equivalent.** Codex produces one final diff
+   from a non-interactive run, not a sequence of hookable Edit/Write tool calls. Downgraded to a
+   post-hoc, self-reported, non-blocking per-hunk classification in the structured output.
+3. **LSP has no Codex-side equivalent at all.** Live-checked this session: `codex mcp list` /
+   `codex exec --help` expose no hover/find-references capable server, and Claude's own `LSP` tool
+   is a native Claude Code capability, not an MCP server — there is nothing to wire into Codex's
+   own MCP mechanism (`codex mcp add`) even in principle. This is a hard gap, not a deferred one.
+4. **`eslint` MCP parity is unresolved, not confirmed either way.** Live-checked this session: no
+   `eslint` MCP server definition was found anywhere on this machine — not in `~/.claude/settings.json`,
+   not in any installed plugin's catalog entry, not in `~/.claude.json`, not in this project's
+   (nonexistent) `.mcp.json`. Coder.md's own tool list already tolerates this class of absence
+   (`coder.md` step 3: "If those tools are absent from your tool list (native macOS and Linux
+   builds, ADR-0038), skip this step without comment") — so a Codex coder without eslint access
+   degrades exactly the same way a Claude coder already does in an environment where eslint MCP is
+   not configured. Not a new failure mode; the existing graceful-degradation path already covers it.
+5. **`context7` parity is partially wired, unauthenticated, unverified live.** Live-checked this
+   session: `codex mcp list` already shows a `context7` remote MCP server pre-registered
+   (`https://mcp.context7.com/mcp`, `streamable_http`), status `enabled` but `Not logged in`.
+   Whether `codex exec` can actually reach it from inside a sandboxed, non-interactive run — and
+   whether an OAuth-style login flow is even possible in that context — was not tested live this
+   session (would require an interactive login step, out of scope for this feasibility check).
+   Recorded as a named follow-up, not solved here.
 
 ## Stack / architecture
 
-No new runtime dependency. `codex-tester.sh` is a Bash 3.2-clean script, deployed via
-`sync-to-claude.sh`'s `PAIRS` mapping (`staging/plugin/scripts/codex-tester.sh` →
-`~/.claude/hooks/codex-tester.sh`), same shape as `codex-reviewer.sh`.
+Same as `codex-tester.sh`/`codex-reviewer.sh`: Bash 3.2-clean script under `staging/plugin/scripts/`,
+deployed to `~/.claude/hooks/` via `sync-to-claude.sh`'s PAIRS mechanism (post-PR #575, symlink-write
+refusal now enforced there — verify the new script deploys through it cleanly, not around it).
+`codex exec -s workspace-write -C <worktree> -c model=<slug> -c model_reasoning_effort=<level>
+--output-schema <file> -o <file>`. Two dispatch-site edits in
+`staging/plugin/skills/concept-to-code/references/step5-implementation.md` (Workflow path ~line
+542/710, Agent-tool path ~line 1585/1596). Manifest schema changes in `manifest-init.sh` and
+`manifest-validate.sh`. New harness `codex-coder-dispatch-gate.test.sh`, parallel to
+`codex-tester-dispatch-gate.test.sh`, offline/hermetic against a stub `codex` on `PATH` — never a
+live Codex call in CI, matching this repo's convention.
 
-**Availability cascade** (mirrors `codex-reviewer.sh`): `command -v codex` → `codex doctor --json`
-→ `auth.credentials.status == "ok"` → not any of these, exit 3 (`DID-NOT-RUN`), never silent.
+## Data model
 
-**Sandbox**: `codex exec -s workspace-write -C <worktree-dir>` — verified live (`codex exec --help`,
-2026-09-06) that both flags exist and compose to scope writes to exactly the given directory. This
-reuses the worktree isolation the tester dispatch already establishes
-(`isolation: "worktree"` on the Workflow path; explicit worktree write-path briefing on the
-Agent-tool batch path) rather than inventing a second isolation boundary.
+Manifest additions (schema 1.4, additive):
+- `use_codex_coder: false` — last choice made, informational, never read to skip the gate.
+- `step5_codex_coder_model: null` — `"astra"` or `"sol"` after a `codex` choice; null otherwise.
+- `step5_codex_coder_effort: null` — one of `low|medium|high|xhigh|max|ultra`; null otherwise.
 
-**Post-run scope check** (new, no reviewer-side precedent): after `codex exec` returns 0, run
-`git -C <worktree> diff --name-only` against the pre-dispatch baseline and classify each changed
-path by the project's own test-file convention (same file-name/path heuristic `tester.md`'s own
-framework detection already uses per stack). Any non-test-file change → exit 4, `--out` still
-written (partial), caller must surface it and never treat exit 4 as success.
+## API / interfaces
 
-## Data model (manifest, schema 1.4, additive)
-
-```yaml
-use_codex_tester: false          # bool, default false — mirrors use_codex_review
-step5_codex_tester_asked: false  # bool, default false — mirrors step5_codex_review_asked;
-                                  # distinguishes "never asked" from "asked, declined" (both leave
-                                  # use_codex_tester=false), same reasoning as ADR-0193's own fix
-                                  # for the equivalent reviewer-side bug.
 ```
+codex-coder.sh --worktree <dir> --brief <file> --out <file> --model <astra|sol> --effort <level>
+```
+Exit codes: `0` success, `2` bad invocation, `3` DID-NOT-RUN (named reason on stderr), `4` scope
+violation (touched path(s) named on stderr).
 
-`manifest-validate.sh` — new conditional Invariants (numbered after the existing 25):
-- **Invariant 26**: if `use_codex_tester` present, must be `true`/`false`.
-- **Invariant 27**: if `step5_codex_tester_asked` present, must be `true`/`false`.
+## UI flows
 
-`manifest-init.sh` seeds both to `false` alongside the existing `use_codex_review`/
-`step5_codex_review_asked` lines.
+One `AskUserQuestion` gate before Step 5's coder dispatch (both paths), options `claude-sonnet`
+(default) / `codex`; on `codex`, two follow-up selections in the same turn (model, default Astra;
+effort, default medium). Re-presented on every Step 5 entry, fresh or resumed, with no
+manifest-driven skip.
 
-## Dispatch flow (both Step 5 sites)
-
-1. Immediately before the tester dispatch, `AskUserQuestion`: `codex` / `claude-sonnet` (default) /
-   `claude-opus`. Skipped under `--autopilot`, same disclosed instruction-not-enforcement limit as
-   the reviewer's own Step 5 ask (rule 16). Writes the answer via `manifest-set-flag.sh` and sets
-   `step5_codex_tester_asked: true` regardless of the answer (so it never re-fires after a "no",
-   same fix ADR-0193 already made for the reviewer).
-2. **`codex` branch**: dispatch `~/.claude/hooks/codex-tester.sh --worktree <dir> --brief <file>
-   --out <file> [--effort <value>]`, brief content identical to what the Claude `tester` receives
-   (SPEC requirement IDs / Success Criteria / plan task text, never implementation files — ADR-0049
-   §D1, ADR-0088). Branch on exit code:
-   - `0` → read `--out` as the tester's report, exactly as if the Claude `tester` had produced it.
-   - `2` → bad invocation, report the stderr line, halt this dispatch.
-   - `3` → DID-NOT-RUN. `AskUserQuestion`: fallback to Claude `tester`, or halt. Never silent.
-   - `4` → wrote outside test scope. Report the offending paths from `--out`, `AskUserQuestion`:
-     fallback to Claude `tester` (recommended), or accept the write and continue, or halt.
-3. **`claude-sonnet`/`claude-opus` branch**: dispatch `tester` at that `model:`, `effort: "high"` on
-   the Workflow path (post-lowering default; see below), no `effort` on the Agent-tool path
-   (unchanged, ADR-0068 §D7).
-
-## Effort pin change (tester default, both backends)
-
-- `staging/plugin/agents/tester.md` frontmatter: `effort: xhigh` → `effort: high`.
-- `references/step5-implementation.md:574-622` (Workflow path) explicit pin: `effort: "xhigh"` →
-  `effort: "high"`.
-- Agent-tool batch path (`:1769-1806`): unaffected, already omits `effort`.
-- This applies unconditionally, independent of which Step 5 dispatch-site ask above is answered —
-  it is a default-cost change, not part of the codex/claude choice itself.
+On Codex exit 3 or 4: a second `AskUserQuestion` — fallback to Claude coder, or halt (exit 4 also
+offers "accept and continue").
 
 ## Edge cases
 
-- **Codex unavailable (exit 3) mid-chain, after already writing some files in a prior attempt on
-  the same worktree**: not possible in this design — `codex-tester.sh`'s availability cascade runs
-  before any `codex exec` invocation, so exit 3 is always a no-op with respect to the filesystem.
-- **Codex writes a file that is ambiguous between test and production** (e.g. a shared fixture
-  file): classified by the same heuristic `tester.md`'s own framework detection already uses; a
-  false positive here is a caller-visible exit 4, not a silent pass — the operator decides via the
-  fallback `AskUserQuestion` in step 2 above.
-- **`model_reasoning_effort` override rejected by Codex** (invalid value): `codex exec` itself fails
-  non-zero; `codex-tester.sh` propagates this as exit 3 or 2 per its own availability-cascade /
-  bad-invocation classification (not a new state) — the failure is visible, not silently ignored.
-- **Autopilot run**: both new Step 5 asks skipped, `use_codex_tester` stays `false`, `tester`
-  dispatches on Claude exactly as it does today (minus the effort-pin lowering, which applies
-  unconditionally).
+- Codex CLI absent, unauthenticated, or rate-limited → exit 3, same availability cascade as
+  `codex-reviewer.sh`/`codex-tester.sh`.
+- Zero files touched by Codex → exit 0 with a distinct `NOTE:` on stderr (ADR-0194 R4's precedent:
+  "wrote nothing" and "wrote only assigned files" are different facts).
+- A resumed Step 5 run with `manifest.use_codex_coder` already set from a prior partial run → the
+  gate still re-fires (R-08); the stale value is display-only context, never authoritative.
+- `--model`/`--effort` both required on the `codex` branch — no default silently governs if the
+  gate is somehow bypassed; a caller invoking `codex-coder.sh` without them exits 2.
 
 ## Success criteria
 
-- [ ] R-01 — A new script `staging/plugin/scripts/codex-tester.sh` exists, deployable via
-      `sync-to-claude.sh`'s `PAIRS` mapping to `~/.claude/hooks/codex-tester.sh`.
-- [ ] R-02 — `codex-tester.sh` runs `codex exec -s workspace-write -C <worktree>`, never
-      `-s read-only` and never `danger-full-access`.
-- [ ] R-03 — `codex-tester.sh` implements the same availability cascade as `codex-reviewer.sh`
-      (codex CLI present, `codex doctor --json` auth check), exiting 3 with a `DID-NOT-RUN` stderr
-      line on any failure of that cascade.
-- [ ] R-04 — `codex-tester.sh` exits 0 on success with the report written to `--out` in
-      `tester.md`'s six-field Output Format shape (no-test: this is a prompt-authoring requirement
-      verified by reading the script's embedded prompt text, not something a harness assertion can
-      mechanically confirm without inventing an unwanted structural parser).
-- [ ] R-05 — `codex-tester.sh` runs a post-run `git diff --name-only` scope check and exits 4 with
-      the offending file paths on stderr when a non-test file was modified.
-- [ ] R-06 — `codex-tester.sh` accepts an optional `--effort <value>` flag, passed through as
-      `-c model_reasoning_effort=<value>` to `codex exec`; omitted entirely when not provided (uses
-      `~/.codex/config.toml`'s own default).
-- [ ] R-07 — `concept-to-code/references/step5-implementation.md`'s Workflow-path tester dispatch
-      (currently lines 574-622) is preceded by an `AskUserQuestion` offering `codex` /
-      `claude-sonnet` (default) / `claude-opus`, skipped under `--autopilot`.
-- [ ] R-08 — `concept-to-code/references/step5-implementation.md`'s Agent-tool batch-path tester
-      dispatch (currently lines 1769-1806) is preceded by the same `AskUserQuestion` as R-07.
-- [ ] R-09 — On the `codex` branch at either site, exit 0 from `codex-tester.sh` is consumed as the
-      tester's report; exit 2 halts that dispatch and reports stderr; exit 3 triggers a
-      fallback-or-halt `AskUserQuestion`, never a silent fallback; exit 4 triggers a
-      fallback-accept-or-halt `AskUserQuestion` naming the offending files.
-- [ ] R-10 — `manifest-init.sh` seeds `use_codex_tester: false` and
-      `step5_codex_tester_asked: false`.
-- [ ] R-11 — `manifest-validate.sh` gains conditional Invariants 26 and 27 validating those two
-      fields are boolean when present, schema stays `1.4` (no version bump).
-- [ ] R-12 — Each Step 5 ask sets `step5_codex_tester_asked: true` unconditionally once it fires,
-      regardless of the answer chosen, so it never re-prompts on a later run of the same manifest
-      after a decline.
-- [ ] R-13 — `staging/plugin/agents/tester.md` frontmatter `effort:` changes from `xhigh` to
-      `high`.
-- [ ] R-14 — `concept-to-code/references/step5-implementation.md`'s Workflow-path dispatch pin
-      changes from `effort: "xhigh"` to `effort: "high"`; the Agent-tool batch path is left
-      unchanged (it already omits `effort`).
-- [ ] R-15 — `docs/architecture/ADR-0194-codex-tester-choice.md` is updated to Accepted status,
-      reflecting any interview-driven refinements above (workspace-write sandbox confirmed live,
-      effort-override mechanism, effort-pin lowering) that were not yet settled when it was
-      drafted as Proposed (no-test: this is a documentation-state requirement, not something a
-      test can assert without inventing a doc-content parser).
+- [ ] R-01 — A single `AskUserQuestion` gate, at the per-dispatch-site moment (before Step 5's
+      coder dispatch, both Workflow and Agent-tool paths), offers `claude-sonnet` (default) /
+      `codex`.
+- [ ] R-02 — On `codex`, the same gate turn additionally asks for model (`astra` default / `sol`)
+      and effort (`medium` default / `low`/`high`/`xhigh`/`max`/`ultra`).
+- [ ] R-03 — The gate re-fires on every Step 5 entry, fresh or resumed, with no manifest field
+      causing it to be silently skipped.
+- [ ] R-04 — `codex-coder.sh` exists, structurally mirrors `codex-tester.sh`'s flag shape and
+      availability cascade, and requires `--model`/`--effort` explicitly (no config.toml
+      inheritance).
+- [ ] R-05 — `codex-coder.sh` runs `codex exec -s workspace-write -C <worktree>`, never read-only,
+      never danger-full-access.
+- [ ] R-06 — A post-run scope-check (union of `git diff --name-only`, `--cached`, and
+      `git ls-files --others --exclude-standard` against a pre-run baseline) flags: a touch to
+      `.claude/test-cmd`, a touch to an unassigned test file, more than one new file under
+      `.claude/agent-memory/coder/topics/`, a touch to `.claude/agent-memory/coder/MEMORY.md`, or a
+      `git commit` in the worktree's log since baseline — any of these is exit 4.
+- [ ] R-07 — On exit 3 or 4, the user is asked to fall back to Claude or halt; exit 4 additionally
+      offers "accept and continue". Never a silent fallback.
+- [ ] R-08 — Zero files touched by Codex is exit 0 with a distinct `NOTE:` on stderr, never
+      conflated with a scope violation.
+- [ ] R-09 — On the `codex` branch, the Workflow path drops the coder stage from `pipeline()` and
+      `codex-coder.sh` runs in the orchestrator's own live turn, sequentially, exactly as ADR-0194
+      R5 already does for `tester`.
+- [ ] R-10 — New manifest fields (`use_codex_coder`, `step5_codex_coder_model`,
+      `step5_codex_coder_effort`) are additive under schema `1.4`, seeded in `manifest-init.sh`,
+      validated by new conditional Invariants 28/29 in `manifest-validate.sh`.
+- [ ] R-11 — The ADR names, explicitly, the five documented gaps above (hook-enforcement,
+      PATTERN classifier, LSP, eslint, context7) as disclosed limitations, never silently dropped
+      (no-test: this is a documentation requirement the ADR's own text satisfies, not something a
+      test asserts).
+- [ ] R-12 — A new offline/hermetic test harness (`codex-coder-dispatch-gate.test.sh`) covers the
+      exit 0/2/3/4 contract, the scope-check's four violation classes plus the zero-touch case, the
+      manifest field trio, and the exactly-two dispatch sites that point back at the single gate —
+      against a stub `codex` on `PATH`, never a live Codex call.
+- [ ] R-13 — `codex-coder.sh` deploys cleanly through `sync-to-claude.sh`'s PAIRS mechanism,
+      confirmed not to trip the post-PR #575 symlink-write refusal (no-test: a one-time deployment
+      verification, not an ongoing assertion).
