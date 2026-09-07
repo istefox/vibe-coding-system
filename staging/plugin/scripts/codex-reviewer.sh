@@ -20,8 +20,16 @@
 #            mirrors reviewer.md's own "no detectable changes" edge case (exit 0, report says so).
 #
 # TWO MODES, matching the two shapes the Claude `reviewer` agent is used in today:
-#   --mode review   --diff-scope uncommitted|base:<ref>|commit:<sha> [--carry-forward <file>] --out <file>
+#   --mode review   --diff-scope uncommitted|base:<ref>|commit:<sha> [--carry-forward <file>] [--focus security] --out <file>
 #   --mode diagnose --finding "<text>" --out <file>
+#
+# --focus security (ADR-0195 D3, review mode only, enumerated — no free-text focus is accepted):
+# swaps the fixed five-item checklist for a security-only one naming the same seven vulnerability
+# classes `security-audit/SKILL.md` Step 2's brief names verbatim (injection, auth bypass,
+# hardcoded secrets, path traversal, insecure deserialization, unguarded URL construction, missing
+# input validation) — everything else (--output-schema, the BLOCKER/MAJOR/MINOR/NIT taxonomy, the
+# confidence filter, the availability cascade, the exit-code contract, --carry-forward) is
+# untouched. Absent --focus, output is byte-identical to before this flag existed.
 #
 # PROMPT DUPLICATION, DECLARED (rule 6/12). The review-mode prompt below is hand-ported from
 # `staging/plugin/agents/reviewer.md`'s Quality Standards / Confidence Filter / Output Format /
@@ -48,6 +56,7 @@ DIFF_SCOPE=""
 CARRY_FORWARD=""
 FINDING=""
 OUT=""
+FOCUS=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -55,6 +64,7 @@ while [ "$#" -gt 0 ]; do
     --diff-scope) DIFF_SCOPE="${2:-}"; shift 2 ;;
     --carry-forward) CARRY_FORWARD="${2:-}"; shift 2 ;;
     --finding) FINDING="${2:-}"; shift 2 ;;
+    --focus) FOCUS="${2:-}"; shift 2 ;;
     --out) OUT="${2:-}"; shift 2 ;;
     *) echo "codex-reviewer: unknown argument '$1'" >&2; exit 2 ;;
   esac
@@ -79,11 +89,21 @@ if [ "$MODE" = "review" ]; then
     echo "codex-reviewer: --carry-forward file not readable: $CARRY_FORWARD" >&2
     exit 2
   fi
+  case "$FOCUS" in
+    ""|security) ;;
+    *) echo "codex-reviewer: --focus must be 'security' (got '$FOCUS')" >&2; exit 2 ;;
+  esac
 fi
 
-if [ "$MODE" = "diagnose" ] && [ -z "$FINDING" ]; then
-  echo "codex-reviewer: --finding is required in diagnose mode" >&2
-  exit 2
+if [ "$MODE" = "diagnose" ]; then
+  if [ -z "$FINDING" ]; then
+    echo "codex-reviewer: --finding is required in diagnose mode" >&2
+    exit 2
+  fi
+  if [ -n "$FOCUS" ]; then
+    echo "codex-reviewer: --focus is only valid with --mode review" >&2
+    exit 2
+  fi
 fi
 
 # --- Availability cascade (steps 1-3), never silent (rule 4) ------------------------------------
@@ -196,18 +216,42 @@ itself has genuinely changed.
 $(cat "$CARRY_FORWARD")"
   fi
 
-  # Hand-ported from reviewer.md (see header comment) — rule 6/12 cross-reference.
-  cat > "$PROMPT_FILE" <<PROMPT_EOF
-You are a senior code reviewer. Review the diff below for security, correctness, performance, and
-consistency. You are reporting only — you make no changes.
-
-Checklist:
+  # Hand-ported from reviewer.md (see header comment) — rule 6/12 cross-reference. The security
+  # checklist below is hand-ported the same way from `security-audit/SKILL.md` Step 2's brief
+  # (ADR-0195 D3) — its seven vulnerability classes are named verbatim so a harness can pin the
+  # two lists against each other.
+  if [ "$FOCUS" = "security" ]; then
+    REVIEW_INTRO="You are a senior security reviewer. Review the diff below for security findings
+only: injection, auth bypass, hardcoded secrets, path traversal, insecure deserialization,
+unguarded URL construction, missing input validation. Ignore style, structure, and performance —
+those are out of scope for this review. You are reporting only — you make no changes."
+    CHECKLIST="Checklist (security only):
+- Injection: SQL/command/template/log injection, unsanitized input reaching an interpreter, shell,
+  or query.
+- Auth bypass: missing or incorrect authentication/authorization checks, privilege escalation.
+- Hardcoded secrets: API keys, tokens, passwords, credentials committed to source.
+- Path traversal: unsanitized file paths, directory-escape sequences, unchecked user-controlled
+  paths.
+- Insecure deserialization: untrusted data deserialized into objects without validation.
+- Unguarded URL construction: user input concatenated into URLs without validation or encoding,
+  SSRF-prone constructs.
+- Missing input validation: unchecked or untyped external input reaching a sensitive operation."
+  else
+    REVIEW_INTRO="You are a senior code reviewer. Review the diff below for security, correctness, performance, and
+consistency. You are reporting only — you make no changes."
+    CHECKLIST="Checklist:
 - Security: input validation, injection, hardcoded secrets, auth/authz flow.
 - Correctness: logic bugs, edge cases, error handling, race conditions.
 - Performance: N+1 queries, needless loops, blocking calls on async paths.
 - Consistency: matches existing patterns in this repository; no unjustified deviation from its
   own documented conventions or ADRs.
-- Tests: coverage of the changed behavior; missing edge-case tests.
+- Tests: coverage of the changed behavior; missing edge-case tests."
+  fi
+
+  cat > "$PROMPT_FILE" <<PROMPT_EOF
+$REVIEW_INTRO
+
+$CHECKLIST
 
 Confidence filter: rate every candidate finding 0-100 before including it.
 - 0-25: likely false positive or pre-existing issue unrelated to this diff — DO NOT report.
@@ -254,11 +298,24 @@ fi
 # --- Execute --------------------------------------------------------------------------------------
 
 CODEX_STDERR=$(mktemp)
-# Cost pin (2026-09-05): review dispatch is automated and high-volume, unlike Stefano's
-# interactive Codex sessions — it does not need his global config's top-tier
-# model/effort (gpt-5.6-sol, xhigh). Pinned here, not in ~/.codex/config.toml, so the
-# interactive default is untouched. -m/-c override the global config for this call only.
-codex exec -m gpt-5.6-terra -c model_reasoning_effort=medium \
+if [ "$FOCUS" = "security" ]; then
+  # ADR-0195 D3 point 3: --focus security does not inherit the high-volume cost pin below —
+  # this is the lowest-volume, highest-miss-cost review site in the system (security-audit is
+  # on-demand only, wired into no chain). gpt-5.6-sol is the config's own baseline model
+  # (`~/.codex/config.toml`); effort is elevated to `high`, not `xhigh` — Stefano's explicit cap
+  # on this pin (2026-09-06) — since `xhigh` was confirmed to work but judged too expensive for
+  # this dispatch.
+  CODEX_MODEL="gpt-5.6-sol"
+  CODEX_EFFORT="high"
+else
+  # Cost pin (2026-09-05): review dispatch is automated and high-volume, unlike Stefano's
+  # interactive Codex sessions — it does not need his global config's top-tier
+  # model/effort (gpt-5.6-sol, xhigh). Pinned here, not in ~/.codex/config.toml, so the
+  # interactive default is untouched. -m/-c override the global config for this call only.
+  CODEX_MODEL="gpt-5.6-terra"
+  CODEX_EFFORT="medium"
+fi
+codex exec -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" \
   --sandbox read-only --output-schema "$SCHEMA_FILE" -o "$RAW_OUT" \
   "$(cat "$PROMPT_FILE")" >/dev/null 2>"$CODEX_STDERR"
 CODEX_RC=$?
@@ -291,7 +348,7 @@ fi
 # --- Format the schema JSON into reviewer.md's exact markdown shape ------------------------------
 
 if [ "$MODE" = "review" ]; then
-  RAW_OUT="$RAW_OUT" CR_OUT="$OUT" python3 -c "
+  RAW_OUT="$RAW_OUT" CR_OUT="$OUT" CR_MODEL="$CODEX_MODEL" CR_EFFORT="$CODEX_EFFORT" python3 -c "
 import json, os, sys
 
 path = os.environ['RAW_OUT']
@@ -342,6 +399,11 @@ if sampled:
     lines.append('')
 
 lines.append('**Verdict:** %s' % verdict)
+
+# ADR-0195 D5: producer-emitted provenance, not consumer-recalled — a caller copies this line
+# verbatim into its own report rather than restating what it thinks it pinned.
+lines.append('')
+lines.append('_Reviewed by: \`%s\` (effort: %s)_' % (os.environ['CR_MODEL'], os.environ['CR_EFFORT']))
 
 with open(os.environ['CR_OUT'], 'w') as out:
     out.write('\n'.join(lines) + '\n')

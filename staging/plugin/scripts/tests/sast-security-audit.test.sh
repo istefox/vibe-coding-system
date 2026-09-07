@@ -323,6 +323,34 @@ else
   bad "SG5: Step 2 does not cross-reference ADR-0049"
 fi
 
+# plant: SG6 | plugin/skills/security-audit/SKILL.md | ADR-0195 D2 | ADR REMOVED
+if grep -qF 'ADR-0195 D2' "$STEP2"; then
+  ok "SG6: Step 2 offers a Codex-vs-Claude backend ask, cross-referencing ADR-0195 D2"
+else
+  bad "SG6: Step 2 does not offer a Codex-vs-Claude backend ask (ADR-0195 D2)"
+fi
+
+# plant: SG7 | plugin/skills/security-audit/SKILL.md | --focus security | --focus none
+if grep -qF -- '--focus security' "$STEP2"; then
+  ok "SG7: Step 2's Codex dispatch uses the --focus security flag (ADR-0195 D3)"
+else
+  bad "SG7: Step 2's Codex dispatch does not pass --focus security"
+fi
+
+# plant: SG8 | plugin/skills/security-audit/SKILL.md | invisible to Codex on this scope | visible to Codex on this scope
+if grep -qF 'invisible to Codex on this scope' "$STEP2"; then
+  ok "SG8: Step 2 surfaces the untracked-file blind spot before the backend ask (ADR-0195 D4)"
+else
+  bad "SG8: Step 2 does not surface the untracked-file blind spot"
+fi
+
+# plant: SG9 | plugin/skills/security-audit/SKILL.md | never silently fall back to Claude | may silently fall back to Claude
+if grep -qF 'never silently fall back to Claude' "$STEP2"; then
+  ok "SG9: Step 2's Codex-unavailable path never silently falls back to Claude"
+else
+  bad "SG9: Step 2 does not state the never-silent-fallback convention"
+fi
+
 # ==================================================================================================
 # SH. Registration in both CI registries, and a PAIRS entry for the skill.
 # ==================================================================================================
