@@ -30,7 +30,6 @@ CONDUCTOR_REF="$STAGING/plugin/skills/project-conductor/references/steps-4-7-cha
 H16_SCRIPT="$STAGING/plugin/skills/project-conductor/scripts/h16-direction-check.sh"
 SYNCSH="$STAGING/sync-to-claude.sh"
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
-CI_YML="$REPO/.github/workflows/ci.yml"
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
@@ -567,8 +566,8 @@ else
 fi
 
 # ====================================================================================
-# HIE. Registration in both CI registries (ci.yml glob automatic; docs-ci.yml explicit named
-# list needs a manual append after external-dependency-gate) plus PAIRS for the new script.
+# HIE. Registration in docs-ci.yml (explicit named list needs a manual append after
+# external-dependency-gate, now the only CI registry per ADR-0193) plus PAIRS for the new script.
 # ====================================================================================
 if [ -f "$DOCSCI" ]; then
   ok "HIE0a: docs-ci.yml is where this harness expects it"
@@ -593,11 +592,9 @@ else
   bad "HIE1b: human-gate-coverage is not positioned right after external-dependency-gate in docs-ci.yml's list"
 fi
 
-if grep -q 'staging/plugin/scripts/tests/\*\.test\.sh' "$CI_YML" 2>/dev/null; then
-  ok "HIE2: ci.yml discovers *.test.sh via a glob (automatic registration, no per-file edit needed)"
-else
-  bad "HIE2: ci.yml does not appear to glob staging/plugin/scripts/tests/*.test.sh — check the workflow"
-fi
+# HIE2 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (HIE1/HIE1b) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 awk '/^PAIRS="$/{f=1; next} /^"$/{f=0} f' "$SYNCSH" > "$TMP/pairs"
 if grep -qxF 'plugin/skills/project-conductor/scripts/h16-direction-check.sh|skills/project-conductor/scripts/h16-direction-check.sh' "$TMP/pairs"; then

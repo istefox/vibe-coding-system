@@ -219,12 +219,9 @@ if grep 'for t in ' "$DOCSCI" 2>/dev/null | head -1 | grep -qE '[[:space:]]triag
 else
   bad "T13: triage-state-gitignore is not in docs-ci.yml's explicit harness list — a new test needs BOTH registries"
 fi
-CI_YML="$REPO/.github/workflows/ci.yml"
-if [ -f "$CI_YML" ] && grep -qE 'tests/\*\.test\.sh|scripts/tests' "$CI_YML"; then
-  ok "T14: ci.yml discovers *.test.sh via a glob (automatic registration)"
-else
-  bad "T14: ci.yml does not glob staging/plugin/scripts/tests/*.test.sh"
-fi
+# T14 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (T13) is now the only harness runner, and pairs-completeness.test.sh's
+# CI3 asserts exactly one workflow executes the suite.
 
 # ==================================================================================================
 # T15. This repository's own .gitignore holds exactly ONE .triage-fix-last covering rule, not two.

@@ -11,8 +11,12 @@
 - `staging/plugin/skills/*/tests/*` (each skill's own integration harness) and any file matching
   `<name>-check.sh` one level below `plugin/scripts/` (not `*.test.sh`) are deliberately outside
   both `docs-ci.yml` and `.claude/test-cmd` — `$HOME`-coupled by design or exempt from PAIRS.
-- `pairs-completeness.test.sh` covers only `plugin/agents/*.md`, `user/rules/*.md`,
-  `plugin/skills/*/SKILL.md` — a new `plugin/scripts/*.sh` needs no PAIRS entry.
+- `pairs-completeness.test.sh` runs `check_complete` on **five** populations, re-derived 2026-09-06:
+  `plugin/agents/*.md`, `user/rules/*.md`, `plugin/skills/*/SKILL.md`,
+  `plugin/skills/*/references/*.md`, and `plugin/scripts/*.sh` (this last one with a five-entry
+  exemption file for probe-only tooling). **A new `plugin/scripts/*.sh` DOES need a PAIRS entry** —
+  an earlier version of this line said the opposite and was wrong. `check_exemptions_live` also
+  asserts each exemption still has a subject, so an exemption cannot outlive its file.
 - `docs/architecture/**` IS linted (`markdownlint-cli2`, `default: false` + 14 rules) —
   `docs/superpowers/**` is NOT (ignore list + links-job exclude), so a plan file is unlinted but an
   ADR is not. Run `npx markdownlint-cli2 <adr>` before returning: MD018 (line starting `#<digits>`)

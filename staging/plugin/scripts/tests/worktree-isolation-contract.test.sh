@@ -186,7 +186,6 @@ fi
 # CI registration (R-19): both registries.
 # ==============================================================================================
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
-CIYML="$REPO/.github/workflows/ci.yml"
 
 DOCSCI_LOOP=$(grep 'for t in ' "$DOCSCI" 2>/dev/null | head -1)
 if printf '%s' "$DOCSCI_LOOP" | grep -qE '[[:space:]]worktree-isolation-contract[[:space:];]'; then
@@ -195,11 +194,9 @@ else
   bad "CI1: worktree-isolation-contract is not in docs-ci.yml's explicit harness list"
 fi
 
-if grep -qF 'staging/plugin/scripts/tests/*.test.sh' "$CIYML" 2>/dev/null; then
-  ok "CI2: ci.yml still runs the automatic glob over staging/plugin/scripts/tests/*.test.sh (forward guard — no manual edit needed there)"
-else
-  bad "CI2: ci.yml no longer uses the automatic *.test.sh glob"
-fi
+# CI2 removed (ADR-0193): ci.yml, the second registry this pinned, was deleted — docs-ci.yml's
+# shell-tests list above (CI1) is now the only harness runner, and pairs-completeness.test.sh's
+# own CI3 asserts exactly one workflow executes the suite.
 
 # ==============================================================================================
 # Section C (R-02) — the mechanism is declared. Parsed with python3 -c, NEVER grep: a grep for

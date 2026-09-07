@@ -112,6 +112,26 @@
 # RS8b report ZERO orphans in either direction (verified by hand: the plant that mutates
 # 176-worktree-isolation-contract.spec.md's R-01 row still turns RS7 red through the new call path).
 # 0 OF 130 ROWS CHANGED — no verdict, class or reason column moved, and no row was added or removed.
+#
+# 2026-09-06 — REGENERATED, drift caused by ADR-0194's own new test file (issue #312 chain,
+# staging/plugin/scripts/tests/codex-tester-dispatch-gate.test.sh). This file carries no bare
+# `#<issue>` token (ADR-0194 has no tracked GitHub issue), so ADR-0157's classifier reads it as
+# UNCLAIMED — folded into every spec's unscoped-question population, exactly the class ADR-0157
+# exists to close. Its own R-07..R-14 assertion labels numerically collide with 15 rows across 7
+# unrelated specs that ADR-0157's 2026-08-19 regeneration had already moved to UNCOVERED for the
+# identical reason (same rows, opposite direction this time — an unclaimed file re-admitting the
+# collision ADR-0157 had excluded). RESULT: 15 of 130 rows move UNCOVERED -> UNSCOPED; ZERO
+# row-count change; ZERO COVERED row moved either way (spec-coverage.sh's own header: this axis
+# carries no false-COVERED risk, both states mean "not proven"). PER-ROW ACCOUNTING is appended to
+# each row's own reason column, not written here (CLAUDE.md rule 14 — record it forward at the
+# row, do not restate a per-row log here that could drift from the rows themselves):
+#   176-worktree-isolation-contract  R-13
+#   222-vendor-deployed-only-skills  R-08, R-10
+#   365-scope-and-bound-the-autopilot-run  R-09
+#   394-skill-fences-rely-on-word-splitting  R-09, R-12
+#   404-stop-gate-trigger-granularity  R-14
+#   410-order-the-manifest-completed-transit  R-08, R-14
+#   project-tasks-vendored-bilateral-ledger  R-08, R-10, R-11, R-12, R-13, R-14
 # See ADR-0166 §M1 for the correction to SPEC.md's R-08 parenthetical ("16 live pairs, 16 baseline
 # rows"), which understated the row count by an order of magnitude: 16 is the pair count, not the
 # row count.
@@ -211,6 +231,56 @@
 # explicitly (`case "$_bn" in \#*) continue ;; esac`) and neither RS7 nor RS8a reads this file's
 # lines directly (they iterate the LIVE side and probe the baseline only for a specific (bn, id)
 # pair), so a comment line cannot be mistaken for a stray (bn, id) row on either check.
+#
+# 2026-09-06 — CORRECTION (ADR-0193, PR #566, emdash/few-bags-taste-p9p5l). PR #566 added a new
+# test file, codex-audit-mode.test.sh, whose comment lines describe assertions CX20-CX27 with bare
+# "R-05" through "R-11" mentions (ADR-0193's own SPEC.md vocabulary) — UNCLAIMED (no #<n> token),
+# the same population ADR-0138 always allowed a stranger's mention to sit in (rule 18's disclosed
+# limitation) and the same mechanism VCS-035's 2026-08-24 correction above already exercised once.
+#
+# EIGHT ROWS FLIP CLEANLY, matching ADR-0157's/VCS-035's own established direction (a stricter
+# remedy, no coverage gained or lost): each id's only in-population mention was previously a
+# FOREIGN feature's identically-numbered R-NN with no unclaimed mention to widen the population
+# into UNSCOPED; codex-audit-mode.test.sh's new unclaimed R-08/R-09/R-10/R-11 comment mentions now
+# join that population, so "no candidate test anywhere" (UNCOVERED) becomes "a candidate exists,
+# but this feature's plan doesn't name it" (UNSCOPED) — a stricter remedy, not new coverage.
+#
+# RE-DERIVED via the test's own RS_PAIRS/RS_LIVE derivation (CLAUDE.md rule 13, not hand-invented):
+# 23 (spec, plan) pairs, 201 live rows — unchanged counts, only 8 of the 201 verdict tokens move.
+#
+# PER-ROW ACCOUNTING (all eight divergent rows, of 201 live pairs — RS7's own count):
+#   222-vendor-deployed-only-skills            R-08 (UNCOVERED -> UNSCOPED)
+#   222-vendor-deployed-only-skills            R-10 (UNCOVERED -> UNSCOPED)
+#   365-scope-and-bound-the-autopilot-run      R-09 (UNCOVERED -> UNSCOPED)
+#   394-skill-fences-rely-on-word-splitting    R-09 (UNCOVERED -> UNSCOPED)
+#   410-order-the-manifest-completed-transit   R-08 (UNCOVERED -> UNSCOPED)
+#   project-tasks-vendored-bilateral-ledger    R-08 (UNCOVERED -> UNSCOPED)
+#   project-tasks-vendored-bilateral-ledger    R-10 (UNCOVERED -> UNSCOPED)
+#   project-tasks-vendored-bilateral-ledger    R-11 (UNCOVERED -> UNSCOPED)
+#
+# The five rows already carrying an ADR-0157 (issue #487) annotation KEEP that class and reason
+# text; this note is appended to it, not replacing it, per this file's own established convention
+# (see the 2026-08-24 VCS-035 block above, "the ADR-0157 note is appended to it rather than
+# replacing it"). The three project-tasks rows had no class/reason columns (pure --bump appends,
+# 3-column form) and gain one here since the verdict is now UNSCOPED, not UNCOVERED.
+#
+# NO ARCHIVED SPEC IS EDITED FOR THIS FILE (CLAUDE.md rule 14, ADR-0138 §D5): this is a new record
+# about the corpus, written forward.
+#
+# 2026-09-07 — MERGE RECONCILIATION (PR #566 into main, after PR #569/ADR-0194 landed on main
+# first). Both the ADR-0193 correction above and the ADR-0194 correction (2026-09-06 block earlier
+# in this header) were authored independently against the same pre-correction baseline and touch
+# an overlapping row set (222/R-08, 222/R-10, 365/R-09, 394/R-09, 410/R-08, and three of the six
+# project-tasks rows: R-08, R-10, R-11) — each of the two new test files (codex-audit-mode.test.sh,
+# codex-tester-dispatch-gate.test.sh) independently contributes an unclaimed R-NN mention to the
+# same population, both moving the same rows the same direction (UNCOVERED -> UNSCOPED). Neither
+# correction is reverted; both are kept, chained onto the same rows in the reason column, per this
+# file's own established append-not-replace convention. Re-derived post-merge via
+# spec-coverage-baseline-rows.sh --rows for the five affected specs (CLAUDE.md rule 13): every
+# verdict token below is confirmed live UNSCOPED for these ids, matching both corrections' claim.
+# The project-tasks R-12/R-13/R-14 rows are ADR-0194-only (codex-audit-mode.test.sh's own mentions
+# stop at R-11) and are unchanged from that correction's text.
+#
 176-worktree-isolation-contract.spec.md	R-01	COVERED
 176-worktree-isolation-contract.spec.md	R-02	COVERED
 176-worktree-isolation-contract.spec.md	R-03	COVERED
@@ -223,7 +293,7 @@
 176-worktree-isolation-contract.spec.md	R-10	COVERED
 176-worktree-isolation-contract.spec.md	R-11	COVERED
 176-worktree-isolation-contract.spec.md	R-12	COVERED
-176-worktree-isolation-contract.spec.md	R-13	UNCOVERED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+176-worktree-isolation-contract.spec.md	R-13	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | 2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it
 176-worktree-isolation-contract.spec.md	R-14	COVERED
 176-worktree-isolation-contract.spec.md	R-15	COVERED
 176-worktree-isolation-contract.spec.md	R-16	COVERED
@@ -237,9 +307,9 @@
 222-vendor-deployed-only-skills.spec.md	R-05	COVERED
 222-vendor-deployed-only-skills.spec.md	R-06	COVERED
 222-vendor-deployed-only-skills.spec.md	R-07	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | VCS-035 (PR #509, 2026-08-24): the verdict token moves back UNCOVERED -> UNSCOPED — PR #509 added commit-outcome-backstop.test.sh, a new UNCLAIMED file (claims no feature) mentioning R-07 for a different requirement's numbering; the unscoped-question population now has an unclaimed mention again alongside the pre-existing foreign one, which is ADR-0138's original state, not a fix
-222-vendor-deployed-only-skills.spec.md	R-08	UNCOVERED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+222-vendor-deployed-only-skills.spec.md	R-08	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | 2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it | ADR-0193 (PR #566, codex-audit-mode.test.sh): a second, independent unclaimed R-08 mention lands in the same population; same direction, no further verdict change
 222-vendor-deployed-only-skills.spec.md	R-09	COVERED
-222-vendor-deployed-only-skills.spec.md	R-10	UNCOVERED	not-test-assertable	a process step: staging/sync-to-claude.sh --apply is run and the subsequent dry run reports zero drift, nothing executable in a test file to assert | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+222-vendor-deployed-only-skills.spec.md	R-10	UNSCOPED	not-test-assertable	a process step: staging/sync-to-claude.sh --apply is run and the subsequent dry run reports zero drift, nothing executable in a test file to assert | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | 2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it | ADR-0193 (PR #566, codex-audit-mode.test.sh): a second, independent unclaimed R-10 mention lands in the same population; same direction, no further verdict change
 286-the-sixth-bare-manifest-set-flag-sh-ment.spec.md	R-01	COVERED
 286-the-sixth-bare-manifest-set-flag-sh-ment.spec.md	R-02	COVERED
 286-the-sixth-bare-manifest-set-flag-sh-ment.spec.md	R-03	COVERED
@@ -267,7 +337,7 @@
 365-scope-and-bound-the-autopilot-run.spec.md	R-06	COVERED
 365-scope-and-bound-the-autopilot-run.spec.md	R-07	COVERED
 365-scope-and-bound-the-autopilot-run.spec.md	R-08	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
-365-scope-and-bound-the-autopilot-run.spec.md	R-09	UNCOVERED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+365-scope-and-bound-the-autopilot-run.spec.md	R-09	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | 2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it | ADR-0193 (PR #566, codex-audit-mode.test.sh): a second, independent unclaimed R-09 mention lands in the same population; same direction, no further verdict change
 365-scope-and-bound-the-autopilot-run.spec.md	R-10	COVERED
 365-scope-and-bound-the-autopilot-run.spec.md	R-11	COVERED
 385-skill-args-substituted-in-fences.spec.md	R-01	COVERED
@@ -283,10 +353,10 @@
 394-skill-fences-rely-on-word-splitting.spec.md	R-06	COVERED
 394-skill-fences-rely-on-word-splitting.spec.md	R-07	COVERED
 394-skill-fences-rely-on-word-splitting.spec.md	R-08	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage
-394-skill-fences-rely-on-word-splitting.spec.md	R-09	UNCOVERED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+394-skill-fences-rely-on-word-splitting.spec.md	R-09	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | 2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it | ADR-0193 (PR #566, codex-audit-mode.test.sh): a second, independent unclaimed R-09 mention lands in the same population; same direction, no further verdict change
 394-skill-fences-rely-on-word-splitting.spec.md	R-10	COVERED
 394-skill-fences-rely-on-word-splitting.spec.md	R-11	UNSCOPED	not-test-assertable	a documentation obligation: the ADR records that the defect predates issue #385 and that the --features bound was never applied on this machine
-394-skill-fences-rely-on-word-splitting.spec.md	R-12	UNCOVERED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+394-skill-fences-rely-on-word-splitting.spec.md	R-12	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | 2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it
 394-skill-fences-rely-on-word-splitting.spec.md	R-13	COVERED
 399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-01	COVERED
 399-bound-phase-p-step-3-to-roadmap-stat.spec.md	R-02	COVERED
@@ -310,7 +380,7 @@
 404-stop-gate-trigger-granularity.spec.md	R-11	COVERED
 404-stop-gate-trigger-granularity.spec.md	R-12	COVERED
 404-stop-gate-trigger-granularity.spec.md	R-13	COVERED
-404-stop-gate-trigger-granularity.spec.md	R-14	UNCOVERED	not-test-assertable	a documentation obligation: the ceiling decision and the settings.json producer/consumer drift are recorded in an ADR, not implemented here | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+404-stop-gate-trigger-granularity.spec.md	R-14	UNSCOPED	not-test-assertable	a documentation obligation: the ceiling decision and the settings.json producer/consumer drift are recorded in an ADR, not implemented here | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | 2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it
 410-order-the-manifest-completed-transit.spec.md	R-01	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-02	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-03	COVERED
@@ -318,13 +388,13 @@
 410-order-the-manifest-completed-transit.spec.md	R-05	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-06	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-07	COVERED
-410-order-the-manifest-completed-transit.spec.md	R-08	UNCOVERED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+410-order-the-manifest-completed-transit.spec.md	R-08	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | 2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it | ADR-0193 (PR #566, codex-audit-mode.test.sh): a second, independent unclaimed R-08 mention lands in the same population; same direction, no further verdict change
 410-order-the-manifest-completed-transit.spec.md	R-09	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-10	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-11	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-12	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-13	COVERED
-410-order-the-manifest-completed-transit.spec.md	R-14	UNCOVERED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
+410-order-the-manifest-completed-transit.spec.md	R-14	UNSCOPED	testable	genuine drift: this id's only in-population test mention lies outside the file(s) this feature's own plan names, so the pre-scoping gate silently counted a foreign or unlisted match as coverage | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it | 2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it
 410-order-the-manifest-completed-transit.spec.md	R-15	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-16	COVERED
 410-order-the-manifest-completed-transit.spec.md	R-17	UNCOVERED	not-test-assertable	an external-process obligation: the E4/H5 uncommitted-manifest gap is filed as its own issue and referenced from the ADR, not fixed in this feature | ADR-0157 (issue #487): the verdict token moves UNSCOPED -> UNCOVERED — the only in-population mention was a FOREIGN feature's R-NN of the same number, and no test file claiming this feature mentions it
@@ -384,13 +454,13 @@ project-tasks-vendored-bilateral-ledger.spec.md	R-04	UNSCOPED
 project-tasks-vendored-bilateral-ledger.spec.md	R-05	COVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-06	UNSCOPED
 project-tasks-vendored-bilateral-ledger.spec.md	R-07	UNSCOPED
-project-tasks-vendored-bilateral-ledger.spec.md	R-08	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-08	UNSCOPED	testable	2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it | ADR-0193 (PR #566, codex-audit-mode.test.sh): a second, independent unclaimed R-08 mention lands in the same population; same direction, no further verdict change
 project-tasks-vendored-bilateral-ledger.spec.md	R-09	COVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-10	UNCOVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-11	UNCOVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-12	UNCOVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-13	UNCOVERED
-project-tasks-vendored-bilateral-ledger.spec.md	R-14	UNCOVERED
+project-tasks-vendored-bilateral-ledger.spec.md	R-10	UNSCOPED	testable	2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it | ADR-0193 (PR #566, codex-audit-mode.test.sh): a second, independent unclaimed R-10 mention lands in the same population; same direction, no further verdict change
+project-tasks-vendored-bilateral-ledger.spec.md	R-11	UNSCOPED	testable	2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it | ADR-0193 (PR #566, codex-audit-mode.test.sh): a second, independent unclaimed R-11 mention lands in the same population; same direction, no further verdict change
+project-tasks-vendored-bilateral-ledger.spec.md	R-12	UNSCOPED	testable	2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it
+project-tasks-vendored-bilateral-ledger.spec.md	R-13	UNSCOPED	testable	2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it
+project-tasks-vendored-bilateral-ledger.spec.md	R-14	UNSCOPED	testable	2026-09-06 (ADR-0194, codex-tester-dispatch-gate.test.sh): the verdict token moves UNCOVERED -> UNSCOPED — this feature's new test file mentions the same R-NN number unclaimed (no #<issue> token), which ADR-0157's population re-admits as an unclaimed in-population match; no test file claiming this feature mentions it
 project-tasks-vendored-bilateral-ledger.spec.md	R-15	UNCOVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-16	UNCOVERED
 project-tasks-vendored-bilateral-ledger.spec.md	R-17	UNCOVERED
