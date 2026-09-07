@@ -3,7 +3,7 @@ name: tester
 description: Writes and runs unit/integration tests. Use proactively after coder finishes implementing a feature or whenever code changed without tests.
 tools: Read, Edit, Write, Glob, Grep, Bash
 model: sonnet
-effort: xhigh
+effort: high
 color: yellow
 memory: project
 ---

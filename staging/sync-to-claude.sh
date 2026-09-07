@@ -201,6 +201,7 @@ plugin/scripts/prompt-en-prose-detect.sh|hooks/prompt-en-prose-detect.sh
 plugin/scripts/reset-gate-counter.sh|hooks/reset-gate-counter.sh
 plugin/scripts/usage-daily-hint.sh|hooks/usage-daily-hint.sh
 plugin/scripts/codex-reviewer.sh|hooks/codex-reviewer.sh
+plugin/scripts/codex-tester.sh|hooks/codex-tester.sh
 plugin/scripts/usage-report.py|scripts/usage-report.py
 plugin/scripts/precompact-guard.sh|hooks/precompact-guard.sh
 plugin/scripts/commit-outcome-backstop.sh|hooks/commit-outcome-backstop.sh

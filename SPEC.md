@@ -1,208 +1,176 @@
-# SPEC — Extend the Codex-vs-Claude review gate to deep-refactor's audit dispatch
+# SPEC: Codex-vs-Claude backend choice for the tester subagent
 
-Source: chain interview, 2026-09-05. Extends ADR-0187 (`docs/architecture/ADR-0187-codex-review-gate.md`).
-
-**Topic slug:** codex-review-gate-deep-refactor
+**Topic slug:** codex-claude-choice-for-tester
 
 ## Objectives
 
-1. Let `deep-refactor`'s Phase 1 audit dispatch (the 4 dimension `reviewer` agents — dead-code,
-   perf, structure, security) run against Codex CLI instead of Claude's `reviewer` agent, on the
-   same substitute-not-second-opinion contract ADR-0187 established, extended to deep-refactor's
-   own `risk_level`/`fix_type` finding taxonomy.
-2. Keep the gate scoped to `deep-refactor` only: a flag independent of `manifest.use_codex_review`,
-   because `deep-refactor` is invocable standalone, outside any `concept-to-code` manifest.
-3. Never touch Phase 2/3 (the fix loop: `coder`/`refactorer`/`debugger` dispatch) — identical to
-   ADR-0187's own scope boundary, which never substitutes a fix agent, only a review-role one.
-4. Preserve, byte-for-byte, `deep-refactor/SKILL.md`'s Claude-only behaviour for every invocation
-   that does not opt in — same non-negotiable ADR-0187 already applied to the five original sites.
+Give the `tester` subagent the same Codex-vs-Claude backend choice already shipped for the
+`reviewer` agent (ADR-0187, ADR-0193), at its two dispatch sites in `concept-to-code` Step 5. Unlike
+the reviewer, the tester must write real test files and run the suite, not just produce a read-only
+report — so the mechanism needs a write-sandboxed Codex wrapper, not a reuse of
+`codex-reviewer.sh`. As a related, explicitly requested change, also lower the tester's default
+Claude effort pin from `xhigh` to `high` globally (frontmatter and Step 5 Workflow dispatch), to
+reduce cost on every tester dispatch regardless of backend.
 
 ## Scope
 
-In:
-- A new `deep-refactor`-local gate (its own `AskUserQuestion`, not Gate CDX) asked once per
-  standalone/attended invocation, before Phase 1 dispatch.
-- Autopilot / unattended invocation via the `concept-to-code` chain's Gate 5.1: no question asked;
-  the decision is inherited from `manifest.use_codex_review` when a manifest is present, else
-  defaults to Claude-only (no manifest → no flag to inherit → today's behaviour).
-- A new `--mode audit --dimension dead-code|perf|structure|security` mode in
-  `staging/plugin/scripts/codex-reviewer.sh`, output shaped to `deep-refactor`'s finding schema
-  (`dimension`/`severity`/`risk_level`/`fix_type`/`file`/`line`/`description`), not the
-  BLOCKER/MAJOR/MINOR/NIT shape the existing `review`/`diagnose` modes use.
-- The two mandatory guard instructions (dead-code's ObjC/reflection carve-out, perf's
-  concurrency carve-out — `SKILL.md` "Mandatory guard 1/2") embedded verbatim inside the new
-  Codex audit prompt for their respective dimensions, so the structural anchor `SKILL.md` declares
-  stays true regardless of which engine actually ran.
-- Per-dimension fallback: if Codex returns DID-NOT-RUN (exit 3, same convention as ADR-0187) for
-  one or more of the 4 dimensions during Branch A's parallel fan-out, only the failing
-  dimension(s) fall back to Claude's `reviewer` for that run; the others stay on Codex. The Phase 1
-  findings summary (HITL Gate 1) reports which engine served each dimension.
-- Both dispatch branches in `deep-refactor/SKILL.md` (`### Dispatch model` — Branch A Workflow
-  fan-out, Branch B sequential `Agent`-tool fallback) get the IF/ELSE wrap, byte-preserving the
-  existing Claude-only branch exactly, same idiom ADR-0187 used at its five sites.
-- An ADR documenting the extension: either an addendum to ADR-0187 (its own text explicitly
-  deferred this) or a new ADR cross-referencing it — architect's call at Step 2, consistent with
-  rule 14 (a completed ADR's original scope note is a correct snapshot of its day and is not
-  edited in place; the deferral is superseded going forward, not rewritten).
-- Harness/test updates: a plant test asserting the new `--mode audit` exists and rejects a bad
-  `--dimension`; a plant test asserting both mandatory guard instructions' literal text is present
-  inside `codex-reviewer.sh`'s audit-mode prompt construction (mirroring the existing structural
-  anchor check on `SKILL.md` itself); an Invariant-1-style manifest field check is NOT needed,
-  since the new flag does not live in the c2c manifest schema (Objective 2).
+**In scope:**
+- A new script `codex-tester.sh` (mirrors `codex-reviewer.sh`'s structure and exit-code contract),
+  running `codex exec -s workspace-write -C <worktree>` to write test files and run the suite inside
+  a worktree it cannot write outside of.
+- A post-run `git diff --name-only` scope check inside `codex-tester.sh`: if Codex wrote to a
+  non-test file, exit 4 (new, in addition to the existing 0/2/3 contract).
+- A free-text `model_reasoning_effort` override on the codex branch (default: config.toml's current
+  value, `medium`), passed as `-c model_reasoning_effort=<value>` to `codex exec`. No `-m/--model`
+  override — the codex model itself stays whatever `~/.codex/config.toml` configures.
+- Two new `AskUserQuestion` gates, one at each Step 5 tester dispatch site
+  (`concept-to-code/references/step5-implementation.md:574-622` Workflow path, `:1769-1806`
+  Agent-tool batch path), offering `codex` / `claude-sonnet` (default) / `claude-opus` — model only,
+  no effort choice on the Claude branches (kept pinned, per the reviewer's own Step 5 precedent).
+- Two new manifest fields, `use_codex_tester` / `step5_codex_tester_asked`, additive under the
+  existing schema `1.4` (no version bump — same treatment ADR-0193 gave the reviewer's own fields),
+  new Invariants 26/27 in `manifest-validate.sh`, seeded in `manifest-init.sh`.
+- Lower the tester's default Claude effort pin from `xhigh` to `high`: `staging/plugin/agents/
+  tester.md` frontmatter, and the Step 5 Workflow dispatch site's explicit `effort: "xhigh"` pin
+  (`references/step5-implementation.md:574-622`). The Agent-tool batch path already omits `effort`
+  (the tool has no such parameter, ADR-0068 §D7) — unaffected.
+- `docs/architecture/ADR-0194-codex-tester-choice.md` moves from Proposed to Accepted once this
+  plan is approved and implemented, with any interview-driven refinements folded in.
 
-Out:
-- Any change to Phase 2 (fix loop), Phase 3 (security report-only section), or Phase 4
-  (report/commit gate) dispatch — those stay exactly as `deep-refactor/SKILL.md` already commits
-  to (coder/refactorer/debugger, model opus, Claude only).
-- Any change to the five sites ADR-0187 already covers (RTF, Step 5 checkpoint) — untouched.
-- A shared/unified taxonomy between `reviewer`'s BLOCKER/MAJOR/MINOR/NIT and deep-refactor's
-  risk_level/fix_type — ADR-0187 already rejected merging these (rule 6: they answer different
-  questions), and this feature does not revisit that.
-- `security-audit` and Gate 5.06 (`silent-failure-hunter`/`type-design-analyzer`) — still
-  explicitly deferred by ADR-0187, unaffected by this feature.
+**Out of scope:**
+- Any change to `codex-reviewer.sh` itself, or to the `reviewer` agent's own dispatch sites.
+- A structural/automated check that Codex's report actually contains all six `tester.md` Output
+  Format sections. Parity is a prompt instruction only (same trust level as `codex-reviewer.sh`'s
+  own report-shape parity with `reviewer.md` — no parser validates that either).
+- Exposing a Codex model override (`-m`) — only `model_reasoning_effort` is exposed, because the
+  set of valid Codex model names was not confirmed live (config.toml default: `gpt-5.6-terra`; a
+  `Sol`/`Terra`/`Luna` family exists per local docs but its capability ranking was not verified).
+- Any change to `review-triage-fix` or its own codex dispatch sites.
 
-## Stack
+## Stack / architecture
 
-Same as the rest of `staging/plugin/`: Bash 3.2-clean shell scripts (`codex-reviewer.sh`
-extension), Markdown skill prose (`deep-refactor/SKILL.md` edits), an ADR in
-`docs/architecture/`, plant-check-covered test scripts under `staging/plugin/scripts/tests/`.
+No new runtime dependency. `codex-tester.sh` is a Bash 3.2-clean script, deployed via
+`sync-to-claude.sh`'s `PAIRS` mapping (`staging/plugin/scripts/codex-tester.sh` →
+`~/.claude/hooks/codex-tester.sh`), same shape as `codex-reviewer.sh`.
 
-## Architecture
+**Availability cascade** (mirrors `codex-reviewer.sh`): `command -v codex` → `codex doctor --json`
+→ `auth.credentials.status == "ok"` → not any of these, exit 3 (`DID-NOT-RUN`), never silent.
 
-### New flag
+**Sandbox**: `codex exec -s workspace-write -C <worktree-dir>` — verified live (`codex exec --help`,
+2026-09-06) that both flags exist and compose to scope writes to exactly the given directory. This
+reuses the worktree isolation the tester dispatch already establishes
+(`isolation: "worktree"` on the Workflow path; explicit worktree write-path briefing on the
+Agent-tool batch path) rather than inventing a second isolation boundary.
 
-`deep-refactor`-local, not part of the c2c manifest schema. Two carriers:
+**Post-run scope check** (new, no reviewer-side precedent): after `codex exec` returns 0, run
+`git -C <worktree> diff --name-only` against the pre-dispatch baseline and classify each changed
+path by the project's own test-file convention (same file-name/path heuristic `tester.md`'s own
+framework detection already uses per stack). Any non-test-file change → exit 4, `--out` still
+written (partial), caller must surface it and never treat exit 4 as success.
 
-1. **Attended/standalone invocation:** a new `AskUserQuestion` at deep-refactor's own HITL Gate 0
-   (or immediately before it), asked every run — no persistent file, no new state mechanism.
-   Options: "No — Claude only (current behaviour)" (default/recommended) / "Yes — use Codex for
-   audit dispatch, with per-dimension fallback if unavailable".
-2. **Unattended invocation via c2c Gate 5.1 with `manifest.autopilot = true`:** no question asked.
-   If a c2c manifest is present, read `manifest.use_codex_review` and use its value directly as
-   deep-refactor's own decision for this run. If no manifest is present (standalone autopilot has
-   no manifest to read), the decision defaults to Claude-only — there is nothing to inherit.
+## Data model (manifest, schema 1.4, additive)
 
-### `codex-reviewer.sh` — new `--mode audit`
-
-```
---mode audit --dimension dead-code|perf|structure|security --diff-scope uncommitted|base:<ref>|commit:<sha> --out <file>
+```yaml
+use_codex_tester: false          # bool, default false — mirrors use_codex_review
+step5_codex_tester_asked: false  # bool, default false — mirrors step5_codex_review_asked;
+                                  # distinguishes "never asked" from "asked, declined" (both leave
+                                  # use_codex_tester=false), same reasoning as ADR-0193's own fix
+                                  # for the equivalent reviewer-side bug.
 ```
 
-Same exit-code contract as the existing two modes (0 success, 2 bad invocation, 3 DID-NOT-RUN).
-Output written to `--out` as JSON matching deep-refactor's `FINDINGS_SCHEMA` (already declared in
-`deep-refactor/SKILL.md` — `dimension`, `severity`, `file`, `line`, `description`, `risk_level`,
-`fix_type`), not the existing modes' markdown report shape.
+`manifest-validate.sh` — new conditional Invariants (numbered after the existing 25):
+- **Invariant 26**: if `use_codex_tester` present, must be `true`/`false`.
+- **Invariant 27**: if `step5_codex_tester_asked` present, must be `true`/`false`.
 
-For `--dimension dead-code` and `--dimension perf`, the prompt construction embeds the exact
-verbatim guard-instruction text from `SKILL.md`'s "Mandatory guard 1"/"Mandatory guard 2" sections.
-For `--dimension security`, the prompt enforces `fix_type: report-only` on every returned finding
-regardless of what Codex proposes (mirroring `SKILL.md`'s own "All security findings are always
-`fix_type: report-only`" invariant) — the wrapper script, not Codex, is the enforcement point,
-consistent with rule 16 (an instruction to an LLM is not an enforcement; a mechanical postprocess
-step is).
+`manifest-init.sh` seeds both to `false` alongside the existing `use_codex_review`/
+`step5_codex_review_asked` lines.
 
-### `deep-refactor/SKILL.md` — dispatch site changes
+## Dispatch flow (both Step 5 sites)
 
-Both branches under `### Dispatch model` get an IF/ELSE on the new flag:
+1. Immediately before the tester dispatch, `AskUserQuestion`: `codex` / `claude-sonnet` (default) /
+   `claude-opus`. Skipped under `--autopilot`, same disclosed instruction-not-enforcement limit as
+   the reviewer's own Step 5 ask (rule 16). Writes the answer via `manifest-set-flag.sh` and sets
+   `step5_codex_tester_asked: true` regardless of the answer (so it never re-fires after a "no",
+   same fix ADR-0193 already made for the reviewer).
+2. **`codex` branch**: dispatch `~/.claude/hooks/codex-tester.sh --worktree <dir> --brief <file>
+   --out <file> [--effort <value>]`, brief content identical to what the Claude `tester` receives
+   (SPEC requirement IDs / Success Criteria / plan task text, never implementation files — ADR-0049
+   §D1, ADR-0088). Branch on exit code:
+   - `0` → read `--out` as the tester's report, exactly as if the Claude `tester` had produced it.
+   - `2` → bad invocation, report the stderr line, halt this dispatch.
+   - `3` → DID-NOT-RUN. `AskUserQuestion`: fallback to Claude `tester`, or halt. Never silent.
+   - `4` → wrote outside test scope. Report the offending paths from `--out`, `AskUserQuestion`:
+     fallback to Claude `tester` (recommended), or accept the write and continue, or halt.
+3. **`claude-sonnet`/`claude-opus` branch**: dispatch `tester` at that `model:`, `effort: "high"` on
+   the Workflow path (post-lowering default; see below), no `effort` on the Agent-tool path
+   (unchanged, ADR-0068 §D7).
 
-- **Branch A (Workflow fan-out, default):** when the flag is on, each of the 4 `agent()` calls is
-  replaced by a call to `codex-reviewer.sh --mode audit --dimension <d>` for that dimension,
-  fanned out the same way (still one call per dimension, still parallel). A per-dimension check on
-  the exit code: `3` → that one dimension's call is replaced with the existing Claude `reviewer`
-  agent() call for that dimension only (per-dimension fallback, Objective/Scope above); `0` →
-  parse the JSON into the same in-memory findings shape the Claude path already produces, so
-  everything downstream of Phase 1 (merge/dedup/sort/Gate 1) is unchanged.
-- **Branch B (sequential `Agent`-tool fallback):** same substitution, sequential instead of
-  parallel — call `codex-reviewer.sh` per dimension in the same fixed order
-  (dead-code → perf → structure → security) the branch already documents, with the same
-  per-dimension exit-3 fallback.
-- The Claude-only branch (today's text) is preserved byte-for-byte inside the `ELSE`, per
-  ADR-0187's own "byte-preserving the ELSE" convention — the harness greps for
-  `Dispatch the \`reviewer\``-shaped text literally at the five original sites; this feature adds
-  the same literal-text preservation requirement at deep-refactor's two branches.
+## Effort pin change (tester default, both backends)
 
-### HITL Gate 1 (findings summary) — engine visibility
-
-When the Codex flag was on for this run, Gate 1's summary gains one line per dimension naming
-which engine actually served it (`Codex` or `Claude (fallback)`), so a per-dimension fallback is
-visible to the operator before they approve the fix loop.
-
-## Data model
-
-`FINDINGS_SCHEMA` (already declared in `deep-refactor/SKILL.md`) is unchanged. No new field is
-added to it — engine attribution is Gate-1-summary-only, not persisted into the finding object
-itself, since Phase 2's fix loop and Phase 4's report never need to know which engine produced a
-given finding.
-
-## API / CLI surface
-
-`codex-reviewer.sh --mode audit --dimension <d> --diff-scope <scope> --out <file>` — new mode,
-additive to the existing `--mode review|diagnose`. No change to either existing mode's contract.
-
-## UI flows
-
-1. `deep-refactor` invoked (standalone, or via c2c Gate 5.1 attended) → its own Codex gate
-   question fires once, before Phase 1 dispatch, mirroring Gate CDX's wording and default.
-2. `deep-refactor` invoked via c2c Gate 5.1 with `manifest.autopilot = true` → no question; the
-   manifest's `use_codex_review` value is read and applied silently.
-3. Phase 1 dispatch fans out 4 dimension calls, each to Codex or Claude per the resolved flag;
-   any per-dimension DID-NOT-RUN falls back to Claude for that dimension only, silently within the
-   run (no mid-run question — consistent with ADR-0187's own "gate once, not per site" decision,
-   here read as "resolve the engine choice once per invocation, not once per dispatch").
-4. HITL Gate 1 shows the existing findings summary plus the new per-dimension engine line.
-5. Phase 2 onward: unchanged, Claude only, exactly as today.
+- `staging/plugin/agents/tester.md` frontmatter: `effort: xhigh` → `effort: high`.
+- `references/step5-implementation.md:574-622` (Workflow path) explicit pin: `effort: "xhigh"` →
+  `effort: "high"`.
+- Agent-tool batch path (`:1769-1806`): unaffected, already omits `effort`.
+- This applies unconditionally, independent of which Step 5 dispatch-site ask above is answered —
+  it is a default-cost change, not part of the codex/claude choice itself.
 
 ## Edge cases
 
-- Codex unavailable for all 4 dimensions → all 4 fall back individually to Claude; Gate 1 shows
-  four `Claude (fallback)` lines; behaviourally identical to the flag having been off, except for
-  the visible fallback notice.
-- No c2c manifest present AND autopilot true (fully standalone unattended deep-refactor) →
-  nothing to inherit; defaults to Claude-only, no question asked (there is no operator to ask).
-- `manifest.use_codex_review` absent on an older-schema manifest (pre-1.4) → treated as `false`
-  (retrocompat, same as ADR-0187's own Invariant 24 default).
-- Security dimension routed to Codex → `fix_type: report-only` is enforced by the wrapper script
-  regardless of what Codex's own output claims, never trusted from the LLM response directly.
-- Dead-code/perf dimensions routed to Codex → the mandatory guard instructions must appear in the
-  actual prompt Codex receives, not merely be present in `SKILL.md`'s prose; the harness check for
-  this feature greps `codex-reviewer.sh`'s own prompt-construction code, not just the skill file.
+- **Codex unavailable (exit 3) mid-chain, after already writing some files in a prior attempt on
+  the same worktree**: not possible in this design — `codex-tester.sh`'s availability cascade runs
+  before any `codex exec` invocation, so exit 3 is always a no-op with respect to the filesystem.
+- **Codex writes a file that is ambiguous between test and production** (e.g. a shared fixture
+  file): classified by the same heuristic `tester.md`'s own framework detection already uses; a
+  false positive here is a caller-visible exit 4, not a silent pass — the operator decides via the
+  fallback `AskUserQuestion` in step 2 above.
+- **`model_reasoning_effort` override rejected by Codex** (invalid value): `codex exec` itself fails
+  non-zero; `codex-tester.sh` propagates this as exit 3 or 2 per its own availability-cascade /
+  bad-invocation classification (not a new state) — the failure is visible, not silently ignored.
+- **Autopilot run**: both new Step 5 asks skipped, `use_codex_tester` stays `false`, `tester`
+  dispatches on Claude exactly as it does today (minus the effort-pin lowering, which applies
+  unconditionally).
 
 ## Success criteria
 
-- [ ] R-01 — `codex-reviewer.sh` gains a `--mode audit --dimension dead-code|perf|structure|security`
-      mode with the exit-code contract 0/2/3 unchanged from the existing modes, and rejects an
-      unknown `--dimension` value with exit 2.
-- [ ] R-02 — the audit-mode output for a successful run is valid JSON matching deep-refactor's
-      `FINDINGS_SCHEMA` field set (`dimension`, `severity`, `file`, `line`, `description`,
-      `risk_level`, `fix_type`).
-- [ ] R-03 — the dead-code and perf audit-mode prompts contain the exact verbatim guard-instruction
-      text from `SKILL.md`'s Mandatory guard 1/2 sections.
-- [ ] R-04 — the security audit-mode path forces `fix_type: report-only` on every finding it
-      returns, regardless of the raw Codex response.
-- [ ] R-05 — `deep-refactor/SKILL.md`'s Branch A (Workflow fan-out) dispatches each of the 4
-      dimensions to Codex when the flag is on, with per-dimension exit-3 fallback to the existing
-      Claude `reviewer` agent() call for that dimension only.
-- [ ] R-06 — `deep-refactor/SKILL.md`'s Branch B (sequential Agent-tool fallback) gets the same
-      per-dimension Codex/fallback behaviour, in the existing fixed dimension order.
-- [ ] R-07 — the Claude-only branch text at both dispatch sites is preserved byte-for-byte inside
-      the `ELSE` of the new IF/ELSE wrap (no rewording of the existing Claude path).
-- [ ] R-08 — an attended/standalone `deep-refactor` invocation asks its own Codex gate question
-      once, before Phase 1, defaulting to "No — Claude only".
-- [ ] R-09 — a `deep-refactor` invocation via c2c Gate 5.1 with `manifest.autopilot = true` asks no
-      question and inherits `manifest.use_codex_review` when a manifest is present, else defaults
-      to Claude-only.
-- [ ] R-10 — HITL Gate 1's findings summary names which engine (Codex or Claude fallback) served
-      each of the 4 dimensions, only when the Codex flag was on for that run.
-- [ ] R-11 — every invocation with the new flag left at its default (off) produces byte-identical
-      dispatch behaviour to today's `deep-refactor/SKILL.md` (no regression on the unopted-in path).
-- [ ] R-12 — a plant test exists asserting the new `--mode audit` and its `--dimension` validation
-      (no-test: this is itself the harness coverage requirement — see repo Rule 2, a needle must be
-      planted and observed RED against a real absence before it counts as coverage).
-- [ ] R-13 — a plant test exists asserting both mandatory guard instructions' literal text is
-      present inside `codex-reviewer.sh`'s prompt-construction code (no-test: same rule-2 reasoning
-      as R-12 — this is the test-planting requirement itself, verified structurally, not by a unit
-      assertion of behaviour).
-- [ ] R-14 — an ADR (addendum to ADR-0187 or a new cross-referencing ADR, architect's call) records
-      this extension and explicitly updates ADR-0187's "explicitly deferred" scope note going
-      forward, without editing ADR-0187's original text in place (no-test: this is a documentation
-      obligation, verified by reading the ADR file, not by an automated assertion).
+- [ ] R-01 — A new script `staging/plugin/scripts/codex-tester.sh` exists, deployable via
+      `sync-to-claude.sh`'s `PAIRS` mapping to `~/.claude/hooks/codex-tester.sh`.
+- [ ] R-02 — `codex-tester.sh` runs `codex exec -s workspace-write -C <worktree>`, never
+      `-s read-only` and never `danger-full-access`.
+- [ ] R-03 — `codex-tester.sh` implements the same availability cascade as `codex-reviewer.sh`
+      (codex CLI present, `codex doctor --json` auth check), exiting 3 with a `DID-NOT-RUN` stderr
+      line on any failure of that cascade.
+- [ ] R-04 — `codex-tester.sh` exits 0 on success with the report written to `--out` in
+      `tester.md`'s six-field Output Format shape (no-test: this is a prompt-authoring requirement
+      verified by reading the script's embedded prompt text, not something a harness assertion can
+      mechanically confirm without inventing an unwanted structural parser).
+- [ ] R-05 — `codex-tester.sh` runs a post-run `git diff --name-only` scope check and exits 4 with
+      the offending file paths on stderr when a non-test file was modified.
+- [ ] R-06 — `codex-tester.sh` accepts an optional `--effort <value>` flag, passed through as
+      `-c model_reasoning_effort=<value>` to `codex exec`; omitted entirely when not provided (uses
+      `~/.codex/config.toml`'s own default).
+- [ ] R-07 — `concept-to-code/references/step5-implementation.md`'s Workflow-path tester dispatch
+      (currently lines 574-622) is preceded by an `AskUserQuestion` offering `codex` /
+      `claude-sonnet` (default) / `claude-opus`, skipped under `--autopilot`.
+- [ ] R-08 — `concept-to-code/references/step5-implementation.md`'s Agent-tool batch-path tester
+      dispatch (currently lines 1769-1806) is preceded by the same `AskUserQuestion` as R-07.
+- [ ] R-09 — On the `codex` branch at either site, exit 0 from `codex-tester.sh` is consumed as the
+      tester's report; exit 2 halts that dispatch and reports stderr; exit 3 triggers a
+      fallback-or-halt `AskUserQuestion`, never a silent fallback; exit 4 triggers a
+      fallback-accept-or-halt `AskUserQuestion` naming the offending files.
+- [ ] R-10 — `manifest-init.sh` seeds `use_codex_tester: false` and
+      `step5_codex_tester_asked: false`.
+- [ ] R-11 — `manifest-validate.sh` gains conditional Invariants 26 and 27 validating those two
+      fields are boolean when present, schema stays `1.4` (no version bump).
+- [ ] R-12 — Each Step 5 ask sets `step5_codex_tester_asked: true` unconditionally once it fires,
+      regardless of the answer chosen, so it never re-prompts on a later run of the same manifest
+      after a decline.
+- [ ] R-13 — `staging/plugin/agents/tester.md` frontmatter `effort:` changes from `xhigh` to
+      `high`.
+- [ ] R-14 — `concept-to-code/references/step5-implementation.md`'s Workflow-path dispatch pin
+      changes from `effort: "xhigh"` to `effort: "high"`; the Agent-tool batch path is left
+      unchanged (it already omits `effort`).
+- [ ] R-15 — `docs/architecture/ADR-0194-codex-tester-choice.md` is updated to Accepted status,
+      reflecting any interview-driven refinements above (workspace-write sandbox confirmed live,
+      effort-override mechanism, effort-pin lowering) that were not yet settled when it was
+      drafted as Proposed (no-test: this is a documentation-state requirement, not something a
+      test can assert without inventing a doc-content parser).

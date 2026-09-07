@@ -20,10 +20,14 @@
 # it rots silently, and fastest in a file being actively extended. This file now enumerates every
 # SCHEMA_EOF block instead (S1, S2, S3, ...) and asserts the block count exactly, so the next mode
 # added cannot silently uncover an existing one.
+#
+# S4 (ADR-0194, Task 1) extends this same walk to codex-tester.sh's own --output-schema block —
+# the same invalid_json_schema trap, this time for the write-sandboxed tester script.
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 CR="$SCRIPTS/codex-reviewer.sh"
+CT="$SCRIPTS/codex-tester.sh"
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
@@ -35,22 +39,24 @@ fi
 ok "S0: codex-reviewer.sh found"
 
 extract_schema() {
-  # $1 = 1-based ordinal of the SCHEMA_EOF block to extract, counted by position in the file.
-  # Used generically below to walk every block in turn (S1, S2, S3, ...) — never to pin a
-  # specific ordinal to a specific mode. Pinning an ordinal to a mode name is exactly the defect
-  # ADR-0193 §D7 repairs here: see the comment below for what stood at this call site before.
-  awk -v n="$1" '
+  # $1 = file to extract from, $2 = 1-based ordinal of the SCHEMA_EOF block to extract, counted
+  # by position in the file. Used generically below to walk every block in turn (S1, S2, S3, ...)
+  # — never to pin a specific ordinal to a specific mode. Pinning an ordinal to a mode name is
+  # exactly the defect ADR-0193 §D7 repairs here: see the comment below for what stood at this
+  # call site before. The file parameter (ADR-0194) lets the same walk cover codex-tester.sh's
+  # own block without a second copy of this function.
+  awk -v n="$2" '
     /<<.SCHEMA_EOF.$/ { count++; if (count==n) { capturing=1; next } }
     capturing && /^SCHEMA_EOF$/ { capturing=0; next }
     capturing { print }
-  ' "$CR"
+  ' "$1"
 }
 
 check_schema() {
-  # $1 = label, $2 = schema text
-  local label="$1" schema="$2"
+  # $1 = label, $2 = schema text, $3 = source file (used only in the not-found message)
+  local label="$1" schema="$2" src="${3:-$CR}"
   if [ -z "$schema" ]; then
-    bad "$label: schema block not found in codex-reviewer.sh"
+    bad "$label: schema block not found in $src"
     return
   fi
   local verdict
@@ -99,13 +105,13 @@ else:
 # that was removed: a third SCHEMA_EOF block (audit mode) landed and, depending on where in the
 # file it was inserted, would either shift under an existing ordinal (silently checking the wrong
 # schema under an unchanged, now-wrong label) or simply go unchecked. Ordinal selection is gone;
-# every block found in the file is enumerated and checked below instead.
+# every block found in codex-reviewer.sh is enumerated and checked below instead.
 BLOCK_COUNT=$(grep -c '<<.SCHEMA_EOF.$' "$CR")
 
 _n=1
 while [ "$_n" -le "$BLOCK_COUNT" ]; do
-  SCHEMA=$(extract_schema "$_n")
-  check_schema "S$_n schema block $_n of $BLOCK_COUNT" "$SCHEMA"
+  SCHEMA=$(extract_schema "$CR" "$_n")
+  check_schema "S$_n schema block $_n of $BLOCK_COUNT" "$SCHEMA" "$CR"
   _n=$((_n + 1))
 done
 
@@ -120,14 +126,25 @@ else
   bad "SC1: SCHEMA_EOF block count is $BLOCK_COUNT, expected exactly 3 (bump this check on purpose if a mode was added or removed)"
 fi
 
+# S_T (ADR-0194, Task 1) — codex-tester.sh's own --output-schema block, a separate script from
+# codex-reviewer.sh (rule 6: reviewer is read-only by construction, tester writes files, so they
+# stay two scripts, not one mode flag) with its own single SCHEMA_EOF block.
+if [ ! -f "$CT" ]; then
+  bad "S_T: codex-tester.sh not found at $CT"
+else
+  TESTER_SCHEMA=$(extract_schema "$CT" 1)
+  check_schema "S_T tester schema" "$TESTER_SCHEMA" "$CT"
+fi
+# plant: S_T | plugin/scripts/codex-tester.sh | "additionalProperties": false } SCHEMA_EOF | "additionalProperties": true } SCHEMA_EOF
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 5 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 5)"
+if [ "$_total" -ge 6 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 6)"
   PASS=$((PASS+1))
 else
-  echo "FAIL: Z1: only $_total assertions ran (floor: 5)"
+  echo "FAIL: Z1: only $_total assertions ran (floor: 6)"
   FAIL=$((FAIL+1))
 fi
 [ "$FAIL" -eq 0 ]

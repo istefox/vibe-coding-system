@@ -1,4 +1,4 @@
-# Memory index
+# Coder memory index
 
 One line per topic. The durable facts live in the linked file, not here — this index stays under
 the 200-line/25KB injection cap; the topic files do not.
@@ -9,6 +9,10 @@ the 200-line/25KB injection cap; the topic files do not.
 - [diff-budget-check.sh FILEBUDGET emission](topics/batch-C-filebudget-emission.md) — per-file
   ceiling attribution (ADR-0189 §D2-D6, issue #296, R-01/R-03) without touching the pre-existing
   BUDGET/SCOPE machinery
+- [Batch C step5-ask premise gap](topics/batch-C-step5-ask-and-effort.md) — Task 1's harness never
+  landed before Batch C ran, causing a predictable TG1 regression (ADR-0194)
+- [codex-tester.sh bash 3.2 gotchas](topics/codex-tester-cx12-argv-token-and-empty-array-nounset.md)
+  — CX12's single-token argv expectation and the empty-array set -u idiom (ADR-0194)
 - [codex-reviewer.sh audit mode](topics/task234-codex-reviewer-audit-mode-slug.md) — Tasks 2-4 of
   ADR-0193: SCHEMA_EOF block ordering, guard-embedding mechanism, python plant strings
 - [deep-refactor/SKILL.md Gate 0-CDX and dispatch IF/ELSE](topics/task678-deep-refactor-skill-gate-cdx-slug.md)
