@@ -40,9 +40,10 @@ present..." will NOT match — `flat_count` is `grep -F` with no `-i`. Write the
 
 **Heading/label style in this file for a conditional split is bold text, not a markdown heading.**
 `**Branch A — ...:**` / `**Branch B — ...:**` are bold paragraph labels, not `###` headings. I
-followed suit with `**IF `USE_CODEX_AUDIT = true`:**` / `**ELSE (`USE_CODEX_AUDIT = false` — today's
-behaviour):**` — also bold text, not `####` or `###`. This matters mechanically, not just
-stylistically: CX20's awk terminates its capture on the next `^### ` line, so introducing a real
+followed suit with **IF `USE_CODEX_AUDIT = true`:** / **ELSE (`USE_CODEX_AUDIT = false` — today's
+behaviour):** — also bold text, not `####` or `###`. This matters mechanically, not just
+stylistically: CX20's awk terminates its capture on the next line matching `^###` followed by a
+space, so introducing a real
 `###` heading anywhere inside the Branch A/B content would truncate or split `DISPATCH_BLOCK` and
 break the exact-2 counts.
 
