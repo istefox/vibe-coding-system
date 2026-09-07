@@ -338,6 +338,36 @@ out | grep -q 'not-required: shell-tests' \
   || bad "R3: the real advisory did not fire — the harness job's exclusion from the gate is invisible"
 
 # ================================================================================================
+# RB. The REAL data, re-recorded (rule 14 — the 2026-08-01 snapshot above stays as the historical
+# record, never edited in place). ADR-0193's D2/Task 8 deleted `.github/workflows/ci.yml` and
+# removed `ci` from main's required status checks (executed 2026-09-06, immediately after the D2/D3
+# PR merged — the ordering the ADR names as load-bearing). `ci` no longer exists as a required
+# context OR as a producer; `shell-tests` moves from advisory (R3 above) to REQUIRED. R3's assertion
+# was correct for 2026-08-01 and is not the live truth any more — this block is what proves that
+# forward instead of silently leaving R3 to be misread as still-current.
+RUNSR2=$(mk_runs real2 "markdownlint
+shell-tests
+plant-shard
+links")
+PROTR2=$(mk_prot real2 '{"required_status_checks":{"strict":false,"contexts":["markdownlint","links","shell-tests"],"checks":[{"app_id":15368,"context":"markdownlint"},{"app_id":15368,"context":"links"},{"app_id":15368,"context":"shell-tests"}]}}')
+RCA_PROT="$PROTR2"; RCA_RUNS="$RUNSR2"; export RCA_PROT RCA_RUNS
+RC=$(run "$REPO")
+_nreq2=$(out | grep -c '^  required: ' || true)
+if [ "$_nreq2" -ge 3 ]; then
+  ok "RB1: the recorded live required set (2026-09-06) resolves $_nreq2 contexts (guard: >= 3)"
+else
+  bad "RB1: only $_nreq2 required context(s) parsed from the recorded response — RB2/RB3 would be vacuous"
+fi
+[ "$RC" = 0 ] && ok "RB2: this repository's real required set (2026-09-06, post-ADR-0193) is fully satisfiable" \
+              || bad "RB2: expected PASS on the 2026-09-06 real data, got rc=$RC — $(out | head -3)"
+out | grep -q '  required: shell-tests' \
+  && ok "RB3: shell-tests is now a REQUIRED context (was advisory-only on 2026-08-01 per R3) — confirms Task 8 landed" \
+  || bad "RB3: shell-tests is not reported as required on the 2026-09-06 data — did Task 8's branch-protection change actually land?"
+out | grep -q 'not-required: shell-tests' \
+  && bad "RB4: shell-tests still reported as advisory-only — the required-set derivation did not pick up the 2026-09-06 change" \
+  || ok "RB4: shell-tests is no longer reported as produced-but-not-required (it moved into the required set)"
+
+# ================================================================================================
 # F. Check 8's fence — declared, and EXECUTED. The whole defect was a step that had never run
 # (ADR-0083 §D3): a marker anchor, never a heading, and an empty extraction is a FAILURE here.
 enumerate_fences() {

@@ -1,10 +1,11 @@
 # ADR-0193 — The post-merge CI re-run is deleted, and the harness suite runs in exactly one job
 
-- **Status:** Partially Accepted — D1 (Phase 1) and D2/D3 (Phase 2 code changes: `ci.yml` deleted,
-  the sixteen stale guards replaced by `CI3`) are accepted and implemented. The one remaining
-  Phase 2 step — removing `ci` from `main`'s required status checks on GitHub — is a separate,
-  already-approved HITL action (D2's own text below), executed immediately after this ADR's PR
-  merges, per the plan's stated ordering (a gap here makes every PR unmergeable, per Consequences).
+- **Status:** Accepted, fully implemented. D1 (Phase 1), D2 (`ci.yml` deleted, `ci` removed from
+  `main`'s required status checks), and D3 (the sixteen stale guards replaced by `CI3`) are all
+  implemented. The branch-protection change turned out to be a precondition for the merge, not a
+  followup: `ci` never reported once `ci.yml` was gone in the same PR, blocking the merge outright
+  (`mergeStateStatus: BLOCKED`) until the required-check removal executed first — the plan's
+  original "immediately after merge" ordering did not survive contact with GitHub's own gate.
 - **Date:** 2026-09-06
 - **Issues:** none filed yet
 - **Related:** ADR-0180 (`ci-tier` selection — one Decision clause is amended forward by D2, not
@@ -106,7 +107,7 @@ a suspicious merge, a human runs the full validation on `main` on demand, at zer
 Verified locally 2026-09-06: full 102-file harness suite green after this change (no test asserts
 on the trigger/condition blocks touched here).
 
-### D2 — `.github/workflows/ci.yml` is deleted; `shell-tests` is the sole harness runner — ACCEPTED, IMPLEMENTED (file deletion); branch-protection change PENDING
+### D2 — `.github/workflows/ci.yml` is deleted; `shell-tests` is the sole harness runner — ACCEPTED, IMPLEMENTED
 
 This **amends ADR-0180's Decision**, which states that `ci.yml`'s `ci` job keeps its `Decide CI
 tier` step and its test loop, "preserving the literal glob line `for t in
@@ -140,8 +141,12 @@ divergent copy goes.
 
 `ci` is removed from `main`'s required status checks, leaving `markdownlint`, `links`,
 `shell-tests` — all three still produced by `docs-ci.yml`. This is a change to repository settings
-on GitHub and is a human gate, not an agent action — **pending, to execute immediately after this
-ADR's PR merges** (Consequences §Negative names the gap this leaves open in between).
+on GitHub and is a human gate, not an agent action. **Executed 2026-09-06, before the PR merged,
+not after**: with `ci.yml` deleted in the same PR, `ci` had no producer on that branch and GitHub
+reported `mergeStateStatus: BLOCKED` — the plan's assumed ordering ("update protection immediately
+after merge") could not work because the PR could not merge at all until the required-check
+removal happened first. Consequences §Negative records the ordering this ADR originally assumed,
+for the record, alongside what actually happened.
 
 ### D3 — Sixteen weak guards become one canonical assertion — ACCEPTED, IMPLEMENTED
 
@@ -257,8 +262,8 @@ runs nothing, dressed as a check that runs something.
   template it stopped matching, parameterised by a `.claude/test-cmd` that does not exist.
 - `workflow_dispatch` (D1, in effect) gives on-demand full validation of `main` — a capability the
   repository did not have before, at zero standing cost.
-- (Once the pending branch-protection change lands) The required-context set shrinks to three
-  checks that all verify something.
+- The required-context set shrank to three checks that all verify something
+  (`markdownlint`, `links`, `shell-tests`).
 
 ### Negative
 
@@ -268,10 +273,12 @@ runs nothing, dressed as a check that runs something.
   is a manual `workflow_dispatch`, which someone has to remember to run.
 - **This does not bring the repository under the free allowance**, even with D1+D2+D3 implemented.
   ~7100 projected min/month against 3000. The residual is named in §D4 and needs its own issue.
-- **The branch-protection change (D2) is still pending** and cannot be scripted away as part of the
-  code change. Between merging this ADR's PR and updating protection, `ci` is a required context
-  with no producer and every PR is unmergeable. The ordering is a human gate with a stated
-  sequence, executed immediately after merge, not a detail to defer.
+- **The branch-protection change (D2) could not be scripted away as part of the code change, and
+  its assumed ordering was wrong.** The plan called for updating protection immediately AFTER
+  merging this ADR's PR; in practice, deleting `ci.yml` in that same PR meant `ci` had no producer
+  on the branch, so GitHub reported the PR itself as `mergeStateStatus: BLOCKED` before any merge
+  was possible. The required-check removal had to execute BEFORE the merge, as its own human gate,
+  not after it as originally planned.
 - **`ci-tier-workflow-decide.test.sh` lost a third of its population (D2, implemented).** It used
   to execute the `Decide CI tier` body from three real call sites; two remain, with a `CTW-SITES`
   count guard added so a further silent collapse of the site list cannot pass unnoticed. Its CTW0
@@ -288,14 +295,13 @@ runs nothing, dressed as a check that runs something.
 - `staging/project-templates/ci/ci.yml` is untouched (D2); ADR-0022 §D8's contract for target
   repos is unaffected, as are `secret-dep-gate.test.sh`'s F5/F6, which assert against the template.
 - ADR-0151's sharding, its baseline pass and §D10's cost trade-off are untouched by instruction.
-- `required-checks-audit.test.sh`'s R-block fixture is deliberately **not yet touched**: its mocked
-  branch protection (`PROTR`) and mocked observed check-runs (`RUNSR`) still include `ci`, matching
-  live GitHub branch protection as of this commit — `ci` has not been removed from the required set
-  yet (that is the pending D2 branch-protection step above). Editing this fixture now would record
-  a state that is not yet true, which rule 13 (measure the premise before designing) forbids just
-  as much as an unmeasured premise does. It is re-recorded, not corrected in place, once the
-  branch-protection change lands: the 2026-08-01 snapshot stays as the historical record and a
-  dated snapshot is added beside it (rule 14).
+- `required-checks-audit.test.sh`'s R-block fixture (2026-08-01, `PROTR`/`RUNSR`) is **left
+  untouched, per rule 14** — it is a correct historical record of branch protection as it stood
+  that day, including `ci` as both required and produced. A new `RB` block, added once the
+  branch-protection change actually landed (2026-09-06), re-records the now-live state instead:
+  `ci` gone from the required set, `shell-tests` moved from advisory (R3's `not-required:
+  shell-tests`) to required (`RB3`/`RB4`). R3 itself is not edited — it stays a true statement
+  about 2026-08-01, and RB3/RB4 are the forward correction rule 14 asks for.
 - TODO.md's VCS-029 (a stacked PR whose base is not `main` runs zero checks) is neither fixed nor
   worsened by D1; it is a different consequence of the same `branches: [main]` filter and is named
   here only so the two are not read as one.
@@ -304,8 +310,10 @@ runs nothing, dressed as a check that runs something.
 
 - Actions API measurement, 2026-09-06: 306 jobs across 80 runs created since 2026-09-01, billed at
   `ceil(seconds/60)` per job.
-- Branch protection, live 2026-09-06:
+- Branch protection, live 2026-09-06 (before D2's required-check change):
   `{"contexts":["markdownlint","links","ci","shell-tests"],"strict":false,"linear":false}`.
+- Branch protection, live 2026-09-06 (after D2, executed pre-merge as PR #565's own precondition):
+  `{"contexts":["markdownlint","links","shell-tests"],"strict":false,"linear":false}`.
 - Harness-set derivation, 2026-09-06: 102 names in `docs-ci.yml`, 102 files on disk, 0 unique
   either side.
 - ADR-0180 §Decision (the clause D2 amends), ADR-0151 §D8/§D10, ADR-0127 §D4, ADR-0113 / issue

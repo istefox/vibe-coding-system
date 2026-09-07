@@ -68,7 +68,45 @@ run — semgrep unavailable" and continue. Tooling absence never blocks the rema
 notification. Nothing here previously said to wait, which was survivable only because the next
 section is a human checklist.
 
-Dispatch a `reviewer` agent with a **security-only** brief:
+**Resolve the review scope first, before choosing a backend (ADR-0195 D4):**
+
+1. `git diff --stat HEAD` — if non-empty, scope is `uncommitted`.
+2. Otherwise, ask for the audit's base ref (the last tag, or the release branch point) and use
+   scope `base:<ref>`.
+3. Otherwise, scope is the whole source tree — **Codex is not offered below; go straight to the
+   Claude dispatch paragraph further down, unchanged.**
+
+When scope is `uncommitted` or `base:<ref>`, also run `git ls-files --others --exclude-standard`
+and count the result (N). Those files are invisible to every Codex diff scope — carry N into
+the ask below and into the report's Step 2 line.
+
+**If scope is `uncommitted` or `base:<ref>`, ask once via `AskUserQuestion` (ADR-0195 D2):** "Use
+Codex for this security review, or Claude — and if Claude, which model? (N untracked file(s)
+are invisible to Codex on this scope.)" — state N; omit that clause if N is 0. Options:
+
+- `[codex]` "Codex (Recommended — a different vendor satisfies this step's different-model rule
+  by construction)".
+- `[claude-opus]` "Claude reviewer, opus".
+- `[claude-sonnet]` "Claude reviewer, sonnet".
+
+**If N > 0, recommend `[claude-opus]` instead of `[codex]`** — untracked files are a real
+security blind spot on any Codex scope, and this step's report is meant to be trustworthy above
+being cheap.
+
+**On `[codex]`:** run `~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope
+<uncommitted|base:ref> --focus security --out <tmp-review-file>`.
+
+- exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report. Its last line
+  is the provenance line the wrapper appends (ADR-0195 D5) — copy it verbatim into the report's
+  "Model used" line below. Continue to Step 3.
+- exit `3` (DID-NOT-RUN) → **stop and ask, never silently fall back to Claude:**
+  `AskUserQuestion`: "Codex review unavailable at security-audit Step 2: `<reason from
+  stderr>`. Fallback to Claude's reviewer agent for this dispatch, or halt?" Options: "Fallback
+  to Claude reviewer (Recommended)" → dispatch `reviewer` per the pin below, then continue /
+  "Halt" → stop the skill (this skill has no chain to abort into — say so to the user).
+
+**On `[claude-opus]`/`[claude-sonnet]`, or when scope is the whole tree:** Dispatch a `reviewer`
+agent with a **security-only** brief:
 
 > "Review the current diff (or, if there is no diff, the full source tree) for security
 > findings only: injection, auth bypass, hardcoded secrets, path traversal, insecure
@@ -76,10 +114,11 @@ Dispatch a `reviewer` agent with a **security-only** brief:
 > structure, and performance — those are out of scope for this review."
 
 **Pin `model: opus` on this dispatch explicitly, unless the orchestrator's own session is
-already running at `model: opus`, in which case pin `model: sonnet` instead.** The rule is not
-"always opus" — it is "always different from whatever model is doing the dispatching". A fixed
-pin that happens to coincide with the session's own model is not a second opinion; it is the
-same model reviewing itself under a different label.
+already running at `model: opus`, in which case pin `model: sonnet` instead** (or the model
+chosen by the ask above, when scope allowed one). The rule is not "always opus" — it is "always
+different from whatever model is doing the dispatching". A fixed pin that happens to coincide
+with the session's own model is not a second opinion; it is the same model reviewing itself
+under a different label.
 
 **A same-model self-review does not satisfy this step.** This is the generator/verifier
 problem (ADR-0049) reappearing in the security domain: a model marking its own session's work
@@ -191,7 +230,8 @@ Create `docs/security-audit/` first if it does not exist.
 
 ## Step 2 — Separate-AI review
 
-Model used: <model> (orchestrator session model: <model>)
+Model used: <model> (orchestrator session model: <model> | N/A — Codex, a different vendor by
+construction; copy the wrapper's provenance line here verbatim per ADR-0195 D5)
 [Findings from the dispatched reviewer, security-only]
 
 ## Step 3 — Human checklist

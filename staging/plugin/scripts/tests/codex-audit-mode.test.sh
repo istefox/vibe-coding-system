@@ -2065,7 +2065,7 @@ fi
 # replacement is `$PWD` rather than a deletion because deleting it would leave the variable holding
 # the caller's cwd anyway — the same defect, but reached by an unset variable rather than by the
 # wrong value, and `set -u` would then decide the outcome instead of the mechanism.
-# plant: CX42 | plugin/scripts/codex-reviewer.sh | ( cd "$CODEX_CWD" && codex exec -m gpt-5.6-terra -c model_reasoning_effort=medium | ( codex exec -m gpt-5.6-terra -c model_reasoning_effort=medium
+# plant: CX42 | plugin/scripts/codex-reviewer.sh | ( cd "$CODEX_CWD" && codex exec -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" | ( codex exec -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT"
 # plant: CX42 | plugin/scripts/codex-reviewer.sh | CODEX_CWD="$REPO_ROOT" | CODEX_CWD="$PWD"
 
 # CX43 (R-02) — the audited SCOPE ITSELF cannot be widened by a TRACKED SYMLINK that leaves the
