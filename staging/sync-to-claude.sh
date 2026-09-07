@@ -118,6 +118,7 @@ fi
 # deployed-only: project-tasks — symlink into a foreign repository (Developer/Skills/tasks, github.com/istefox/Skills) carrying its own git remote, history and PR-based workflow; migrated out of this repo's vendored surface after ADR-0153, ratified by ADR-0191, same class as auto-learning/website-auditor above.
 # deployed-only: vibiso-intake — front end of a different project's intake contract (vibiso-system ADR-002).
 # deployed-only: website-auditor — symlink into a foreign repository (steve-skills/website_auditor); moves ADR-0024 section 2.1's exclusion out of prose.
+# deployed-only: worktree-todo — local worktree utility that symlinks a worktree's gitignored ledger file to the main worktree's copy; written for a project that gitignores its TODO.md, while this repo's TODO.md is tracked, so it is not this repo's surface to vendor.
 PAIRS="
 user/CLAUDE.md|CLAUDE.md
 plugin/agents/architect.md|agents/architect.md
