@@ -127,6 +127,23 @@ print(flat(sys.argv[1]).count(flat(sys.argv[2])))
 ' "$1" "$2"
 }
 
+# flat_count_stdin <needle> (text piped in on stdin) — same normalization as flat_count_text,
+# for a haystack too large to pass as a single argv string. Linux caps one argument at
+# MAX_ARG_STRLEN (128 KiB); macOS has no such per-argument limit, so a whole-file haystack
+# passed via argv (as CX30 below used to) passes locally and fails only on a Linux CI runner
+# once the file crosses that threshold.
+flat_count_stdin() {
+  python3 -c '
+import re, sys
+def flat(s):
+    s = re.sub(r"[`*_]", "", s)
+    s = re.sub(r"\s+", " ", s)
+    return s.lower()
+text = sys.stdin.read()
+print(flat(text).count(flat(sys.argv[1])))
+' "$1"
+}
+
 # =====================================================================================
 # A. The script exists, is deployed, and shells codex exec with the write-sandboxed flags
 # (R-01, R-02). CX03/CX04 scope to the codex-exec invocation slice only (rule 1) — a needle
@@ -569,7 +586,7 @@ fi
 
 CX30_TABLE_ROW_HAS_TESTER=0
 grep -qF '| `architect`, `coder`, `tester` | `xhigh` |' "$STEP5" && CX30_TABLE_ROW_HAS_TESTER=1
-CX30_TMPL_COUNT=$(flat_count_text "$(cat "$STEP5")" 'no `effort` pin — the Agent tool has no such parameter')
+CX30_TMPL_COUNT=$(flat_count_stdin 'no `effort` pin — the Agent tool has no such parameter' < "$STEP5")
 CX30_TEMPLATE_STATES_NO_EFFORT=0
 [ "$CX30_TMPL_COUNT" -ge 1 ] && CX30_TEMPLATE_STATES_NO_EFFORT=1
 if [ "$CX30_TABLE_ROW_HAS_TESTER" -eq 0 ] && [ "$CX30_TEMPLATE_STATES_NO_EFFORT" -eq 1 ]; then
