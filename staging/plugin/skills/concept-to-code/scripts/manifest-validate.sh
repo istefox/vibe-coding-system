@@ -399,6 +399,29 @@ if grep -q '^step5_codex_review_asked:' "$MANIFEST"; then
   fi
 fi
 
+# Invariant 26 (conditional, schema 1.4, ADR-0194): if use_codex_tester field present, must be
+# true or false. Absent = valid (retrocompat 1.0-1.3), same template as use_codex_review
+# (Invariant 24) — this feature ADDS an opt-in path, so absent/false is the pre-feature-equivalent
+# default.
+if grep -q '^use_codex_tester:' "$MANIFEST"; then
+  if ! grep -Eq '^use_codex_tester: (true|false)$' "$MANIFEST"; then
+    fail "use_codex_tester field present but value is not 'true' or 'false'"
+  fi
+fi
+
+# Invariant 27 (conditional, schema 1.4, ADR-0194): if step5_codex_tester_asked field present,
+# must be true or false. Absent = valid (retrocompat 1.0-1.3 / pre-ADR-0194 1.4 manifests), same
+# shape as Invariant 25. Distinguishes "the Step 5 pre-dispatch ask has not yet fired on this
+# manifest" (absent or false) from "it fired and was answered" (true, set once regardless of
+# which answer was given) — use_codex_tester alone cannot carry that distinction because it is
+# seeded false and a declined ask leaves it false too (same three-state reasoning as
+# step5_codex_review_asked, ADR-0193 correction).
+if grep -q '^step5_codex_tester_asked:' "$MANIFEST"; then
+  if ! grep -Eq '^step5_codex_tester_asked: (true|false)$' "$MANIFEST"; then
+    fail "step5_codex_tester_asked field present but value is not 'true' or 'false'"
+  fi
+fi
+
 if [ "$ERRORS" != "0" ]; then
   exit 1
 fi

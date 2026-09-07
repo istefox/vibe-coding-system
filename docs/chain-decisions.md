@@ -5650,3 +5650,45 @@ Key architectural decisions:
 - **Instruction, not enforcement (rule 16).** The harness pins that the clauses are in the prompt. The pre-registered success criterion is a re-measurement over the next 30 or more dispatches: never-emitted headers well below 54 of 83, absolute-path rejections near zero.
 
 Detail: `docs/architecture/ADR-0192-coder-working-discipline.md`.
+
+## Decisions from the codex-claude-choice-for-tester chain (ADR-0194)
+
+Codex-vs-Claude backend choice for the tester subagent, extending ADR-0187/ADR-0193's reviewer-side
+pattern: `staging/plugin/scripts/codex-tester.sh` (new).
+
+Key architectural decisions:
+- **A separate script, not a mode flag on `codex-reviewer.sh`.** The two agents answer different
+  questions (rule 6): reviewer is read-only by construction, tester must write test files and run
+  the suite. Folding a write-capable mode into a script whose whole design leans on being
+  unconditionally read-only would weaken that guarantee for both callers.
+- **`codex exec -s workspace-write -C <worktree>`**, verified live against the installed CLI, reuses
+  the worktree isolation the tester dispatch already requires rather than inventing a second
+  isolation boundary.
+- **A post-run scope check as an independent second safety net (new exit code 4).** Re-derives the
+  full set of paths Codex touched — tracked diff, staged diff, *and* untracked files, minus a
+  pre-run baseline — because a brand-new production file written by Codex is untracked and
+  invisible to `git diff --name-only` alone, which the initial draft would have missed.
+- **On the `codex` branch, the tester runs in the orchestrator's own live turn on both dispatch
+  paths, and the Workflow pipeline drops its tester stage entirely when codex is chosen.** A
+  Workflow `pipeline()` stage has no `AskUserQuestion` hook, so "never a silent fallback" (the
+  reviewer's own standing rule) is structurally unsatisfiable from inside one — unlike a skipped
+  review, a tester that silently didn't run leaves the coder with no red tests at all.
+- **Report-format parity (Tests added, Run result, Coverage, Bugs found, Requirement IDs, Sub-steps)
+  is enforced by prompt instruction only, no structural validator** — the same trust level
+  `codex-reviewer.sh` already has for its own parity with `reviewer.md`.
+- **An `--effort` override is exposed, no `-m/--model` override.** The set of valid Codex model
+  names was not fully verified live; `--effort` passes through as
+  `-c model_reasoning_effort=<value>`, verified against the live CLI and config.
+- **A related, independently-requested change rides the same ADR:** the tester's default Claude
+  effort pin drops from `xhigh` to `high` globally, in `tester.md` frontmatter and in two dispatch
+  sites — a third location, an effort table in `step5-implementation.md`, was found only because it
+  would otherwise have silently overridden the change.
+- **Two new manifest fields (`use_codex_tester`, `step5_codex_tester_asked`), additive under the
+  existing schema 1.4, no version bump** — same treatment ADR-0193 gave the reviewer's own fields,
+  new Invariants 26/27.
+- **Disclosed, not yet closed:** the live dry run (does `workspace-write` survive a real test-suite
+  execution inside a worktree; does the six-field report survive a real round trip) is deferred to
+  implementation, the same shape ADR-0193's own deferred manual step took before it found a real
+  defect.
+
+Detail: `docs/architecture/ADR-0194-codex-tester-choice.md`.
