@@ -27,6 +27,21 @@
 - A SPEC id carrying `(no-test: …)` whose token appears anywhere in a scoped test file produces
   `STALE-WAIVER`, exit 3, blocking Step 5→6 before any code exists. Fix is a SPEC.md edit at Gate 2
   plus real existence-level assertions — never deleting the waiver alone.
+- **The forward form of that trap is the plan's job to prevent, and it is easy to walk into.** A
+  plan that cites a `(no-test:)` id in a task heading is correct (the marker exempts the *test*
+  axis, never the plan axis — ADR-0138), but if the same plan also puts that id in a per-assertion
+  bullet the tester will copy it into the harness comment header and detonate `STALE-WAIVER` on the
+  first run. Write the id in the task heading only, and say in the plan, in words, that the token
+  must never be typed into a test file. Caught live 2026-09-05 on the codex-review-gate-deep-refactor
+  plan: three ids (R-12/R-13/R-14) were about to be written into a new harness.
+- **Before naming any harness by basename in a plan, census its `R-NN` tokens** —
+  `grep -ohE '\bR-[0-9]+' <harness> | sort -u`. Zero tokens means the basename is free to use;
+  anything else imports that namespace. Measured 2026-09-05: `codex-reviewer-schema.test.sh`,
+  `workflow-dispatch-pins.test.sh`, `dispatch-completion.test.sh` are all zero and safe;
+  `fence-contract-coverage.test.sh` (8 ids), `plant-registry-parallel.test.sh` (11),
+  `spec-coverage-baseline-bump.test.sh` (8) and `pairs-completeness.test.sh` (2) are not — refer to
+  those descriptively. The census is one command; the alternative is a plan whose ids read green
+  before a line of code exists.
 - Takes `--spec`/`--plan` flags, not positionals; a bad invocation exits 0 with a usage message on
   stdout. Always check the `COVERED` lines are actually printed, not just the exit code.
 - Run `spec-coverage.sh --spec SPEC.md --plan <plan> --tests-root .` before finishing any plan — a
