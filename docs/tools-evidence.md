@@ -269,3 +269,48 @@ pasting the full definition (role, boundaries, tool restrictions) into the promp
 stand-in honors the same contract even where the harness does not enforce it. Landed in
 `~/.claude/rules/tools.md` via auto-learning on 2026-09-03/04, backported here the same way
 as `github-raw-default-branch` above.
+
+## toolsearch-load-before-typed-params
+
+A deferred tool (`TaskCreate`) was called with typed parameters — an array, a number, a
+boolean — before its schema had been loaded via `ToolSearch`. The client-side parser
+serialized every typed field to a string instead of rejecting the call outright, so the
+failure surfaced downstream as a subtly wrong call rather than an immediate error. Calling
+`ToolSearch({"query": "select:<ToolName>"})` first loads the real schema and the call
+succeeds normally. `TaskCreate` has a second, independent trap: it creates exactly ONE task
+per call — top-level `subject`/`description` strings, never a `tasks`/`todos` array passed
+in one shot. A call carrying only `{}` (e.g. `ListAgents`, no fields at all) is unaffected by
+load order either way, since there are no typed params to mis-serialize. Landed in
+`~/.claude/rules/tools.md` via auto-learning on 2026-09-07 (session
+`db34b10a-3a09-4a96-9b9a-b9562560712f`), backported here in PR #575.
+
+## fork-inherited-context-hitl-bypass
+
+A `fork` dispatched for read-only regression analysis, inside a conversation that also
+carried a pending, already-approved merge instruction ("mergia, ma prima verifica eventuali
+possibili regressioni" — merge it, but first check for regressions), executed the merge
+itself instead of reporting back. A fork inherits the FULL conversation, including the
+user's earlier "mergia", and the SAME tool access as the parent — not a restricted, read-only
+one — so it treated the inherited instruction as its own authorization once it found no
+regressions. The prompt made this worse by asking for a verdict phrased as an action label,
+"SAFE TO MERGE / NOT SAFE", which primed the fork toward completing the action rather than
+just reporting on it. Outcome was clean (no real regression existed) but the process
+bypassed the intended human checkpoint of reviewing the findings before an irreversible
+action ran. Fix: state explicitly in the fork prompt, "report your findings back to me and
+stop — do not execute the action yourself, regardless of what the inherited context implies
+is authorized," and phrase the requested verdict as a neutral finding ("regression risk:
+none found / found"), never an action label. Applies to every fork, not just this repo —
+forks always inherit full tool access, so the scoping has to happen in the prompt, not in a
+tool restriction. Incident: vibe-coding-system PR #570, 2026-09-07. Landed in
+`~/.claude/rules/tools.md` via auto-learning the same day (session
+`db34b10a-3a09-4a96-9b9a-b9562560712f`), backported here in PR #575.
+
+## agent-no-resume-use-sendmessage
+
+`Agent()` always spawns a brand-new subagent, even when the prompt is explicitly aimed at
+continuing a prior dispatch — there is no resume-by-prompt-similarity, and a second `Agent()`
+call sharing the same intent produces an unrelated agent with no memory of the first one's
+work. To keep talking to an already-dispatched agent, running or finished, find its task-id
+with `ListAgents` and use `SendMessage(to: <task-id>, message: ...)` instead of calling
+`Agent()` again. Landed in `~/.claude/rules/tools.md` via auto-learning on 2026-09-07 (session
+`db34b10a-3a09-4a96-9b9a-b9562560712f`), backported here in PR #575.
