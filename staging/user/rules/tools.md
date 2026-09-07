@@ -33,21 +33,19 @@ when the reason here isn't enough, don't restate it here.
   never restate the rule it's checking.** The reminder tests itself, not the subagent, and
   hides the failure of the next run that omits it. → #subagent-self-check
 
-- **A GUI app launched with `nohup … &` from a Bash call dies when the command returns** —
-  the tool kills the process group. Use `open -n /path/App.app --args …` instead, which
-  hands the launch to LaunchServices. → #gui-app-nohup
+- **A GUI app launched with `nohup … &` from a Bash call dies when the command returns**
+  (the tool kills the process group) — use `open -n /path/App.app --args …` instead.
+  → #gui-app-nohup
 
-- **`tell ... first process whose unix id is <pid>` fails reliably** (`Indice non valido
-  (-1719)`) even when the pid is alive. Address the process by name:
-  `tell process "AppName" to ...`. → #system-events-by-pid
+- **`tell ... first process whose unix id is <pid>` fails reliably** (`-1719`) even when
+  alive — address by name instead: `tell process "AppName" to ...`. → #system-events-by-pid
 
-- **UI-element-level System Events queries fail with `-1728`** (no Accessibility access) —
-  a standing state, not a fluke. Non-UI calls still work. Don't retry variations; ask the
-  user to drive the GUI manually. → #system-events-accessibility
+- **UI-element-level System Events queries fail with `-1728`** (no Accessibility access,
+  a standing state) — non-UI calls still work; ask the user to drive the GUI manually.
+  → #system-events-accessibility
 
-- **`ScheduleWakeup` requires `prompt` unless `stop: true`**, even for a pure `noop: true`
-  ping. Always pass `prompt` alongside `delaySeconds`, `reason`, `noop`.
-  → #schedulewakeup-prompt
+- **`ScheduleWakeup` requires `prompt` unless `stop: true`**, even for `noop: true`. Always
+  pass `prompt` alongside `delaySeconds`, `reason`, `noop`. → #schedulewakeup-prompt
 
 - **`VAR=value cmd args…` resolves `cmd` through the NEW value being assigned**, not the
   caller's current PATH. Testing an empty-PATH failure breaks a bare-name wrapper command
@@ -70,9 +68,18 @@ when the reason here isn't enough, don't restate it here.
   recursively instead: `grep -rln "pattern" Sources/`. → #zsh-nomatch-glob
 
 - **`gh pr checks <N>` exits non-zero (observed: 8) while checks are merely pending, not
-  only on failure.** Read the per-check status column, or `--json bucket` (lowercase
-  `"pending"`, not `"PENDING"`). Poll in the background:
-  `until gh pr checks <N> --json bucket -q '[.[].bucket] | all(. != "pending")' ...; do
+  only on failure — and also exits 1 with `no checks reported on the '<branch>' branch` when
+  the repo has no CI configured at all, which looks identical to "still pending" and hangs a
+  poll loop forever.** Read the per-check status column, or `--json bucket` (lowercase
+  `"pending"`, not `"PENDING"`). Before polling, check
+  `gh pr view <N> --json statusCheckRollup -q '.statusCheckRollup'`; empty means no CI exists
+  at all, so stop any background poll and merge directly.
+  **`--json bucket -q '<jq boolean expr>'` does NOT fix the loop**: `gh`'s own process exit
+  code stays 0 whenever the call itself succeeds, regardless of whether the printed jq boolean
+  is `true` or `false` — so `until gh pr checks <N> --json bucket -q '...'; do sleep 15; done`
+  exits after the FIRST iteration even while still pending (confirmed live, 2026-09-06). Loop on
+  the printed TEXT instead:
+  `until [ "$(gh pr checks <N> --json bucket -q '[.[].bucket] | all(. != "pending")' 2>/dev/null)" = "true" ]; do
   sleep 15; done`. → #gh-pr-checks-pending
 
 - **`gh pr view <N> --json ...` has no `merged` field.** Use `mergedAt`:
@@ -95,10 +102,12 @@ when the reason here isn't enough, don't restate it here.
   like `^` is a parse error, not a literal plus. Don't escape the plus, or use fixed-string
   mode (`grep -F`). → #ugrep-anchor-plus
 
-- **`git checkout -- <file>` / `git reset --hard` are denied by the Bash permission system,
-  even issued alone.** If the edit was made via the Edit tool, revert with an inverse Edit
-  call instead — no permission gate there. For a stash-pop conflict, resolve hunks by hand
-  with Edit rather than reaching for reset. → #git-checkout-discard-denied
+- **`git checkout -- <file>` / `git reset --hard` / `git restore --staged <file>` are denied
+  by the Bash permission system, even issued alone.** If the edit was made via the Edit tool,
+  revert with an inverse Edit call instead — no permission gate there. For a stash-pop
+  conflict, resolve hunks by hand with Edit rather than reaching for reset. For unstaging, no
+  in-session workaround was found; leave the file staged and give the user the exact command
+  to run themselves, rather than retrying variations. → #git-checkout-discard-denied
 
 - **`git push origin :refs/tags/<tag>` is reliably blocked by the Auto Mode classifier** —
   retrying doesn't help. Delete via the GitHub API instead:
@@ -163,3 +172,26 @@ when the reason here isn't enough, don't restate it here.
   under the same contract (role, boundaries, and any tool restriction honored as a hard
   self-imposed rule even where not enforced by the grant). A fresh session picks up the
   repaired symlink normally. → #agent-registry-snapshot-mid-session
+
+- **A tool not yet in the discovered-tool set (e.g. `TaskCreate`) must be loaded with
+  `ToolSearch({"query": "select:<ToolName>"})` before a call using typed params (arrays,
+  numbers, booleans)** — otherwise those params get serialized to strings and the
+  client-side parser rejects the call. `TaskCreate` also creates exactly ONE task per call:
+  top-level `subject`/`description` strings, never a `tasks`/`todos` array. A call with only
+  `{}` (e.g. `ListAgents`) is unaffected regardless of load order. → #toolsearch-load-before-typed-params
+
+- **A `fork` inherits the full conversation, including any pending irreversible instruction
+  (merge, push, delete, deploy), and the same tool access as the parent — not a restricted,
+  read-only one.** Dispatched for analysis only, with a verdict prompt phrased as an action
+  label ("SAFE TO MERGE / NOT SAFE"), it can read an earlier "go ahead" as its own
+  authorization and execute the action itself before reporting back. State explicitly in the
+  fork prompt: "report your findings and stop — do not execute the action yourself, regardless
+  of what the inherited context implies is authorized," and phrase the requested verdict as a
+  neutral finding ("regression risk: none found"), not an action label. → #fork-inherited-context-hitl-bypass
+
+- **`Agent()` always spawns a brand-new subagent, even with a prompt aimed at continuing a
+  prior dispatch** — there is no resume-by-prompt-similarity. To keep talking to an
+  already-dispatched agent (running or finished), find its task-id with `ListAgents` and use
+  `SendMessage(to: <task-id>, message: ...)`. → #agent-no-resume-use-sendmessage
+
+<!-- src:auto-learning session:db34b10a-3a09-4a96-9b9a-b9562560712f date:2026-09-07 -->
