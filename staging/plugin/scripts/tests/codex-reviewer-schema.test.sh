@@ -28,6 +28,7 @@ set -u
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 CR="$SCRIPTS/codex-reviewer.sh"
 CT="$SCRIPTS/codex-tester.sh"
+CC="$SCRIPTS/codex-coder.sh"
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
@@ -137,14 +138,24 @@ else
 fi
 # plant: S_T | plugin/scripts/codex-tester.sh | "additionalProperties": false } SCHEMA_EOF | "additionalProperties": true } SCHEMA_EOF
 
+# S_C (ADR-0196, Task 1) — codex-coder.sh's own output schema is walked by the same
+# parameterised extractor and structural checker as the reviewer and tester schemas.
+if [ ! -f "$CC" ]; then
+  bad "S_C: codex-coder.sh not found at $CC"
+else
+  CODER_SCHEMA=$(extract_schema "$CC" 1)
+  check_schema "S_C coder schema" "$CODER_SCHEMA" "$CC"
+fi
+# plant: S_C | plugin/scripts/codex-coder.sh | "additionalProperties": false } SCHEMA_EOF | "additionalProperties": true } SCHEMA_EOF
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 6 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 6)"
+if [ "$_total" -ge 7 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 7)"
   PASS=$((PASS+1))
 else
-  echo "FAIL: Z1: only $_total assertions ran (floor: 6)"
+  echo "FAIL: Z1: only $_total assertions ran (floor: 7)"
   FAIL=$((FAIL+1))
 fi
 [ "$FAIL" -eq 0 ]
