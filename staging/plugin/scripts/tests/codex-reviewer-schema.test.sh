@@ -98,7 +98,7 @@ check_schema "S2 diagnose-mode schema" "$DIAGNOSE_SCHEMA" "$CR"
 TESTER_SCHEMA=""
 [ -f "$CT" ] && TESTER_SCHEMA=$(extract_schema "$CT" 1)
 check_schema "S3 tester schema" "$TESTER_SCHEMA" "$CT"
-# plant: S3 | plugin/scripts/codex-tester.sh | "additionalProperties": false | "additionalProperties": true
+# plant: S3 | plugin/scripts/codex-tester.sh | "additionalProperties": false } SCHEMA_EOF | "additionalProperties": true } SCHEMA_EOF
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"

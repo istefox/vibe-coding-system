@@ -156,7 +156,7 @@ if printf '%s' "$CX_INVOKE" | grep -qF -- '-s workspace-write' && printf '%s' "$
 else
   bad "CX03 (R-02): codex exec invocation slice missing -s workspace-write and/or -C \"\$WORKTREE\" (slice: ${CX_INVOKE:-<empty — codex-tester.sh not found or has no codex exec line>})"
 fi
-# plant: CX03 | plugin/scripts/codex-tester.sh | -s workspace-write | -s read-only
+# plant: CX03 | plugin/scripts/codex-tester.sh | codex exec -s workspace-write | codex exec -s read-only
 
 if [ -z "$CX_INVOKE" ]; then
   bad "CX04 (R-02): codex exec invocation slice not found (codex-tester.sh missing or has no codex exec line) — cannot verify absence of danger-full-access/read-only"
@@ -232,7 +232,7 @@ if [ "$CX07_RC" -eq 4 ] && grep -qF 'src/prod.py' "$CX07_ERR"; then
 else
   bad "CX07 (R-05): expected exit 4 with src/prod.py on stderr, got exit $CX07_RC, stderr: $(cat "$CX07_ERR" 2>/dev/null)"
 fi
-# plant: CX07 | plugin/scripts/codex-tester.sh | ls-files --others --exclude-standard | ls-files --cached
+# plant: CX07 | plugin/scripts/codex-tester.sh | remains. ------------------------------------------------------------ { git -C "$WORKTREE" diff --name-only 2>/dev/null git -C "$WORKTREE" diff --name-only --cached 2>/dev/null git -C "$WORKTREE" ls-files --others --exclude-standard | remains. ------------------------------------------------------------ { git -C "$WORKTREE" diff --name-only 2>/dev/null git -C "$WORKTREE" diff --name-only --cached 2>/dev/null git -C "$WORKTREE" ls-files --cached
 
 CX08_REPO="$SCRATCH_ROOT/cx08_repo"; new_repo_empty "$CX08_REPO"
 CX08_STUB="$SCRATCH_ROOT/cx08_stub"; mkdir -p "$CX08_STUB"
@@ -536,7 +536,7 @@ if [ "$CX26_COUNT" -eq 2 ]; then
 else
   bad "CX26 (R-09): expected exactly 2 occurrences of the pointer literal, found $CX26_COUNT"
 fi
-# plant: CX26 | plugin/skills/concept-to-code/references/step5-implementation.md | branch per `#### Codex tester exit-code handling` above (ADR-0194) | branch as documented above (ADR-0194)
+# plant: CX26 | plugin/skills/concept-to-code/references/step5-implementation.md | branch per `#### Codex tester exit-code handling` above (ADR-0194); then run | branch as documented above (ADR-0194); then run
 
 CX27_COUNT=$(grep -F '~/.claude/hooks/codex-tester.sh' "$STEP5" | grep -cF -- '--worktree')
 if [ "$CX27_COUNT" -eq 2 ]; then

@@ -518,8 +518,8 @@ exists solely to record that the ask happened, independent of which way it was a
 If `manifest.step5_codex_tester_asked` is `true`: skip straight to dispatch, reading
 `manifest.use_codex_tester` as already decided. Otherwise (`false` or the field absent):
 
-Ask once, in the orchestrator's own live turn, **before the Workflow/Agent-tool branch below, so
-one ask covers both dispatch paths** — the same placement the review ask above uses.
+Ask once, in the orchestrator's own live turn, before the Workflow/Agent-tool branch, so one ask
+covers both dispatch paths — the same placement the review ask above uses.
 `AskUserQuestion` options:
 - `[claude-sonnet]` "Claude tester at sonnet (current behaviour) (Recommended)"
 - `[codex]` "Codex CLI, sandboxed to the worktree, with a gate if it is unavailable"
@@ -531,8 +531,8 @@ one ask covers both dispatch paths** — the same placement the review ask above
 
 **Either way**, then
 `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest> step5_codex_tester_asked true` —
-this write is **unconditional on the answer**, which is what makes the gate fire ONCE per manifest
-rather than once per decline.
+this write of `step5_codex_tester_asked: true` regardless of the answer is what makes the gate fire
+ONCE per manifest rather than once per decline.
 
 The Claude model choice (`[claude-sonnet]` vs `[claude-opus]`) is **turn-local**: it governs this
 Step 5 run only, is not persisted anywhere in the manifest, and a later resumed run on the same
@@ -540,7 +540,7 @@ manifest does not re-ask (`step5_codex_tester_asked` is already `true`) and disp
 tester at `sonnet`. This is a disclosed limit, not a hidden one — its remedy is a
 `step5_tester_model` field (ADR-0194 §R8), not added here.
 
-The ask does not fire under `--autopilot`: unattended runs keep `manifest.use_codex_tester` at its
+The ask is skipped under `--autopilot`: unattended runs keep `manifest.use_codex_tester` at its
 seeded `false` and leave `manifest.step5_codex_tester_asked` at its seeded `false` too, so a later
 attended run on the same manifest still gets asked once. This is an instruction, not an
 enforcement (rule 16) — say so rather than implying a guarantee that is not there.
@@ -645,8 +645,7 @@ below run in the orchestrator's own live turn rather than inside a stage callbac
 ADR-0194):** do **not** put a tester stage in `pipeline()` at all. Before writing the workflow
 script, for each task group in turn, in this same live turn: materialize the brief with
 `step5-brief.sh` exactly as below; `git worktree add` a worktree for the group; run
-`~/.claude/hooks/codex-tester.sh --worktree <wt> --brief <brief> --out <report>`; branch per
-`#### Codex tester exit-code handling` above (ADR-0194); then run `#### Merge-back and base-fork
+`~/.claude/hooks/codex-tester.sh --worktree <wt> --brief <brief> --out <report>`; branch per `#### Codex tester exit-code handling` above (ADR-0194); then run `#### Merge-back and base-fork
 audit` with `$WT`/`$WB` taken from the `git worktree add` you just issued. Only then write the
 workflow script, with stages **coder** (plus the optional reviewer), one fewer stage than the
 default. This is sequential where the Claude branch is parallel: a real wall-clock cost, taken
