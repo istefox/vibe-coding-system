@@ -323,6 +323,21 @@ printf '%s\n' "$PAIRS" | while IFS='|' read -r src dst; do
   [ -z "$src" ] && continue
   s="$STAGING/$src"; d="$DEST/$dst"
   [ -f "$s" ] || { printf '!! source missing: %s\n' "$src"; continue; }
+
+  # Refuse to write through a symlinked directory into a foreign tree (the deep-refactor class of
+  # hazard: $DEST/skills/deep-refactor is a symlink into a separate git repo with its own remote,
+  # and a plain cp through it silently overwrites that repo's live files). "Did not run" is not
+  # "found nothing" (rule 4) — this is reported as its own state, distinct from CHANGED/NEW, and
+  # never falls through to a write even under --apply.
+  _ddir=$(dirname "$d")
+  if [ -e "$_ddir" ]; then
+    _dreal=$(cd "$_ddir" 2>/dev/null && pwd -P)
+    case "$_dreal" in
+      "$DEST"|"$DEST"/*) ;;
+      *) printf '\n!! REFUSED: %s resolves outside %s (%s) -- symlink into a foreign tree, not written\n' "$dst" "$DEST" "$_dreal"; continue ;;
+    esac
+  fi
+
   if [ ! -f "$d" ]; then
     printf '\n== NEW: %s\n' "$dst"
     [ "$APPLY" -eq 1 ] && { mkdir -p "$(dirname "$d")"; cp "$s" "$d"; printf '   written\n'; }
