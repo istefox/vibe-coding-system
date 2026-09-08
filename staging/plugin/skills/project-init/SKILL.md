@@ -369,12 +369,16 @@ On "Abort": exit, write nothing — including the canonical-mechanisms draft.
 
 4. Write `<project_root>/.claude/context.md`:
    ```markdown
-   ## Status (<YYYY-MM-DD>)
+   ## Status (<YYYY-MM-DD>) — initial
    **Branch:** <current branch or "main">
    **In progress:** project init — CLAUDE.md generated
    **Next:** review generated CLAUDE.md, fill in <placeholders>, run /commit
    **Open decisions:** none
    ```
+   This seed is intentionally minimal and written inline, not via the `session-state` skill: there
+   is no session history yet to derive a `Notes` field from, and a structurally empty field is
+   worse than its absence. From the first `/commit` onward, `session-state` (ADR-0197) owns the
+   full template — see its `SKILL.md` for the authoritative field set.
 
 5. If a canonical-mechanisms draft was approved at Step 4: create `.claude/rules/` if absent
    (`mkdir -p "<project_root>/.claude/rules"`) and write

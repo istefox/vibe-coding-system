@@ -259,6 +259,7 @@ plugin/skills/review-triage-fix/scripts/verify.sh|skills/review-triage-fix/scrip
 plugin/skills/review-triage-fix/scripts/weakening-scan.sh|skills/review-triage-fix/scripts/weakening-scan.sh
 plugin/skills/review-triage-fix/tests/run-tests.sh|skills/review-triage-fix/tests/run-tests.sh
 plugin/skills/commit/SKILL.md|skills/commit/SKILL.md
+plugin/skills/session-state/SKILL.md|skills/session-state/SKILL.md
 plugin/skills/claude-md-slim/SKILL.md|skills/claude-md-slim/SKILL.md
 plugin/skills/claude-md-slim/scripts/classify-sections.sh|skills/claude-md-slim/scripts/classify-sections.sh
 plugin/skills/claude-md-slim/scripts/content-union-check.sh|skills/claude-md-slim/scripts/content-union-check.sh
