@@ -346,15 +346,21 @@ done < "$tmp/deployed-only-fixture"
 # tests/enumerate-sources.test.sh) survive that migration's removal of the rest of the vendored
 # tree, retained not as a deploy source — no PAIRS entry, D2 removes the four deep-refactor
 # PAIRS lines — but as a compatibility-contract reference that codex-reviewer.sh's staging-side
-# resolution (line 206) has a runtime dependency on. ADR-0197 D5 declares them with a new
-# `contract-reference:` marker beside the deployed-only block above; this section is the check
-# that reads that declaration (rule 17) — it does not exist in sync-to-claude.sh yet, so every
-# assertion below that reads real data is RED until that migration's Task 3 lands.
+# resolution (its `ENUM=` assignment in the audit-mode block) has a runtime dependency on.
+# ADR-0197 D5 declares them with a new `contract-reference:` marker beside the deployed-only
+# block above; this section is the check that reads that declaration (rule 17). Correction
+# (2026-09-08, RTF re-review): the sentence above originally said this block stayed RED until
+# migration Task 3 landed — Task 3 has since landed (sync-to-claude.sh:134-135 carries both
+# `contract-reference:` declarations) and every assertion below is green.
 #
 # The `CR` assertion-id prefix is already taken in this repo (phase1.test.sh CR1-CR9,
 # fence-contract-coverage.test.sh CR5/CR6 — grep -rnoE '\bCR[0-9]+' staging/, checked
-# 2026-09-08), so this block uses `XR` instead, fixed-width two-digit per plant-check.sh's
-# prefix matching (an unpadded XR1 would also be credited when XR10 fires, and vice versa).
+# 2026-09-08), so this block uses `XR` instead. Correction (2026-09-08, RTF review): the ids
+# below are actually single-digit (XR1-XR5), not fixed-width two-digit as an earlier draft of
+# this comment claimed — that padding is unnecessary here. plant-check.sh's `red_re()` anchors
+# the FAIL match as `^FAIL: <id>:?([[:space:]]|$)`, a word-boundary-style anchor that already
+# stops an `XR1` plant from being credited by an `XR10` failure (issue #355, predating this
+# migration), so no id in this repo needs two-digit padding for that reason.
 #
 # The needle is built at run time so this file does not match its own explanatory prose
 # (rule 12) — the DMARK/ZMARK lines above are the pattern this copies.
