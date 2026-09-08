@@ -630,3 +630,19 @@ new file's closest structural siblings — `scope-guards.test.sh`,
 - `staging/sync-to-claude.sh`, `staging/plugin/scripts/tests/pairs-completeness.test.sh` —
   confirmed no new `PAIRS` mapping entry needed for the new test file (§2.5)
 - Implementation plan: `docs/superpowers/plans/2026-07-11-35-refactor-snapshot-deep-refactor.md`
+
+## Correction (2026-09-08)
+
+Two of the four `deep-refactor` files named above (in the header `Related:` list and in
+References) no longer exist: `staging/plugin/skills/deep-refactor/SKILL.md` and
+`staging/plugin/skills/deep-refactor/tests/run-tests.sh` were deleted when `deep-refactor` was
+migrated out of this repo's vendored surface
+(`docs/architecture/ADR-0197-deep-refactor-migrated-to-istefox-skills.md`, Accepted 2026-09-07).
+`staging/plugin/skills/deep-refactor/scripts/enumerate-sources.sh` and
+`staging/plugin/skills/deep-refactor/tests/enumerate-sources.test.sh` are retained at their exact
+original paths, no longer as `$HOME`-coupled skill-local self-tests confirmed merely compatible,
+but as a declared `contract-reference:` in `sync-to-claude.sh`, never a deploy source. Section B
+of `refactor-snapshot-deep-refactor.test.sh` (the harness this ADR's Finding 1-3 built) is now
+stated as **the** CI-runnable contract test for `enumerate-sources.sh`, per ADR-0197 §D8 — a role
+its own B6 comment already described informally. This note does not alter the findings recorded
+above (rule 14).

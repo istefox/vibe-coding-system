@@ -404,3 +404,15 @@ rots silently, and it rots fastest in a file being actively extended.
 - `.github/workflows/docs-ci.yml` — harness list entry for the new test
 - `docs/chain-decision-index.md` — the index entry this feature adds
 - `docs/superpowers/plans/2026-09-05-codex-review-gate-deep-refactor.md` — the implementation plan
+
+## Correction (2026-09-08)
+
+`staging/plugin/skills/deep-refactor/SKILL.md`, named above in References and in §D3's description
+of the staging-side resolution, no longer exists — `deep-refactor` was migrated out of this repo's
+vendored surface (`docs/architecture/ADR-0197-deep-refactor-migrated-to-istefox-skills.md`, Accepted
+2026-09-07). `staging/plugin/skills/deep-refactor/scripts/enumerate-sources.sh`, also named above, is
+retained at its exact original path as a declared `contract-reference:` (never a deploy source);
+§D3's resolves-identically-in-both-trees argument for `codex-reviewer.sh:206`'s relative-path lookup
+still holds unchanged. Nothing in `codex-reviewer.sh` itself was edited by ADR-0197 (its own D11).
+This note does not alter the decision recorded above (rule 14) — read ADR-0197 for the current state
+of the vendored tree.
