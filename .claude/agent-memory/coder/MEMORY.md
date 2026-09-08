@@ -18,3 +18,9 @@ the 200-line/25KB injection cap; the topic files do not.
 - [deep-refactor/SKILL.md Gate 0-CDX and dispatch IF/ELSE](topics/task678-deep-refactor-skill-gate-cdx-slug.md)
   — Tasks 6-8 of ADR-0193: exact-count string traps in plant needles, this file's bold-heading and
   ```sh-fence conventions
+- [codex-coder.sh scope-check gotchas](topics/batch-B-codex-coder-scope-check.md) — ADR-0196 tasks
+  2-3: plant markers stay in the test file only, CK ids span two tasks, `-c key=value` as one argv
+  element
+- [codex coder backend gate in step5-implementation.md](topics/batch-C-codex-coder-step5-gate.md)
+  — ADR-0196 tasks 4-6: a dispatch-site-marker quoting trap, and where `slice_heading` actually
+  draws section boundaries versus where the plan's prose implies they are

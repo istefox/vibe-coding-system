@@ -19,24 +19,24 @@ must not be copied into production files) — same root cause, a scanner whose n
 substring match against prose that happens to quote the mechanism's own declaration syntax.
 
 **Fact 2 — `slice_heading` (used by every CK/CX-style dispatch-gate test) cuts a section at the
-NEXT literal `^#### ` line, full stop — it does not know or care what the plan's prose calls "the
-Stage 2 text".** ADR-0196's plan brief says, almost verbatim, "add before the existing `**Stage 2 —
+NEXT literal `^#### ` line (a level-four heading followed by a space), full stop — it does not know
+or care what the plan's prose calls "the Stage 2 text".** ADR-0196's plan brief says, almost verbatim, "add before the existing `**Stage 2 —
 coder.**` text" for the Workflow-path pipeline-degeneration content. But the test that actually
 gates R-09 (`CK32`) scopes its three regexes to `CK_WORKFLOW = slice_heading('#### Workflow
-dispatch path...')`, which ends at the very next `#### ` heading — `#### Codex tester exit-code
+dispatch path...')`, which ends at the very next `####` heading — `#### Codex tester exit-code
 handling (ADR-0194)` — dozens of lines BEFORE `**Stage 2 — coder.**` ever appears (Stage 1, the
 whole tester dispatch, and the entire Merge-back section sit in between). Content placed literally
-adjacent to `**Stage 2 — coder.**` is invisible to a check scoped to an earlier `#### ` heading.
+adjacent to `**Stage 2 — coder.**` is invisible to a check scoped to an earlier `####` heading.
 Resolution used here: split the coder's codex-branch content in two — a SHORT statement of "no
 coder stage in pipeline(), runs in the orchestrator's own live turn sequentially, degenerates to
 zero stages if tester is also codex and review isn't checkpoint" placed right at the end of the
 `#### Workflow dispatch path` section's own prose (satisfies the heading-scoped check), and the FULL
 operational recipe (worktree add, hook invocation with all required flags, `branch per` pointer,
 merge-back) placed at the literal site the plan's prose names (right before `**Stage 2 — coder.**`,
-which by then falls under a LATER, different `#### ` heading's slice — `#### Merge-back and
+which by then falls under a LATER, different `####` heading's slice — `#### Merge-back and
 base-fork audit` — so the "above" in "branch per `#### Codex coder exit-code handling` above" reads
 correctly, since that heading was introduced earlier in the file). When a plan names a bolded
-sub-heading (not a real `#### ` heading) as an anchor, check which `#### ` slice a checkpoint test
+sub-heading (not a real `####` heading) as an anchor, check which `####` slice a checkpoint test
 actually scopes to before trusting the plan's own wording about "where".
 
 **Fact 3 — an option's `(Recommended)` label is not read as "the default" by these tests; the
