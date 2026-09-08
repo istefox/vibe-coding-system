@@ -670,30 +670,9 @@ After "Abort": exit without doing anything.
 
 Immediately after exit 0 on Step 5. Skip in autopilot mode.
 
-**Always Read `<project-root>/.claude/context.md` first** (even if you expect it not to exist):
-the Write tool refuses to overwrite a file that was not read in the current session.
-If the Read returns an error (file absent), ignore it and proceed to Write.
-
-Write or overwrite `<project-root>/.claude/context.md` (create `.claude/` if missing):
-
-```
-## Status (YYYY-MM-DD)
-**Branch:** <current-branch>
-**Last commit:** <short-hash> — <commit subject>
-**In progress:** <infer from branch name / open manifest step / remaining findings — or "—">
-**Next:** <one line: most actionable next step — or "—">
-**Open decisions:** <from in-progress manifest current_step / recent ADR / or "none">
-```
-
-Rules:
-- Max 10 lines total. Factual — no speculation beyond what context provides.
-- "In progress" / "Next": derive from branch name, manifest `current_step`, or commit body TODOs.
-- "Open decisions": check `docs/manifests/` for a manifest with `status: in_progress`; if found,
-  note `current_step`. Otherwise `none`.
-- This file is read-only for the session-context-inject.sh hook at the next SessionStart —
-  the model gets the context automatically without the user having to re-explain.
-- Emit one line after writing: `"Context → .claude/context.md"`.
-- Wrap the whole step in `|| true` — never abort the commit flow if this fails.
+Invoke the `session-state` skill in `after commit` mode (ADR-0197) — it owns the
+`.claude/context.md` template and the read-before-write handling. Wrap the whole step in
+`|| true` — never abort the commit flow if this fails.
 
 ### Step 6 — PR (optional, only after successful commit)
 

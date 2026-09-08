@@ -29,6 +29,7 @@ The main exception: you can explicitly ask for an agent by its role ("debug this
 | `review-triage-fix` | Skill | Full review+fix cycle with routing to fix agents | `/skill review-triage-fix` |
 | `deep-refactor` | Skill | Codebase health audit + regression-safe auto-fix | `/skill deep-refactor` |
 | `project-init` | Skill | Bootstrap project CLAUDE.md + context.md | `/skill project-init` |
+| `session-state` | Skill | Write cross-session `.claude/context.md` (auto + manual) | `/skill session-state` |
 | `vibe-status` | Skill | System health check | `/skill vibe-status` |
 | `interview-driver` | Skill | User interview → SPEC.md | `/skill interview-driver` |
 | `adr-writer` | Skill | Write an Architecture Decision Record | `/skill adr-writer <topic>` |
@@ -176,9 +177,27 @@ Output: `docs/deep-refactor/YYYY-MM-DD-<slug>.md` + per-dimension commits.
 Run this once when starting work on a project that has no CLAUDE.md. It auto-detects the stack
 (Python, Swift, Node, etc.) and asks at most 2 questions. Produces:
 - `CLAUDE.md` — lean, stack-appropriate, <80 lines
-- `.claude/context.md` — initial state (branch, last commit, next action)
+- `.claude/context.md` — initial minimal state (branch, next action), seeded inline
 
-The context.md is auto-injected at every `SessionStart` so you never have to re-explain state.
+From the first `/commit` onward, `session-state` owns `.claude/context.md` and writes the full
+template (branch, last commit, in progress, next, open decisions, notes). The context.md is
+auto-injected at every `SessionStart` so you never have to re-explain state.
+
+---
+
+### session-state — cross-session state writer
+
+```
+/skill session-state
+```
+
+Writes `.claude/context.md`, the single file injected at every `SessionStart`. Called
+automatically by `commit` Step 5.5 right after a successful commit (ADR-0197) — and transitively
+at the end of `concept-to-code`, which invokes `commit` at its own Step 7. Also invocable by hand
+at any point to snapshot in-progress, uncommitted work before ending a session (e.g. before a
+reboot). Fields: `Branch`, `Last commit`, `In progress`, `Next` (1-3 items), `Open decisions`
+(from an in-progress manifest or a recent ADR), `Notes` (non-obvious gotchas/blockers, omitted
+when empty). Max 20 lines.
 
 ---
 
@@ -553,7 +572,7 @@ Some skills fire without `/skill` when specific keywords appear:
 | `BRAINSTORM.md` | design-brainstorm | Pre-architecture alternatives |
 | `UX-BLUEPRINT.md` | macos-ux | HIG design decisions |
 | `CLAUDE.md` | claude-md-generator, project-init | Project instructions for Claude |
-| `.claude/context.md` | project-init, commit Step 5.5 | Cross-session state (auto-injected) |
+| `.claude/context.md` | project-init (seed), session-state (full, ADR-0197) | Cross-session state (auto-injected) |
 | `.claude/test-cmd` | Gate 2b TOFU approval | Approved test command |
 | `.claude/rules/<domain>.md` | claude-md-slim | Path-scoped rules |
 | `docs/architecture/ADR-NNN-*.md` | adr-writer, architect | Architecture records |
