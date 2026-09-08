@@ -247,23 +247,34 @@
 # section explicitly flags as unverified). Plant-declaration count: THIRTY-EIGHT across THIRTY-THREE
 # ids drops to THIRTY-TWO across TWENTY-SEVEN (measured: `grep -c '^# plant:'` and
 # `grep -oE '^# plant: CX[0-9]+' | sort -u | wc -l` against this file post-edit).
+#
+# AND AGAIN 2026-09-08, closing the follow-up the SKILL_MD/extract_guard comment above itself
+# flagged as out of Task 4's scope (rule 19): CX14, CX15, CX16 and CX17 (R-03) — the two mandatory
+# guards extracted from staging/plugin/skills/deep-refactor/SKILL.md via extract_guard() into
+# GUARD1/GUARD2 — are removed now that Task 5 of the same plan has actually deleted that file
+# (git rm, already committed, so SKILL_MD resolves to nothing and every extraction would come back
+# empty). extract_guard(), SKILL_MD, GUARD1 and GUARD2 have no consumer left after CX14-CX17 are
+# removed (verified: grepping this file for each of the four names finds only the sites removed
+# here), so all four are removed with them. Their THREE `# plant:` declarations (CX14, CX15, CX17 —
+# CX16 carried none) are removed too. See the rule-19 comments left at each site. This is a further
+# "live claim" correction to the same counts the paragraph above touched, made in place for the same
+# reason (rule 14 does not apply — these are derived counts describing the file's current shape, not
+# a dated event to preserve verbatim).
+# Assertion count: S0 + CX01-CX45 minus the ten ids removed across both 2026-09-08 passes, 39 -> 35
+# (measured by running this file, rule 10/rule 13). Plant-declaration count: THIRTY-TWO across
+# TWENTY-SEVEN ids drops to TWENTY-NINE across TWENTY-FOUR (measured the same way as the paragraph
+# above, against this file post-edit).
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO_ROOT=$(cd "$STAGING/.." && pwd)
 CR="$SCRIPTS/codex-reviewer.sh"
-# SKILL_MD is RETAINED here (not removed per the letter of Task 4's R-05 instruction) because
-# extract_guard() below (feeding GUARD1/GUARD2, which feed CX14-CX17) still reads this file
-# directly, and CX14-CX17 are NOT named by Task 4's R-05/R-06/R-07 bullets — removing this variable
-# would abort this entire script via `set -u` at the extract_guard() call below, before any CX
-# assertion runs. This is a real call-site the migration plan's own "Read this second" grep did not
-# enumerate (docs/superpowers/plans/2026-09-07-migrate-deep-refactor-out-of-vendored-pa.md);
-# flagged in this task's report rather than silently resolved. CX14-CX17 will need the same
-# fate-decision CX10 got below, once staging/plugin/skills/deep-refactor/SKILL.md is actually
-# deleted (Task 5) — that decision is out of this task's scope. See ADR-0197
-# (docs/architecture/ADR-0197-deep-refactor-migrated-to-istefox-skills.md).
-SKILL_MD="$STAGING/plugin/skills/deep-refactor/SKILL.md"
+# SKILL_MD stood here (feeding extract_guard() below, which fed GUARD1/GUARD2, which fed
+# CX14-CX17); removed 2026-09-08, migrate-deep-refactor-out-of-vendored-pa / ADR-0197 (rule 19).
+# staging/plugin/skills/deep-refactor/SKILL.md is now actually deleted from this repo (Task 5 of
+# that plan, git rm, already committed) — the fate-decision the comment that used to stand here
+# deferred. CX14-CX17, extract_guard() and GUARD1/GUARD2 are removed below for the same reason.
 ENUM_SCRIPT="$SCRIPTS/../skills/deep-refactor/scripts/enumerate-sources.sh"
 ADR187="$REPO_ROOT/docs/architecture/ADR-0187-codex-review-gate.md"
 ADR193="$REPO_ROOT/docs/architecture/ADR-0193-codex-review-gate-deep-refactor.md"
@@ -311,22 +322,10 @@ flat_has() {
 # =====================================================================================
 # Helpers — extraction from the two real source files (never hard-coded copies, ADR-0193 §D6/§A9).
 
-extract_guard() {
-  # $1 = anchor regex for the "### Mandatory guard N — ..." heading. Prints the quoted instruction
-  # text on the first `> "..."` blockquote line found after it, empty if not found.
-  awk -v h="$1" '
-    $0 ~ h { infield=1; next }
-    infield && /^> "/ {
-      line = $0
-      sub(/^> "/, "", line)
-      sub(/"[[:space:]]*$/, "", line)
-      print line
-      exit
-    }
-  ' "$SKILL_MD"
-}
-GUARD1=$(extract_guard "^### Mandatory guard 1")
-GUARD2=$(extract_guard "^### Mandatory guard 2")
+# extract_guard(), GUARD1 and GUARD2 stood here — the mandatory-guard-text extraction from
+# deep-refactor/SKILL.md that fed CX14-CX17. Removed 2026-09-08, migrate-deep-refactor-out-of-vendored-pa
+# / ADR-0197 (rule 19): every consumer (CX14, CX15, CX16, CX17) is removed below for the same
+# reason — this repo no longer vendors the file they extracted from.
 
 # extract_finding_schema_block(), FINDING_SCHEMA_BLOCK, FINDING_FIELDS, FINDING_FIELD_COUNT and
 # FINDING_FIELDS_CSV stood here — the finding-schema-fence extraction from deep-refactor/SKILL.md —
@@ -638,64 +637,16 @@ esac
 # plant: CX13 | plugin/scripts/codex-reviewer.sh | 'id': fid,
 
 # =====================================================================================
-# CX14-CX17 (R-03) — the two mandatory guards, extracted from SKILL.md, embedded verbatim and
-# dimension-correctly in codex-reviewer.sh's audit prompt.
-
-CX14_COUNT=$(flat_count "$CR_TEXT" "$GUARD1")
-if [ -n "$GUARD1" ] && [ "$CX14_COUNT" -ge 1 ]; then
-  ok "CX14: Mandatory guard 1's string, extracted from SKILL.md, appears whitespace-flattened in codex-reviewer.sh"
-else
-  bad "CX14: guard 1 not found in codex-reviewer.sh — extracted-from-SKILL.md=$([ -n "$GUARD1" ] && echo yes || echo no), occurrences=$CX14_COUNT"
-fi
-# plant: CX14 | plugin/scripts/codex-reviewer.sh | reflection-reachable, protocol-witness symbols. | reflection-reachable, protocol-witness helpers.
-
-CX15_COUNT=$(flat_count "$CR_TEXT" "$GUARD2")
-if [ -n "$GUARD2" ] && [ "$CX15_COUNT" -ge 1 ]; then
-  ok "CX15: Mandatory guard 2's string, extracted from SKILL.md, appears whitespace-flattened in codex-reviewer.sh"
-else
-  bad "CX15: guard 2 not found in codex-reviewer.sh — extracted-from-SKILL.md=$([ -n "$GUARD2" ] && echo yes || echo no), occurrences=$CX15_COUNT"
-fi
-# plant: CX15 | plugin/scripts/codex-reviewer.sh | Auto-fix only synchronous perf patterns. | Auto-fix only synchronous performance patterns.
-
-CX16_GCOUNT=0
-[ -n "$GUARD1" ] && CX16_GCOUNT=$((CX16_GCOUNT + 1))
-[ -n "$GUARD2" ] && CX16_GCOUNT=$((CX16_GCOUNT + 1))
-if [ "$CX16_GCOUNT" -eq 2 ] && [ "${#GUARD1}" -ge 80 ] && [ "${#GUARD2}" -ge 80 ]; then
-  ok "CX16: exactly two guard strings extracted from SKILL.md, each >= 80 chars (len1=${#GUARD1}, len2=${#GUARD2})"
-else
-  bad "CX16: guard-extraction denominator broken — extracted=$CX16_GCOUNT (need 2), len1=${#GUARD1}, len2=${#GUARD2}"
-fi
-
-CX17_ALL_OK=1
-CX17_DETAILS=""
-if [ -z "$GUARD1" ] || [ -z "$GUARD2" ]; then
-  CX17_ALL_OK=0
-  CX17_DETAILS="guard extraction from SKILL.md failed, cannot check embedding"
-else
-  for _cx17_dim in dead-code perf structure security; do
-    _cx17_plog="$WORK/cx17-prompt-$_cx17_dim.txt"
-    _cx17_out="$WORK/cx17-out-$_cx17_dim.json"
-    set_stub "$MINIMAL_PAYLOAD" "$_cx17_plog"
-    cr "$STUB_PATH" --mode audit --dimension "$_cx17_dim" --out "$_cx17_out"
-    _cx17_ptext=""
-    [ -f "$_cx17_plog" ] && _cx17_ptext=$(cat "$_cx17_plog")
-    _cx17_g1=0; _cx17_g2=0
-    flat_has "$_cx17_ptext" "$GUARD1" && _cx17_g1=1
-    flat_has "$_cx17_ptext" "$GUARD2" && _cx17_g2=1
-    case "$_cx17_dim" in
-      dead-code) [ "$_cx17_g1" -eq 1 ] && [ "$_cx17_g2" -eq 0 ] || { CX17_ALL_OK=0; CX17_DETAILS="$CX17_DETAILS dead-code(g1=$_cx17_g1,g2=$_cx17_g2)"; } ;;
-      perf) [ "$_cx17_g2" -eq 1 ] && [ "$_cx17_g1" -eq 0 ] || { CX17_ALL_OK=0; CX17_DETAILS="$CX17_DETAILS perf(g1=$_cx17_g1,g2=$_cx17_g2)"; } ;;
-      structure) [ "$_cx17_g1" -eq 0 ] && [ "$_cx17_g2" -eq 0 ] || { CX17_ALL_OK=0; CX17_DETAILS="$CX17_DETAILS structure(g1=$_cx17_g1,g2=$_cx17_g2)"; } ;;
-      security) [ "$_cx17_g1" -eq 0 ] && [ "$_cx17_g2" -eq 0 ] || { CX17_ALL_OK=0; CX17_DETAILS="$CX17_DETAILS security(g1=$_cx17_g1,g2=$_cx17_g2)"; } ;;
-    esac
-  done
-fi
-if [ "$CX17_ALL_OK" -eq 1 ]; then
-  ok "CX17: dimension-correct guard embedding holds in all four directions (dead-code=guard1-only, perf=guard2-only, structure/security=neither)"
-else
-  bad "CX17: guard embedding wrong for:$CX17_DETAILS"
-fi
-# plant: CX17 | plugin/scripts/codex-reviewer.sh | "$DIMENSION" = "perf" | "$DIMENSION" != ""
+# CX14-CX17 (R-03) stood here — the two mandatory guards, extracted from
+# staging/plugin/skills/deep-refactor/SKILL.md, checked embedded verbatim and dimension-correctly
+# in codex-reviewer.sh's audit prompt. Removed 2026-09-08, migrate-deep-refactor-out-of-vendored-pa
+# / ADR-0197 (rule 19): SKILL.md, the source of truth these four assertions compared against, no
+# longer exists anywhere in this repo (Task 5 of that plan, git rm, already committed) — the live
+# copy is now in a separate, externally-maintained repo
+# (/Users/stefer/Developer/Skills/Deep_refactor, symlinked at ~/.claude/skills/deep-refactor) not
+# guaranteed to be present or checked out in CI. Their THREE `# plant:` declarations (CX14, CX15,
+# CX17 — CX16 carried none) are removed with them, along with extract_guard(), SKILL_MD, GUARD1 and
+# GUARD2 above (their only consumers).
 
 # =====================================================================================
 # CX18-CX19 (R-04) — security forces fix_type: report-only; the forcing does not leak elsewhere.
@@ -2225,11 +2176,11 @@ fi
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 39 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 39) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX45 minus CX10 and CX20-CX25 (7 removed 2026-09-08, migrate-deep-refactor-out-of-vendored-pa / ADR-0197, rule 19) are the frozen identity set"
+if [ "$_total" -ge 35 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 35) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX45 minus CX10, CX14-CX17 and CX20-CX25 (11 removed across 2026-09-08, migrate-deep-refactor-out-of-vendored-pa / ADR-0197, rule 19) are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 39; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 35; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]

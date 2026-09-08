@@ -372,13 +372,23 @@ else
   bad "F9: c2c §25's invokable line yields only $_F9_RAW raw backticked tokens (expected >= 7) — the derivation broke"
 fi
 
+# DEPLOYED-ONLY REGISTRY names (issue #222 F10, extended 2026-09-08 for ADR-0197 /
+# migrate-deep-refactor-out-of-vendored-pa): a chain-invokable token can also resolve via
+# staging/sync-to-claude.sh's `# deployed-only: <name> — <reason>` registry rather than via a
+# staged SKILL.md or agent file — `deep-refactor` is the case in point, migrated out of this
+# repo's vendored surface but still a real, functioning, chain-invokable skill (Gate 5.1). Same
+# grep idiom pairs-completeness.test.sh's DO-prefixed assertions use against the same registry
+# (needle built at run time so this file does not match its own explanatory prose, rule 12).
+_DMARK="deployed""-only"
+_DEPLOYED_ONLY_NAMES=$(grep "^# *${_DMARK}: " "$SYNC" 2>/dev/null | sed "s/^# *${_DMARK}: *//" | cut -d' ' -f1)
+
 _F6_CHECKED=0
 _F6_BAD=""
 _F10_NEITHER=""
 if [ -n "$_INVOKABLE_LINE" ]; then
   # Every backticked token on that line. The line also backticks an agent name (`reviewer`) and,
   # until vendored, a skill that does not yet exist in staging (`ui-layout-audit`) — resolution
-  # below sorts all three cases instead of silently skipping the ones that are not a skill.
+  # below sorts all four cases instead of silently skipping the ones that are not a staged skill.
   for _s in $(sed -n "${_INVOKABLE_LINE}p" "$_C2C" | tr '`' '\n' | sed -n 'n;p' | sort -u); do
     _sf="$STAGING/plugin/skills/$_s/SKILL.md"
     _af="$STAGING/plugin/agents/$_s.md"
@@ -394,7 +404,17 @@ if [ -n "$_INVOKABLE_LINE" ]; then
       # check applies, but the token still counts as resolved (not collected into F10's failure list).
       :
     else
-      _F10_NEITHER="$_F10_NEITHER $_s"
+      _do_resolved=0
+      for _do_name in $_DEPLOYED_ONLY_NAMES; do
+        [ "$_do_name" = "$_s" ] && _do_resolved=1 && break
+      done
+      if [ "$_do_resolved" -eq 0 ]; then
+        _F10_NEITHER="$_F10_NEITHER $_s"
+      fi
+      # Resolves via the deployed-only registry: not vendored, not a staged agent, but a real,
+      # functioning chain-invokable skill (e.g. deep-refactor) — counts as resolved, same as the
+      # staged-agent branch above; F6's flag check does not apply to it either (nothing staged to
+      # carry the flag).
     fi
   done
 fi
@@ -407,15 +427,17 @@ else
   ok "F6: none of the $_F6_CHECKED chain-invokable skills carries disable-model-invocation"
 fi
 
-# F10 (ADR-0087, issue #222): every backticked token on c2c §25's invokable line must resolve as
-# either a staged skill or a staged agent. A token resolving as neither is a genuine, real RED on
-# the unmodified repository today: `ui-layout-audit` is chain-invokable (gate 5.05) but not yet
-# vendored into staging/ — recorded proof the check works, not a synthetic fixture. Do NOT vendor
-# ui-layout-audit to make this pass in this task; it lands in a later task.
+# F10 (ADR-0087, issue #222; extended 2026-09-08 for ADR-0197 / migrate-deep-refactor-out-of-vendored-pa):
+# every backticked token on c2c §25's invokable line must resolve as a staged skill, a staged
+# agent, or a name declared in sync-to-claude.sh's `deployed-only:` registry — a chain-invokable
+# skill this repo deliberately does not vendor (e.g. `deep-refactor`, migrated out after ADR-0197,
+# still a real, functioning skill). Do NOT vendor a deployed-only skill back into staging/ to make
+# this pass — that defeats the point of migrating it out; fix the resolution logic instead, which
+# is what the branch above does.
 if [ -n "$_F10_NEITHER" ]; then
-  bad "F10: token(s) on c2c §25's invokable line resolve as neither a staged skill nor a staged agent:$_F10_NEITHER"
+  bad "F10: token(s) on c2c §25's invokable line resolve as neither a staged skill, a staged agent, nor a deployed-only registry entry:$_F10_NEITHER"
 else
-  ok "F10: every token on c2c §25's invokable line resolves as a staged skill or staged agent"
+  ok "F10: every token on c2c §25's invokable line resolves as a staged skill, a staged agent, or a deployed-only registry entry"
 fi
 
 # F7/F8 (issue #211, ADR-0084): the OTHER two flag carriers, asserted on the FILES.
