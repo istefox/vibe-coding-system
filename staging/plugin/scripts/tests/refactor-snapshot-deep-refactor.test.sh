@@ -1,6 +1,8 @@
 #!/bin/bash
-# refactor-snapshot-deep-refactor.test.sh -- three findings from the concept-to-code audit
-# (SPEC.md / issue #35). Three lettered sections:
+# refactor-snapshot-deep-refactor.test.sh -- findings from the concept-to-code audit
+# (SPEC.md / issue #35). Two lettered sections (Section C removed 2026-09-08,
+# migrate-deep-refactor-out-of-vendored-pa / ADR-0197, rule 19 -- see the removal note at its
+# former site, below):
 #   Section A (Finding 2.6, P2, 7 tests) -- refactor-snapshot/scripts/capture.sh's read loop
 #     always leaves a trailing newline on CMD_CONTENT, so "$CMD_CONTENT $RFS_FILTER" puts the
 #     filter on a NEW line; `bash -c` then runs it as a second, separate (bogus) command, and
@@ -8,26 +10,22 @@
 #     regardless of the real, filtered suite's actual pass/fail -- silently defeating the
 #     harness's own exit-code comparison channel whenever RFS_FILTER is used. Fixed by
 #     stripping the single trailing newline before building EXEC_CMD.
-#   Section B (Finding 3.8, 6 tests) -- deep-refactor/scripts/enumerate-sources.sh's documented
-#     "glob/dir prefix" path-override is interpolated raw into `grep -E`; a leading `*` (e.g.
-#     override "*.swift") has no operand to repeat, an undefined case in POSIX ERE -- no
-#     tracked path starts with a literal "*", so the override always returns zero files and
-#     Step 0.6 aborts. Fixed with a single, unified bash `case`-pattern matching engine (real
-#     glob semantics, no external regex dialect) that also preserves the existing
+#   Section B (6 tests) -- THE CI-runnable compatibility contract test for
+#     deep-refactor/scripts/enumerate-sources.sh (R-06, ADR-0197 §D8,
+#     migrate-deep-refactor-out-of-vendored-pa): offline, hermetic, mktemp git fixture, zero
+#     $HOME dependency, pinning the documented "<root> [<path-override>]" argument shape, both
+#     override forms (directory-literal prefix and glob), the exclusion set, and the
+#     empty-output-on-no-match behaviour that `codex-reviewer.sh --mode audit` depends on. It
+#     was originally written for Finding 3.8: the override was interpolated raw into `grep -E`;
+#     a leading `*` (e.g. override "*.swift") has no operand to repeat, an undefined case in
+#     POSIX ERE -- no tracked path starts with a literal "*", so the override always returned
+#     zero files and Step 0.6 aborted. Fixed with a single, unified bash `case`-pattern matching
+#     engine (real glob semantics, no external regex dialect) that also preserves the existing
 #     directory-literal-prefix contract unchanged.
-#   Section C (Finding 3.9, 5 tests) -- deep-refactor/SKILL.md's circuit-breaker HITL message
-#     (Gate 2) unconditionally suggests `git checkout -- .` to revert unstaged changes, but
-#     Gate 0 explicitly allows starting the audit on a dirty tree (DIRTY_TREE=true) -- on that
-#     path, the blanket revert also destroys the user's own pre-existing uncommitted edits.
-#     Fixed by conditioning the suggestion on DIRTY_TREE, matching this file's own existing
-#     `[If <condition>:]` bracket convention.
 # Zero $HOME dependency: runs identically in CI (ubuntu-latest, no ~/.claude) and locally.
 # Never point any variable at $HOME/.claude/... -- that is the deployed copy, out of scope.
 # Sections A and B invoke the real, staging scripts directly against disposable mktemp
-# fixtures (both are standalone executables) -- no fence-extraction machinery is needed here,
-# unlike ADR-0027/28/29/30's SKILL.md-prose fixes. Section C is prose inside a HITL message
-# template, so its coverage is static grep anchors only, scoped to the Gate 2 block via an awk
-# extractor.
+# fixtures (both are standalone executables) -- no fence-extraction machinery is needed here.
 # Bash 3.2 clean. Run: bash refactor-snapshot-deep-refactor.test.sh
 set -u
 
@@ -143,7 +141,17 @@ EXIT_LINE=$(grep '^EXIT=' "$SNAP2")
   || bad "A7: RFS_FILTER=SUBSET, real failure should give real EXIT=4 (got: $EXIT_LINE)"
 
 # =====================================================================================
-# Section B -- Finding 3.8: deep-refactor enumerate-sources.sh glob path-override
+# Section B -- THE CI-runnable compatibility contract test for
+# deep-refactor/scripts/enumerate-sources.sh (R-06, ADR-0197 §D8,
+# migrate-deep-refactor-out-of-vendored-pa). Offline, hermetic, mktemp git fixture, zero
+# $HOME dependency: pins the documented "<root> [<path-override>]" argument shape, both
+# override forms (directory-literal prefix and glob), the exclusion set, and the
+# empty-output-on-no-match behaviour that `codex-reviewer.sh --mode audit` depends on. Under
+# this ADR that stops being incidental coverage and becomes Section B's declared purpose --
+# folding B6's own note below ("included here purely for CI-visible coverage, since the
+# equivalent $HOME-coupled test never runs in CI") into this role statement rather than
+# deleting it: B6 is why this section is run in full here, not left as incidental overlap.
+# Originally written for Finding 3.8: deep-refactor enumerate-sources.sh's glob path-override.
 # =====================================================================================
 
 # Fixture: a small git repo mirroring the shape of the existing (non-hermetic)

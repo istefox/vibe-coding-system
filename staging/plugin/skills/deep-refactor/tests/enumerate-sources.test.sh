@@ -1,10 +1,32 @@
 #!/bin/bash
-# enumerate-sources.test.sh — unit tests for scripts/enumerate-sources.sh
+# enumerate-sources.test.sh (R-04, ADR-0197 §D9, migrate-deep-refactor-out-of-vendored-pa) —
+# the LIVE-SIDE behavioural probe for the deployed
+# $HOME/.claude/skills/deep-refactor/scripts/enumerate-sources.sh. Run it by hand when
+# `sync-to-claude.sh`'s dry-run drift report says DRIFT for this file, to tell a cosmetic change
+# in the deployed copy apart from an actual contract break: this asserts *whether the contract
+# still holds*, where the drift report only says *that* the byte content changed.
+# It stays pointed at the deployed copy on purpose (never the staging one — that is
+# refactor-snapshot-deep-refactor.test.sh's Section B, the CI-runnable compatibility contract
+# test). By design this file sits outside `docs-ci.yml`'s shell-tests list AND outside
+# `plant-check.sh`'s `staging/plugin/scripts/tests/*.test.sh` glob — `.claude/test-ignore`
+# already documents that perimeter boundary. Because it is outside `plant-check.sh`'s
+# perimeter, no plant is declarable for any assertion below (rule 2 does not apply here; there
+# is nothing for plant-check.sh to sweep).
 # Bash 3.2-clean: no assoc arrays, no mapfile, no process substitution, no <<<, no ${v^^}
 # Uses mktemp -d for isolation; trap cleans up on exit.
 set -u
 
 SCRIPT="$HOME/.claude/skills/deep-refactor/scripts/enumerate-sources.sh"
+
+# Rule-4 guard: "did not run" is not "found nothing". Without this, an absent deployed copy
+# (e.g. a machine that never ran sync-to-claude.sh, or CI, which never deploys to $HOME) would
+# fall straight into the 13 tests below and print 13 FAILs that read as 13 contract breaks,
+# instead of the one true state: this probe never ran.
+if [ ! -f "$SCRIPT" ]; then
+  printf 'DID-NOT-RUN: live script absent: %s\n' "$SCRIPT"
+  exit 3
+fi
+
 TMP="$(mktemp -d)"
 PASS=0; FAIL=0
 
