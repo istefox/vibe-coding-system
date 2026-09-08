@@ -188,9 +188,13 @@ DECL_N=$(printf '%s\n' "$DECLS" | grep -c . || true)
   && ok "DC20: the declared dispatch-site population is non-vacuous ($DECL_N declarations)" \
   || bad "DC20: only ${DECL_N:-0} dispatch-site declarations found — the derivation collapsed"
 
-EXPECTED="deep-refactor-fix-agents
-deep-refactor-reviewers
-gate506-reviewers
+# `deep-refactor-fix-agents` and `deep-refactor-reviewers` stood as the first two entries of this
+# frozen baseline; removed 2026-09-08, migrate-deep-refactor-out-of-vendored-pa / ADR-0197 (rule
+# 19). Both were declared inside staging/plugin/skills/deep-refactor/SKILL.md, a file this repo no
+# longer vendors after this migration (Task 5 of that plan deletes it) — a shrinking frozen
+# baseline is exactly the silent edit ADR-0124 warns is easy to make unnoticed, and this comment is
+# the record that the shrink from 13 to 11 entries was deliberate, not a regression.
+EXPECTED="gate506-reviewers
 rtf-advisor-pair
 rtf-fix-agents
 rtf-step1-reviewer

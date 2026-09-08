@@ -234,12 +234,35 @@
 # The needle is quoted from code already on disk, not a projection, and it spans the arm's pattern
 # together with its whole message and exit, because the bare pattern alone would not be unique
 # against the pattern arm immediately below it.
+#
+# 2026-09-08 — Task 4 of migrate-deep-refactor-out-of-vendored-pa.md / ADR-0197
+# (docs/architecture/ADR-0197-deep-refactor-migrated-to-istefox-skills.md): CX10 and CX20-CX25 (six
+# ids, all reading staging/plugin/skills/deep-refactor/SKILL.md — a file this repo stops vendoring)
+# and their SIX `# plant:` declarations (CX10, CX20, CX21, CX22, CX23, CX24 — CX25 carried none) are
+# removed; see the rule-19 comments left at each site. This is a "live claim" correction made in
+# place per the ADR's own Consequences section, not a historical record (rule 14 does not apply to
+# it), because the counts describe the file's current shape, not a dated event to preserve verbatim.
+# Assertion count: S0 + CX01-CX45 minus the six removed ids, 46 -> 39 (measured by running this file,
+# rule 10/rule 13 — not computed from the ADR's own "roughly 36" estimate, which its Consequences
+# section explicitly flags as unverified). Plant-declaration count: THIRTY-EIGHT across THIRTY-THREE
+# ids drops to THIRTY-TWO across TWENTY-SEVEN (measured: `grep -c '^# plant:'` and
+# `grep -oE '^# plant: CX[0-9]+' | sort -u | wc -l` against this file post-edit).
 set -u
 
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 REPO_ROOT=$(cd "$STAGING/.." && pwd)
 CR="$SCRIPTS/codex-reviewer.sh"
+# SKILL_MD is RETAINED here (not removed per the letter of Task 4's R-05 instruction) because
+# extract_guard() below (feeding GUARD1/GUARD2, which feed CX14-CX17) still reads this file
+# directly, and CX14-CX17 are NOT named by Task 4's R-05/R-06/R-07 bullets — removing this variable
+# would abort this entire script via `set -u` at the extract_guard() call below, before any CX
+# assertion runs. This is a real call-site the migration plan's own "Read this second" grep did not
+# enumerate (docs/superpowers/plans/2026-09-07-migrate-deep-refactor-out-of-vendored-pa.md);
+# flagged in this task's report rather than silently resolved. CX14-CX17 will need the same
+# fate-decision CX10 got below, once staging/plugin/skills/deep-refactor/SKILL.md is actually
+# deleted (Task 5) — that decision is out of this task's scope. See ADR-0197
+# (docs/architecture/ADR-0197-deep-refactor-migrated-to-istefox-skills.md).
 SKILL_MD="$STAGING/plugin/skills/deep-refactor/SKILL.md"
 ENUM_SCRIPT="$SCRIPTS/../skills/deep-refactor/scripts/enumerate-sources.sh"
 ADR187="$REPO_ROOT/docs/architecture/ADR-0187-codex-review-gate.md"
@@ -254,14 +277,17 @@ if [ ! -f "$CR" ]; then
   bad "S0: codex-reviewer.sh not found at $CR — nothing else in this file can run"
   echo "----"; echo "PASS=$PASS FAIL=$FAIL"; exit 1
 fi
-if [ ! -f "$SKILL_MD" ]; then
-  bad "S0: deep-refactor/SKILL.md not found at $SKILL_MD — nothing else in this file can run"
-  echo "----"; echo "PASS=$PASS FAIL=$FAIL"; exit 1
-fi
-ok "S0: codex-reviewer.sh and deep-refactor/SKILL.md both found"
+# The SKILL.md-presence half of S0 stood here; removed 2026-09-08,
+# migrate-deep-refactor-out-of-vendored-pa / ADR-0197 (rule 19). deep-refactor/SKILL.md is retired
+# from this repo's vendored surface (Task 5 of that plan deletes it); a hard-exit on its absence
+# would kill all 44 CX assertions for a file this repo no longer claims to own or vendor. S0 now
+# gates only on codex-reviewer.sh, which this repo does still own.
+ok "S0: codex-reviewer.sh found"
 
 CR_TEXT=$(cat "$CR" 2>/dev/null)
-SKILL_TEXT=$(cat "$SKILL_MD" 2>/dev/null)
+# SKILL_TEXT (the whole-file slurp of SKILL_MD) stood here; removed 2026-09-08,
+# migrate-deep-refactor-out-of-vendored-pa / ADR-0197 (rule 19). It was consumed only by CX20-CX24
+# and CX25, both removed below for the same reason.
 
 # =====================================================================================
 # Helpers — flattened-clause matching (rule 3: a clause is the same clause whether it wraps).
@@ -302,42 +328,12 @@ extract_guard() {
 GUARD1=$(extract_guard "^### Mandatory guard 1")
 GUARD2=$(extract_guard "^### Mandatory guard 2")
 
-extract_finding_schema_block() {
-  awk '
-    /^```json$/ { c++; if (c==1) { capturing=1; next } }
-    capturing && /^```$/ { capturing=0; next }
-    capturing { print }
-  ' "$SKILL_MD"
-}
-FINDING_SCHEMA_BLOCK=$(extract_finding_schema_block)
-FINDING_FIELDS=$(printf '%s\n' "$FINDING_SCHEMA_BLOCK" | grep -oE '"[A-Za-z_]+":' | sed -E 's/[":]//g')
-FINDING_FIELD_COUNT=$(printf '%s\n' "$FINDING_FIELDS" | grep -c .)
-FINDING_FIELDS_CSV=$(printf '%s\n' "$FINDING_FIELDS" | tr '\n' ',' | sed -E 's/,$//')
-
-extract_all_schema_blocks() {
-  # $1 = output dir (already created). Writes every `<<'SCHEMA_EOF' ... SCHEMA_EOF` block's body to
-  # $1/block-<n> in file order. All-blocks, never ordinal-trusted (ADR-0193 §D7's own lesson,
-  # applied here independently of Task 5's ordinal-to-all-blocks repair to the sibling harness).
-  awk -v outdir="$1" '
-    /<<.SCHEMA_EOF.$/ { n++; capturing=1; fn = outdir "/block-" n; next }
-    capturing && /^SCHEMA_EOF$/ { capturing=0; close(fn); next }
-    capturing { print > fn }
-  ' "$CR"
-}
-
-find_audit_schema() {
-  # $1 = dir extract_all_schema_blocks wrote into. Prints the content of whichever block declares
-  # "risk_level" (the field unique to the audit schema, absent from review's and diagnose's) —
-  # never the ordinal position, since Task 3 may insert it anywhere among the SCHEMA_EOF blocks.
-  for _fas_f in "$1"/block-*; do
-    [ -f "$_fas_f" ] || continue
-    if grep -q '"risk_level"' "$_fas_f" 2>/dev/null; then
-      cat "$_fas_f"
-      return 0
-    fi
-  done
-  return 1
-}
+# extract_finding_schema_block(), FINDING_SCHEMA_BLOCK, FINDING_FIELDS, FINDING_FIELD_COUNT and
+# FINDING_FIELDS_CSV stood here — the finding-schema-fence extraction from deep-refactor/SKILL.md —
+# together with extract_all_schema_blocks() and find_audit_schema(), the codex-reviewer.sh-side
+# counterpart CX10 consumed alongside it. Removed 2026-09-08, migrate-deep-refactor-out-of-vendored-pa
+# / ADR-0197 (rule 19): every consumer (CX10, CX25) is removed below for the same reason — this repo
+# no longer vendors the fence they extracted.
 
 # =====================================================================================
 # Helpers — the stub `codex` on an isolated PATH inside a mktemp -d, and PATH-with-no-codex.
@@ -541,37 +537,17 @@ else
 fi
 
 # =====================================================================================
-# CX10-CX13 (R-02) — the FINDINGS_SCHEMA-shaped JSON output, end to end against the stub.
-
-CX10_DIR=$(mktemp -d)
-extract_all_schema_blocks "$CX10_DIR"
-AUDIT_SCHEMA=$(find_audit_schema "$CX10_DIR")
-if [ "$FINDING_FIELD_COUNT" -lt 7 ]; then
-  bad "CX10: denominator broken — only $FINDING_FIELD_COUNT field name(s) extracted from SKILL.md's finding-schema fence (need >= 7, rule 7)"
-elif [ -z "$AUDIT_SCHEMA" ]; then
-  bad "CX10: no audit --output-schema SCHEMA_EOF block found in codex-reviewer.sh (searched every block for one declaring risk_level)"
-else
-  CX10_VERDICT=$(SCHEMA_JSON="$AUDIT_SCHEMA" REQ_FIELDS="$FINDING_FIELDS_CSV" python3 -c '
-import json, os, sys
-try:
-    doc = json.loads(os.environ["SCHEMA_JSON"])
-except Exception as e:
-    print("PARSE-ERROR: %s" % e); sys.exit(0)
-req_fields = [f for f in os.environ["REQ_FIELDS"].split(",") if f]
-try:
-    item_required = set(doc["properties"]["findings"]["items"]["required"])
-except Exception as e:
-    print("SHAPE-ERROR: %s" % e); sys.exit(0)
-missing = [f for f in req_fields if f not in item_required]
-print(("MISSING: " + ",".join(missing)) if missing else "OK")
-')
-  case "$CX10_VERDICT" in
-    OK) ok "CX10: audit schema parses as JSON and its findings-item required[] is a superset of SKILL.md's finding-schema field set" ;;
-    *) bad "CX10: $CX10_VERDICT" ;;
-  esac
-fi
-rm -rf "$CX10_DIR"
-# plant: CX10 | plugin/scripts/codex-reviewer.sh | "file", "line", "description", "fix_type", "suggested_fix"] | "file", "line", "description", "fix_type"]
+# CX10 stood here (R-02) — the audit --output-schema's findings-item required[] cross-checked as a
+# superset of the finding-schema fence in deep-refactor/SKILL.md. Removed 2026-09-08,
+# migrate-deep-refactor-out-of-vendored-pa / ADR-0197 (rule 19). This repo no longer vendors that
+# fence; the current migration's own SPEC does not name CX10 (Task 4 cites only R-05, R-06 and
+# R-07), and freezing a local copy of the "required" field list would recreate exactly the
+# duplicate-source-of-truth problem this migration exists to eliminate — the schema CX10 checked
+# against is now owned by istefox/Skills, not this repository (rule 6). Its supporting
+# extract_all_schema_blocks()/find_audit_schema() helpers (no other CX assertion used them) were
+# removed above with it.
+#
+# CX11-CX13 (R-02) — the FINDINGS_SCHEMA-shaped JSON output, end to end against the stub.
 
 # FILE VALUES MUST BE REAL, IN-SCOPE PATHS (2026-09-06, commit 31cdc68's file-scope validation).
 # CX11/CX12/CX13/CX18/CX19/CX29 below all run audit mode with no --diff-scope, so FILE_LIST is the
@@ -770,101 +746,21 @@ case "$CX19_VERDICT" in
 esac
 
 # =====================================================================================
-# CX20-CX24 (R-05, R-06, R-07, R-08, R-09, R-10, R-11) — deep-refactor/SKILL.md's dispatch model,
-# Gate 0-CDX, and Gate 1 engine attribution.
-
-DISPATCH_BLOCK=$(awk '
-  /^### Dispatch model$/ { capturing=1; next }
-  capturing && /^### / { exit }
-  capturing { print }
-' "$SKILL_MD")
-
-CX20_CMD_COUNT=$(flat_count "$DISPATCH_BLOCK" "codex-reviewer.sh --mode audit --dimension")
-CX20_IF_COUNT=$(flat_count "$DISPATCH_BLOCK" "USE_CODEX_AUDIT = true")
-if [ "$CX20_CMD_COUNT" -eq 2 ] && [ "$CX20_IF_COUNT" -eq 2 ]; then
-  ok "CX20: both dispatch branches carry an IF USE_CODEX_AUDIT = true half naming codex-reviewer.sh --mode audit --dimension — exactly two branches"
-else
-  bad "CX20: expected exactly 2 branches naming the audit CLI and the flag-true condition — cli-mentions=$CX20_CMD_COUNT flag-true-mentions=$CX20_IF_COUNT"
-fi
-# plant: CX20 | plugin/skills/deep-refactor/SKILL.md | Branch A — Workflow dispatch (default): IF USE_CODEX_AUDIT = true | Branch A — Workflow dispatch (default):
-
-CX21_N1=$(flat_count "$SKILL_TEXT" 'model: "opus", effort: "high"')
-CX21_N2=$(flat_count "$SKILL_TEXT" "inherit the session")
-CX21_N3=$(flat_count "$SKILL_TEXT" "Dispatch the 4 reviewer agents sequentially using the")
-CX21_N4=$(flat_count "$SKILL_TEXT" "dispatch-site: deep-refactor-reviewers")
-if [ "$CX21_N1" -eq 1 ] && [ "$CX21_N2" -eq 1 ] && [ "$CX21_N3" -eq 1 ] && [ "$CX21_N4" -eq 1 ]; then
-  ok "CX21: byte-preservation of the Claude-only ELSE — all four frozen literals present exactly once each"
-else
-  bad "CX21: a frozen literal is missing or duplicated in the Claude-only ELSE — opus/effort=$CX21_N1 inherit-session=$CX21_N2 dispatch-4-sequential=$CX21_N3 dispatch-site-marker=$CX21_N4 (each must be 1)"
-fi
-# plant: CX21 | plugin/skills/deep-refactor/SKILL.md | Dispatch the 4 reviewer agents sequentially using the | Dispatch the four reviewer agents sequentially using the
-
-CX22_HEADING_COUNT=$(flat_count "$SKILL_TEXT" "### HITL Gate 0-CDX")
-CX22_POS_OK=0
-if [ "$CX22_HEADING_COUNT" -ge 1 ]; then
-  _cx22_gate0=$(grep -n '^### HITL Gate 0 — Approval to start$' "$SKILL_MD" | head -1 | cut -d: -f1)
-  _cx22_cdx=$(grep -n '^### HITL Gate 0-CDX' "$SKILL_MD" | head -1 | cut -d: -f1)
-  _cx22_phase1=$(grep -n '^## Phase 1' "$SKILL_MD" | head -1 | cut -d: -f1)
-  if [ -n "$_cx22_gate0" ] && [ -n "$_cx22_cdx" ] && [ -n "$_cx22_phase1" ] \
-     && [ "$_cx22_cdx" -gt "$_cx22_gate0" ] && [ "$_cx22_cdx" -lt "$_cx22_phase1" ]; then
-    CX22_POS_OK=1
-  fi
-fi
-CX22_SHAPE_OK=0
-if [ "$CX22_HEADING_COUNT" -ge 1 ]; then
-  CDX_BLOCK=$(awk '
-    /^### HITL Gate 0-CDX/ { c=1; next }
-    c && /^### / { exit }
-    c && /^## / { exit }
-    c { print }
-  ' "$SKILL_MD")
-  if flat_has "$CDX_BLOCK" "AskUserQuestion" && flat_has "$CDX_BLOCK" "No — Claude only" && flat_has "$CDX_BLOCK" "(Recommended)"; then
-    _cx22_first_opt=$(printf '%s\n' "$CDX_BLOCK" | grep -m1 -E '^[[:space:]]*-[[:space:]]*"')
-    case "$_cx22_first_opt" in
-      *"No — Claude only"*"(Recommended)"*) CX22_SHAPE_OK=1 ;;
-    esac
-  fi
-fi
-if [ "$CX22_HEADING_COUNT" -ge 1 ] && [ "$CX22_POS_OK" -eq 1 ] && [ "$CX22_SHAPE_OK" -eq 1 ]; then
-  ok "CX22: Gate 0-CDX exists between Gate 0 and Phase 1, is AskUserQuestion-shaped, and lists 'No — Claude only' first with (Recommended)"
-else
-  bad "CX22: Gate 0-CDX check failed — heading-count=$CX22_HEADING_COUNT position-ok=$CX22_POS_OK shape-ok=$CX22_SHAPE_OK"
-fi
-# plant: CX22 | plugin/skills/deep-refactor/SKILL.md | ### HITL Gate 0-CDX — Audit engine (Codex or Claude)
-
-CX23_NOQ=$(flat_count "$SKILL_TEXT" "no question is asked")
-CX23_MFS=$(flat_count "$SKILL_TEXT" "manifest-field-state.sh")
-CX23_NOMANIFEST=$(flat_count "$SKILL_TEXT" "with no manifest")
-if [ "$CX23_NOQ" -ge 1 ] && [ "$CX23_MFS" -ge 1 ] && [ "$CX23_NOMANIFEST" -ge 1 ]; then
-  ok "CX23: the unattended path is stated — no-question-under-autopilot, manifest-field-state.sh read for the inherited value, and a no-manifest-resolves-Claude-only clause"
-else
-  bad "CX23: unattended path under-documented — no-question-clause=$CX23_NOQ manifest-field-state.sh-mention=$CX23_MFS no-manifest-clause=$CX23_NOMANIFEST (each must be >= 1)"
-fi
-# plant: CX23 | plugin/skills/deep-refactor/SKILL.md | with no manifest
-
-CX24_MARKER=$(flat_count "$SKILL_TEXT" "Audit engine per dimension:")
-CX24_COND=$(flat_count "$SKILL_TEXT" "USE_CODEX_AUDIT was true for this run")
-if [ "$CX24_MARKER" -ge 1 ] && [ "$CX24_COND" -ge 1 ]; then
-  ok "CX24: Gate 1 gains a per-dimension engine-attribution block, conditional on USE_CODEX_AUDIT having been true for the run"
-else
-  bad "CX24: Gate 1 engine-attribution block not found — marker=$CX24_MARKER conditional-clause=$CX24_COND"
-fi
-# plant: CX24 | plugin/skills/deep-refactor/SKILL.md | Audit engine per dimension:
+# CX20-CX25 stood here (R-05, R-06, R-07, R-08, R-09, R-10, R-11) — deep-refactor/SKILL.md's
+# dispatch model, Gate 0-CDX, Gate 1 engine attribution, and a no-collateral-drift check over the
+# dimension table and the finding-schema fence. Removed 2026-09-08,
+# migrate-deep-refactor-out-of-vendored-pa / ADR-0197 (rule 19): CX20-CX24 and their five
+# `# plant:` declarations read staging/plugin/skills/deep-refactor/SKILL.md directly, and CX25 read
+# both SKILL.md and the now-removed FINDING_FIELD_COUNT denominator — all of a file this repo no
+# longer vendors after this migration (Task 5 of that plan deletes it). A needle that would now
+# match zero times is BADPLANT, not a pass (ADR-0197's Verification section), so the five plants are
+# deleted whole, not merely re-targeted. The design they pinned (dispatch model, Gate 0-CDX shape,
+# Gate 1 engine attribution) is unreviewable from this repository going forward — ADR-0197's own
+# stated cost, accepted for the same reason ADR-0191 accepted it for project-tasks.
 
 # =====================================================================================
-# CX25-CX27 (R-11, plus the waived plan-side documentation id SPEC.md marks no-test) — no
+# CX26-CX27 (R-11, plus the waived plan-side documentation id SPEC.md marks no-test) — no
 # collateral drift; the ADR and its index entry.
-
-CX25_ROWS=0
-for _cx25_d in dead-code perf structure security; do
-  _cx25_needle='| `'"$_cx25_d"'` | reviewer |'
-  grep -qF "$_cx25_needle" "$SKILL_MD" && CX25_ROWS=$((CX25_ROWS + 1))
-done
-if [ "$CX25_ROWS" -eq 4 ] && [ "$FINDING_FIELD_COUNT" -eq 9 ]; then
-  ok "CX25: no collateral drift — all four dimension table rows present, finding-schema fence still declares nine fields"
-else
-  bad "CX25: collateral drift detected — dimension-table-rows=$CX25_ROWS/4, finding-schema-field-count=$FINDING_FIELD_COUNT/9"
-fi
 
 ADR187_TEXT=$(cat "$ADR187" 2>/dev/null)
 CX26_NEEDLE='This pass does not extend Codex substitution to `coder`/`tester` dispatch, to Gate 5.06 / `security-audit` / `deep-refactor`, or to `--autopilot` runs — all explicitly deferred, not solved.'
@@ -2329,11 +2225,11 @@ fi
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 46 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 46) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX45 are the frozen identity set"
+if [ "$_total" -ge 39 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 39) — a floor only, it absorbs its own plant (rule 10); S0 + CX01-CX45 minus CX10 and CX20-CX25 (7 removed 2026-09-08, migrate-deep-refactor-out-of-vendored-pa / ADR-0197, rule 19) are the frozen identity set"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 46; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 39; assertions vanished"
   FAIL=$((FAIL + 1))
 fi
 [ "$FAIL" -eq 0 ]

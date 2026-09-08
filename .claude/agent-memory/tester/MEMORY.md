@@ -29,3 +29,8 @@ the 200-line/25KB injection cap; the topic files do not.
   floors, whole-block insertions needing the future coder's free text) — follow the file's own
   no-plant-for-RED-until-future-task precedent instead of faking one, learned on pairs-completeness
   XR1/XR3/XR5 and sync-manual-steps section J (ADR-0197 migration)
+- [Plan contract-scan blind spot: shared extractor](topics/plan-contract-scan-blind-spot-shared-extractor.md)
+  — a plan's "every call-site is listed" grep can miss a consumer reached through a shared
+  helper/variable rather than a direct literal match; resolution pattern (keep the variable, remove
+  only in-scope consumers, flag the gap) and the CX10-shaped "retire a cross-check, don't freeze a
+  baseline" rule-6 default, learned retiring codex-audit-mode.test.sh's SKILL.md reads (ADR-0197 Task 4)
