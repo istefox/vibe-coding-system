@@ -545,6 +545,41 @@ seeded `false` and leave `manifest.step5_codex_tester_asked` at its seeded `fals
 attended run on the same manifest still gets asked once. This is an instruction, not an
 enforcement (rule 16) — say so rather than implying a guarantee that is not there.
 
+#### Codex coder backend for Step 5 dispatch (ADR-0196, both paths)
+
+Like the tester ask above and unlike the review ask, this one is **not** conditional on
+`manifest.step5_review_mode` — the coder dispatch is unconditional on both dispatch paths, so the
+ask that decides its backend is unconditional too.
+
+**This ask has no `_asked` gate.** The gate re-fires on every Step 5 entry, fresh or resumed. This
+is the deliberate opposite of the review and tester asks above (ADR-0196 §R7): a fresh model/effort
+choice is wanted every time, since an inherited `ultra` on a run nobody re-approved would be a
+silent cost decision. `manifest.use_codex_coder` may already hold a value from a prior partial run;
+treat it as display-only context, never authoritative, and never a reason to skip this ask.
+
+The ask fires once, in the orchestrator's own live turn, before the Workflow/Agent-tool branch
+below, so one ask covers both dispatch paths — the same placement the tester ask above uses.
+`AskUserQuestion` options:
+- `[claude-sonnet]` "Claude coder at sonnet (default, current behaviour) (Recommended)"
+- `[codex]` "Codex CLI, sandboxed to the worktree, with a gate if it is unavailable"
+
+On `[codex]`, **in the same gate turn**, two further selections: model — `[astra]` "Astra
+(gpt-6-astra) (default) (Recommended)" / `[sol]` "Sol (gpt-5.6-sol)"; and effort — `[medium]`
+"(default) (Recommended)" / `[low]` / `[high]` / `[xhigh]` / `[max]` / `[ultra]`.
+
+Persistence: `[codex]` → `~/.claude/skills/concept-to-code/scripts/manifest-set-flag.sh <manifest>
+use_codex_coder true`; `[claude-sonnet]` → the same helper with `false` (explicitly, because this
+value may hold `true` from a previous entry and this gate never skips). `step5_codex_coder_model`
+and `step5_codex_coder_effort` are written by bash `sed` substitution on the additive field, not via
+manifest-set-flag.sh, which validates its value as exactly `true`/`false` and cannot write them. <!-- path-rule-exempt: negated -- describes NOT writing the two string fields through this boolean-only helper -->
+
+On `[claude-sonnet]`, set both string fields back to `null` by the same `sed` mechanism, so a later
+reader never sees a model/effort pair beside `use_codex_coder: false`.
+
+The ask does not fire under `--autopilot`; unattended runs keep `use_codex_coder` at `false` and
+both string fields at `null`. This is an instruction, not an enforcement (rule 16) — say so rather
+than implying a guarantee that is not there.
+
 #### Workflow dispatch path — Step 5 implementation (hook_verified = true)
 
 **CONSTRAINT — NO inline source code in the generated workflow script:**
@@ -622,6 +657,14 @@ every Edit operation. Auto mode active. No intermediate HITL. `.claude/test-cmd`
 never read, write, or modify it. If the test command needs changing, stop and report it to the
 orchestrator.
 
+**If the Step 5 coder backend ask above resolved to `codex`:** this task group gets no coder stage
+in `pipeline()` at all — the coder instead runs in the orchestrator's own live turn, sequentially,
+per task group (see `#### Codex coder exit-code handling` below for the branch on its exit code). If
+the tester backend also resolved to `codex` and `manifest.step5_review_mode` is not `checkpoint`,
+`pipeline()` has no stages left at all: write no workflow script and make no `Workflow()` call — the
+whole of Step 5 runs as a sequence of orchestrator-turn subprocess calls with a merge-back between
+each. This is a legal state, not an error.
+
 #### Codex tester exit-code handling (ADR-0194)
 
 One resolution site for the Codex tester's exit contract, referenced by both dispatch paths below
@@ -694,6 +737,29 @@ confirm a failing assertion and stop, it stops: a red assertion left red is the 
 unfinished task. The tester reports which sub-steps it executed and which it leaves to the coder.
 
 Also add to the brief: Writes go under the dispatched worktree, never to an absolute path into the shared checkout: `isolation: worktree` bounds the working directory, not the filesystem, and an absolute path resolves out of it (ADR-0068 §D11, issue #245). Read the planning artifacts by absolute path; write by relative path.
+
+#### Codex coder exit-code handling (ADR-0196)
+
+One resolution site for the Codex coder's exit contract, referenced by both dispatch paths below
+(the Workflow path's codex branch and the Agent-tool batch path's codex branch) — the same "stated
+once, referenced twice" idiom as `#### Merge-back and base-fork audit` and `#### Codex tester
+exit-code handling`.
+
+- exit `0` → read `--out` as the coder's report, exactly as if the Claude `coder` had produced it.
+- exit `2` → bad invocation. Report the stderr line and halt this dispatch; it is a defect in the
+  orchestrator's own arguments, never a reason to fall back.
+- exit `3` → DID-NOT-RUN. `AskUserQuestion`: "Fallback to the Claude `coder` (Recommended)" / "Halt
+  the chain". **Never a silent fallback.**
+- exit `4` → scope violation. Name the class and the subject from stderr, then `AskUserQuestion`:
+  "Fallback to the Claude `coder`, discarding Codex's work (Recommended)" / "Accept the write and
+  continue" / "Halt the chain". The check is a heuristic and the operator decides, not the script.
+  **For the `NEW-COMMIT` class specifically, "accept and continue" is not safe and the block says
+  so**: the merge-back's base-fork check compares the worktree's `HEAD` against `$PRE` and will halt
+  one step later with a cause that is wrong ("the worktree forked from somewhere other than the
+  feature branch"). Halting here, or resetting the worktree by hand, is the honest resolution.
+
+A Workflow `pipeline()` stage cannot pause to ask the user anything at all — that is **why** both
+branches below run in the orchestrator's own live turn rather than inside a stage callback.
 
 #### Merge-back and base-fork audit (ADR-0068 §D5, §D6, §D9)
 
@@ -821,6 +887,10 @@ feature branch — before Stage 2 below creates the coder's worktree, so the cod
 not make this step redundant: `"head"` means the commit `HEAD` points at, not the working tree,
 and a worktree forks from a commit — the tester's output is uncommitted until this merge lands it
 there (ADR-0068 §D6, §D9).
+
+**If the Step 5 coder backend ask above resolved to `codex`:** for each task group in turn, in this same live turn: materialize the brief with `step5-brief.sh` exactly as below; `git worktree add` a worktree for the group; run `~/.claude/hooks/codex-coder.sh --worktree <wt> --brief <brief> --out <report> --model <manifest.step5_codex_coder_model> --effort <manifest.step5_codex_coder_effort>`; branch per `#### Codex coder exit-code handling` above (ADR-0196); then run `#### Merge-back and base-fork audit` with `$WT`/`$WB` taken from the `git worktree add` you just issued — known by construction here, not enumerated out of `git worktree list` (F19). This is sequential where the Claude branch is parallel: a real wall-clock cost, larger than the tester's because the coder is the long stage, taken deliberately because a coder that cannot report its own failure leaves nothing to review, nothing for Gate 5 to approve and nothing to commit (ADR-0196 §R5).
+
+**Otherwise (default — `use_codex_coder` absent or `false`):**
 
 **Stage 2 — coder.** Pin `agentType: "coder"`, an explicit `model` (per the model-override rule
 above), an explicit `effort` (per the effort table above), and `isolation: "worktree"` explicitly
@@ -1887,6 +1957,10 @@ Return a report naming the requirement IDs (or Success Criteria / plan-task line
 fallback fired) each test covers, plus which sub-steps you executed and which you leave to the
 coder.
 ```
+
+**If the Step 5 coder backend ask above resolved to `codex`:** create the batch worktree with `git worktree add`, run `~/.claude/hooks/codex-coder.sh --worktree <wt> --brief <brief> --out <report> --model <manifest.step5_codex_coder_model> --effort <manifest.step5_codex_coder_effort>`, branch per `#### Codex coder exit-code handling` above (ADR-0196), merge back via the same block with `$WT`/`$WB` from the `git worktree add`. **The completion-fact fence below (`step5-batch-completion-gate`) is not run on this branch** (ADR-0196 §R6): `codex-coder.sh` is synchronous and its exit code is the completion fact, and running `dispatch-state.sh` against this worktree would report `NONE` and HALT every successful Codex run — a producer/consumer mismatch (rule 17), not a defect in the run. The `step5-batch-coder` isolated-dispatch marker below stays exactly where it is, unmodified and un-exempted: it still gates the Claude branch's own completion check.
+
+**Otherwise (default):**
 
 **Single batch dispatch template** (dispatched AFTER this batch's tester above; MUST carry the
 TEST-AUTHORING SCOPE marker verbatim, ASCII hyphen, ADR-0049 §D3):
