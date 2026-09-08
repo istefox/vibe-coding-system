@@ -5789,3 +5789,96 @@ Key architectural decisions:
   ADR's scope.
 
 Detail: `docs/architecture/ADR-0196-codex-coder-choice.md`.
+
+## Decisions from migrating deep-refactor out of the vendored PAIRS surface (ADR-0197)
+
+- **`deep-refactor` follows the `project-tasks`/`auto-learning`/`website-auditor` precedent
+  (ADR-0191), and is the last remaining PAIRS entry pointing through a symlink into a foreign
+  repo.** Phase 0 of the deploy roadmap had already made the four `deep-refactor` PAIRS entries
+  dead deploy targets (the symlink-clobber guard refuses any `--apply` write whose destination
+  resolves outside `staging/`'s own tree); this migration removes the stale claim of ownership
+  the vendored copy still made, rather than leaving a guard covering for it indefinitely.
+- **Measured, not assumed, the true consumer population is larger than the SPEC's three named
+  harnesses.** `codex-audit-mode.test.sh` (S0 hard-exits 1 on a missing `SKILL.md`, CX08/CX09/CX32
+  read the vendored `enumerate-sources.sh`, CX20-CX25 and five `# plant:` declarations read the
+  vendored `SKILL.md`), `refactor-snapshot-deep-refactor.test.sh` (Section B runs
+  `enumerate-sources.sh` hermetically in CI; Section C reads the vendored `SKILL.md`'s Gate 2
+  block), `workflow-dispatch-pins.test.sh` (A2/A3 read the vendored `SKILL.md`; A1 is
+  negative-shaped and passes vacuously once the file is gone — rule 4), and
+  `dispatch-completion.test.sh` (DC21, a frozen exact baseline per ADR-0124, sources two dispatch
+  names from the vendored `SKILL.md`'s markers) — the last two were not named in the SPEC.
+- **`enumerate-sources.sh` and its test are retained at their exact current paths, as a declared
+  `contract-reference:`, never as a deploy source — the deliberate exception the ADR settles
+  rather than improvises.** `codex-reviewer.sh:206` resolves this script relatively
+  (`$SCRIPT_DIR/../skills/deep-refactor/scripts/enumerate-sources.sh`), a form ADR-0193 §D3 chose
+  precisely because it resolves identically in both trees; moving the file would break that
+  property and the three assertions (`CX08`/`CX09`/`CX32`) that pin it. ADR-0077's "a waiver
+  travels with the file it excuses" does not apply here for a different reason than in the
+  `deployed-only` case: the file exists, and a marker comment inserted into it would destroy the
+  byte-identity the drift check below depends on.
+- **A new `# contract-reference:` declaration class, distinct from `deployed-only:`, with its own
+  five-assertion `CR` block in `pairs-completeness.test.sh` (rule 17 — a declaration needs the
+  check that reads it).** `CR1` guards the derivation count (rule 7); `CR2` checks every declared
+  path exists; `CR3` is the substance — no declared path may appear as a PAIRS `src`, or the dead
+  deploy target D2 removes would silently return; `CR4` is `CR3`'s backward self-test against a
+  synthetic PAIRS-listed fixture (the `DO4`/`self-test 2` lesson, vacuous otherwise); `CR5` is the
+  reverse direction that closes the measured blind spot (rule 8) — every file under a
+  `deployed-only` skill's own directory must itself carry a `contract-reference:` declaration,
+  generalising past this one migration.
+- **Staleness against the live foreign copy is a three-state byte-diff REPORT, never a checksum,
+  never gates the exit code (ADR-0087 §D3's precedent, `$HOME`-dependent and unverifiable in
+  CI).** Live counterpart absent → `DID-NOT-RUN`, naming the path (not clean, not drift);
+  byte-identical → `CLEAN`; differing → `DRIFT`, naming the file and the diff command. It never
+  sets `MANUAL=1`, so `sync-manual-steps.test.sh`'s `A3` all-clear assertion (run under a hermetic
+  `$HOME` fixture with no `skills/` tree) stays green on the `DID-NOT-RUN` case.
+- **The CI-runnable contract test already existed and is kept, re-headed, not rewritten.** Section
+  B of `refactor-snapshot-deep-refactor.test.sh` (B1-B6, ADR-0031) already runs the retained
+  `enumerate-sources.sh` hermetically against a disposable `mktemp` git fixture with zero `$HOME`
+  dependency, and its own B6 comment already named this exact role. This ADR makes that role
+  declared rather than incidental.
+- **Every deletion driven by this migration leaves a rule-19 comment naming the issue and this
+  ADR**, in `codex-audit-mode.test.sh` (S0, CX10, CX20-25), `refactor-snapshot-deep-refactor.test.sh`
+  Section C, `workflow-dispatch-pins.test.sh` Section A (including the now-vacuous A1), and
+  `dispatch-completion.test.sh`'s DC21 frozen baseline.
+- **Nothing in `codex-reviewer.sh` itself changes.** The SPEC's options 2 (change the resolution)
+  and 3 (remove the coupling entirely) are explicitly rejected in favor of D4's retained-file
+  exception, recorded with the rejection reason rather than left silent.
+- **A concurrently-merged chain (ADR-0196, `codex-coder-backend-choice`) claimed ADR number 0196
+  before this chain's own commit landed — this ADR was renumbered 0196 → 0197 after the fact.**
+  Two independent concept-to-code chains running from the same prior base each computed the
+  next-free ADR number at dispatch time, and neither reserved it; the collision surfaced only
+  because the user proactively asked for an overlap check before handing this chain to a fresh
+  implementation session, not from any mechanism in the chain itself.
+- **A second, unrelated ADR-numbering collision surfaced during `spec-coverage.sh`
+  re-verification after the merge above, and it predates this chain entirely.** Three separate
+  files already share number 0194: `ADR-0194-codex-tester-choice.md` and
+  `ADR-0194-pr-batching-ci-cost-lever.md` (both dated 2026-09-06, mutually colliding with each
+  other, unrelated to this migration), and
+  `ADR-0194-codex-substitution-not-extended-to-deep-refactor.md` (2026-09-07, the one this plan
+  legitimately cites as a "doc to correct forward"). `spec-coverage.sh`'s plan-side ADR-key scan
+  matches the literal `ADR-` + 4 digits anywhere in the plan file with no filename disambiguation
+  (ADR-0154 §D1). **Applied, not a fix of the underlying collision:** the plan's two citations of
+  the third file now use a Unicode non-breaking hyphen (`ADR‑0194`, U+2011) instead of the ASCII
+  hyphen the scanner's literal `"ADR-"` match requires — same reference, same reader-visible
+  meaning, invisible to the token scan. The three-file numbering collision itself is untouched and
+  unresolved; it is a pre-existing repo-integrity defect out of this migration's scope, flagged
+  here as a named follow-up rather than silently worked around.
+- **The actual `STALE-WAIVER R-14` was not a merge artifact at all — the plan's own text had
+  already measured and named the exact mechanism for R-09/R-10/R-12, and R-14 was simply the
+  fourth id the Gate-2 SPEC fix missed.** The plan's "Do NOT fix R-09, R-10 or R-12" section
+  (predating this merge) documents that `worktree-isolation-contract.test.sh` legitimately enters
+  scope (plan names it for the population-floors edge case, and the plan's own ADR-0068 citation
+  satisfies half 2), and that its foreign `R-09`/`R-10`/`R-12` tokens are accepted, disclosed,
+  over-optimistic coverage by design — adding a `(no-test:)` marker to any of the three turns it
+  `STALE-WAIVER`. `R-14` is the exact same case: the same harness's own Section H
+  (`R-06/R-07/R-08/R-09/R-14`) already carried the token before this chain existed. The Gate-2 fix
+  that added `(no-test:)` to both R-13 and R-14 together should only have touched R-13 — R-13 is
+  genuinely unique (no in-scope file carries that token), R-14 is not. **Fix: removed the
+  `(no-test:)` clause from R-14 in `SPEC.md`, restoring it to an ordinary checklist item — exactly
+  R-09/R-10/R-12's already-established treatment, not a new exception.** Re-verified:
+  `spec-coverage.sh` rc=0, 14/14 `COVERED`, 10 files in scope, matching the plan's own originally
+  documented verification exactly. (An earlier attempt in this same session tried removing the
+  harness's basename mention instead, which fixed R-14 but flipped R-12 to `UNSCOPED` — reverted
+  once the plan's own prior note was actually read.)
+
+Detail: `docs/architecture/ADR-0197-deep-refactor-migrated-to-istefox-skills.md`.
