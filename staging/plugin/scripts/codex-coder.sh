@@ -48,9 +48,10 @@
 # assertion (CK10) pins the three copies' load-bearing needles identical so a future fix applied to
 # one and not the others is caught.
 #
-# SANDBOX AS ENFORCEMENT (rule 16), AND WHAT IT STANDS IN FOR. `-s workspace-write -C "$WORKTREE"`
-# on `codex exec` is what actually constrains Codex to write only inside the dispatch's own
-# worktree — a runtime guarantee, not an instruction Codex is asked to obey. This script's own
+# SANDBOX AS ENFORCEMENT (rule 16), AND WHAT IT STANDS IN FOR. The `workspace-write` sandbox mode,
+# scoped with `-C "$WORKTREE"` below, on `codex exec` is what actually constrains Codex to write
+# only inside the dispatch's own worktree — a runtime guarantee, not an instruction Codex is asked
+# to obey. This script's own
 # post-run scope check, below, is a SECOND, INDEPENDENT guard: the sandbox stops writes outside the
 # worktree; the scope check catches a write that lands inside the worktree but outside a coder's
 # legitimate scope, which workspace-write alone does not forbid. Together the two are standing in
@@ -62,8 +63,9 @@
 # already happened inside the isolated worktree.
 #
 # CODEX CLI SHAPE, VERIFIED LIVE (rule 13, 2026-09-07 — not assumed from --help alone; see
-# ADR-0196): `~/.codex/models_cache.json` lists both `gpt-6-astra` and `gpt-5.6-sol` as model
-# slugs, alongside `gpt-5.6-terra`, `gpt-5.6-luna` and others. `codex exec --help`'s flag shape
+# ADR-0196): `~/.codex/models_cache.json` lists both the astra and sol model slugs (mapped to their
+# full names below) as valid, alongside `gpt-5.6-terra`, `gpt-5.6-luna` and others. `codex exec
+# --help`'s flag shape
 # (`-s/--sandbox <read-only|workspace-write|danger-full-access>`, `-C/--cd <DIR>`,
 # `--output-schema <FILE>`, `-o/--output-last-message <FILE>`, `-c <key>=<value>`) is the one
 # ADR-0194 verified live on 2026-09-06 and `codex-tester.sh` has used since. `--model` maps to
@@ -169,11 +171,16 @@ PROMPT_FILE=$(mktemp)
 RAW_OUT=$(mktemp)
 trap 'rm -f "$BASELINE_FILE" "$AFTER_FILE" "$REMAINING_FILE" "$SCHEMA_FILE" "$PROMPT_FILE" "$RAW_OUT"' EXIT
 
-{
+# One question (rule 6): "what does the worktree's changed+untracked file set look like right
+# now", asked twice at two different times (baseline, after). A shared function keeps the two
+# answers from drifting apart instead of two copies of the same three git calls.
+_snapshot_worktree_files() {
   git -C "$WORKTREE" diff --name-only 2>/dev/null
   git -C "$WORKTREE" diff --name-only --cached 2>/dev/null
   git -C "$WORKTREE" ls-files --others --exclude-standard 2>/dev/null
-} | sort -u > "$BASELINE_FILE"
+}
+
+_snapshot_worktree_files | sort -u > "$BASELINE_FILE"
 
 BASELINE_HEAD=$(git -C "$WORKTREE" rev-parse HEAD 2>/dev/null)
 
@@ -356,11 +363,7 @@ fi
 # about a path, opposite conclusion (rule 6): there, a non-test path is the violation; here, a test
 # path is. --------------------------------------------------------------------------------------
 
-{
-  git -C "$WORKTREE" diff --name-only 2>/dev/null
-  git -C "$WORKTREE" diff --name-only --cached 2>/dev/null
-  git -C "$WORKTREE" ls-files --others --exclude-standard 2>/dev/null
-} | sort -u > "$AFTER_FILE"
+_snapshot_worktree_files | sort -u > "$AFTER_FILE"
 
 comm -13 "$BASELINE_FILE" "$AFTER_FILE" > "$REMAINING_FILE"
 
