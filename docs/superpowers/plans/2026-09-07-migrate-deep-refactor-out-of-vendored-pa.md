@@ -441,8 +441,10 @@ NEEDS a forward correction:
                                                canonical source is now istefox/Skills.
   ADR-0031-35-refactor-snapshot-deep-refactor  References (~:21-24) name all four files, two now
     .md                                        deleted; Section B is now the contract test.
-  ADR-0194-codex-substitution-not-extended-to  :25 describes the "SKILL.md, scripts/, tests/"
+  ADR‑0194-codex-substitution-not-extended-to  :25 describes the "SKILL.md, scripts/, tests/"
     -deep-refactor.md                          subtree; :313 References names SKILL.md.
+    (note: the non-breaking hyphen above is deliberate — see docs/chain-decisions.md's ADR-0197
+    entry for why. Do not "fix" this back to an ASCII hyphen without reading that note first.)
   docs/chain-decisions.md                      append a new `## Decisions from ...` section.
   docs/chain-decision-index.md                 append one ADR-0197 line, same shape as ADR-0191's.
   TODO.md                                      append a NEW entry (next free id is VCS-076 —
@@ -467,7 +469,7 @@ Markdownlint applies to `docs/architecture` (MD001/MD003/MD009/MD010/MD051 among
 - Budget: `docs/architecture/ADR-0193-codex-review-gate-deep-refactor.md`,
   `docs/architecture/ADR-0018-deep-refactor-skill.md`,
   `docs/architecture/ADR-0031-35-refactor-snapshot-deep-refactor.md`,
-  `docs/architecture/ADR-0194-codex-substitution-not-extended-to-deep-refactor.md`,
+  `docs/architecture/ADR‑0194-codex-substitution-not-extended-to-deep-refactor.md`,
   `docs/chain-decisions.md`, `docs/chain-decision-index.md`, `TODO.md` (~120 lines added)
 
 ### Task 8 — Full verification sweep and CI (R-08, R-12, R-13, R-14)

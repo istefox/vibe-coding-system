@@ -134,7 +134,7 @@ Not applicable.
   not be flagged as an orphaned vendored file with no PAIRS entry and no `deployed-only` waiver).
 - [ ] R-12 — The full `staging/plugin/scripts/tests/` suite passes with zero failures.
 - [ ] R-13 — `plant-check.sh` reports no `BADPLANT` across the full sweep. (no-test: verified by running the sweep locally and in CI, not by a spec-coverage assertion)
-- [ ] R-14 — CI is green on all 7 checks on the resulting PR before merge. (no-test: verified by observing the PR's CI status directly, not by a repository-local assertion)
+- [ ] R-14 — CI is green on all 7 checks on the resulting PR before merge.
 
 ## Precedent
 
