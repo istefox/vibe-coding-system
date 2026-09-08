@@ -422,6 +422,34 @@ if grep -q '^step5_codex_tester_asked:' "$MANIFEST"; then
   fi
 fi
 
+# Invariant 28 (conditional, schema 1.4, ADR-0196): if use_codex_coder field present, must be
+# true or false. Absent = valid (retrocompat 1.0-1.3), same template as use_codex_review
+# (Invariant 24) and use_codex_tester (Invariant 26) — this feature ADDS an opt-in path, so
+# absent/false is the pre-feature-equivalent default. There is deliberately no fourth,
+# "already asked once" companion field here: that shape the two earlier features use exists
+# solely to let a resumed manifest skip a re-ask, and this gate never skips (ADR-0196 §R7).
+if grep -q '^use_codex_coder:' "$MANIFEST"; then
+  if ! grep -Eq '^use_codex_coder: (true|false)$' "$MANIFEST"; then
+    fail "use_codex_coder field present but value is not 'true' or 'false'"
+  fi
+fi
+
+# Invariant 29 (conditional, schema 1.4, ADR-0196): if step5_codex_coder_model or
+# step5_codex_coder_effort are present, each must be null or one of its closed-set values. The
+# effort vocabulary (null|low|medium|high|xhigh|max|ultra) duplicates the same six-value set the
+# Step 5 gate offers — CK27 pins the two copies identical, since a value added to one and not the
+# other would silently reject a choice the gate just offered.
+if grep -q '^step5_codex_coder_model:' "$MANIFEST"; then
+  if ! grep -Eq '^step5_codex_coder_model: (null|astra|sol)$' "$MANIFEST"; then
+    fail "step5_codex_coder_model field present but value is not one of: null|astra|sol"
+  fi
+fi
+if grep -q '^step5_codex_coder_effort:' "$MANIFEST"; then
+  if ! grep -Eq '^step5_codex_coder_effort: (null|low|medium|high|xhigh|max|ultra)$' "$MANIFEST"; then
+    fail "step5_codex_coder_effort field present but value is not one of: null|low|medium|high|xhigh|max|ultra"
+  fi
+fi
+
 if [ "$ERRORS" != "0" ]; then
   exit 1
 fi
