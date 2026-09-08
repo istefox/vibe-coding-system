@@ -131,7 +131,7 @@ fi
 # drift REPORT below is built on. pairs-completeness.test.sh's CR/XR block derives this registry at
 # run time.
 #
-# contract-reference: plugin/skills/deep-refactor/scripts/enumerate-sources.sh — retained verbatim as codex-reviewer.sh's staging-side dependency (line 206); compared for drift below, never a deploy source.
+# contract-reference: plugin/skills/deep-refactor/scripts/enumerate-sources.sh — retained verbatim as codex-reviewer.sh's staging-side dependency (referenced via its `ENUM=` assignment in the audit-mode block); compared for drift below, never a deploy source.
 # contract-reference: plugin/skills/deep-refactor/tests/enumerate-sources.test.sh — retained verbatim as the compatibility-contract test for enumerate-sources.sh; compared for drift below, never a deploy source.
 PAIRS="
 user/CLAUDE.md|CLAUDE.md
