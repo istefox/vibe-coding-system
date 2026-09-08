@@ -503,6 +503,107 @@ case "$OUT" in
   *) bad "I3b: autopilot-guard notice muted by an unrelated hook (InstructionsLoaded) being wired" ;;
 esac
 
+# =====================================================================================
+# J. Contract-reference drift REPORT (migrate-deep-refactor-out-of-vendored-pa,
+# 2026-09-07-migrate-deep-refactor-out-of-vendored-pa.md, ADR-0197 D7, R-04). sync-to-claude.sh
+# gains a report block, beside the DEPLOYED SKILL REPORT above, that byte-diffs each declared
+# `contract-reference:` file (see pairs-completeness.test.sh's XR block) against its live
+# counterpart under $DEST/skills/. Three states, all distinct (rules 4 and 5): the live
+# counterpart absent -> a DID-NOT-RUN line naming the path, not a DRIFT; present and
+# byte-identical -> CLEAN; present and differing -> DRIFT, naming the file. It is a REPORT: it
+# must never set MANUAL=1 and never affect the exit code, which is what the all-clear-line
+# assertions below protect (ADR-0197 D7's own stated reason — a drift block that set MANUAL=1
+# on the absent case would turn A3-style assertions red in CI for a state that is not an
+# outstanding manual step). This is RED right now: sync-to-claude.sh has no drift-report block
+# yet (Task 3 adds it), so none of DID-NOT-RUN/CLEAN/DRIFT is printed at all.
+DID_NOT_RUN_MARK="DID-NOT-RUN"
+CONTRACT_CLEAN_MARK="CLEAN"
+CONTRACT_DRIFT_MARK="DRIFT"
+ENUM_REL="deep-refactor/scripts/enumerate-sources.sh"
+ENUM_LIVE_SRC="$STAGING/plugin/skills/deep-refactor/scripts/enumerate-sources.sh"
+
+# build_home_drift <name> <state:absent|clean|modified> — returns the fixture HOME path. Fully
+# wired settings.json (WIRED_HOOKS + baseRef "head", the same "nothing outstanding" shape
+# build_home_skills uses) so every OTHER notice and the G report stay silent, isolating the
+# assertions below to the new drift block and the all-clear line. "clean" copies the real
+# retained script byte-for-byte; "modified" copies it and appends one comment line.
+build_home_drift() {
+  _n="$1"; _state="$2"
+  _h="$TMP/$_n"; mkdir -p "$_h/.claude/hooks"
+  printf '{"worktree":{"baseRef":"head"},"hooks":%s}\n' "$WIRED_HOOKS" > "$_h/.claude/settings.json"
+  case "$_state" in
+    absent) : ;;
+    clean)
+      mkdir -p "$(dirname "$_h/.claude/skills/$ENUM_REL")"
+      cp "$ENUM_LIVE_SRC" "$_h/.claude/skills/$ENUM_REL"
+      ;;
+    modified)
+      mkdir -p "$(dirname "$_h/.claude/skills/$ENUM_REL")"
+      cp "$ENUM_LIVE_SRC" "$_h/.claude/skills/$ENUM_REL"
+      printf '# drift fixture: one appended comment line, deliberately not byte-identical\n' \
+        >> "$_h/.claude/skills/$ENUM_REL"
+      ;;
+  esac
+  printf '%s' "$_h"
+}
+
+# J1/J1b: live counterpart absent -> DID-NOT-RUN, naming the path; and no DRIFT line at all.
+OUT=$(run_sync "$(build_home_drift j1 absent)")
+case "$OUT" in
+  *"$DID_NOT_RUN_MARK"*) ok "J1: drift report prints DID-NOT-RUN when the live counterpart is absent" ;;
+  *) bad "J1: drift report did not print DID-NOT-RUN for an absent live counterpart" ;;
+esac
+case "$OUT" in
+  *"$ENUM_REL"*) ok "J1b: the DID-NOT-RUN line names the missing path ($ENUM_REL)" ;;
+  *) bad "J1b: DID-NOT-RUN did not name the missing path ($ENUM_REL)" ;;
+esac
+case "$OUT" in
+  *"$CONTRACT_DRIFT_MARK"*) bad "J1c: a DRIFT line printed although the live counterpart is absent, not differing" ;;
+  *) ok "J1c: no DRIFT line when the live counterpart is absent" ;;
+esac
+# Not planted: the drift-report block J1 mutates does not exist in sync-to-claude.sh yet (Task 3
+# of this migration adds it), so there is no real code to target with an exactly-once literal
+# needle today — the same reason G1/H1/I1 above, each RED until its own future task lands, carry
+# no plant of their own. A plant belongs here once Task 3's actual report code exists to mutate.
+
+# J2/J2b: live counterpart present and byte-identical -> CLEAN; no DRIFT line.
+OUT=$(run_sync "$(build_home_drift j2 clean)")
+case "$OUT" in
+  *"$CONTRACT_CLEAN_MARK"*) ok "J2: drift report prints CLEAN when the live counterpart is byte-identical" ;;
+  *) bad "J2: drift report did not print CLEAN for a byte-identical live counterpart" ;;
+esac
+case "$OUT" in
+  *"$CONTRACT_DRIFT_MARK"*) bad "J2b: a DRIFT line printed although the live counterpart is byte-identical" ;;
+  *) ok "J2b: no DRIFT line when the live counterpart is byte-identical" ;;
+esac
+
+# J3/J3b: live counterpart present and differing -> DRIFT, naming the file.
+OUT=$(run_sync "$(build_home_drift j3 modified)")
+case "$OUT" in
+  *"$CONTRACT_DRIFT_MARK"*) ok "J3: drift report prints DRIFT when the live counterpart differs" ;;
+  *) bad "J3: drift report did not print DRIFT for a differing live counterpart" ;;
+esac
+case "$OUT" in
+  *"$ENUM_REL"*) ok "J3b: the DRIFT line names the differing file ($ENUM_REL)" ;;
+  *) bad "J3b: DRIFT did not name the differing file ($ENUM_REL)" ;;
+esac
+# Not planted, same reason as J1 above: the report code J3 exercises does not exist yet.
+
+# J4/J5 (protects A3, ADR-0197 D7): the all-clear line must still print in states 1 and 2 —
+# proving the drift report never sets MANUAL=1. This is the assertion that would have caught
+# the obvious wrong implementation (a report block that treats DID-NOT-RUN or CLEAN as
+# outstanding).
+OUT=$(run_sync "$(build_home_drift j4 absent)")
+case "$OUT" in
+  *"$CLEAR_MARK"*) ok "J4: all-clear line still prints when the drift report shows DID-NOT-RUN" ;;
+  *) bad "J4: no all-clear line although nothing but the drift DID-NOT-RUN state is outstanding — the report may be setting MANUAL=1" ;;
+esac
+OUT=$(run_sync "$(build_home_drift j5 clean)")
+case "$OUT" in
+  *"$CLEAR_MARK"*) ok "J5: all-clear line still prints when the drift report shows CLEAN" ;;
+  *) bad "J5: no all-clear line although the drift report is CLEAN — the report may be setting MANUAL=1" ;;
+esac
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

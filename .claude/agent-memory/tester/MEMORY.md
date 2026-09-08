@@ -23,3 +23,9 @@ the 200-line/25KB injection cap; the topic files do not.
   hyphen-free-basename + realpath fixture fix, content-selective python3 shim for an otherwise
   unreachable denominator guard, a manual scratch-copy plant-verify procedure, and a worktree-git-
   guardrail trigger fixed by using literal (non-`$VAR`) absolute paths
+- [Plant infeasible for a not-yet-existing mechanism](topics/plant-infeasible-for-not-yet-existing-mechanism.md)
+  — Batch-A tester-first RED assertions: when a plant IS still constructible (inject via a stable
+  existing anchor + `\n`-escaped insertion) vs. when it genuinely is not (small fixed-population
+  floors, whole-block insertions needing the future coder's free text) — follow the file's own
+  no-plant-for-RED-until-future-task precedent instead of faking one, learned on pairs-completeness
+  XR1/XR3/XR5 and sync-manual-steps section J (ADR-0197 migration)
