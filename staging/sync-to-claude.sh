@@ -114,11 +114,25 @@ fi
 # deployed-only: auto-learning — symlink into a foreign repository (steve-skills/auto-learning) carrying its own git remote and history; same class as website-auditor below, and vendoring it would duplicate a project that is already versioned elsewhere (ADR-0024/0025's drift).
 # deployed-only: daily-close — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365).
 # deployed-only: daily-open — personal daily-routine skill bound to local connectors (Obsidian, NotePlan, DEVONthink, ms365), same class as daily-close.
+# deployed-only: deep-refactor — symlink into a foreign repository (Developer/Skills/Deep_refactor, github.com/istefox/Skills) carrying its own git remote and history; migrated out of this repo's vendored surface after ADR-0197, same class as auto-learning/project-tasks/website-auditor above.
 # deployed-only: impeccable — third-party skill installed as a static local copy (not a symlinked repo, not a plugin); cited in ADR-0172 as the reference-split scale proof, never vendored here.
 # deployed-only: project-tasks — symlink into a foreign repository (Developer/Skills/tasks, github.com/istefox/Skills) carrying its own git remote, history and PR-based workflow; migrated out of this repo's vendored surface after ADR-0153, ratified by ADR-0191, same class as auto-learning/website-auditor above.
 # deployed-only: vibiso-intake — front end of a different project's intake contract (vibiso-system ADR-002).
 # deployed-only: website-auditor — symlink into a foreign repository (steve-skills/website_auditor); moves ADR-0024 section 2.1's exclusion out of prose.
 # deployed-only: worktree-todo — local worktree utility that symlinks a worktree's gitignored ledger file to the main worktree's copy; written for a project that gitignores its TODO.md, while this repo's TODO.md is tracked, so it is not this repo's surface to vendor.
+#
+# CONTRACT-REFERENCE REGISTRY (ADR-0197 §D5, R-04). scripts/enumerate-sources.sh and
+# tests/enumerate-sources.test.sh under staging/plugin/skills/deep-refactor/ are retained at their
+# exact current paths after the migration above — declared here as a contract-test reference, never
+# as a deploy source (no PAIRS entry for either; the CR/XR block below asserts that). ADR-0077's
+# rule that a waiver travels with the file it excuses cannot apply here, and for a different reason
+# than the deployed-only case above: there the excused file is absent, so nothing exists to carry a
+# marker; here the file exists, and a marker comment inserted into it would break the byte-diff the
+# drift REPORT below is built on. pairs-completeness.test.sh's CR/XR block derives this registry at
+# run time.
+#
+# contract-reference: plugin/skills/deep-refactor/scripts/enumerate-sources.sh — retained verbatim as codex-reviewer.sh's staging-side dependency (line 206); compared for drift below, never a deploy source.
+# contract-reference: plugin/skills/deep-refactor/tests/enumerate-sources.test.sh — retained verbatim as the compatibility-contract test for enumerate-sources.sh; compared for drift below, never a deploy source.
 PAIRS="
 user/CLAUDE.md|CLAUDE.md
 plugin/agents/architect.md|agents/architect.md
@@ -249,10 +263,6 @@ plugin/skills/concept-to-code/tests/run-tests.sh|skills/concept-to-code/tests/ru
 plugin/skills/concept-to-code/tests/smoke-e2e.sh|skills/concept-to-code/tests/smoke-e2e.sh
 plugin/skills/autopilot-build/SKILL.md|skills/autopilot-build/SKILL.md
 plugin/skills/autopilot-build/tests/run-tests.sh|skills/autopilot-build/tests/run-tests.sh
-plugin/skills/deep-refactor/SKILL.md|skills/deep-refactor/SKILL.md
-plugin/skills/deep-refactor/scripts/enumerate-sources.sh|skills/deep-refactor/scripts/enumerate-sources.sh
-plugin/skills/deep-refactor/tests/enumerate-sources.test.sh|skills/deep-refactor/tests/enumerate-sources.test.sh
-plugin/skills/deep-refactor/tests/run-tests.sh|skills/deep-refactor/tests/run-tests.sh
 plugin/skills/review-triage-fix/SKILL.md|skills/review-triage-fix/SKILL.md
 plugin/skills/review-triage-fix/scripts/triage-state.sh|skills/review-triage-fix/scripts/triage-state.sh
 plugin/skills/review-triage-fix/scripts/verify.sh|skills/review-triage-fix/scripts/verify.sh
@@ -383,6 +393,30 @@ if [ -d "$DEST/skills" ]; then
     printf '\n-- REPORT: deployed skill(s) neither vendored nor declared --\n'
     for _u in $UNDECLARED; do printf '%s\n' "$_u"; done
   fi
+fi
+
+# CONTRACT-REFERENCE DRIFT REPORT (ADR-0087 §D3, ADR-0197 §D7, R-04). Byte-diffs each declared
+# `contract-reference:` file above against its live counterpart under $DEST/skills/, and prints
+# exactly one of three states per file (rules 4 and 5): the live counterpart absent -> DID-NOT-RUN,
+# naming the path; present and byte-identical -> CLEAN; present and differing -> DRIFT, naming the
+# file, the `diff -u` command to run, and the live-side behavioural probe to run by hand
+# (staging/plugin/skills/deep-refactor/tests/enumerate-sources.test.sh, ADR-0197 §D9). It is a
+# REPORT, same contract as the DEPLOYED SKILL REPORT above: it never sets MANUAL=1 and never affects
+# the exit code (ADR-0087 §D3) — sync-manual-steps.test.sh's J4/J5 assert the all-clear line still
+# prints when this block reports DID-NOT-RUN or CLEAN.
+CONTRACT_REFS=$(grep "^# *contract-reference: " "$STAGING/sync-to-claude.sh" 2>/dev/null | sed 's/^# *contract-reference: *//' | cut -d' ' -f1)
+if [ -n "$CONTRACT_REFS" ]; then
+  printf '\n-- REPORT: contract-reference drift against %s --\n' "$DEST/skills"
+  for _cr in $CONTRACT_REFS; do
+    _crlive="$DEST/skills/${_cr#plugin/skills/}"
+    if [ ! -f "$_crlive" ]; then
+      printf 'DID-NOT-RUN: %s (no live counterpart at %s)\n' "$_cr" "$_crlive"
+    elif diff -q "$STAGING/$_cr" "$_crlive" >/dev/null 2>&1; then
+      printf 'CLEAN: %s\n' "$_cr"
+    else
+      printf 'DRIFT: %s -- run: diff -u %s %s ; then re-run the live-side probe at staging/plugin/skills/deep-refactor/tests/enumerate-sources.test.sh\n' "$_cr" "$_crlive" "$STAGING/$_cr"
+    fi
+  done
 fi
 
 # MANUAL STEP notices are gated on the state they describe. They used to print unconditionally,
