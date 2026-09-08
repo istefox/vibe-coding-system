@@ -19,7 +19,7 @@ must not be copied into production files) — same root cause, a scanner whose n
 substring match against prose that happens to quote the mechanism's own declaration syntax.
 
 **Fact 2 — `slice_heading` (used by every CK/CX-style dispatch-gate test) cuts a section at the
-NEXT literal `^#### ` line (a level-four heading followed by a space), full stop — it does not know
+NEXT literal `^####` line followed by a space (a level-four heading), full stop — it does not know
 or care what the plan's prose calls "the Stage 2 text".** ADR-0196's plan brief says, almost verbatim, "add before the existing `**Stage 2 —
 coder.**` text" for the Workflow-path pipeline-degeneration content. But the test that actually
 gates R-09 (`CK32`) scopes its three regexes to `CK_WORKFLOW = slice_heading('#### Workflow
