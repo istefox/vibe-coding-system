@@ -503,6 +503,56 @@ so a later attended run on the same manifest still gets asked once). The gate fi
 manifest, the same shape as the `hook_verified` gate immediately above: silent on every
 subsequent Step 5 run on the same manifest.
 
+**Codex model and effort sub-ask (ADR-0198) — whenever the resolved backend for this Step 5 entry
+is `codex`, on EITHER path above (a fresh `[yes]` answer, or `step5_codex_review_asked = true`
+with `manifest.use_codex_review` already `true`), one further `AskUserQuestion` fires in the same
+gate turn, before dispatch, before the Workflow/Agent-tool branch below.** This half of the gate
+is never suppressed by `step5_codex_review_asked` — that field gates only the backend question
+above, once per manifest; the model/effort choice re-fires on every Step 5 entry, fresh or
+resumed, because it is the half that spends money and an inherited `ultra` on a run nobody
+re-approved would be a silent cost decision (ADR-0196 §R7's reasoning, applied here to only the
+cost-bearing half of an otherwise once-per-manifest gate).
+
+`AskUserQuestion` options — model: `[sol]` "Sol (gpt-5.6-sol) (default) (Recommended)" /
+`[astra]` "Astra (gpt-6-astra)" / `[terra]` "Terra (gpt-5.6-terra) — today's former fixed pin";
+effort: `[medium]` "(default) (Recommended)" / `[low]` / `[high]` / `[xhigh]` / `[max]` /
+`[ultra]`.
+
+Persistence: the two string fields are written by bash `sed` substitution on the additive field, not via manifest-set-flag.sh, which validates its value as exactly `true`/`false` and cannot write them. <!-- path-rule-exempt: negated -- describes NOT writing the two string fields through this boolean-only helper -->
+`manifest.step5_codex_review_model` and `manifest.step5_codex_review_effort` are set
+to the chosen tokens. If the resolved backend is Claude instead (`[no]`
+above, or a prior `use_codex_review = false`), set both string fields back to `null` by the same
+`sed` mechanism, so a later reader never sees a model/effort pair beside `use_codex_review: false`.
+
+**Legacy-manifest guard:** a manifest created before this ADR (`use_codex_review`/
+`step5_codex_review_asked` already seeded by ADR-0193, but the two new fields absent rather than
+`null`) has no `step5_codex_review_model:`/`step5_codex_review_effort:` line for a bare `sed`
+substitution to match — `sed` on a no-match input exits 0 and writes nothing, which would leave
+the field silently absent even though the ask just ran and "persisted" it without error, and the
+checkpoint invocation lines below would then read an empty placeholder. Rather than inserting a
+line silently (a new idiom this codebase does not otherwise use), this follows the same convention manifest-set-flag.sh already established for a missing top-level key: check first, HALT if absent, never insert. <!-- path-rule-exempt: negated -- names the helper only to describe the convention this guard borrows from it, never invokes it here --> (rule 11: absent is a distinct
+state, not a default to paper over.) Check first with
+`grep -q '^step5_codex_review_model:' <manifest>`; if absent, HALT before dispatch with
+`"step5-implementation: manifest predates ADR-0198 (step5_codex_review_model absent) — re-seed the two null fields by hand before resuming this checkpoint"`,
+naming the exact two fields to add. Only when the key is confirmed present does the `sed`
+substitution run. The same gap and the same guard apply to `step5_codex_coder_model`/`_effort`'s
+identical ADR-0196 write, a pre-existing exposure this ADR does not otherwise touch.
+
+The chosen pair is prefilled from the manifest's current values when non-null (display-only
+context, never a reason to skip the ask — the same treatment `use_codex_coder`'s prior value gets
+in ADR-0196), then written to `manifest.step5_codex_review_model`/`_effort`, which both checkpoint
+invocation lines below read directly — the same "invocation line reads the manifest field, not a
+turn-local variable" idiom `codex-coder.sh`'s own Step 5 dispatch lines already use. This sub-ask
+does not fire under `--autopilot`: an autopilot run never reaches it from a cold start, because
+`manifest.use_codex_review` stays at its seeded `false` (D3 above) and the codex branch is never
+entered. The one case where the codex branch IS reached under `--autopilot` is a resume: a prior
+**attended** run already set `use_codex_review: true` and, by firing this sub-ask, already wrote
+non-null values into both string fields — those persisted values are what the invocation lines
+read on the unattended resume, never a fresh ask and never a blank flag. A manifest that somehow
+holds `use_codex_review: true` with both string fields still `null` (a state this gate never
+itself produces, since the two writes are simultaneous) is a malformed manifest, not a case this
+sub-ask needs to handle.
+
 #### Codex tester backend for Step 5 dispatch (ADR-0194, both paths)
 
 **Unlike the review ask above, this one is not conditional on `manifest.step5_review_mode`** —
@@ -946,7 +996,7 @@ Do NOT use parallel() as a barrier between the stages — task B must keep imple
 task A is under review. Wall-clock is the slowest single-task chain, not sum-of-slowest-per-stage.
 
 **If `manifest.use_codex_review = true` (set by the pre-dispatch ask above, ADR-0193):** Stage 3 runs
-`codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>` (the deployed
+`codex-reviewer.sh --mode review --diff-scope uncommitted --model <manifest.step5_codex_review_model> --effort <manifest.step5_codex_review_effort> --out <tmp-review-file>` (the deployed
 copy at `~/.claude/hooks/codex-reviewer.sh`) scoped to the files Stage 2 (coder) reported for that
 task, INSTEAD of dispatching `agentType "reviewer"`, via `agent()`'s own `Bash`-equivalent
 execution inside the stage callback (a Workflow script has no interactive `AskUserQuestion` hook —
@@ -1841,7 +1891,7 @@ stderr.
    <!-- dispatch-site: step5-checkpoint-reviewer class=inline exempt: the reviewer grant carries no Write tool so no completion fact is producible, and its findings are carried forward as advice that halts nothing -->
    **[IF `manifest.step5_review_mode = checkpoint` (ADR-0039 D5-D9) — otherwise skip:]**
    At this same checkpoint: **if `manifest.use_codex_review = true` (set by the pre-dispatch ask above, ADR-0193):** run
-   `~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>`
+   `~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --model <manifest.step5_codex_review_model> --effort <manifest.step5_codex_review_effort> --out <tmp-review-file>`
    scoped to the diff of the batch that just closed.
    - exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report; continue
      below unchanged.

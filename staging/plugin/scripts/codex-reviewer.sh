@@ -1,6 +1,7 @@
 #!/bin/bash
-# codex-reviewer.sh v1.0 — Codex CLI substitute for the `reviewer` agent (Codex-vs-Claude review
-# gate, ADR pending). Bash 3.2-clean. Run: bash codex-reviewer.sh --mode ... --out <file>
+# codex-reviewer.sh v1.1 — Codex CLI substitute for the `reviewer` agent (Codex-vs-Claude review
+# gate, ADR-0193; live per-dispatch model/effort choice, ADR-0198). Bash 3.2-clean.
+# Run: bash codex-reviewer.sh --mode ... --out <file> [--model astra|sol|terra --effort <level>]
 #
 # WHY THIS EXISTS. The chain's `reviewer` agent contract (taxonomy, confidence filter, output
 # format — `staging/plugin/agents/reviewer.md`) spends Claude Code tokens at five dispatch sites
@@ -21,14 +22,27 @@
 #
 # THREE MODES, matching the two shapes the Claude `reviewer` agent is used in today, plus the
 # `deep-refactor` audit mode added by ADR-0193:
-#   --mode review   --diff-scope uncommitted|base:<ref>|commit:<sha> [--carry-forward <file>] [--focus security] --out <file>
-#   --mode diagnose --finding "<text>" --out <file>
+#   --mode review   --diff-scope uncommitted|base:<ref>|commit:<sha> [--carry-forward <file>] [--focus security] [--model <m> --effort <e>] --out <file>
+#   --mode diagnose --finding "<text>" [--model <m> --effort <e>] --out <file>
 #   --mode audit    --dimension dead-code|perf|structure|security
 #                   [--diff-scope uncommitted|base:<ref>|commit:<sha>] --out <file>
 #
 # The exit contract above (0/2/3) is unchanged across all three modes. Audit-mode output at --out
 # is FINDINGS_SCHEMA-shaped JSON — a JSON array of findings (ADR-0193 §D4) — never the markdown
 # review and diagnose modes produce.
+#
+# --model / --effort (ADR-0198, review and diagnose modes only): OPTIONAL and both-or-neither —
+# the deliberate inverse of codex-coder.sh's ADR-0196 §R2 required pair. This script has two other
+# callers besides RTF/Step 5 — deep-refactor's `--mode audit` (ADR-0193 §D4) and security-audit's
+# `--mode review --focus security` (ADR-0195 §D3) — whose model/effort choices are themselves
+# approved, written-down decisions. Making the flags required would force both to pass them or
+# break; leaving them optional keeps every existing caller byte-identical when absent. Passing one
+# without the other is exit 2: model and effort are one fact, not two independent ones (the same
+# argument ADR-0196's Invariant 29 makes for the coder's pair) — a lone --model would silently pair
+# a new model with an effort pinned for a different one. --model is a closed set (astra|sol|terra,
+# unknown value is exit 2, the script owns the name-to-slug mapping); --effort is a passthrough
+# (Codex's own vocabulary — an invalid value fails inside `codex exec` and surfaces as exit 3 with
+# the reason, never validated here). Omit both and the existing cost pins below apply unchanged.
 #
 # --focus security (ADR-0195 D3, review mode only, enumerated — no free-text focus is accepted):
 # swaps the fixed five-item checklist for a security-only one naming the same seven vulnerability
@@ -65,6 +79,8 @@ FINDING=""
 OUT=""
 DIMENSION=""
 FOCUS=""
+MODEL=""
+EFFORT=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -75,6 +91,8 @@ while [ "$#" -gt 0 ]; do
     --focus) FOCUS="${2:-}"; shift 2 ;;
     --out) OUT="${2:-}"; shift 2 ;;
     --dimension) DIMENSION="${2:-}"; shift 2 ;;
+    --model) MODEL="${2:-}"; shift 2 ;;
+    --effort) EFFORT="${2:-}"; shift 2 ;;
     *) echo "codex-reviewer: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -87,6 +105,24 @@ esac
 if [ -z "$OUT" ]; then
   echo "codex-reviewer: --out is required" >&2
   exit 2
+fi
+
+# --model/--effort (ADR-0198): optional, but both-or-neither — one fact, not two independent
+# ones (see the header comment). Validated here, before the availability cascade, so a caller
+# mistake is exit 2 offline rather than surfacing after a spent codex-doctor round trip.
+if [ -n "$MODEL" ] && [ -z "$EFFORT" ]; then
+  echo "codex-reviewer: --model given without --effort — both or neither" >&2
+  exit 2
+fi
+if [ -z "$MODEL" ] && [ -n "$EFFORT" ]; then
+  echo "codex-reviewer: --effort given without --model — both or neither" >&2
+  exit 2
+fi
+if [ -n "$MODEL" ]; then
+  case "$MODEL" in
+    astra|sol|terra) ;;
+    *) echo "codex-reviewer: unknown --model value '$MODEL' (astra|sol|terra)" >&2; exit 2 ;;
+  esac
 fi
 
 # Shared by review mode (mandatory) and audit mode (optional) — rule 6: both call sites answer
@@ -655,7 +691,19 @@ fi
 # --- Execute --------------------------------------------------------------------------------------
 
 CODEX_STDERR=$(mktemp)
-if [ "$FOCUS" = "security" ]; then
+if [ -n "$MODEL" ]; then
+  # ADR-0198: an explicit --model/--effort is a live, per-dispatch operator choice (RTF's Step 0
+  # item 6 sub-ask, or the Step 5 checkpoint gate) and outranks both pins below unconditionally —
+  # including --focus security's, since choosing a model IS choosing to override the pin. No
+  # default is assigned to MODEL/EFFORT anywhere above; reaching this arm means both were given
+  # and validated (case shape mirrors codex-coder.sh's ADR-0196 mapping).
+  case "$MODEL" in
+    astra) CODEX_MODEL="gpt-6-astra" ;;
+    sol) CODEX_MODEL="gpt-5.6-sol" ;;
+    terra) CODEX_MODEL="gpt-5.6-terra" ;;
+  esac
+  CODEX_EFFORT="$EFFORT"
+elif [ "$FOCUS" = "security" ]; then
   # ADR-0195 D3 point 3: --focus security does not inherit the high-volume cost pin below —
   # this is the lowest-volume, highest-miss-cost review site in the system (security-audit is
   # on-demand only, wired into no chain). gpt-5.6-sol is the config's own baseline model

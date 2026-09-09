@@ -450,6 +450,26 @@ if grep -q '^step5_codex_coder_effort:' "$MANIFEST"; then
   fi
 fi
 
+# Invariant 30 (conditional, schema 1.4, ADR-0198): if step5_codex_review_model or
+# step5_codex_review_effort are present, each must be null or one of its closed-set values. The
+# model set here (null|astra|sol|terra) includes terra, unlike the coder's (Invariant 29,
+# null|astra|sol) — the reviewer script's own former fixed cost pin stays selectable by hand, a
+# deliberate divergence from ADR-0196's set, not a copy-paste gap. The effort vocabulary
+# (null|low|medium|high|xhigh|max|ultra) duplicates the same six-value set both the RTF gate and
+# the Step 5 checkpoint gate offer — an assertion pins the copies identical, since a value added
+# to one and not the other would silently reject a choice a gate just offered (same argument as
+# Invariant 29's CK27).
+if grep -q '^step5_codex_review_model:' "$MANIFEST"; then
+  if ! grep -Eq '^step5_codex_review_model: (null|astra|sol|terra)$' "$MANIFEST"; then
+    fail "step5_codex_review_model field present but value is not one of: null|astra|sol|terra"
+  fi
+fi
+if grep -q '^step5_codex_review_effort:' "$MANIFEST"; then
+  if ! grep -Eq '^step5_codex_review_effort: (null|low|medium|high|xhigh|max|ultra)$' "$MANIFEST"; then
+    fail "step5_codex_review_effort field present but value is not one of: null|low|medium|high|xhigh|max|ultra"
+  fi
+fi
+
 if [ "$ERRORS" != "0" ]; then
   exit 1
 fi

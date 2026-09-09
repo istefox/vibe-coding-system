@@ -73,15 +73,15 @@ no push, no automatic iteration beyond the cycle** inside this skill.
    - `advisor` — two-call pattern per routable finding (see Step 3 for the mechanics).
    Non-blocking — never fail the cycle if the script is unavailable. Use the **same** label for both calls, built from data already resolved in this step (`RTF_LABEL="rtf-<variant>-${_branch}"`, reusing `$_branch` from item 3), since `usage-snapshot.py --diff <label>` both locates the snapshot AND becomes the logged chain name — a mismatched pair silently breaks the lookup, and there is no separate "log label" flag. Before the cycle: `python3 ~/.claude/scripts/usage-snapshot.py --save "$RTF_LABEL" >/dev/null 2>&1 || true`. After Step 5 (see the reminder there): `python3 ~/.claude/scripts/usage-snapshot.py --diff "$RTF_LABEL" --log-to ~/.claude/chain-eval.md >/dev/null 2>&1 || true`.
 6. **Review backend and model (ADR-0193, moved here from the former chain-start Gate CDX —
-   VCS-063).** Declare which backend this cycle's three reviewer dispatches (Step 1, the
-   `advisor` variant's advisor call, Step 4) use. Ask once, via `AskUserQuestion`: "Use Codex
-   instead of Claude for review dispatch this cycle, or Claude — and if Claude, which model?"
-   Options: `[codex]` "Codex" / `[claude-sonnet]` "Claude reviewer, sonnet (Recommended — today's
-   default)" / `[claude-opus]` "Claude reviewer, opus". If a manifest is in scope, prefill the
-   default from `manifest.use_codex_review` (`true` → preselect `[codex]`); if no manifest is in
-   scope (a standalone invocation), default to `[claude-sonnet]` — RTF has no manifest-resolution
-   step of its own (Step 0 items 1-5 above never read one), so this is the first point at which
-   the choice exists for a standalone cycle.
+   VCS-063; live Codex model/effort choice, ADR-0198).** Declare which backend this cycle's
+   three reviewer dispatches (Step 1, the `advisor` variant's advisor call, Step 4) use. Ask
+   once, via `AskUserQuestion`: "Use Codex instead of Claude for review dispatch this cycle, or
+   Claude — and if Claude, which model?" Options: `[codex]` "Codex" / `[claude-sonnet]` "Claude
+   reviewer, sonnet (Recommended — today's default)" / `[claude-opus]` "Claude reviewer, opus".
+   If a manifest is in scope, prefill the default from `manifest.use_codex_review` (`true` →
+   preselect `[codex]`); if no manifest is in scope (a standalone invocation), default to
+   `[claude-sonnet]` — RTF has no manifest-resolution step of its own (Step 0 items 1-5 above
+   never read one), so this is the first point at which the choice exists for a standalone cycle.
    - **`codex`** — all three sites in this cycle run `~/.claude/hooks/codex-reviewer.sh` in
      place of dispatching `reviewer`, per Steps 1/3/4 below.
    - **`claude-sonnet`** (default) — dispatch `reviewer` at `model: "sonnet"`, the agent's own
@@ -90,10 +90,30 @@ no push, no automatic iteration beyond the cycle** inside this skill.
      override does not disturb the frontmatter's `effort: high` — the advisor call below already
      overrides `model` alone the same way — but verify this holds on the first real dispatch
      rather than assuming it from the frontmatter alone.
-   **This ask is skipped for an autopilot/unattended invocation** (state so in the invoking
-   brief; RTF has no `autopilot` field or predicate of its own to resolve this automatically —
-   an instruction, not an enforcement), which defaults silently to `claude-sonnet`, identical to
-   today's unattended behavior.
+
+   **On `[codex]`, in the same gate turn, a second `AskUserQuestion` (ADR-0198) asks the Codex
+   model and reasoning effort — this half of the gate re-fires on every cycle, never suppressed
+   by any prior choice, because it is the half that spends money:**
+   - Model: `[sol]` "Sol (gpt-5.6-sol) (default) (Recommended)" / `[astra]` "Astra (gpt-6-astra)"
+     / `[terra]` "Terra (gpt-5.6-terra) — today's former fixed pin".
+   - Effort: `[medium]` "(default) (Recommended)" / `[low]` / `[high]` / `[xhigh]` / `[max]` /
+     `[ultra]`.
+   - If a manifest is in scope, prefill from `manifest.step5_codex_review_model` /
+     `manifest.step5_codex_review_effort` when non-null; RTF never writes these fields, only
+     reads them for prefill (same read-only posture as `use_codex_review` above).
+   - The chosen pair is passed as `--model <m> --effort <e>` on all three
+     `codex-reviewer.sh` invocations below (Steps 1/3/4). Omitting the sub-ask's answer is not
+     possible once `[codex]` is chosen — both flags travel together (both-or-neither, per the
+     script's own contract).
+
+   **This ask — both the backend question and, when applicable, the model/effort sub-ask — is
+   skipped for an autopilot/unattended invocation** (state so in the invoking brief; RTF has no
+   `autopilot` field or predicate of its own to resolve this automatically — an instruction, not
+   an enforcement), which defaults silently to `claude-sonnet`, identical to today's unattended
+   behavior. RTF has no manifest field of its own to persist a prior `codex` choice across
+   invocations (item 6 above), so there is no unattended path that reaches the `codex` branch at
+   all: an autopilot RTF cycle never passes `--model`/`--effort`, because it never passes
+   `--mode` to `codex-reviewer.sh` in the first place.
 
 ## Step 1 — Review
 
@@ -104,7 +124,7 @@ to it.
 
 <!-- dispatch-site: rtf-step1-reviewer class=inline exempt: reviewer produces no completion fact — its Edit/Write (via memory: project) is confined to its own memory directory by reviewer-write-scope.sh, and an empty report yields an empty triage rather than a green -->
 **If this cycle's backend (Step 0 item 6) is `codex`:** run
-`~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --out <tmp-review-file>`.
+`~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --model <chosen-model> --effort <chosen-effort> --out <tmp-review-file>`.
 - exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report; continue below
   unchanged.
 - exit `3` (DID-NOT-RUN) → **stop and ask, never silently fall back to Claude:**
@@ -206,7 +226,7 @@ and the project's test-cmd so the agent self-verifies.
 - **`advisor`:** for each routable finding, two `Agent`-tool calls instead of one:
   <!-- dispatch-site: rtf-advisor-pair class=inline exempt: the advisor is a reviewer with no Write tool and its own failure clause already falls back to plain opus behaviour for that one finding -->
   1. **Advisor call.** **If this cycle's backend (Step 0 item 6) is `codex`:** run
-     `~/.claude/hooks/codex-reviewer.sh --mode diagnose --finding "<finding + loc + suggested fix>" --out <tmp-diag-file>`.
+     `~/.claude/hooks/codex-reviewer.sh --mode diagnose --finding "<finding + loc + suggested fix>" --model <chosen-model> --effort <chosen-effort> --out <tmp-diag-file>`.
      - exit `0` → read `<tmp-diag-file>` as the diagnosis; proceed to the Executor call below.
      - exit `3` (DID-NOT-RUN) → **stop and ask, never silently fall back to Claude:**
        `AskUserQuestion`: "Codex advisor unavailable: `<reason from stderr>`. Fallback to Claude's
@@ -283,7 +303,7 @@ Apply the circuit breakers:
 <!-- dispatch-site: rtf-step4-rereview class=inline exempt: the reviewer grant carries no Write tool, and an early read produces fewer findings which the cross-cycle diff surfaces rather than hides -->
 **If this cycle's backend (Step 0 item 6) is `codex`:** write the previous cycle's findings as
 `sev<TAB>loc<TAB>problem` TSV to a temp file, then run
-`~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --carry-forward <that-tsv-file> --out <tmp-review-file>`
+`~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope uncommitted --carry-forward <that-tsv-file> --model <chosen-model> --effort <chosen-effort> --out <tmp-review-file>`
 (`--carry-forward` embeds the wording-preservation instruction above directly in the Codex prompt,
 so it is never skipped when the dispatch is substituted).
 - exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report; continue below
