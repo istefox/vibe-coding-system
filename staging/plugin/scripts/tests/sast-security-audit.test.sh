@@ -422,6 +422,7 @@ fi
 # codex-reviewer.sh's own case arms accept (astra,sol,terra). Cross-checked against the script
 # rather than re-declaring a second independent literal list — a value added to one side and not
 # the other would silently reject or omit a choice this gate just offered.
+# plant: SG13 | plugin/scripts/codex-reviewer.sh | terra) CODEX_MODEL="gpt-5.6-terra" ;; | zeta) CODEX_MODEL="gpt-5.6-terra" ;;
 SG13_SCRIPT_MODELS=$(python3 -c '
 import re, sys
 text = open(sys.argv[1]).read()
