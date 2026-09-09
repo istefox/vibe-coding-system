@@ -1,6 +1,8 @@
 #!/bin/bash
-# refactor-snapshot-deep-refactor.test.sh -- three findings from the concept-to-code audit
-# (SPEC.md / issue #35). Three lettered sections:
+# refactor-snapshot-deep-refactor.test.sh -- findings from the concept-to-code audit
+# (SPEC.md / issue #35). Two lettered sections (Section C removed 2026-09-08,
+# migrate-deep-refactor-out-of-vendored-pa / ADR-0197, rule 19 -- see the removal note at its
+# former site, below):
 #   Section A (Finding 2.6, P2, 7 tests) -- refactor-snapshot/scripts/capture.sh's read loop
 #     always leaves a trailing newline on CMD_CONTENT, so "$CMD_CONTENT $RFS_FILTER" puts the
 #     filter on a NEW line; `bash -c` then runs it as a second, separate (bogus) command, and
@@ -8,26 +10,22 @@
 #     regardless of the real, filtered suite's actual pass/fail -- silently defeating the
 #     harness's own exit-code comparison channel whenever RFS_FILTER is used. Fixed by
 #     stripping the single trailing newline before building EXEC_CMD.
-#   Section B (Finding 3.8, 6 tests) -- deep-refactor/scripts/enumerate-sources.sh's documented
-#     "glob/dir prefix" path-override is interpolated raw into `grep -E`; a leading `*` (e.g.
-#     override "*.swift") has no operand to repeat, an undefined case in POSIX ERE -- no
-#     tracked path starts with a literal "*", so the override always returns zero files and
-#     Step 0.6 aborts. Fixed with a single, unified bash `case`-pattern matching engine (real
-#     glob semantics, no external regex dialect) that also preserves the existing
+#   Section B (6 tests) -- THE CI-runnable compatibility contract test for
+#     deep-refactor/scripts/enumerate-sources.sh (R-06, ADR-0197 §D8,
+#     migrate-deep-refactor-out-of-vendored-pa): offline, hermetic, mktemp git fixture, zero
+#     $HOME dependency, pinning the documented "<root> [<path-override>]" argument shape, both
+#     override forms (directory-literal prefix and glob), the exclusion set, and the
+#     empty-output-on-no-match behaviour that `codex-reviewer.sh --mode audit` depends on. It
+#     was originally written for Finding 3.8: the override was interpolated raw into `grep -E`;
+#     a leading `*` (e.g. override "*.swift") has no operand to repeat, an undefined case in
+#     POSIX ERE -- no tracked path starts with a literal "*", so the override always returned
+#     zero files and Step 0.6 aborted. Fixed with a single, unified bash `case`-pattern matching
+#     engine (real glob semantics, no external regex dialect) that also preserves the existing
 #     directory-literal-prefix contract unchanged.
-#   Section C (Finding 3.9, 5 tests) -- deep-refactor/SKILL.md's circuit-breaker HITL message
-#     (Gate 2) unconditionally suggests `git checkout -- .` to revert unstaged changes, but
-#     Gate 0 explicitly allows starting the audit on a dirty tree (DIRTY_TREE=true) -- on that
-#     path, the blanket revert also destroys the user's own pre-existing uncommitted edits.
-#     Fixed by conditioning the suggestion on DIRTY_TREE, matching this file's own existing
-#     `[If <condition>:]` bracket convention.
 # Zero $HOME dependency: runs identically in CI (ubuntu-latest, no ~/.claude) and locally.
 # Never point any variable at $HOME/.claude/... -- that is the deployed copy, out of scope.
 # Sections A and B invoke the real, staging scripts directly against disposable mktemp
-# fixtures (both are standalone executables) -- no fence-extraction machinery is needed here,
-# unlike ADR-0027/28/29/30's SKILL.md-prose fixes. Section C is prose inside a HITL message
-# template, so its coverage is static grep anchors only, scoped to the Gate 2 block via an awk
-# extractor.
+# fixtures (both are standalone executables) -- no fence-extraction machinery is needed here.
 # Bash 3.2 clean. Run: bash refactor-snapshot-deep-refactor.test.sh
 set -u
 
@@ -35,7 +33,9 @@ SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)              # staging/plugin/scripts
 STAGING=$(cd "$SCRIPTS/../.." && pwd)                    # staging/
 CAPTURE_SH="$STAGING/plugin/skills/refactor-snapshot/scripts/capture.sh"
 ENUM_SH="$STAGING/plugin/skills/deep-refactor/scripts/enumerate-sources.sh"
-DR_SKILL="$STAGING/plugin/skills/deep-refactor/SKILL.md"
+# DR_SKILL stood here (pointed at deep-refactor/SKILL.md, Section C's only consumer). Removed
+# 2026-09-08, migrate-deep-refactor-out-of-vendored-pa / ADR-0197 (rule 19) — see Section C's own
+# removal note below.
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
@@ -141,7 +141,17 @@ EXIT_LINE=$(grep '^EXIT=' "$SNAP2")
   || bad "A7: RFS_FILTER=SUBSET, real failure should give real EXIT=4 (got: $EXIT_LINE)"
 
 # =====================================================================================
-# Section B -- Finding 3.8: deep-refactor enumerate-sources.sh glob path-override
+# Section B -- THE CI-runnable compatibility contract test for
+# deep-refactor/scripts/enumerate-sources.sh (R-06, ADR-0197 §D8,
+# migrate-deep-refactor-out-of-vendored-pa). Offline, hermetic, mktemp git fixture, zero
+# $HOME dependency: pins the documented "<root> [<path-override>]" argument shape, both
+# override forms (directory-literal prefix and glob), the exclusion set, and the
+# empty-output-on-no-match behaviour that `codex-reviewer.sh --mode audit` depends on. Under
+# this ADR that stops being incidental coverage and becomes Section B's declared purpose --
+# folding B6's own note below ("included here purely for CI-visible coverage, since the
+# equivalent $HOME-coupled test never runs in CI") into this role statement rather than
+# deleting it: B6 is why this section is run in full here, not left as incidental overlap.
+# Originally written for Finding 3.8: deep-refactor enumerate-sources.sh's glob path-override.
 # =====================================================================================
 
 # Fixture: a small git repo mirroring the shape of the existing (non-hermetic)
@@ -208,54 +218,16 @@ printf '%s\n' "$OUT" | grep -qF "auto.generated.swift" \
   || ok "B6: override 'Sources/' still excludes auto.generated.swift (exclusion composes)"
 
 # =====================================================================================
-# Section C -- Finding 3.9: deep-refactor Gate 2 circuit-breaker DIRTY_TREE conditioning
+# Section C stood here -- Finding 3.9: deep-refactor Gate 2 circuit-breaker DIRTY_TREE
+# conditioning (extract_gate2_block(), C1-C5). Removed 2026-09-08,
+# migrate-deep-refactor-out-of-vendored-pa / ADR-0197 (rule 19). Section C read
+# staging/plugin/skills/deep-refactor/SKILL.md's Gate 2 HITL message, a file this repo no longer
+# vendors after this migration (Task 5 of that plan deletes it) -- the design it pinned
+# (Gate 2's DIRTY_TREE-conditioned circuit-breaker suggestion) is unreviewable from this
+# repository going forward, ADR-0197's own stated cost. Sections A and B above are untouched:
+# they exercise refactor-snapshot/scripts/capture.sh and the retained
+# deep-refactor/scripts/enumerate-sources.sh, neither of which this migration moves.
 # =====================================================================================
-
-# extract_gate2_block -- isolates HITL Gate 2's own AskUserQuestion message (bounded between
-# the Gate 2 heading and the closing fence), so a marker landing in the WRONG place in the
-# file (e.g. only in Gate 0's own, separate, pre-existing DIRTY_TREE warning) is not mistaken
-# for a pass.
-extract_gate2_block() {
-  awk '
-    /^### HITL Gate 2 — Commit approval/ { grab=1; next }
-    grab && /^```$/ && fence==1 { exit }
-    grab && /^```$/ { fence=1; next }
-    grab && fence { print }
-  ' "$DR_SKILL"
-}
-GATE2_BLOCK="$(extract_gate2_block)"
-
-# C1 (static, genuine RED now): the old, unconditional 'git checkout -- .' sentence is gone
-# from Gate 2's own message.
-if printf '%s\n' "$GATE2_BLOCK" | grep -qF "git diff' to inspect; 'git checkout -- .' to revert if unwanted"; then
-  bad "C1: old unconditional 'git checkout -- .' sentence is still present in Gate 2"
-else
-  ok "C1: old unconditional 'git checkout -- .' sentence is gone from Gate 2"
-fi
-
-# C2 (static, genuine RED now): a DIRTY_TREE=true conditional branch exists inside Gate 2's
-# own message (not merely somewhere else in the file, e.g. Gate 0's separate warning).
-printf '%s\n' "$GATE2_BLOCK" | grep -qF '[If DIRTY_TREE=true:]' \
-  && ok "C2: Gate 2 has a DIRTY_TREE=true conditional branch" \
-  || bad "C2: Gate 2 should have a DIRTY_TREE=true conditional branch"
-
-# C3 (static, genuine RED now): the DIRTY_TREE=true branch documents a non-destructive git
-# stash alternative.
-printf '%s\n' "$GATE2_BLOCK" | grep -qF 'git stash' \
-  && ok "C3: Gate 2's DIRTY_TREE=true branch documents a non-destructive git stash alternative" \
-  || bad "C3: Gate 2's DIRTY_TREE=true branch should document a git stash alternative"
-
-# C4 (static, genuine RED now): the safe, clean-tree case keeps its own conditional branch
-# with the original suggestion's intent.
-printf '%s\n' "$GATE2_BLOCK" | grep -qF '[If DIRTY_TREE=false:]' \
-  && ok "C4: Gate 2 has a DIRTY_TREE=false branch retaining the safe suggestion" \
-  || bad "C4: Gate 2 should have a DIRTY_TREE=false branch"
-
-# C5 (non-regression companion, already true today, must stay true): the circuit-breaker tag
-# and its immediately-surrounding lines are untouched by this fix.
-printf '%s\n' "$GATE2_BLOCK" | grep -qF 'CIRCUIT BREAKER FIRED AT: <CIRCUIT_BREAKER_DIMENSION>' \
-  && ok "C5: circuit-breaker tag line is unchanged" \
-  || bad "C5: circuit-breaker tag line should remain unchanged"
 
 printf '\nPASS=%d FAIL=%d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

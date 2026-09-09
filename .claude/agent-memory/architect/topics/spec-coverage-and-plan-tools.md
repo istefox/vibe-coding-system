@@ -42,6 +42,29 @@
   `spec-coverage-baseline-bump.test.sh` (8) and `pairs-completeness.test.sh` (2) are not — refer to
   those descriptively. The census is one command; the alternative is a plan whose ids read green
   before a line of code exists.
+- **The SPEC parser is strictly LINE-oriented, and this produces two opposite traps around
+  `(no-test:)`.** It reads each checklist item's own line and nothing else. (a) A marker on the item
+  line whose reason wraps — only `verified by` before the newline — measures 11 chars against the
+  20-char floor and is `MALFORMED`, exit 3, aborting the run before ANY id is evaluated (observed
+  2026-09-07: the whole output was `MALFORMED R-14` / `ORPHAN R-14`, the ORPHAN a cascade from the
+  plan citing an id the parser never registered). (b) A marker on a CONTINUATION line is invisible,
+  so the id is simply not exempt — and "tidying" it onto the item line can be strictly worse:
+  measured, moving R-09's marker up, and adding `(no-test:)` to R-10/R-12, each turned a passing id
+  into `STALE-WAIVER`, exit 3, because those tokens occur as OTHER features' ids in in-scope
+  harnesses. Only an id with zero in-scope token occurrences is safely waivable. Always simulate a
+  proposed SPEC fix against a scratch copy before recommending it.
+- **`--count` is the LOOSE predicate and legitimately over-counts; `--count-openers` is the one that
+  matters.** Anything that batches, ranges or attributes content to a task uses openers. A plan with
+  8 tasks reported 10/8 here; a known-good precedent plan reported 39/8. Never read `--count` as a
+  task count.
+- **A `COVERED` verdict on a removal-shaped feature is usually a foreign match.** Measured
+  2026-09-07: 14 of 14 ids `COVERED`, rc 0, before a line of code existed — because legacy harnesses
+  the plan must name carry their own features' `R-NN` tokens and the line-granular negative filter
+  drops only lines bearing a foreign `#<n>`/`ADR-NNNN` on the SAME line, which comment prose rarely
+  does. The remedy that is honest rather than evasive: have every rule-19 deletion comment and every
+  new assertion header cite THIS feature's id beside its ADR, at the site of the change. Do not
+  instead refer to harnesses descriptively to dodge half 1 — that buys a green verdict by hiding
+  filenames from the coder.
 - **Each shipped Codex-backend harness adds a new landmine to that census, and they are the worst
   kind: they name the ADRs a successor feature inevitably cites, so both halves of the ADR-0154
   scope filter close on their own.** Measured 2026-09-07: the tester's dispatch-gate harness carries

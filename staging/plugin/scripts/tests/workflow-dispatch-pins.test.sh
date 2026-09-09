@@ -5,12 +5,14 @@
 #
 # One class of defect, two skills: a reference that named something which later moved.
 #
-# A. deep-refactor's audit phase has two dispatch branches. Branch B (Agent tool) pins
-#    model: opus; Branch A (Workflow, the DEFAULT) pinned nothing. The skill's own
-#    "model: opus requirement" section said "in every Agent-tool dispatch" — naming one
-#    mechanism when there are two — so Branch A inherited the session model and effort.
-#    The model half was wrong on every default run; the effort half only coincided with
-#    reviewer's frontmatter while the orchestrator happened to sit at high.
+# Section A stood here — deep-refactor's audit-phase Branch A model/effort pin (A1-A3), plus the
+# DR variable pointing at deep-refactor/SKILL.md. Removed 2026-09-08,
+# migrate-deep-refactor-out-of-vendored-pa / ADR-0197 (rule 19). A1 was NEGATIVE-shaped
+# (`if grep -q ... "$DR"; then bad; else ok`), so with staging/plugin/skills/deep-refactor/SKILL.md
+# gone (Task 5 of that plan) it would pass VACUOUSLY — removed along with A2/A3, not left to rot as
+# a check that can no longer fail. codex-audit-mode.test.sh's CX20/CX21 pinned the same
+# model/effort-pin content from the same file; see that file's own rule-19 comments for the same
+# reasoning.
 #
 # B. autopilot-build delegates to concept-to-code by LINE RANGE (c2c §475-486 etc.).
 #    Every one of those ranges had drifted off its target. Line numbers cannot survive
@@ -21,39 +23,12 @@ set -u
 SCRIPTS=$(cd "$(dirname "$0")/.." && pwd)
 STAGING=$(cd "$SCRIPTS/../.." && pwd)
 SKILLS="$STAGING/plugin/skills"
-DR="$SKILLS/deep-refactor/SKILL.md"
 AB="$SKILLS/autopilot-build/SKILL.md"
 CC="$SKILLS/concept-to-code/SKILL.md"
 STEP5_REF="$SKILLS/concept-to-code/references/step5-implementation.md"
 PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
-
-# =====================================================================================
-# A. deep-refactor Branch A.
-
-# A1: the requirement sentence must not scope itself to one dispatch mechanism. Naming
-# "Agent-tool" was what left the Workflow branch uncovered.
-if grep -q 'in every Agent-tool dispatch' "$DR"; then
-  bad "A1: 'model: opus requirement' still scoped to Agent-tool only, Workflow branch uncovered"
-else
-  ok "A1: the opus requirement is no longer scoped to a single dispatch mechanism"
-fi
-
-# A2: Branch A must pin the model explicitly. Omitting it means the audit reviewers run on
-# whatever model the CLI session happens to use, contradicting this skill's own requirement.
-if grep -q 'model: "opus", effort: "high"' "$DR"; then
-  ok "A2: Branch A pins model and effort explicitly"
-else
-  bad "A2: Branch A does not pin model and effort"
-fi
-
-# A3: the reason must travel with the pin, or a future editor reads it as noise and drops it.
-if grep -q 'inherit the session' "$DR"; then
-  ok "A3: the inheritance reason is stated in deep-refactor"
-else
-  bad "A3: no inheritance reason recorded in deep-refactor"
-fi
 
 # =====================================================================================
 # B. autopilot-build cross-references.

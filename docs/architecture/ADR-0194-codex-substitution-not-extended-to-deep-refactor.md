@@ -331,3 +331,13 @@ This ADR changes no mechanism, so verification is about its premises rather than
 - `docs/architecture/ADR-0016-dynamic-workflows-step5.md` — Workflow dispatch and `hook_verified`
 - `docs/architecture/ADR-0049-103-generator-verifier-separation.md` — the framing `security-audit`'s
   Step 2 reuses
+
+## Correction (2026-09-08)
+
+`staging/plugin/skills/deep-refactor/SKILL.md`, named above in References as "unchanged except for
+D2's note", no longer exists — `deep-refactor` was migrated out of this repo's vendored surface
+(`docs/architecture/ADR-0197-deep-refactor-migrated-to-istefox-skills.md`, Accepted 2026-09-07); the
+skill's canonical source is now `github.com/istefox/Skills`. `enumerate-sources.sh`, also named
+above (behind D4), is retained at its exact original path as a declared `contract-reference:`. This
+migration made no decision about Codex substitution one way or the other — the deferral this ADR
+records stands unchanged; this note only corrects the reference's target (rule 14).

@@ -338,6 +338,116 @@ done < "$tmp/deployed-only-fixture"
 [ -n "$_do4_bad" ] && ok "DO4: self-test — stale waiver on a real staged skill (commit) is flagged" \
                    || bad "DO4: self-test — a declared name that IS vendored was NOT flagged (the check would pass vacuously)"
 
+# =====================================================================================
+# CONTRACT-REFERENCE REGISTRY — migrate-deep-refactor-out-of-vendored-pa
+# (2026-09-07-migrate-deep-refactor-out-of-vendored-pa.md, ADR-0197, R-04, R-11).
+#
+# Two files under staging/plugin/skills/deep-refactor/ (scripts/enumerate-sources.sh,
+# tests/enumerate-sources.test.sh) survive that migration's removal of the rest of the vendored
+# tree, retained not as a deploy source — no PAIRS entry, D2 removes the four deep-refactor
+# PAIRS lines — but as a compatibility-contract reference that codex-reviewer.sh's staging-side
+# resolution (its `ENUM=` assignment in the audit-mode block) has a runtime dependency on.
+# ADR-0197 D5 declares them with a new `contract-reference:` marker beside the deployed-only
+# block above; this section is the check that reads that declaration (rule 17). Correction
+# (2026-09-08, RTF re-review): the sentence above originally said this block stayed RED until
+# migration Task 3 landed — Task 3 has since landed (sync-to-claude.sh:134-135 carries both
+# `contract-reference:` declarations) and every assertion below is green.
+#
+# The `CR` assertion-id prefix is already taken in this repo (phase1.test.sh CR1-CR9,
+# fence-contract-coverage.test.sh CR5/CR6 — grep -rnoE '\bCR[0-9]+' staging/, checked
+# 2026-09-08), so this block uses `XR` instead. Correction (2026-09-08, RTF review): the ids
+# below are actually single-digit (XR1-XR5), not fixed-width two-digit as an earlier draft of
+# this comment claimed — that padding is unnecessary here. plant-check.sh's `red_re()` anchors
+# the FAIL match as `^FAIL: <id>:?([[:space:]]|$)`, a word-boundary-style anchor that already
+# stops an `XR1` plant from being credited by an `XR10` failure (issue #355, predating this
+# migration), so no id in this repo needs two-digit padding for that reason.
+#
+# The needle is built at run time so this file does not match its own explanatory prose
+# (rule 12) — the DMARK/ZMARK lines above are the pattern this copies.
+XRMARK="contract-""reference"
+
+# Extracted via REDIRECTION into a tmp file, never a pipe into `while read` (line 237's own
+# comment states why — a piped while runs in a subshell and drops the counters).
+grep "^# *${XRMARK}: " "$SYNC" > "$tmp/contract-reference-decl" 2>/dev/null
+sed "s/^# *${XRMARK}: *//" "$tmp/contract-reference-decl" | cut -d' ' -f1 > "$tmp/contract-reference-paths"
+
+# XR1: count guard on the derivation (rule 7) — at least one contract-reference line parsed.
+# Vacuity guard only (rule 10); deliberately NOT individually planted, same as DO1/ZA1/ZA2/
+# CI0/CI0b above: the retained population is fixed at exactly two entries (ADR-0197 D4/D5), so
+# no single exactly-once literal needle can zero the count without also matching each entry's
+# free-text reason, which this migration's Task 3 has not authored yet. This assertion is RED
+# right now — sync-to-claude.sh carries no `contract-reference:` lines — and must stay RED
+# until Task 3 lands.
+_xr1n=$(grep -c "^# *${XRMARK}: " "$SYNC" 2>/dev/null || true)
+[ -z "$_xr1n" ] && _xr1n=0
+[ "$_xr1n" -ge 1 ] && ok "XR1: sync-to-claude.sh declares $_xr1n contract-reference path(s) (>= 1)" \
+                    || bad "XR1: only $_xr1n '${XRMARK}:' declaration(s) found in $SYNC — expected >= 1"
+
+# XR2: every declared path exists under $STAGING/ (same direction as check_exemptions_live and
+# ZA4 — a declaration outliving its subject hides whatever takes its place, rule 9). Checked
+# against the real declarations. Not planted, for a different reason than XR4 below: this is a
+# "does the file exist on disk" check, and plant-check.sh's mechanism substitutes file CONTENT —
+# it cannot delete a file, so there is no needle that exercises this failure branch.
+_xr2_bad=""
+while IFS= read -r _xrline; do
+  [ -n "$_xrline" ] || continue
+  _xrpath=$(printf '%s\n' "$_xrline" | sed "s/^# *${XRMARK}: *//" | cut -d' ' -f1)
+  [ -n "$_xrpath" ] || continue
+  [ -f "$STAGING/$_xrpath" ] || _xr2_bad="$_xr2_bad $_xrpath"
+done < "$tmp/contract-reference-decl"
+[ -z "$_xr2_bad" ] && ok "XR2: every declared contract-reference path exists under $STAGING/" \
+                   || bad "XR2: declared contract-reference path(s) missing on disk —$_xr2_bad"
+
+# XR3: no declared contract-reference path appears as a PAIRS src (ADR-0197 D6 — the substance
+# of the retention: retained means NOT deployed, and a PAIRS entry re-added for one of these
+# files would re-create the dead deploy target Task 3's D2 removes). Real check against the
+# real PAIRS block already parsed above into $tmp/real-pairs.
+_xr3_bad=""
+while IFS= read -r _xrpath; do
+  [ -n "$_xrpath" ] || continue
+  cut -d'|' -f1 < "$tmp/real-pairs" | grep -qxF "$_xrpath" && _xr3_bad="$_xr3_bad $_xrpath"
+done < "$tmp/contract-reference-paths"
+[ -z "$_xr3_bad" ] && ok "XR3: no declared contract-reference path appears as a PAIRS src" \
+                   || bad "XR3: declared contract-reference path(s) ALSO present as a PAIRS src (dead deploy target re-created) —$_xr3_bad"
+# plant: XR3 | sync-to-claude.sh | plugin/skills/autopilot-build/tests/run-tests.sh|skills/autopilot-build/tests/run-tests.sh | plugin/skills/autopilot-build/tests/run-tests.sh|skills/autopilot-build/tests/run-tests.sh\nplugin/skills/deep-refactor/scripts/enumerate-sources.sh|skills/deep-refactor/scripts/enumerate-sources.sh
+
+# XR4 (backward self-test for XR3, mirrors DO4): a synthetic one-line fixture declaring
+# plugin/scripts/codex-reviewer.sh — which IS a real PAIRS src — as a contract-reference, run
+# through XR3's exact logic. Without this, XR3 is vacuously satisfiable (self-test 2's own
+# lesson, applied here). Self-test against a synthetic fixture; exempt from planting for the
+# same reason DO4/DO5 above are.
+printf '# %s: plugin/scripts/codex-reviewer.sh — synthetic contract-reference fixture for this self-test only, not a real entry\n' \
+  "$XRMARK" > "$tmp/contract-reference-fixture"
+sed "s/^# *${XRMARK}: *//" "$tmp/contract-reference-fixture" | cut -d' ' -f1 > "$tmp/contract-reference-fixture-paths"
+
+_xr4_bad=""
+while IFS= read -r _xrpath; do
+  [ -n "$_xrpath" ] || continue
+  cut -d'|' -f1 < "$tmp/real-pairs" | grep -qxF "$_xrpath" && _xr4_bad="$_xr4_bad $_xrpath"
+done < "$tmp/contract-reference-fixture-paths"
+[ -n "$_xr4_bad" ] && ok "XR4: self-test — a synthetic contract-reference path that IS a PAIRS src (codex-reviewer.sh) is flagged" \
+                   || bad "XR4: self-test — a declared path that IS a PAIRS src was NOT flagged (the check would pass vacuously)"
+
+# XR5: the reverse direction (rule 8, ADR-0197 D6 — the blind spot DO2 leaves invisible: DO2
+# only ever looks at SKILL.md, so residue elsewhere in a deployed-only skill's directory passes
+# by silence). For every `deployed-only:` name, every file found under
+# $STAGING/plugin/skills/<name>/ must appear as a declared contract-reference path; a name with
+# no directory contributes nothing and is not an error. DO1 above already guards the count of
+# the deployed-only derivation this reuses.
+_xr5_bad=""
+for _xr5name in $(grep "^# *${DMARK}: " "$SYNC" 2>/dev/null | sed "s/^# *${DMARK}: *//" | cut -d' ' -f1); do
+  [ -d "$STAGING/plugin/skills/$_xr5name" ] || continue
+  find "$STAGING/plugin/skills/$_xr5name" -type f > "$tmp/xr5-files" 2>/dev/null
+  while IFS= read -r _xr5f; do
+    [ -n "$_xr5f" ] || continue
+    _xr5rel="${_xr5f#$STAGING/}"
+    grep -qxF "$_xr5rel" "$tmp/contract-reference-paths" 2>/dev/null || _xr5_bad="$_xr5_bad $_xr5rel"
+  done < "$tmp/xr5-files"
+done
+[ -z "$_xr5_bad" ] && ok "XR5: every file under a deployed-only skill's staging directory is a declared contract-reference" \
+                   || bad "XR5: undeclared residue under a deployed-only skill's staging directory —$_xr5_bad"
+# plant: XR5 | sync-to-claude.sh | # deployed-only: worktree-todo — local worktree utility that symlinks a worktree's gitignored ledger file to the main worktree's copy; written for a project that gitignores its TODO.md, while this repo's TODO.md is tracked, so it is not this repo's surface to vendor. | # deployed-only: worktree-todo — local worktree utility that symlinks a worktree's gitignored ledger file to the main worktree's copy; written for a project that gitignores its TODO.md, while this repo's TODO.md is tracked, so it is not this repo's surface to vendor.\n# deployed-only: commit — synthetic residue-detection fixture proving XR5 flags an undeclared file under a deployed-only name, not a real registry entry
+
 # =================================================================================================
 # CI — the harness list in .github/workflows/docs-ci.yml, both directions (issue #331, ADR-0113).
 #
@@ -383,6 +493,10 @@ _nf=$(grep -c . "$CI_FILES" 2>/dev/null || true); _nf=${_nf:-0}
 [ "$_nf" -ge 40 ]  && ok "CI0b: found $_nf *.test.sh files under staging (guard: >= 40)" \
                    || bad "CI0b: found only $_nf test files — CI1 would pass vacuously"
 
+# CI1 and CI2 also discharge migrate-deep-refactor-out-of-vendored-pa's R-08 (ADR-0197): that
+# migration creates and deletes no staging/plugin/scripts/tests/*.test.sh file, so no
+# docs-ci.yml edit is expected from it — R-08 is satisfied by these two assertions staying
+# green, not by a workflow-file change (see the plan's Task 8).
 # CI1 — every harness runs in CI, or says in its own header why it does not.
 _ci_missing=""
 while IFS= read -r _t; do

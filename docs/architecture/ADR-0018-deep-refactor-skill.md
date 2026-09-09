@@ -363,3 +363,15 @@ not compromise safety.
 - MEMORY.md `feedback_automode-gate-bypass`: only `AskUserQuestion` pauses under Auto mode
 - MEMORY.md `feedback_coder-worktree-subdirectory`: isolation:none pre-check on non-git roots
 - concept-to-code SKILL.md §5: Gate 5 / Gate 5.5 region (Gate 5.1 insertion point)
+
+## Correction (2026-09-08)
+
+`deep-refactor` has been retired from this repo's vendored PAIRS surface and now lives at
+`github.com/istefox/Skills` (`Deep_refactor`), symlinked at `~/.claude/skills/deep-refactor` —
+the same pattern ADR-0191 already established for `project-tasks`. The canonical source for the
+skill this ADR designed is that external repository, not `staging/plugin/skills/deep-refactor/`
+in this one. `staging/plugin/skills/deep-refactor/scripts/enumerate-sources.sh` and its test are
+retained here at their original paths as a declared `contract-reference:`, never as a deploy
+source. See `docs/architecture/ADR-0197-deep-refactor-migrated-to-istefox-skills.md` (Accepted
+2026-09-07) for the migration decision; this note does not alter the design recorded above
+(rule 14).
