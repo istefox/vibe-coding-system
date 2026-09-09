@@ -10,9 +10,9 @@ use_codex_tester: false
 step5_codex_tester_asked: false
 chain_path: "standard"
 created_at: "2026-09-07T19:59:14+00:00"
-last_updated_at: "2026-09-08T15:08:17+00:00"
-current_step: "ready_for_implementation"
-status: "in_progress"
+last_updated_at: "2026-09-08T20:42:06+00:00"
+current_step: "completed"
+status: "completed"
 
 # Gate 0 routing result (ADR-0017)
 gate0:
@@ -33,10 +33,10 @@ autopilot: false
 
 # Dynamic Workflows Step 5 tracking (ADR-0016) — default false; smoke test flips it true per environment
 hook_verified: false
-step5_mode: null
+step5_mode: "agent_batch"
 
 # Recovery-readiness pre-flight (ADR-0050) — HEAD sha recorded once at Step 5 entry
-recovery_baseline_sha: null
+recovery_baseline_sha: "1927ea68263df1f6e8842884e8f3fc13c54eeef0"
 
 # Worktree isolation contract (ADR-0068 §D1, §D11). worktree_baseref_verified is boolean,
 # set true by Step 5.0.4 via manifest-set-flag.sh once worktree.baseRef == "head" is
@@ -46,7 +46,7 @@ recovery_baseline_sha: null
 # it goes via bash sed on the additive field, the step5_review_mode precedent above. Flip
 # with, per merged stage ({stage, agent_type, branch, base_sha, merge_result}):
 # sed -i '' 's/^worktree_merges: \[\]$/worktree_merges: [{stage: ..., agent_type: ..., branch: ..., base_sha: ..., merge_result: ...}]/' <manifest>
-worktree_baseref_verified: false
+worktree_baseref_verified: true
 worktree_merges: []
 
 # Proportional audit depth (ADR-0055) — risk and task_type axes. Absent/null means STRICT
@@ -87,11 +87,11 @@ license: null
 xcode_project: false
 initial_commit_push: null
 git_remote_url: null
-step6_mode: null
+step6_mode: "skill_fallback"
 
 # Artifacts (absolute paths, populated as steps complete)
 artifacts:
-  spec: "/Users/stefer/emdash/worktrees/vibe-coding-system-19f4e0e7/emdash-light-experts-cross-4qo9n/SPEC.md"
+  spec: "/Users/stefer/emdash/worktrees/vibe-coding-system-19f4e0e7/emdash-light-experts-cross-4qo9n/docs/specs/migrate-deep-refactor-out-of-vendored-pa.spec.md"
   brainstorm: null
   ux_blueprint: null
   design_prompt: null
@@ -125,15 +125,15 @@ hitl_gates:
     notes: "User chose fresh session for implementation"
   - gate: 5
     label: "review_cycle_decision"
-    status: "pending"
-    approved_at: null
-    notes: null
+    status: "approved"
+    approved_at: "2026-09-08T20:32:30+00:00"
+    notes: "RTF v1.2 cycle 1: 2 MINOR findings, both resolved, 0 open. Full suite 100% green (incl. spec-coverage RS7, resolved by baseline bump during review). plant-check.sh sweep clean."
 
 # Session boundary tracking
 session_boundary:
   pre_step_4_session_id: "db34b10a-3a09-4a96-9b9a-b9562560712f"
   fresh_session_started_at: null
-  resumed_at: null
+  resumed_at: "2026-09-08T17:05:57+00:00"
 
 # Failure tracking (populated only on status=failed)
 failure:
@@ -143,4 +143,4 @@ failure:
   partial_artifacts: []
 
 # Hint for next action (UX)
-next_action: "Run /skill concept-to-code resume /Users/stefer/emdash/worktrees/vibe-coding-system-19f4e0e7/emdash-light-experts-cross-4qo9n/docs/manifests/2026-09-07-migrate-deep-refactor-out-of-vendored-pa.manifest.yml in a fresh session to start Step 5 implementation"
+next_action: "Tasks 1-7 confirmed done and committed (verified on disk 2026-09-08, this field's prior text was stale). Task 8 (full verification sweep) run 2026-09-08: 105 of 106 staging/plugin/scripts/tests/*.test.sh harnesses green; the sole RED is spec-coverage.test.sh's RS7 (frozen corpus baseline, ADR-0166), independently confirmed by plant-check.sh's PC5 (RS7's own plant is now vacuous -- already red unmutated). Root cause diagnosed: deleting staging/plugin/skills/deep-refactor/tests/run-tests.sh (Task 5, pre-authorized) plus this chain's own required R-08 citation comment in pairs-completeness.test.sh (Task 8's citation policy, ADR-0197) together flip exactly 2 pre-existing frozen rows -- 222-vendor-deployed-only-skills.spec.md R-08 and project-tasks-vendored-bilateral-ledger.spec.md R-08, both UNSCOPED -> COVERED -- in staging/plugin/scripts/tests/spec-coverage-scope-baseline.tsv. This is CLAUDE.md rule 18 in action (foreign-claim disambiguation only recognises a bare #<digits> issue token; this ADR-tracked, issue-less chain's comment has none), landing in a harness (pairs-completeness.test.sh) that both older, already-shipped specs' plans also cite -- confirmed by reverting to pre-chain commit 1927ea6, where both rows read UNSCOPED as the baseline records. ADR-0166 SS D7 designs --bump to REFUSE this exact conflict (exit 1, nothing written) specifically so a human reads the file before any row is touched; this is a genuine HITL gate, not something to hand-edit past. HALTED before completing R-12/R-13 and before Step 6/7. A human must decide: (a) accept the drift as a disclosed false-positive and authorize a dated regeneration block in spec-coverage-scope-baseline.tsv for exactly these 2 rows (precedent: the file's own 2026-08-18/2026-08-19 blocks), or (b) direct a different remedy (e.g. reword the Task 8 citation in pairs-completeness.test.sh to carry a disambiguating token). Once resolved, re-run the full staging/plugin/scripts/tests/ suite and plant-check.sh clean, then resume: /skill concept-to-code resume /Users/stefer/emdash/worktrees/vibe-coding-system-19f4e0e7/emdash-light-experts-cross-4qo9n/docs/manifests/2026-09-07-migrate-deep-refactor-out-of-vendored-pa.manifest.yml to finish Task 8, Step 6 review and Step 7 commit/PR. PR #579 remains open, unmerged, CI red on shell-tests (manifest non-terminal invariant) -- unchanged, nothing pushed this session."
