@@ -93,8 +93,18 @@ are invisible to Codex on this scope.)" — state N; omit that clause if N is 0.
 security blind spot on any Codex scope, and this step's report is meant to be trustworthy above
 being cheap.
 
+**On `[codex]`, in the same gate turn, before dispatch, one further `AskUserQuestion` (ADR-0199):**
+model — `[sol]` "Sol (gpt-5.6-sol) (default — today's pin) (Recommended)" / `[astra]` "Astra
+(gpt-6-astra)" / `[terra]` "Terra (gpt-5.6-terra)"; effort — `[high]` "(default — today's pin)
+(Recommended)" / `[low]` / `[medium]` / `[xhigh]` / `[max]` / `[ultra]`. Unlike RTF's and Step 5's
+sol/medium default (ADR-0198), this sub-ask defaults to `sol`/`high` — ADR-0195 chose that pin
+deliberately for this system's lowest-volume, highest-miss-cost review site, and pressing Enter
+here must keep buying that elevated guarantee, not silently trade it away for a cheaper one.
+Choosing a lower effort is the operator's informed choice to make, not this gate's default.
+
 **On `[codex]`:** run `~/.claude/hooks/codex-reviewer.sh --mode review --diff-scope
-<uncommitted|base:ref> --focus security --out <tmp-review-file>`.
+<uncommitted|base:ref> --focus security --model <chosen-model> --effort <chosen-effort> --out
+<tmp-review-file>`.
 
 - exit `0` → read `<tmp-review-file>` exactly as the reviewer agent's own report. Its last line
   is the provenance line the wrapper appends (ADR-0195 D5) — copy it verbatim into the report's
