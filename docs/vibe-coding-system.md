@@ -1589,6 +1589,34 @@ defects found and fixed while building this (a task number that legitimately ope
 letter-suffixed task designator a digits-only parser was collapsing onto its neighbour):
 `docs/architecture/ADR-0185-step5-task-brief.md`.
 
+### Audit 2026-09-11 (CC 2.1.264–2.1.268)
+
+Two items from this range touch the orchestrator/sub-agent task-tracking path and were checked
+live against this repo's deployed state, not just read from the changelog text.
+
+**TaskCreate/TaskGet/TaskUpdate/TaskList/TodoWrite model gating (2.1.268).** These tools are now
+restricted to a named model list (Opus 4.0–4.7, Sonnet 4.0–4.6, Haiku 4.5, Claude 3.x) unless
+`CLAUDE_CODE_ENABLE_TODO_TOOLS=1` is set — a list that does not include Sonnet 5. This system is
+unaffected: `staging/user/settings.json` has carried `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` since
+2026-08-25 (commit `250003e`, added for an unrelated reason during the worktree-git-guardrail
+hook work, not in anticipation of this gate), and the live `~/.claude/settings.json` mirror
+matches. Verified in-session on Sonnet 5 (`echo $CLAUDE_CODE_ENABLE_TODO_TOOLS` → `1`; TaskCreate
+remained an available deferred tool throughout). No settings change needed; noted here only so the
+existing line's purpose is documented rather than accidental.
+
+**Auto-mode denial messaging (2.1.268).** Denial messages now name the blocking rule and suggest a
+safer method before stopping to ask, instead of only stating the block. Reproduced live in a
+disposable worktree: a heredoc-wrapped `git status` still gets refused as "too complex to verify"
+(the block itself is unchanged), but the refusal text now states the safer alternative inline
+("Run the plain command from `<path>`"), and the plain single-statement form then succeeds. This
+confirms the workaround already documented in `~/.claude/rules/tools.md`
+(`#worktree-isolated-bash-refusal`) still holds as written; no rule or doc change needed there.
+
+No other entry in 2.1.264–2.1.268 (2.1.264 has no CHANGELOG.md entry) required a change to this
+document, `staging/user/settings.json`, or any staged hook/rule. Source: `github.com/anthropics/
+claude-code` `CHANGELOG.md`, fetched 2026-09-11 via `gh api repos/anthropics/claude-code/contents/
+CHANGELOG.md`.
+
 ### Update 2026-06-23 (workflow model pinning)
 
 - **Workflow dispatch pins models explicitly** (sec. 3.10, `concept-to-code` Step 5/6): a workflow
