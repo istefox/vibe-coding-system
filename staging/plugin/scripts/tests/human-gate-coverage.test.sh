@@ -619,6 +619,17 @@ else
   ok "HIF1: this harness does not pin the repo-root SPEC.md (forward guard)"
 fi
 
+# ====================================================================================
+# Z1. Assertion-count floor (ADR-0083 §D3, VCS-021) — a file that silently stops running
+# assertions reports fewer of them and nothing reads the total. A floor, not an exact count.
+# ====================================================================================
+_total=$((PASS + FAIL))
+if [ "$_total" -ge 54 ]; then
+  ok "Z1: assertion-count floor ($_total >= 54)"
+else
+  bad "Z1: only $_total assertions ran — expected >= 54; assertions vanished"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -523,11 +523,11 @@ echo "PASS=$PASS FAIL=$FAIL"
 # Z1: assertion-count floor (ADR-0083 §D3) — a file that silently stops running six assertions
 # reports fewer of them and nothing reads the total. A floor, not an exact count.
 _total=$((PASS + FAIL))
-if [ "$_total" -ge 26 ]; then
-  echo "PASS: Z1: $_total assertions ran (floor: 26)"
+if [ "$_total" -ge 36 ]; then
+  echo "PASS: Z1: $_total assertions ran (floor: 36)"
   PASS=$((PASS+1))
 else
-  echo "FAIL: Z1: only $_total assertions ran — expected >= 26; assertions vanished"
+  echo "FAIL: Z1: only $_total assertions ran — expected >= 36; assertions vanished"
   FAIL=$((FAIL+1))
 fi
 echo "required-checks-audit.test.sh — PASS=$PASS FAIL=$FAIL"

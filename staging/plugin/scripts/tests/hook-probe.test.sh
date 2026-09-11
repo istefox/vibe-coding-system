@@ -14,7 +14,7 @@ VERIFY="$SCRIPTS/hook-probe-verify.sh"
 
 PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); printf 'ok   %s\n' "$1"; }
-no() { FAIL=$((FAIL+1)); printf 'FAIL %s\n' "$1"; }
+no() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

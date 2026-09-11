@@ -13,3 +13,6 @@ Mandatory structure, each section concrete, no fluff:
 4. Alternatives considered (at least 2, with reason for rejection)
 5. Consequences (positive, negative, neutral)
 6. References (related ADRs, docs, issues)
+
+Never let a line wrap so an issue number like `#123` lands at column 1 — `markdownlint`'s MD018
+reads it as a heading. Keep the number on the previous line.

@@ -460,6 +460,17 @@ If branch creation fails: **STOP** — never fall through to Step 4/5 while stil
 every caller of this skill, including `concept-to-code`'s Step 7 (which itself never creates a
 persistent branch before invoking `commit`).
 
+**Stacked-PR CI gap (VCS-029).** When the "already on a feature branch — reuse it" no-op path
+above fires — i.e. `$current_branch` at invocation was itself a feature branch, not
+`$default_branch` — the PR Step 6 later opens will have that feature branch as its base, not
+`$default_branch`. Re-verified 2026-09-11 against the consolidated `.github/workflows/
+docs-ci.yml`: its trigger is still `on: pull_request: branches: [main]`, which filters on the
+PR's *base* branch, so **a PR whose base isn't `main` runs zero CI checks** — `gh pr checks`
+reports "no checks reported", not a failure. Nothing in `gh pr merge` or Step 7 catches this; a
+zero-check PR is mergeable into its base with no verification at all. If this is a stacked PR,
+merge it into its base first so every commit passes through one real CI gate on a `main`-based
+PR, rather than merging the stack straight through unverified.
+
 ### Step 3.7 — Recommend CI tier (blocking gate, attended; auto-applies under `--autopilot`)
 
 VCS-051 / ADR-0180. **Design note:** Step 3 (above) drafts the commit message BEFORE this step
@@ -715,7 +726,11 @@ If "Yes":
    ```
 3. If `BASE_EXISTS`: proceed with `mcp__github__create_pull_request`:
    - `title`: subject of the commit message
-   - `body`: body of the commit message + ADR reference if present in context
+   - `body`: body of the commit message + ADR reference if present in context. **If this PR closes
+     more than one GitHub issue, give each its own `Closes #N` line, own paragraph, never
+     `and`/comma-joined on one line** (`closes #489 and #479` closes only #489 — GitHub honours one
+     closing keyword per line, VCS-028, ADR-0194 §"PR body" already decided this shape for the
+     batched-PR case this codifies for every PR).
    - `base`: `$default_branch`, `head`: `$branch_name`
    - Set `pr_number`/`pr_url` from the response. Proceed to Step 6b.
 4. If `NO_BASE` (new/first push — `$default_branch` not yet on remote):
