@@ -635,7 +635,7 @@ empty commit — see Invariant guardrails); show only "Stage additional files" a
 # free variables across the new process boundary. The terminator sits at COLUMN 0 on purpose: an
 # indented one is swallowed into the here-document and destroys this fence's exit code silently,
 # which on this fence means a failed `git commit` reporting success. Do not tidy either line.
-export staged include_paths
+export staged tracked_modified include_paths
 bash <<'FENCE_BASH'
 # Stage the default scope computed in Step 1 (skip if something was already staged
 # manually, or if "Stage additional files" in Step 4 already staged what was needed):
@@ -650,6 +650,19 @@ for _inc in $include_paths; do
   [ -n "$_inc" ] || continue
   git add -- "$_inc"
 done
+# VCS-011 (2026-08-05): another session working in this same checkout modified a tracked file
+# between Step 1's scope computation and this staging call, and `git add -u` above swept it in
+# silently — it stages every tracked modification live in the tree, not only the ones Step 1 saw
+# and the human approved at the Step 4 gate. Re-verify the ACTUALLY staged set against Step 1's
+# approved scope right now, never trusting the earlier snapshot once staging has run: this is the
+# only point in the flow positioned after `git add -u` and before the irreversible `git commit`.
+_expected=$(printf '%s\n%s\n' "${staged:-$tracked_modified}" "$include_paths" | sed '/^$/d' | sort -u)
+_actual=$(git diff --name-only --staged | sort -u)
+if [ "$_actual" != "$_expected" ]; then
+  _extra=$(comm -13 <(printf '%s\n' "$_expected") <(printf '%s\n' "$_actual") | tr '\n' ' ')
+  echo "Error: staged set does not match Step 1's approved scope — unexpected file(s) swept in by 'git add -u': $_extra. Refusing to commit; re-run Step 1 to re-approve the current scope." >&2
+  exit 1
+fi
 # Commit with approved message:
 git commit -m "$(cat <<'COMMITMSG'
 <commit-message>
