@@ -210,6 +210,7 @@ plugin/scripts/dispatch-state.sh|hooks/dispatch-state.sh
 plugin/scripts/secret-scan.sh|hooks/secret-scan.sh
 plugin/scripts/dependency-scan.sh|hooks/dependency-scan.sh
 plugin/scripts/ci-tier.sh|hooks/ci-tier.sh
+plugin/scripts/ci-verdict.sh|hooks/ci-verdict.sh
 plugin/scripts/external-dependency-check.sh|hooks/external-dependency-check.sh
 plugin/scripts/interface-check.sh|hooks/interface-check.sh
 plugin/scripts/vendor-checks.sh|hooks/vendor-checks.sh

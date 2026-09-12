@@ -765,6 +765,24 @@ structurally unreachable (e.g. the `--force` push guardrail below).
 - `gh auth status` fails → skip 6b/6c/7: "gh not authenticated — verify CI manually: `<pr_url>`."
 - Remote host is not `github.com` → skip 6b/6c/7: "Non-GitHub remote — CI check unavailable."
 
+**Required vs. informational checks — read this repo's own branch protection, never hardcode.**
+Computed before the wait below because the verdict step now needs it too, not only Step 6c's
+labeling:
+
+```bash
+required=$(gh api "repos/{owner}/{repo}/branches/$default_branch/protection/required_status_checks" \
+  --jq '.contexts // [.checks[].context]' 2>/dev/null)
+required_file=$(mktemp)
+printf '%s' "$required" | jq -r '.[]?' >"$required_file" 2>/dev/null || : >"$required_file"
+```
+
+- Call fails (no protection configured, or no permission) → `required_file` stays empty — an
+  absent/empty file is `ci-verdict.sh`'s own fail-safe, so every reported check is treated as
+  required, never silently ignored because "required" couldn't be confirmed.
+- Call succeeds → `required_file` holds one context name per line, passed to `ci-verdict.sh
+  --required` below. Only checks matching it block Step 7; other red checks are still reported in
+  Step 6c, labeled "(non-blocking)".
+
 **Bounded wait — up to 3 rounds of ~8 minutes, never an unbounded loop:**
 
 ```bash
@@ -772,7 +790,14 @@ timeout 480 gh pr checks "$pr_number" --watch --fail-fast
 rc=$?
 ```
 
-- `rc=0` → "CI green — all required checks passed." Proceed to Step 7.
+This command's exit code is used ONLY to decide whether the wait is still in progress — **never**
+as the CI verdict itself (issue #398). `gh` exits 0 both when every check genuinely passed and
+when the watch itself dies mid-wait for an unrelated reason (observed live on PR #397: a TLS
+handshake timeout while `shell-tests` was still pending, `rc=0`, three of four required contexts
+concluded, the fourth not). Reading `rc=0` as "CI green" conflates "watched to completion, all
+green" with "stopped watching" — exactly the DID-NOT-RUN/FOUND-NOTHING collapse repo rule 4
+exists to prevent, here applied to a tool's exit code instead of one of this repo's own checks.
+
 - `rc=124` (shell `timeout` fired) or `rc=8` (`gh`'s own "checks pending" code) → still pending.
   Use `AskUserQuestion` (an operational choice, not an approval gate):
   ```
@@ -791,20 +816,26 @@ rc=$?
   - "Check back later" → report the PR URL, stop cleanly (not an error).
   - "Investigate now anyway" → proceed to Step 6c; any check still `pending` there is reported
     as "not yet resolved", never counted as failed.
-- any other nonzero → at least one required check failed → Step 6c.
-
-**Required vs. informational checks — read this repo's own branch protection, never hardcode:**
-
-```bash
-required=$(gh api "repos/{owner}/{repo}/branches/$default_branch/protection/required_status_checks" \
-  --jq '.contexts // [.checks[].context]' 2>/dev/null)
-```
-
-- Call fails (no protection configured, or no permission) → fail-safe: treat every reported
-  check as required — never silently ignore a red check because "required" couldn't be
-  confirmed.
-- Call succeeds → only checks matching `$required` block Step 7; other red checks are still
-  reported in Step 6c, labeled "(non-blocking)".
+- **any other exit code, including 0** → the wait has ended for some reason; derive the actual
+  verdict independently rather than trusting which reason it was:
+  ```bash
+  gh pr view "$pr_number" --json statusCheckRollup -q '.statusCheckRollup' \
+    | bash "$CI_VERDICT_SH" --required "$required_file"
+  ```
+  (`CI_VERDICT_SH` resolved the same two-tier way as `CI_TIER_SH` in Step 3.7: this repo's own dev
+  copy `staging/plugin/scripts/ci-verdict.sh` first, `$HOME/.claude/hooks/ci-verdict.sh` fallback.)
+  Read the `VERDICT:` line:
+  - **`GREEN`** → "CI green — all required checks passed (confirmed via `statusCheckRollup`,
+    independent of the watch command's own exit code)." Proceed to Step 7.
+  - **`PENDING`** → this is R-02's exact case, including the dead-watch shape from PR #397 (`rc=0`
+    with a required context still unconcluded) — treat identically to the `rc=124`/`rc=8` branch
+    above: the same `AskUserQuestion`, the same 3-round bound, no special-casing by which exit
+    code got here.
+  - **`RED`** → at least one required check has already concluded unsuccessfully → Step 6c.
+  - **Exit 3 (`DID-NOT-RUN: <reason>`)** → the verdict script itself could not run (e.g. `jq`
+    missing). Fail-safe, matching the existing gh-CLI-absent/unauthenticated skips just above:
+    skip 6b/6c/7, report "Could not independently verify CI state (`<reason>`) — verify manually:
+    `gh pr checks <pr_url>`." Never assume green because the watch's own exit code looked clean.
 
 ### Step 6c — Diagnose CI failure (mandatory on any red required check; NEVER auto-fix)
 
