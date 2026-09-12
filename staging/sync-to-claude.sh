@@ -90,8 +90,9 @@ fi
 #     and concept-to-code/SKILL.md references it at its DEPLOYED path. That is correct; do not
 #     "normalise" either side.
 #   usage-report.py -> scripts/
-#     A plain script invoked by usage-daily-hint.sh at $HOME/.claude/scripts/usage-report.py, not a
-#     hook entry point, so hooks/ would be the wrong zone.
+#     A plain reporting script (no current caller — usage-daily-hint.sh, its only caller, was
+#     retired 2026-09-12; issue #378 tracks its own fate) at $HOME/.claude/scripts/usage-report.py,
+#     not a hook entry point, so hooks/ would be the wrong zone.
 #
 # pairs-completeness.test.sh derives this set from PAIRS and requires each member to appear in the
 # declaration line above — a THIRD anomaly fails there instead of being discovered by an audit.
@@ -209,12 +210,13 @@ plugin/scripts/dispatch-state.sh|hooks/dispatch-state.sh
 plugin/scripts/secret-scan.sh|hooks/secret-scan.sh
 plugin/scripts/dependency-scan.sh|hooks/dependency-scan.sh
 plugin/scripts/ci-tier.sh|hooks/ci-tier.sh
+plugin/scripts/ci-verdict.sh|hooks/ci-verdict.sh
+plugin/scripts/spec-coverage-lookup.sh|hooks/spec-coverage-lookup.sh
 plugin/scripts/external-dependency-check.sh|hooks/external-dependency-check.sh
 plugin/scripts/interface-check.sh|hooks/interface-check.sh
 plugin/scripts/vendor-checks.sh|hooks/vendor-checks.sh
 plugin/scripts/prompt-en-prose-detect.sh|hooks/prompt-en-prose-detect.sh
 plugin/scripts/reset-gate-counter.sh|hooks/reset-gate-counter.sh
-plugin/scripts/usage-daily-hint.sh|hooks/usage-daily-hint.sh
 plugin/scripts/codex-reviewer.sh|hooks/codex-reviewer.sh
 plugin/scripts/codex-tester.sh|hooks/codex-tester.sh
 plugin/scripts/codex-coder.sh|hooks/codex-coder.sh
@@ -224,7 +226,6 @@ plugin/scripts/commit-outcome-backstop.sh|hooks/commit-outcome-backstop.sh
 plugin/scripts/instructions-loaded-canon.sh|hooks/instructions-loaded-canon.sh
 plugin/scripts/instructions-loaded-log.sh|hooks/instructions-loaded-log.sh
 plugin/scripts/instructions-loaded-verify.sh|hooks/instructions-loaded-verify.sh
-plugin/scripts/context-occupancy.sh|hooks/context-occupancy.sh
 plugin/scripts/migrate-trust-paths.sh|hooks/migrate-trust-paths.sh
 plugin/scripts/tests/db-backup-guardrail.sh|hooks/tests/db-backup-guardrail.sh
 plugin/scripts/tests/pre-flight-pattern-enforce.sh|hooks/tests/pre-flight-pattern-enforce.sh
@@ -606,27 +607,6 @@ deployed but never invoked, and the session-preservation half of this feature do
 NOTE
 fi
 
-if ! grep -q 'usage-daily-hint' "$DEST/settings.json" 2>/dev/null; then
-  MANUAL=1
-  cat <<'NOTE'
-
---- MANUAL STEP: hook wiring (not auto-applied) ---
-Add this Stop entry to ~/.claude/settings.json (alongside the stop-gate entry):
-
-  { "hooks": [ { "type": "command", "command": "\"$HOME\"/.claude/hooks/usage-daily-hint.sh" } ] }
-
-usage-daily-hint (issue #112, ADR-0058 §D4) is the measurement half of the context-occupancy
-feature: it reports approximate context-window occupancy (via context-occupancy.sh) plus the daily
-usage diff, through additionalContext, and never emits a decision field — it cannot block, unlike
-stop-gate.sh which shares this event. Occupancy is reported, never gated (§D4: it correlates with
-instruction-following degradation but does not determine it, so a threshold gate would be a
-heuristic deciding to block, the exact shape ADR-0051/0053/0054 already rejected). Until this entry
-exists the hook is deployed but never invoked, and occupancy is never observable to a human or a
-later gate — precompact-guard.sh (above) still protects mid-flight chain state either way; only the
-reporting half is silent.
-NOTE
-fi
-
 if ! grep -q 'commit-outcome-backstop' "$DEST/settings.json" 2>/dev/null; then
   MANUAL=1
   cat <<'NOTE'
@@ -719,6 +699,20 @@ removed from staging/, so this sync script has no PAIRS entry and no way to remo
 deployed tree. Delete the deployed
 ~/.claude/skills/concept-to-code/scripts/agent-notes-harvest.sh and
 ~/.claude/skills/concept-to-code/tests/agent-notes-roundtrip.sh by hand.
+NOTE
+fi
+
+if [ -f "$DEST/hooks/usage-daily-hint.sh" ] || [ -f "$DEST/hooks/context-occupancy.sh" ]; then
+  MANUAL=1
+  cat <<'NOTE'
+
+--- MANUAL STEP: retired context-occupancy hook cleanup (not auto-applied) ---
+usage-daily-hint.sh and context-occupancy.sh are retired (ADR-0058 §D3/D4/D5 Correction,
+2026-09-12): the Stop-hook occupancy-measurement/reporting half of the feature was removed at
+Stefano's explicit request. The PreCompact half (precompact-guard.sh, §D1/D2) is unaffected and
+stays deployed and wired. Both retired scripts were removed from staging/, so this sync script has
+no PAIRS entry and no way to remove them from a deployed tree. Delete the deployed
+~/.claude/hooks/usage-daily-hint.sh and ~/.claude/hooks/context-occupancy.sh by hand.
 NOTE
 fi
 

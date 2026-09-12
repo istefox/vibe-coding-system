@@ -735,6 +735,34 @@ export the name.**
 
 ---
 
+## Correction (2026-09-12)
+
+The `bash <<'FENCE_BASH' ... FENCE_BASH` wrapper this ADR prescribes breaks one further construct
+not identified at the time: a **quoted heredoc nested inside a command substitution nested inside
+double quotes** — `git commit -m "$(cat <<'COMMITMSG' ... COMMITMSG )"` — fails with `unexpected
+EOF while looking for matching '` the moment the heredoc body contains an apostrophe. Found live in
+`commit/SKILL.md`'s Step 5 fence (issue #406), reproduced three times on ordinary prose ("run's
+manifest", "the issue's proposed remedy") across three separate sessions (2026-08-11, -14, -17)
+before being traced to this ADR's own wrapper rather than to the fence content.
+
+Repo-wide audit (issue #406 R-03): of the seven `SKILL.md` files using the `FENCE_BASH` wrapper
+(`brief-to-app`, `autopilot-build`, `autopilot`, `claude-md-slim`, `commit`, `concept-to-code`,
+`project-conductor`), this was the only instance of the nested-heredoc-in-command-substitution
+shape. `autopilot-build`'s `bash -c "$(cat $project_root/.claude/test-cmd)"` reads a file's content
+into a command substitution but contains no heredoc, so it does not carry this failure mode.
+
+**The fix is not a new escaping rule — it is removing the construct.** `git commit -F <tmpfile>`
+takes the message through a file instead of the shell's argument-parsing path entirely: no command
+substitution, no nested heredoc, no character class left to break on. Any future fence that needs to
+hand a multi-line, human-authored string to a command should prefer writing it to a temp file over
+building a `"$(cat <<'X' ... X)"` construct under this wrapper — the wrapper's own free-variable and
+column-0-terminator rules (§D1) do not make that specific nesting safe.
+
+Regression pinned as `WSM` in `fence-contract-coverage.test.sh`, plant manually verified RED against
+`git commit -F "$_commitmsgfile"` → `git commit -m "$_commitmsgfile"` before trusting it.
+
+---
+
 ## References
 
 - Issue #394; SPEC `docs/specs/394-skill-fences-rely-on-word-splitting.spec.md`

@@ -2,13 +2,16 @@
 # precompact-occupancy.test.sh — offline, hermetic, no network, no $HOME dependency.
 # Bash 3.2 clean. Run: bash precompact-occupancy.test.sh
 #
-# Covers issue #112 / ADR-0058: a PreCompact hook that forces a chain-history handoff write when
-# `current_step` is a dispatch state (§D1), refuses AT MOST ONCE per compaction cycle (§D2 — the
-# decision that keeps the hook from being harmful, since PreCompact fires because the window is
-# full and an unbounded refusal strands the session instead of protecting it), fails open on every
-# error (§D3), and a context-occupancy figure read from what the runtime already recorded in the
-# transcript (never an independent counter, §D5) that is REPORTED via the Stop hint and never
-# gates anything (§D4).
+# Covers issue #112 / ADR-0058's PreCompact guard (§D1-D3 only): a hook that forces a
+# chain-history handoff write when `current_step` is a dispatch state (§D1), refuses AT MOST ONCE
+# per compaction cycle (§D2 — the decision that keeps the hook from being harmful, since
+# PreCompact fires because the window is full and an unbounded refusal strands the session instead
+# of protecting it), and fails open on every error (§D3).
+#
+# §D4/D5 (context-occupancy.sh's measurement, and usage-daily-hint.sh's Stop-hook reporting of it)
+# were retired 2026-09-12 — see ADR-0058's dated Correction. XD2 below still stands: it pins that
+# the guard never reached for the occupancy script, which is worth keeping even with that script
+# gone.
 #
 # ASSERTION LABELS ARE X-PREFIXED (XA, XB, ...). Checked before use: `grep -RhoE '"[A-Z]{1,3}[0-9]'
 # across every existing tests/*.test.sh file turns up A/B/C/.../TB/TI/... but no bare or compound
@@ -24,8 +27,6 @@ STAGING=$(cd "$SCRIPTS/../.." && pwd)                    # staging/
 REPO=$(cd "$STAGING/.." && pwd)                          # repo root
 
 GUARD="$SCRIPTS/precompact-guard.sh"
-OCC="$SCRIPTS/context-occupancy.sh"
-HINT="$SCRIPTS/usage-daily-hint.sh"
 SYNCSH="$STAGING/sync-to-claude.sh"
 SETTINGSJSON="$STAGING/user/settings.json"
 DOCSCI="$REPO/.github/workflows/docs-ci.yml"
@@ -67,17 +68,6 @@ run_guard() {  # <json> <state_dir>
 }
 
 blocked() { printf '%s' "$1" | jq -e '.decision == "block"' >/dev/null 2>&1; }
-
-# write_usage_transcript <path> <usage-json-object>...
-# Each extra arg is a JSON `usage` object; one JSONL line per arg, in order.
-write_usage_transcript() {
-  _path="$1"; shift
-  mkdir -p "$(dirname "$_path")"
-  : > "$_path"
-  for _u in "$@"; do
-    printf '{"message":{"usage":%s}}\n' "$_u" >> "$_path"
-  done
-}
 
 # ===================================================================================
 # XA. The hook forces the handoff write when current_step is a dispatch state (§D1).
@@ -207,13 +197,12 @@ OUT_MALFORMED=$(printf 'not json' | PRECOMPACT_GUARD_DIR="$TMP/state-xc5" bash "
                          || bad "XC5: malformed JSON but output was non-empty: $OUT_MALFORMED"
 
 # ===================================================================================
-# XD. Occupancy is reported, never gated (§D4) — no threshold comparison exists that can block.
+# XD. The refusal path stays independent of occupancy reporting (§D4 originally covered occupancy
+# itself too; §D3/D4/D5 — context-occupancy.sh and usage-daily-hint.sh — were retired 2026-09-12,
+# ADR-0058 dated Correction. XD2 is the one assertion still meaningful post-retirement: it pins
+# that the guard never reached for the occupancy script even when it existed, and (now) that it
+# doesn't reach for a script that no longer exists either.
 # ===================================================================================
-if [ -f "$OCC" ] && ! grep -q '"decision"' "$OCC" && ! grep -qi '"block"' "$OCC"; then
-  ok "XD1: context-occupancy.sh contains no decision/block field at all"
-else
-  bad "XD1: context-occupancy.sh references a decision/block field, or does not exist yet"
-fi
 
 # Bare mentions in prose (explaining why occupancy is NOT read here) are fine and expected; what
 # must be absent is an actual INVOCATION of the occupancy script from within the refusal path.
@@ -225,110 +214,13 @@ fi
 
 # Same distinction: a comment explaining the threshold is not read is fine; an actual shell
 # expansion of the variable (an ACTUAL read) is what must be absent.
-for f in "$OCC" "$GUARD"; do
+for f in "$GUARD"; do
   if [ -f "$f" ] && ! grep -qE '\$\{?CLAUDE_AUTOCOMPACT_PCT_OVERRIDE' "$f"; then
     ok "XD3: $(basename "$f") does not read the compaction threshold env var"
   else
     bad "XD3: $(basename "$f") reads CLAUDE_AUTOCOMPACT_PCT_OVERRIDE as a variable, or does not exist yet"
   fi
 done
-
-if [ -f "$HINT" ] && ! grep -q '"decision"' "$HINT"; then
-  ok "XD4: usage-daily-hint.sh (the Stop hint) never emits a decision field — it cannot block"
-else
-  bad "XD4: usage-daily-hint.sh references a decision field, or does not exist"
-fi
-
-# ===================================================================================
-# XE. The occupancy figure comes from what the runtime exposes, with no independent counter (§D5).
-# ===================================================================================
-if [ -f "$OCC" ] && grep -q 'cache_read_input_tokens' "$OCC" && grep -q 'input_tokens' "$OCC"; then
-  ok "XE1: context-occupancy.sh reads the runtime's own usage token fields"
-else
-  bad "XE1: context-occupancy.sh does not read cache_read_input_tokens/input_tokens — does it exist yet?"
-fi
-
-if [ -f "$OCC" ] && ! grep -qi 'tiktoken' "$OCC"; then
-  ok "XE2: context-occupancy.sh does not depend on a tokenizer library (no independent counter)"
-else
-  bad "XE2: context-occupancy.sh appears to depend on a tokenizer library"
-fi
-
-TRANSCRIPT_XE="$TMP/xe-transcript.jsonl"
-write_usage_transcript "$TRANSCRIPT_XE" \
-  '{"input_tokens":100,"cache_creation_input_tokens":400,"cache_read_input_tokens":9500}'
-PCT_XE=$(CONTEXT_OCCUPANCY_WINDOW=20000 bash "$OCC" "$TRANSCRIPT_XE" 2>/dev/null)
-if [ "$PCT_XE" = "50" ]; then
-  ok "XE3: occupancy computed from real transcript usage fields matches expected (100+400+9500)/20000=50%"
-else
-  bad "XE3: expected pct=50, got '$PCT_XE'"
-fi
-
-TRANSCRIPT_XE2="$TMP/xe2-transcript.jsonl"
-write_usage_transcript "$TRANSCRIPT_XE2" \
-  '{"input_tokens":10,"cache_creation_input_tokens":10,"cache_read_input_tokens":10}' \
-  '{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":19000}'
-PCT_XE2=$(CONTEXT_OCCUPANCY_WINDOW=20000 bash "$OCC" "$TRANSCRIPT_XE2" 2>/dev/null)
-if [ "$PCT_XE2" = "95" ]; then
-  ok "XE4: uses the LAST usage-bearing message, not a sum across the transcript (would be 100% if summed)"
-else
-  bad "XE4: expected the last message's usage (pct=95), got '$PCT_XE2' — may be summing turns into its own counter"
-fi
-
-TRANSCRIPT_XE3="$TMP/xe3-empty.jsonl"; : > "$TRANSCRIPT_XE3"
-PCT_XE3=$(bash "$OCC" "$TRANSCRIPT_XE3" 2>/dev/null)
-[ -z "$PCT_XE3" ] && ok "XE5: no usage data in transcript -> prints nothing (fail open)" \
-                   || bad "XE5: expected empty output for a transcript with no usage data, got '$PCT_XE3'"
-
-PCT_XE4=$(bash "$OCC" "$TMP/does-not-exist.jsonl" 2>/dev/null)
-[ -z "$PCT_XE4" ] && ok "XE6: missing transcript path -> prints nothing (fail open)" \
-                   || bad "XE6: expected empty output for a missing transcript, got '$PCT_XE4'"
-
-PCT_XE5=$(bash "$OCC" 2>/dev/null)
-[ -z "$PCT_XE5" ] && ok "XE7: no argument at all -> prints nothing (fail open)" \
-                   || bad "XE7: expected empty output with no argument, got '$PCT_XE5'"
-
-# ===================================================================================
-# XF. The Stop hint reports occupancy.
-# ===================================================================================
-TRANSCRIPT_XF="$TMP/xf-transcript.jsonl"
-write_usage_transcript "$TRANSCRIPT_XF" \
-  '{"input_tokens":100,"cache_creation_input_tokens":400,"cache_read_input_tokens":9500}'
-IN_XF=$(printf '{"session_id":"s-xf","transcript_path":"%s","hook_event_name":"Stop"}' "$TRANSCRIPT_XF")
-OUT_XF=$(printf '%s' "$IN_XF" \
-  | USAGE_REPORT_SCRIPT="$TMP/does-not-exist-usage-report.py" \
-    CONTEXT_OCCUPANCY_SCRIPT="$OCC" CONTEXT_OCCUPANCY_WINDOW=20000 \
-    bash "$HINT" 2>/dev/null)
-
-if [ -f "$HINT" ] && printf '%s' "$OUT_XF" | jq empty >/dev/null 2>&1; then
-  ok "XF1: the Stop hint's stdout is valid JSON (never mixed with plain text)"
-else
-  bad "XF1: the Stop hint's stdout is not valid JSON — got: $OUT_XF"
-fi
-
-if printf '%s' "$OUT_XF" | jq -e '.hookSpecificOutput.additionalContext | test("context_occupancy=50")' >/dev/null 2>&1; then
-  ok "XF2: the Stop hint reports the occupancy figure (50%) via additionalContext"
-else
-  bad "XF2: additionalContext does not carry the occupancy figure — got: $OUT_XF"
-fi
-
-if printf '%s' "$OUT_XF" | jq -e '.hookSpecificOutput.hookEventName == "Stop"' >/dev/null 2>&1; then
-  ok "XF3: hookSpecificOutput.hookEventName is 'Stop', matching the documented shape"
-else
-  bad "XF3: hookSpecificOutput.hookEventName is not 'Stop' — got: $OUT_XF"
-fi
-
-if ! printf '%s' "$OUT_XF" | jq -e 'has("decision")' >/dev/null 2>&1; then
-  ok "XF4: the Stop hint's output never carries a decision field (non-blocking, §D4)"
-else
-  bad "XF4: the Stop hint emitted a decision field — it must never block"
-fi
-
-# No transcript_path and no usage-report script -> nothing to report -> silent allow.
-OUT_XF_EMPTY=$(printf '{"session_id":"s-xf-empty","hook_event_name":"Stop"}' \
-  | USAGE_REPORT_SCRIPT="$TMP/does-not-exist-usage-report.py" bash "$HINT" 2>/dev/null)
-[ -z "$OUT_XF_EMPTY" ] && ok "XF5: nothing to report -> silent allow (empty stdout)" \
-                        || bad "XF5: expected empty stdout with nothing to report, got: $OUT_XF_EMPTY"
 
 # ===================================================================================
 # XG. Registration — PAIRS entries + a conditional MANUAL-STEP notice. sync-manual-steps.test.sh's
@@ -341,12 +233,6 @@ if grep -qxF 'plugin/scripts/precompact-guard.sh|hooks/precompact-guard.sh' "$TM
   ok "XG1: PAIRS deploys precompact-guard.sh to ~/.claude/hooks/"
 else
   bad "XG1: precompact-guard.sh PAIRS entry is missing"
-fi
-
-if grep -qxF 'plugin/scripts/context-occupancy.sh|hooks/context-occupancy.sh' "$TMP/pairs" 2>/dev/null; then
-  ok "XG2: PAIRS deploys context-occupancy.sh to ~/.claude/hooks/"
-else
-  bad "XG2: context-occupancy.sh PAIRS entry is missing"
 fi
 
 if grep -F 'chmod +x' "$SYNCSH" 2>/dev/null | grep -qF 'precompact-guard.sh'; then

@@ -1268,6 +1268,7 @@ CR5="$TMPROOT/cr5"; mkdir -p "$CR5"; git_init "$CR5"
 cat >"$TMPROOT/s_stage_good" <<EOF
 cd "$CR5"
 staged=""
+tracked_modified=""
 include_paths="inc1.txt
 inc2.txt"
 EOF
@@ -1287,6 +1288,7 @@ printf 'y\n' >>"$CR6/tracked.txt"
 cat >"$TMPROOT/s_stage_empty" <<EOF
 cd "$CR6"
 staged=""
+tracked_modified="tracked.txt"
 include_paths=""
 EOF
 _rc=$(run_fence "commit-step5-include-stage" "$CMT" "$TMPROOT/s_stage_empty" "s|<commit-message>|WSH test commit|")
@@ -1296,6 +1298,60 @@ if [ "$_rc" = "0" ] && [ "$_tracked" = "tracked.txt," ] && [ "$_subj" = "WSH tes
   ok "WSH: commit-step5-include-stage's loop is a no-op on an empty --include value, staging only git add -u's default scope (today's behaviour for every caller that does not pass --include)"
 else
   bad "WSH: commit-step5-include-stage (rc=$_rc, tracked=[$_tracked], subject='$_subj') — an empty include set must not stage inc1.txt"
+fi
+
+# ---- WSM: commit-step5-include-stage, issue #406 regression pin -----------------------------
+# The actual bug: `git commit -m "$(cat <<'COMMITMSG' ... )"` nests a quoted heredoc inside a
+# command substitution inside double quotes, and an apostrophe in the message body aborted with
+# "unexpected EOF while looking for matching '" before ever reaching git — reproduced live three
+# times on ordinary prose ("run's manifest", "the issue's proposed remedy"). The fix commits via
+# `git commit -F <tmpfile>`, which removes the quoting contract from the message body entirely.
+# plant: WSM | plugin/skills/commit/SKILL.md | git commit -F "$_commitmsgfile" | git commit -m "$_commitmsgfile"
+CR8="$TMPROOT/cr8"; mkdir -p "$CR8"; git_init "$CR8"
+( cd "$CR8" && printf 'x\n' >tracked.txt && git add tracked.txt && git commit -qm init >/dev/null )
+printf 'y\n' >>"$CR8/tracked.txt"
+cat >"$TMPROOT/s_stage_apos" <<EOF
+cd "$CR8"
+staged=""
+tracked_modified="tracked.txt"
+include_paths=""
+EOF
+_rc=$(run_fence "commit-step5-include-stage" "$CMT" "$TMPROOT/s_stage_apos" "s|<commit-message>|run's manifest test|")
+_subj=$(git -C "$CR8" log -1 --pretty=%s 2>/dev/null)
+if [ "$_rc" = "0" ] && [ "$_subj" = "run's manifest test" ]; then
+  ok "WSM: commit-step5-include-stage commits a message containing an apostrophe (issue #406)"
+else
+  bad "WSM: commit-step5-include-stage (rc=$_rc, subject='$_subj') — an apostrophe in the commit message must not abort the fence"
+fi
+
+# ---- WSL: commit-step5-include-stage, VCS-011 regression pin --------------------------------
+# The actual bug (2026-08-05): a concurrent session modifies a tracked file AFTER Step 1 computed
+# its approved scope but BEFORE Step 5 stages and commits — `git add -u` sweeps it in regardless,
+# with nothing that ever compares what actually got staged against what the human approved. Here
+# `tracked_modified` (Step 1's snapshot) names only `known.txt`; `surprise.txt` is modified in the
+# working tree afterward, simulating the other session's edit, then the fence itself runs. It must
+# abort BEFORE `git commit` — no new commit, `surprise.txt` named in the error — never silently
+# include it the way the live incident did.
+CR7="$TMPROOT/cr7"; mkdir -p "$CR7"; git_init "$CR7"
+( cd "$CR7" && printf 'x\n' >known.txt && printf 'x\n' >surprise.txt \
+    && git add known.txt surprise.txt && git commit -qm init >/dev/null )
+_head_before=$(git -C "$CR7" rev-parse HEAD)
+printf 'known-change\n' >>"$CR7/known.txt"
+printf 'unapproved-change\n' >>"$CR7/surprise.txt"
+cat >"$TMPROOT/s_stage_abort" <<EOF
+cd "$CR7"
+staged=""
+tracked_modified="known.txt"
+include_paths=""
+EOF
+_rc=$(run_fence "commit-step5-include-stage" "$CMT" "$TMPROOT/s_stage_abort" "s|<commit-message>|WSL test commit|")
+_out=$(cat "$TMPROOT/out-commit-step5-include-stage" 2>/dev/null)
+_head_after=$(git -C "$CR7" rev-parse HEAD)
+if [ "$_rc" != "0" ] && [ "$_head_after" = "$_head_before" ] \
+   && printf '%s' "$_out" | grep -qF "surprise.txt"; then
+  ok "WSL: commit-step5-include-stage aborts (rc=$_rc, no new commit) and names surprise.txt when git add -u sweeps in a tracked file outside Step 1's approved scope (VCS-011)"
+else
+  bad "WSL: commit-step5-include-stage (rc=$_rc, head_before=$_head_before, head_after=$_head_after): $_out — must abort without committing and name the unexpected file"
 fi
 
 # =====================================================================================

@@ -143,7 +143,11 @@ Run the following bash to probe the project's existing git state:
 
 ```bash
 _git_root="<project_root>"
-_git_ok=$(git -C "$_git_root" rev-parse --is-inside-work-tree 2>/dev/null && echo "yes" || echo "no")
+# issue #407: `rev-parse --is-inside-work-tree` prints "true" on its OWN stdout on success, and
+# that capture the command substitution — without a stdout redirect on the probed command itself
+# — sees "true\nyes", never the bare "yes" every branch below compares against. Redirect the
+# probe's own stdout to /dev/null so only the echo's output is captured.
+_git_ok=$(git -C "$_git_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 && echo "yes" || echo "no")
 _git_remote=$(git -C "$_git_root" remote get-url origin 2>/dev/null || echo "")
 ```
 

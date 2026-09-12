@@ -31,3 +31,14 @@ paths:
 - `KeyboardShortcuts.Recorder` requires `Binding<KeyboardShortcuts.Name>` where the name is a `static` extension on `KeyboardShortcuts.Name`. Passing a local `@State` string binding does not compile.
 - `resignFirstResponder()` on an `NSTextView` embedded via `NSViewRepresentable` must be called on the `NSTextView` instance directly — calling it on the hosting view is a no-op.
 - `NSPopover` anchored to an `NSRect` inside `NSTextView` must be AppKit-owned. SwiftUI `.popover` cannot anchor to an arbitrary rect and falls back to window-level positioning.
+
+## Optional/Dictionary Sentinels — Correctness
+
+- A dictionary keyed by position/id that doubles as a per-key feature toggle (`nil` = feature
+  off, key absent = nothing at this key) must not hand the raw subscript result through
+  unchanged when the producer only inserts non-empty entries — an absent key then reads as
+  "feature off" and silently falls back to old/default behavior instead of "nothing here".
+  Coalesce explicitly: `dict[key] ?? []`, never `dict[key]` alone, when the two meanings must
+  stay distinguishable.
+
+<!-- src:auto-learning session:708d0d1e-0bc9-425b-bac6-745d820c7eb3 date:2026-09-09 -->

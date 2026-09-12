@@ -117,3 +117,16 @@ convention (`- (none active)`, per `chain-memory-capture.sh`'s existing render l
 - Adding a third hook to `Stop` does not change `stop-gate.sh`'s blocking behaviour (already
   pinned by an existing assertion), but any future `Stop` hook addition should keep verifying
   that non-interference, since three hooks now share the event.
+
+## Correction (2026-09-12)
+
+§D1's claim ("Added to `staging/user/settings.json` and to the live `~/.claude/settings.json`
+directly") does not match the live file: a direct grep of `~/.claude/settings.json` on this date
+found **0** occurrences of `usage-daily-hint`, and its `Stop` array carried only `stop-gate.sh`
+plus one unrelated entry. Either the wiring documented here was never actually applied to the
+live file, or it was applied and later reverted by an unrecorded change — which of the two is not
+determinable from what's on disk today. This is exactly the class of documented-vs-actual drift
+this ADR's own D1 was written to catch, so it's recorded here rather than silently left standing.
+
+Moot as of today regardless: `usage-daily-hint.sh` itself is retired (ADR-0058's dated
+Correction, 2026-09-12), so there is no longer a wiring state to reconcile.

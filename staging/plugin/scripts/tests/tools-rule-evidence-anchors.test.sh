@@ -46,7 +46,20 @@ trap 'rm -rf "$TMP"' EXIT
 
 ANCHORS="$TMP/anchors.txt"
 HEADINGS="$TMP/headings.txt"
-grep -o '→ #[a-zA-Z0-9-]*' "$RULES_TOOLS" | sed 's/→ #//' | sort -u > "$ANCHORS"
+JOINED="$TMP/joined.txt"
+# An entry's pointer is a `→ #anchor` chain, and one entry (the tag-quirks block) wraps a
+# trailing anchor onto its own continuation line with no `→` of its own — a bare run of
+# `#token #token…`. Fold that continuation back onto its parent line first, so a single pass
+# below can pull every anchor out of the chain, not just the one immediately after `→`.
+awk '
+  /^[[:space:]]*#[a-zA-Z0-9-]+([[:space:]]+#[a-zA-Z0-9-]+)*[[:space:]]*$/ && prev != "" {
+    prev = prev " " $0
+    next
+  }
+  { if (prev != "") print prev; prev = $0 }
+  END { if (prev != "") print prev }
+' "$RULES_TOOLS" > "$JOINED"
+grep '→ #' "$JOINED" | grep -oE '#[a-zA-Z0-9-]+' | sed 's/^#//' | sort -u > "$ANCHORS"
 grep '^## ' "$EVIDENCE" | sed 's/^## //' | sort -u > "$HEADINGS"
 
 # TE3 — denominator guard, rule 7: a zero population on either side must not read as "checked, all

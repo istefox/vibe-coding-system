@@ -94,8 +94,11 @@ mk_root() {
 # to HOUT, stderr to HERR, exit code to HRC; the underlying files persist at $TMPROOT/hout and
 # $TMPROOT/herr so a caller needing per-line inspection (PRS18) can read them directly instead of
 # re-splitting an already newline-joined variable.
+# SPEC_COVERAGE_LOOKUP_SH pinned to the STAGING copy (issue #414) — same override idiom as
+# CI_TIER_SH in commit/SKILL.md: unbound, an un-synced ~/.claude/hooks would make every PRS0x
+# coverage assertion below read DID-NOT-RUN instead of the behaviour under test.
 run_helper() {
-  bash "$HELPER" "$@" >"$TMPROOT/hout" 2>"$TMPROOT/herr"
+  SPEC_COVERAGE_LOOKUP_SH="$SCRIPTS/spec-coverage-lookup.sh" bash "$HELPER" "$@" >"$TMPROOT/hout" 2>"$TMPROOT/herr"
   HRC=$?
   HOUT=$(cat "$TMPROOT/hout")
   HERR=$(cat "$TMPROOT/herr")
@@ -152,14 +155,32 @@ else
 fi
 
 R=$(mk_root prs05)
-printf '%s\t%s\t%s\n' "prs05-delta" "5004" "Delta widget" > "$R/docs/specs/_issue-map.tsv"
+printf '%s\t%s\t%s\n' "5004-delta" "5004" "Delta widget" > "$R/docs/specs/_issue-map.tsv"
 printf -- '- [ ] Delta widget  (issue #5004)\n' > "$R/PROJECT.md"
-: > "$R/docs/specs/prs05-delta.spec.md"
+: > "$R/docs/specs/5004-delta.spec.md"
 run_helper --root "$R"
 if [ "$HRC" = "0" ] && [ -z "$HOUT" ]; then
-  ok "PRS05: a [ ] row whose SPEC exists is not selected (coverage rule unchanged)"
+  ok "PRS05: a [ ] row whose SPEC exists (under the map's own slug) is not selected (coverage rule unchanged)"
 else
   bad "PRS05: rc=$HRC out=[$HOUT]"
+fi
+
+# ==================================================================================================
+# PRS05b (issue #414): a SPEC exists for this issue under a DIFFERENT slug than the map's own —
+# still not selected. This is the exact ADR-0134 Correction 1 shape (map slug for #365 named one
+# file, a SPEC for the same issue existed under a different name) — the map-slug-exact predicate
+# missed it; the issue-number glob (spec-coverage-lookup.sh) catches it.
+# plant: PRS05b | plugin/scripts/spec-coverage-lookup.sh | ls "$SPECDIR/$ISSUE"-*.spec.md | ls "$SPECDIR/$ISSUE.spec.md"
+# ==================================================================================================
+R=$(mk_root prs05b)
+printf '%s\t%s\t%s\n' "5005-map-slug-unused" "5005" "Epsilon widget" > "$R/docs/specs/_issue-map.tsv"
+printf -- '- [ ] Epsilon widget  (issue #5005)\n' > "$R/PROJECT.md"
+: > "$R/docs/specs/5005-archived-under-a-different-name.spec.md"
+run_helper --root "$R"
+if [ "$HRC" = "0" ] && [ -z "$HOUT" ]; then
+  ok "PRS05b: a [ ] row whose SPEC exists under a DIFFERENT slug for the same issue number is not selected (issue #414, ADR-0134 Correction 1 shape)"
+else
+  bad "PRS05b: rc=$HRC out=[$HOUT] — the map-slug-exact predicate would have missed this coverage and re-generated a duplicate SPEC"
 fi
 
 # PRS06: the auto-design shape — step 2 has just generated the roadmap, every row is [ ], no SPEC
@@ -680,12 +701,12 @@ fi
 # =====================================================================================
 # PRS99 — assertion floor for this file (ADR-0124: a floor, not an exact count, raised in the same
 # edit that adds assertions, or it carries slack and an assertion can vanish while it stays green).
-# >= 26 after this task (PRS01-PRS19 plus PRS20/PRS20b/PRS21/PRS21b/PRS21c/PRS21d plus PRS22).
+# >= 27 after issue #414 (previous floor 26 plus PRS05b).
 _prs99_total=$((PASS + FAIL))
-if [ "$_prs99_total" -ge 26 ]; then
-  ok "PRS99: assertion-count floor ($_prs99_total >= 26)"
+if [ "$_prs99_total" -ge 27 ]; then
+  ok "PRS99: assertion-count floor ($_prs99_total >= 27)"
 else
-  bad "PRS99: only $_prs99_total assertions ran (floor 26) — assertions vanished from this file"
+  bad "PRS99: only $_prs99_total assertions ran (floor 27) — assertions vanished from this file"
 fi
 
 echo

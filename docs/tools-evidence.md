@@ -59,6 +59,21 @@ stolen the focus. That `log show --predicate` command is itself worth a script f
 into a Bash call, with its nested single and double quotes, it failed twice with
 `too many arguments`; written to a `#!/bin/bash` file and run, it worked first time.
 
+## nohup-cli-script-survives
+
+The opposite finding from `gui-app-nohup`, in the same session, on the same machine: a
+plain CLI/shell script backgrounded with `nohup … &` from a Bash call is not killed when
+the Bash call returns, unlike a GUI app launched the same way. Confirmed via
+`ps -Ao pid,ppid,command`, showing `ppid 1` (reparented to `launchd`, the signature of a
+process that actually detached). The redirected log going quiet right after the Bash call
+returned looked identical to a killed process at first glance, but was ordinary buffering
+on the script's own side (an `xcodebuild` wrapper's slow, bursty output) — `ps -p <pid>`
+confirmed it was still running. Established a wait idiom for this shape:
+`until ! ps -p <pid> > /dev/null 2>&1; do sleep 15; done`, issued as its own
+`run_in_background: true` call rather than treated as evidence of death. Landed in
+`~/.claude/rules/tools.md` via auto-learning on 2026-09-11 (session
+`c5b1ac2b-b810-4e28-b27f-2618be3133e0`).
+
 ## system-events-by-pid
 
 Fails reliably with `Impossibile ottenere process 1 whose unix id = <pid>. Indice non
@@ -103,6 +118,16 @@ denial — a bare, unchained `rm -rf <path>` gets denied on its own merits just 
 `(eval):2: no matches found: Sources/Connector/VaultAPI*.swift` instead of the bash
 behavior of passing the literal pattern through to the command (`nomatch` is on by default
 in this zsh).
+
+## zsh-equals-expansion
+
+Same family as `zsh-nomatch-glob`: a bare word starting with `=` (a `======` line separator,
+say) triggers zsh's `=command` expansion instead of being passed through as a literal, and
+fails the whole call with `<rest> not found` — `nomatch` is not the only zsh substitution
+surprise this shell applies to an unquoted word. Fix is the same shape as the glob case:
+avoid the trigger character rather than work around the expansion, using `---` or `####` as
+separators instead of `======`. Landed in `~/.claude/rules/tools.md` via auto-learning on
+2026-09-09 (session `12348409-ed36-4def-a370-011451ed0a92`).
 
 ## gh-pr-checks-pending
 
@@ -314,3 +339,36 @@ work. To keep talking to an already-dispatched agent, running or finished, find 
 with `ListAgents` and use `SendMessage(to: <task-id>, message: ...)` instead of calling
 `Agent()` again. Landed in `~/.claude/rules/tools.md` via auto-learning on 2026-09-07 (session
 `db34b10a-3a09-4a96-9b9a-b9562560712f`), backported here in PR #575.
+
+## worktree-isolated-bash-refusal
+
+A Bash call whose `cwd` sits inside a worktree-isolated session is refused whenever the
+static pre-check can't prove every clause of the call stays inside that worktree, even when
+the command in fact never leaves it. Confirmed triggers, all refused with "too complex to
+verify": a heredoc, a `$(bash script.sh ...)` command substitution, a quoted
+`$HOME`-prefixed script path even used alone, a piped script, or a chain mixing a `for`
+loop or a runtime variable with `git`/`open`. The fix is not a smarter command, it's a
+plainer one: one single-statement call, a literal absolute path (never `"$HOME/..."`), no
+heredoc, no pipe, no `$(...)` wrapping the whole call. A command genuinely targeting a path
+outside the session's own worktree (`git -C <other-worktree> ...`) is a hard deny with no
+in-session fix — hand the exact commands to the user for an unsandboxed terminal instead of
+retrying variations. Distinguished from a separate, look-alike block: when the message names
+`worktree-git-guardrail` instead and no `EnterWorktree` ran this session, the `cwd` is simply
+stuck inside a worktree directory from an earlier `cd` — `cd <main-repo-path> && pwd` as its
+own call relocates it, after which the same command succeeds normally. Landed in
+`~/.claude/rules/tools.md` via auto-learning across three sessions on 2026-09-07/09/11
+(`708d0d1e-0bc9-425b-bac6-745d820c7eb3`, `db34b10a-3a09-4a96-9b9a-b9562560712f`,
+`5ec38a12-eed4-4704-8d46-1010d5bf262f`).
+
+## codex-sandbox-xcodebuild
+
+The Codex CLI sandbox (`workspace-write`) cannot build or test an Xcode project, even a
+native `-destination 'platform=macOS'` target: `xcodebuild` reports
+`CoreSimulatorService connection became invalid`, then the misleading
+`'<name>.xcworkspace' is not a workspace file` — the same workspace lists fine when the same
+command runs outside the sandbox. The wrapping `codex exec` process can still print exit
+code 0 regardless, so its own exit status is not evidence the build succeeded; read
+`xcodebuild`'s own status instead. Route Xcode tester/coder work to a Claude agent running in
+an isolated worktree rather than through the Codex sandbox. Landed in
+`~/.claude/rules/tools.md` via auto-learning on 2026-09-09 (session
+`12348409-ed36-4def-a370-011451ed0a92`).

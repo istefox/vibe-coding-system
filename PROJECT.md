@@ -1354,8 +1354,10 @@ first two look like implementation gaps and only the third settles it:
 feature costs what it costs, and the only brakes are the feature count and `/goal`'s turn budget.
 
 **If a spend ceiling is ever wanted, it does not come from `task_metrics`.** The only place in this
-system that knows about tokens is the transcript — `usage-report.py` and `context-occupancy.sh`
-read `input_tokens`, `output_tokens` and `cache_*` from it. Any future bound starts there, is
+system that knows about tokens is the transcript — `usage-report.py` reads `input_tokens`,
+`output_tokens` and `cache_*` from it (`context-occupancy.sh`, the other reader, was retired
+2026-09-12 along with `usage-daily-hint.sh`, ADR-0058's dated Correction — a future bound would
+need to re-derive occupancy from the transcript directly). Any future bound starts there, is
 per-session rather than per-feature, and still cannot stop a feature already in flight. Recorded so
 the next author does not rebuild it from the same wrong source.
 
