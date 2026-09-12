@@ -663,11 +663,21 @@ if [ "$_actual" != "$_expected" ]; then
   echo "Error: staged set does not match Step 1's approved scope — unexpected file(s) swept in by 'git add -u': $_extra. Refusing to commit; re-run Step 1 to re-approve the current scope." >&2
   exit 1
 fi
-# Commit with approved message:
-git commit -m "$(cat <<'COMMITMSG'
+# Commit with approved message (issue #406): NOT `git commit -m "$(cat <<'COMMITMSG' ... )"`.
+# That construct nests a quoted heredoc inside a command substitution inside double quotes, and
+# an apostrophe anywhere in the message body reads as a quote opener before the heredoc's own
+# quoting applies, aborting with "unexpected EOF while looking for matching '" — reproduced live
+# three times (2026-08-11, -14, -17) on ordinary prose ("run's manifest", "the issue's proposed
+# remedy"). `-F <file>` removes the quoting contract from the message body entirely: no shell
+# parse of its content, no character class left to break on.
+_commitmsgfile=$(mktemp)
+cat <<'COMMITMSG' > "$_commitmsgfile"
 <commit-message>
 COMMITMSG
-)"
+git commit -F "$_commitmsgfile"
+_commit_rc=$?
+rm -f "$_commitmsgfile"
+exit $_commit_rc
 FENCE_BASH
 ```
 

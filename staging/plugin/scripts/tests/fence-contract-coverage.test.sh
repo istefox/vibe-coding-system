@@ -1300,6 +1300,30 @@ else
   bad "WSH: commit-step5-include-stage (rc=$_rc, tracked=[$_tracked], subject='$_subj') — an empty include set must not stage inc1.txt"
 fi
 
+# ---- WSM: commit-step5-include-stage, issue #406 regression pin -----------------------------
+# The actual bug: `git commit -m "$(cat <<'COMMITMSG' ... )"` nests a quoted heredoc inside a
+# command substitution inside double quotes, and an apostrophe in the message body aborted with
+# "unexpected EOF while looking for matching '" before ever reaching git — reproduced live three
+# times on ordinary prose ("run's manifest", "the issue's proposed remedy"). The fix commits via
+# `git commit -F <tmpfile>`, which removes the quoting contract from the message body entirely.
+# plant: WSM | plugin/skills/commit/SKILL.md | git commit -F "$_commitmsgfile" | git commit -m "$_commitmsgfile"
+CR8="$TMPROOT/cr8"; mkdir -p "$CR8"; git_init "$CR8"
+( cd "$CR8" && printf 'x\n' >tracked.txt && git add tracked.txt && git commit -qm init >/dev/null )
+printf 'y\n' >>"$CR8/tracked.txt"
+cat >"$TMPROOT/s_stage_apos" <<EOF
+cd "$CR8"
+staged=""
+tracked_modified="tracked.txt"
+include_paths=""
+EOF
+_rc=$(run_fence "commit-step5-include-stage" "$CMT" "$TMPROOT/s_stage_apos" "s|<commit-message>|run's manifest test|")
+_subj=$(git -C "$CR8" log -1 --pretty=%s 2>/dev/null)
+if [ "$_rc" = "0" ] && [ "$_subj" = "run's manifest test" ]; then
+  ok "WSM: commit-step5-include-stage commits a message containing an apostrophe (issue #406)"
+else
+  bad "WSM: commit-step5-include-stage (rc=$_rc, subject='$_subj') — an apostrophe in the commit message must not abort the fence"
+fi
+
 # ---- WSL: commit-step5-include-stage, VCS-011 regression pin --------------------------------
 # The actual bug (2026-08-05): a concurrent session modifies a tracked file AFTER Step 1 computed
 # its approved scope but BEFORE Step 5 stages and commits — `git add -u` sweeps it in regardless,
