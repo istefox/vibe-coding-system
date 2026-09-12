@@ -1288,6 +1288,84 @@ else
 fi
 # plant: BL12 | plugin/skills/concept-to-code/references/step5-implementation.md | FILEBUDGET<TAB><tasks-label><TAB><file><TAB>lines=<expected>/<actual><TAB>margin=<N> | BUDGETFILE<TAB><tasks-label><TAB><file><TAB>lines=<expected>/<actual><TAB>margin=<N>
 
+# ==================================================================================================
+# BM. expand_tasks() range expansion is identifier-aware (ADR-0126 D2, issue #293, VCS-002).
+# task_num() itself already preserves a letter suffix (plan-budget-parse.awk, shipped separately
+# via VCS-057/ADR-0189) — BM4 pins that. What was still live before this section's fix: a range
+# like "1-2" expanded purely numerically and silently dropped a lettered sibling's ceiling
+# ("1b"), and a lettered range ENDPOINT ("1b-3") fell into the suppressed `2>/dev/null` numeric
+# comparison and expanded to nothing.
+# ==================================================================================================
+cat >"$TMP/bm-plan.md" <<'EOF'
+# Plan
+
+- [ ] **Task 1 — first.** Budget: a.py (~5 lines)
+- [ ] **Task 1b — inserted after 1.** Budget: b.py (~50 lines)
+- [ ] **Task 2 — second.** Budget: c.py (~10 lines)
+EOF
+
+# BM1 — a range spanning a lettered sibling must not falsely overshoot: the correct sum is
+# 5+50+10=65 lines across 3 declared files; only b.py and c.py are actually touched (45 lines,
+# 2 files), well under the correctly-summed ceiling. Before this fix, expand_tasks("1-2") silently
+# omitted "1b", so the checker measured against 5+10=15 expected lines against the SAME 45 actual
+# — a false BUDGET overshoot on a diff that is genuinely within budget.
+mk_diffstat bm1 "b.py:40" "c.py:5" >"$TMP/stat_in"
+run_dbc --plan "$TMP/bm-plan.md" --tasks 1-2
+if [ "$OUT" = "CLEAN" ] && [ "$RC" -eq 0 ]; then
+  ok "BM1: --tasks 1-2 sums Task 1b's ceiling into the range (5+50+10=65 vs 45 actual) -> CLEAN; the pre-fix range (15 vs 45) would have false-BUDGET'd this same diff"
+else
+  bad "BM1: expected CLEAN once the lettered sibling's ceiling is correctly summed into the range — got out=[$OUT] rc=$RC"
+fi
+
+# BM2 — exact-value pin: push the same two files just over the CORRECTLY-summed ceiling (65) and
+# confirm the reported expected total is 65 (5+50+10), not 15 (5+10, the pre-fix omission of 1b).
+mk_diffstat bm2 "b.py:60" "c.py:10" >"$TMP/stat_in"
+run_dbc --plan "$TMP/bm-plan.md" --tasks 1-2
+if printf '%s\n' "$OUT" | grep -qE "^BUDGET${TAB}1-2${TAB}files=3/2${TAB}lines=65/70${TAB}margin=5$"; then
+  ok "BM2: --tasks 1-2 reports the exact summed ceiling files=3/2 lines=65/70 margin=5 — 65 is 5(Task 1)+50(Task 1b)+10(Task 2), proving the lettered sibling's ceiling is included, not dropped"
+else
+  bad "BM2: expected files=3/2 lines=65/70 margin=5 (the three-task sum including Task 1b) — got out=[$OUT]"
+fi
+
+# BM3 — a lettered LOW endpoint ("1b-3", here "1b-2") reduces to its digit prefix and behaves
+# identically to the plain numeric range "1-2", rather than the pre-fix silent empty-set (CLEAN
+# with nothing measured, indistinguishable from "genuinely nothing to report").
+run_dbc --plan "$TMP/bm-plan.md" --tasks 1b-2
+if printf '%s\n' "$OUT" | grep -qE "^BUDGET${TAB}1b-2${TAB}files=3/2${TAB}lines=65/70${TAB}margin=5$"; then
+  ok "BM3: --tasks 1b-2 (lettered low endpoint) reduces to digits and expands identically to 1-2 — files=3/2 lines=65/70 margin=5, not a silent empty range"
+else
+  bad "BM3: expected a lettered endpoint range to behave exactly as its digit-reduced equivalent (files=3/2 lines=65/70 margin=5) — got out=[$OUT]"
+fi
+
+# BM4 — the bare lettered identifier itself (D1, shipped separately via VCS-057/ADR-0189) gets its
+# own regression pin here rather than living only in ADR-0126's disclosed narrative. files=1/2
+# because Task 1b declares one file (b.py) but two files are globally in-scope and touched
+# (b.py + c.py, both declared by SOME task) — the same files-only-overshoot shape as BA4.
+mk_diffstat bm4 "b.py:40" "c.py:5" >"$TMP/stat_in"
+run_dbc --plan "$TMP/bm-plan.md" --tasks 1b
+if printf '%s\n' "$OUT" | grep -qE "^BUDGET${TAB}1b${TAB}files=1/2${TAB}lines=50/45${TAB}margin=0$"; then
+  ok "BM4: bare --tasks 1b selects only Task 1b's own ceiling (files=1/2 lines=50/45 margin=0) — task_num()'s letter-suffix preservation, pinned directly rather than only disclosed"
+else
+  bad "BM4: expected the bare lettered identifier to select exactly Task 1b's declared ceiling (files=1/2 lines=50/45 margin=0) — got out=[$OUT]"
+fi
+
+# BM5 — backward compatibility (ADR-0126 D3/D4): a range with NO lettered member at all is
+# byte-identical to today's behavior. Plain three-task plan, no letters anywhere.
+cat >"$TMP/bm5-plan.md" <<'EOF'
+# Plan
+
+- [ ] **Task 1 — first.** Budget: a.py (~5 lines)
+- [ ] **Task 2 — second.** Budget: b.py (~50 lines)
+- [ ] **Task 3 — third.** Budget: c.py (~10 lines)
+EOF
+mk_diffstat bm5 "b.py:60" "c.py:10" >"$TMP/stat_in"
+run_dbc --plan "$TMP/bm5-plan.md" --tasks 1-2
+if printf '%s\n' "$OUT" | grep -qE "^BUDGET${TAB}1-2${TAB}files=2/2${TAB}lines=55/70${TAB}margin=15$"; then
+  ok "BM5: a non-lettered range (1-2, no letter suffix anywhere in the plan) sums exactly Task 1 + Task 2 (5+50=55) — unaffected by the identifier-aware range logic"
+else
+  bad "BM5: expected the non-lettered range to be unaffected (files=2/2 lines=55/70 margin=15) — got out=[$OUT]"
+fi
+
 # Z1 — assertion-count floor (ADR-0083 §D3). A floor, not an exact count. Bumped from 55 to 66
 # by issue #296 / ADR-0189's twelve BL assertions (measured 2026-09-02: 75 executed with section
 # BL in place, floor set a little below it — a vacuity guard only, never an exact count).

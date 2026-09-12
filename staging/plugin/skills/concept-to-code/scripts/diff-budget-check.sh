@@ -210,7 +210,12 @@ while IFS="$(printf '\t')" read -r _t _files _lines; do
   IFS="$_oldifs"
 done <"$BUDGET_FILE"
 
-# --- expand --tasks into an explicit task-number set, and sum the declared budgets in it ---------
+# --- expand --tasks into an explicit task-identifier set, and sum the declared budgets in it -----
+# ADR-0126 D2 (issue #293): a range must cover every DECLARED identifier whose numeric part falls
+# inside it, not only the bare integers — a lettered task (e.g. "1b") is a task inserted after its
+# numeric sibling, inside the span a range like "1-2" names. This reads BUDGET_FILE, so it must run
+# after the plan parse above has populated it, which it already does (expand_tasks is called at
+# line ~236, well after BUDGET_FILE is filled).
 expand_tasks() {
   _arg="$1"
   _oldifs="$IFS"; IFS=','
@@ -218,11 +223,25 @@ expand_tasks() {
     case "$_part" in
       *-*)
         _lo="${_part%%-*}"; _hi="${_part##*-}"
-        _i="$_lo"
-        while [ "$_i" -le "$_hi" ] 2>/dev/null; do
+        # Range endpoints are reduced to their digit prefix first: "1b-3" behaves as "1-3" rather
+        # than the bare comparison below silently failing into 2>/dev/null and expanding to nothing.
+        _lo_n=$(printf '%s' "$_lo" | sed -E 's/^([0-9]+).*/\1/')
+        _hi_n=$(printf '%s' "$_hi" | sed -E 's/^([0-9]+).*/\1/')
+        _i="$_lo_n"
+        while [ "$_i" -le "$_hi_n" ] 2>/dev/null; do
           printf '%s\n' "$_i"
           _i=$((_i + 1))
         done
+        # Identifier-aware membership: any BUDGET_FILE identifier whose numeric part falls in
+        # [_lo_n, _hi_n] joins the range too, letter suffix and all. Duplicates a plain-numeric
+        # id the walk above already emitted; harmless, since every consumer treats TASK_SET as a
+        # membership set (`grep -qxF`), never an ordered or counted list.
+        if [ -s "$BUDGET_FILE" ]; then
+          awk -v lo="$_lo_n" -v hi="$_hi_n" -F'\t' '
+            { id = $1; n = id; sub(/[^0-9].*$/, "", n)
+              if (n != "" && n+0 >= lo+0 && n+0 <= hi+0) print id }
+          ' "$BUDGET_FILE"
+        fi
         ;;
       *)
         printf '%s\n' "$_part"

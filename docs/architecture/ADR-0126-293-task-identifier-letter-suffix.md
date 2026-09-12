@@ -1,7 +1,7 @@
 # ADR-0126 — The task identifier gains a letter suffix, and the `--tasks` expansion moves with it
 
 - **Issue:** #293
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-04
 - **Supersedes in part:** ADR-0070 §Negative (the `task_num()` digits-only disclosure)
 - **Related:** ADR-0052 (the budget check), ADR-0069 (the shared task predicate), ADR-0070 (the
@@ -305,6 +305,31 @@ rather than rediscovering it.
   predicate reports "nothing to report" forever. Pre-existing, out of scope, worth someone's issue.
 
 ---
+
+## Correction (2026-09-12)
+
+The chain that would have implemented this ADR stalled at Step 2 on 2026-08-04, after the ADR was
+written and before the plan (`VCS-002`). Picking it back up over a month later, measuring the
+premise first (rule 13) rather than assuming this decision was still entirely unimplemented:
+
+- **D1 (`task_num()` extracts digits plus letter suffix) had already shipped**, as a side effect of
+  an unrelated later refactor — VCS-057/ADR-0185 extracted `task_num()` out of
+  `diff-budget-check.sh` and into the shared `plan-budget-parse.awk`, and the extracted version
+  already preserves the letter suffix exactly as D1 specifies. Verified directly against the exact
+  corpus line this ADR cites (`## Task 1b — Amend the SPEC...`): `task_num()` returns `1b`, not
+  `1`. Nobody set out to implement D1; the extraction happened to carry it along.
+- **D2 (`expand_tasks()` range expansion, and range-endpoint digit reduction) was still live** and
+  was implemented now, in `expand_tasks()` only. Reproduced against the deployed script before
+  fixing: `--tasks 1-2` summed only the plain-numeric members' ceilings, silently dropping `1b`'s;
+  `--tasks 1b-2` (lettered low endpoint) expanded to nothing. Both now match this ADR's D2.
+- D3-D6 were not separately implemented as distinct work — D3's harness-level backward-compat
+  pattern and D6's byte-untouched-files claim both remain true of the fixed code (verified: only
+  `expand_tasks()` changed); D5's call-site instruction was not added to `concept-to-code/SKILL.md`
+  in this pass, and stays open as a small follow-up rather than blocking this closure.
+
+The consequences and alternatives sections above describe the design as a whole and are left
+unedited (rule 14: a historical record is not corrected in place) — only D1's implementation
+history differs from what this ADR originally proposed to do itself, not the design's correctness.
 
 ## References
 
