@@ -42,7 +42,7 @@ fi
 # different slugs, resolve DETERMINISTICALLY (lexicographically first), never an arbitrary
 # directory-entry order — this is what made the pre-fix `head -1` at the project-conductor site
 # arbitrary.
-# plant: SCL3 | plugin/scripts/spec-coverage-lookup.sh | ls "$SPECDIR/$ISSUE"-*.spec.md 2>/dev/null | sort | head -1 | ls "$SPECDIR/$ISSUE"-*.spec.md 2>/dev/null | tail -1
+# plant: SCL3 | plugin/scripts/spec-coverage-lookup.sh | | head -1) | | tail -1)
 # ==================================================================================================
 D3="$TMP/d3"; mkdir -p "$D3"
 : > "$D3/9003-zzz-later-alphabetically.spec.md"
