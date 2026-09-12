@@ -95,6 +95,22 @@ MAP="$ROOT/docs/specs/_issue-map.tsv"
 PMD="$ROOT/PROJECT.md"
 SPECDIR="$ROOT/docs/specs"
 
+# Coverage predicate (issue #414 / ADR-0134 §D13): resolved once, up front, never re-derived per
+# row. `SPEC_COVERAGE_LOOKUP_SH` lets a test point this at a fixture copy without touching the
+# resolution order -- same override idiom as `CI_TIER_SH` in commit/SKILL.md Step 3.7.
+SPEC_COVERAGE_LOOKUP_SH="${SPEC_COVERAGE_LOOKUP_SH:-}"
+if [ -z "$SPEC_COVERAGE_LOOKUP_SH" ]; then
+  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/spec-coverage-lookup.sh" ]; then
+    SPEC_COVERAGE_LOOKUP_SH="$CLAUDE_PLUGIN_ROOT/scripts/spec-coverage-lookup.sh"
+  elif [ -f "$HOME/.claude/hooks/spec-coverage-lookup.sh" ]; then
+    SPEC_COVERAGE_LOOKUP_SH="$HOME/.claude/hooks/spec-coverage-lookup.sh"
+  fi
+fi
+if [ -z "$SPEC_COVERAGE_LOOKUP_SH" ] || [ ! -f "$SPEC_COVERAGE_LOOKUP_SH" ]; then
+  printf '%s: could not run -- spec-coverage-lookup.sh not resolvable (checked CLAUDE_PLUGIN_ROOT/scripts and ~/.claude/hooks)\n' "$SELF" >&2
+  exit 3
+fi
+
 # Step 1: read the map. Unreadable -> exit 3. Empty -> exit 0 with empty stdout, guard skipped --
 # PROJECT.md is deliberately not touched in that case (PRS16, the positive twin of the denominator
 # guard below: a helper that always exits 3 must not satisfy that guard's own RED evidence).
@@ -200,8 +216,11 @@ while IFS=$(printf '\t') read -r slug num title; do
     continue
   fi
 
-  # coverage SECOND -- today's rule, unchanged.
-  if [ -f "$SPECDIR/$slug.spec.md" ]; then
+  # coverage SECOND (issue #414: the issue-NUMBER glob is now authoritative, matching
+  # project-conductor's own predicate, not the map's own slug -- see spec-coverage-lookup.sh's
+  # header for why a SPEC archived under a different slug for this same issue still counts).
+  _covering_spec=$(bash "$SPEC_COVERAGE_LOOKUP_SH" "$SPECDIR" "$num")
+  if [ -n "$_covering_spec" ]; then
     _covered=$((_covered + 1))
     continue
   fi

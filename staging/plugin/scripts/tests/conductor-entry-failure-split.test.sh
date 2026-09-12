@@ -271,6 +271,18 @@ else
   bad "S1: rc=$RC spec_copied=$( [ -f "$R/SPEC.md" ] && echo yes || echo no ) — $(out_of conductor-step4-nospec-skip | head -2)"
 fi
 
+# S1b (issue #414 / ADR-0134 §D13): a SPEC exists for this issue number under a slug DIFFERENT
+# from what the map/feature line would suggest — still resolved and copied, via
+# spec-coverage-lookup.sh's issue-number glob (mirrors PRS05b at the autopilot call site).
+R=$(mk_root s1b)
+printf '# spec\n' > "$R/docs/specs/42-archived-under-a-totally-different-name.spec.md"
+RC=$(run_fence "conductor-step4-nospec-skip" "$PC_REF" "$(setup "$R")")
+if [ "$RC" = "0" ] && [ -f "$R/SPEC.md" ] && out_of conductor-step4-nospec-skip | grep -q 'SPEC-COPY: OK'; then
+  ok "S1b: a SPEC under a differently-worded slug for the same issue number is still resolved and copied (issue #414)"
+else
+  bad "S1b: rc=$RC spec_copied=$( [ -f "$R/SPEC.md" ] && echo yes || echo no ) — $(out_of conductor-step4-nospec-skip | head -2)"
+fi
+
 # S2: no spec -> exit 1, a per-feature skip note, and NOT the run-level marker. The whole issue.
 R=$(mk_root s2)
 RC=$(run_fence "conductor-step4-nospec-skip" "$PC_REF" "$(setup "$R")")
@@ -1056,11 +1068,12 @@ fi
 # colour, because `TOTAL` sums executed assertions, not passing ones — a failing assertion still
 # ran (the seven CDA cases are exactly that: expected-red today, still counted). Raised 64 -> 68
 # (issue #474, ADR-0188): FK16-FK19, the autopilot fork-point refusal and its prose backstop.
+# Raised 68 -> 69 (issue #414): S1b, the divergent-slug coverage regression pin.
 TOTAL=$((PASS + FAIL))
-if [ "$TOTAL" -ge 68 ]; then
+if [ "$TOTAL" -ge 69 ]; then
   ok "Z1: assertion floor met ($TOTAL)"
 else
-  bad "Z1: only $TOTAL assertions executed, expected >= 68 — did an extraction return empty?"
+  bad "Z1: only $TOTAL assertions executed, expected >= 69 — did an extraction return empty?"
 fi
 
 echo "----"

@@ -90,11 +90,12 @@ into the other.)
 <!-- fence-contract: conductor-step4-nospec-skip -->
 ```bash
 # ADR-0133 §D1 (issue #394): the body between the two FENCE_BASH lines runs under BASH, not under
-# the host shell. The `ls "$_root"/docs/specs/…` glob below is a measured divergence: zsh's `nomatch`
-# declines to run `ls` at all rather than passing the unmatched pattern through, and its diagnostic
-# escapes the `2>/dev/null` that belongs to the command it never ran. `export` forwards this body's
-# caller-bound free variables. Terminator at COLUMN 0; an indented one is swallowed into the
-# here-document and destroys this fence's exit code silently.
+# the host shell — a measured divergence: zsh's `nomatch` declines to run an unmatched glob at all
+# rather than passing the pattern through, and its diagnostic escapes any `2>/dev/null` on the
+# command it never ran. `spec-coverage-lookup.sh` below (issue #414) carries exactly such a glob,
+# always invoked here via an explicit `bash`, never inline, for that reason. `export` forwards
+# this body's caller-bound free variables. Terminator at COLUMN 0; an indented one is swallowed
+# into the here-document and destroys this fence's exit code silently.
 export _root _feature CLAUDE_PLUGIN_ROOT
 bash <<'FENCE_BASH'
 # Free variables, bound by the orchestrator: _root (project root), _feature (the PROJECT.md feature
@@ -106,7 +107,21 @@ if [ -z "$_issue" ]; then
   echo "SPEC-COPY: PREDESIGNED — no issue suffix; leaving SPEC.md as it is."
   exit 0
 fi
-_spec=$(ls "$_root"/docs/specs/"$_issue"-*.spec.md 2>/dev/null | head -1)
+# Coverage predicate (issue #414 / ADR-0134 §D13): shared with `autopilot` Phase P step 3's
+# `prep-row-select.sh`, which used to test the map's own slug exactly while this site globbed the
+# issue number and took an unsorted `head -1` — the two disagreed whenever a SPEC existed under a
+# slug other than the map's. Same two-tier resolution as `_scripts` above, self-contained since
+# that variable does not survive this fence's own subprocess boundary (ADR-0133 §D4).
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/spec-coverage-lookup.sh" ]; then
+  _scl="$CLAUDE_PLUGIN_ROOT/scripts/spec-coverage-lookup.sh"
+elif [ -f "$HOME/.claude/hooks/spec-coverage-lookup.sh" ]; then
+  _scl="$HOME/.claude/hooks/spec-coverage-lookup.sh"
+else
+  echo "SPEC-COPY: DID-NOT-RUN — spec-coverage-lookup.sh not deployed"
+  echo "  Run: bash <repo>/staging/sync-to-claude.sh --apply"
+  exit 3
+fi
+_spec=$(bash "$_scl" "$_root/docs/specs" "$_issue")
 if [ -n "$_spec" ] && [ -f "$_spec" ]; then
   cp "$_spec" "$_root/SPEC.md" || { echo "SPEC-COPY: DID-NOT-RUN — could not copy $_spec"; exit 3; }
   echo "SPEC-COPY: OK $_spec"
