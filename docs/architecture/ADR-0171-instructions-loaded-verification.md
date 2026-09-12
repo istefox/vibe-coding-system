@@ -160,3 +160,11 @@ a different pair of copies in this repo (fixed the same day as this ADR).
 
 Related: `docs/chain-decision-index.md` / `docs/chain-decisions.md` carry the paired index entry
 and narrative block, per `claude-md-condensation.test.sh`'s CMC05 check.
+
+## Correction (2026-09-12)
+
+The `usage-daily-hint.sh` precedent D2 cites ("report, never gate", ADR-0058 §D4) is retired —
+see ADR-0058's own dated Correction. `instructions-loaded-log.sh`'s posture here is unaffected:
+Claude Code ignores the `InstructionsLoaded` event's exit code regardless of any other hook's
+fate, so nothing about D2's actual mechanism changes. This note only keeps a future reader from
+chasing a deleted example.

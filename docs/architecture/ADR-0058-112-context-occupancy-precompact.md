@@ -106,3 +106,23 @@ that looks authoritative is worse than no number.
   major Claude Code bump rather than trusted indefinitely.
 - Fail-open (§D3) means a broken hook is a silent no-op, which is the standing trade for every hook
   in this system.
+
+## Correction (2026-09-12)
+
+D3/D4/D5 — the occupancy-measurement half (`context-occupancy.sh`) and its Stop-hook reporting
+half (`usage-daily-hint.sh`) — are **retired**, at Stefano's explicit request. Both scripts and
+their `sync-to-claude.sh` PAIRS entries were deleted; the already-deployed
+`~/.claude/hooks/{usage-daily-hint.sh,context-occupancy.sh}` were removed by hand the same day.
+The hook had never actually fired live (0 occurrences confirmed in `~/.claude/settings.json`) and
+had sat in a tracked, intentional standby since 2026-09-01 — see the corrected ADR-0170 §D1 below,
+whose claim that the hook *was* wired directly into the live settings.json does not match the
+live file.
+
+**D1/D2 (the `PreCompact` guard, `precompact-guard.sh`) are UNCHANGED** — still active, deployed,
+and wired. Nothing about the guard's one-shot refusal or fail-open behavior changed; only the
+separate occupancy-reporting half was removed.
+
+Test coverage: `precompact-occupancy.test.sh` was trimmed to cover only §D1-D3 (its XD/XE/XF
+sections and the context-occupancy PAIRS assertion were removed rather than left to pass
+vacuously on missing files); `sync-manual-steps.test.sh`'s wiring fixture and notice assertions
+were updated to match.

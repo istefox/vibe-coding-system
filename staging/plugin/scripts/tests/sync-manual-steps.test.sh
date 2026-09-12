@@ -43,8 +43,8 @@ TEST_MARK="alongside the agent-command-scope entry"
 # direction this implies and the new fixtures that exercise it.
 STALE_ARCH_MARK="invoking hooks/agent-write-scope.sh"
 PRECOMPACT_MARK="PreCompact is not currently in the hooks block"
-USAGE_HINT_MARK="usage-daily-hint (issue #112, ADR-0058"
 RETIRED_MARK="MANUAL STEP: retired hook cleanup"
+RETIRED_OCC_MARK="MANUAL STEP: retired context-occupancy hook cleanup"
 CLEAR_MARK="no manual steps outstanding"
 BASEREF_MARK="worktree forks from the default branch and the chain's Step 5 pre-flight will refuse to dispatch"
 INSTRUCTIONS_LOADED_MARK="has nothing to read"
@@ -56,7 +56,7 @@ INSTRUCTIONS_LOADED_MARK="has nothing to read"
 # WIRED_HOOKS / UNWIRED_HOOKS below are the SINGLE definition of "what does a settings.json hooks
 # block look like with nothing outstanding" / "with nothing wired at all". Every notice that is a
 # CONTRACT CHANGE to this file (precompact-guard/ADR-0058, worktree.baseRef/ADR-0068,
-# commit-outcome-backstop/ADR-0168, usage-daily-hint/ADR-0170, memory-store-guard/VCS-055 Phase 2,
+# commit-outcome-backstop/ADR-0168, memory-store-guard/VCS-055 Phase 2,
 # reviewer-write-scope/VCS-055 Phase 2.3/ADR-0182, coder-memory-scope/VCS-057/ADR-0184, and
 # whichever is next) must be
 # reflected here, in the one place, or A3's all-clear assertion breaks the moment the new notice
@@ -70,7 +70,7 @@ INSTRUCTIONS_LOADED_MARK="has nothing to read"
 # VCS-046: no agent-write-scope.sh entry here — that PreToolUse entry invoked a script that no
 # longer exists (merged into test-write-scope.sh, which needs no change to gate the architect
 # too), so its PRESENCE is now the outstanding condition (see STALE_ARCH_MARK), not its absence.
-WIRED_HOOKS='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/memory-store-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/reviewer-write-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/coder-memory-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}],"InstructionsLoaded":[{"matcher":"session_start|nested_traversal|path_glob_match|include|compact","hooks":[{"type":"command","command":"\"$HOME\"/.claude/hooks/instructions-loaded-log.sh"}]}]}'
+WIRED_HOOKS='{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/autopilot-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/write-scope-enforce.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/memory-store-guard.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/reviewer-write-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/coder-memory-scope.sh"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"bash ~/.claude/hooks/agent-command-scope.sh"}]},{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command","command":"bash ~/.claude/hooks/test-write-scope.sh"}]},{"matcher":"Skill","hooks":[{"type":"command","command":"bash ~/.claude/hooks/commit-outcome-backstop.sh"}]}],"PreCompact":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/precompact-guard.sh"}]}],"InstructionsLoaded":[{"matcher":"session_start|nested_traversal|path_glob_match|include|compact","hooks":[{"type":"command","command":"\"$HOME\"/.claude/hooks/instructions-loaded-log.sh"}]}]}'
 UNWIRED_HOOKS='{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"protect-files.sh"}]}]}'
 
 # build_home <name> <wired:yes|no|nofile> <retired:yes|no> — returns the fixture HOME path.
@@ -280,30 +280,33 @@ case "$OUT9" in
   *) bad "E11: autopilot-guard notice muted by an unrelated event key being wired" ;;
 esac
 
-# E12: usage-daily-hint (issue #112, ADR-0058 D4) fires independently too — it is Stop, a
-# different event key again, and shares the fixture's default settings.json (no Stop entry at
-# all) with none of the notices above.
-case "$OUT" in
-  *"$USAGE_HINT_MARK"*) ok "E12: usage-daily-hint notice fires independently too (issue #112, ADR-0058 D4)" ;;
-  *) bad "E12: usage-daily-hint notice suppressed although Stop/usage-daily-hint is not wired" ;;
-esac
+# E12/E13/E14/E14b retired the same day as usage-daily-hint.sh itself (2026-09-12, ADR-0058 dated
+# Correction) — they tested the now-removed "please wire usage-daily-hint" notice. In its place:
+# the RETIRED_OCC_MARK pair below mirrors C1/C2 (backup-before-deploy.sh) for the two scripts this
+# retirement actually leaves behind on a deployed tree that hasn't been cleaned up by hand yet.
 
-# E13: the reverse direction — wiring Stop/usage-daily-hint must suppress its own reminder while
-# leaving the PreToolUse/PreCompact notices alone.
+# E12: the retired-context-occupancy notice fires when either deployed script still exists.
 _h="$TMP/e12"; mkdir -p "$_h/.claude/hooks"
-printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"bash ~/.claude/hooks/usage-daily-hint.sh"}]}]}}\n' > "$_h/.claude/settings.json"
+printf '{"worktree":{"baseRef":"head"},"hooks":%s}\n' "$WIRED_HOOKS" > "$_h/.claude/settings.json"
+: > "$_h/.claude/hooks/usage-daily-hint.sh"
 OUT12=$(run_sync "$_h")
 case "$OUT12" in
-  *"$USAGE_HINT_MARK"*) bad "E13: usage-daily-hint notice printed although it IS wired" ;;
-  *) ok "E13: usage-daily-hint notice suppressed once wired" ;;
+  *"$RETIRED_OCC_MARK"*) ok "E12: retired context-occupancy notice fires when usage-daily-hint.sh is still deployed" ;;
+  *) bad "E12: retired context-occupancy notice suppressed although usage-daily-hint.sh still exists" ;;
 esac
-case "$OUT12" in
-  *"$WIRING_MARK"*) ok "E14: wiring Stop/usage-daily-hint does not suppress the autopilot-guard notice" ;;
-  *) bad "E14: autopilot-guard notice muted by an unrelated event key being wired" ;;
+
+# E13: the reverse direction — neither retired script present must suppress the notice, while
+# leaving the unrelated backup-before-deploy notice (RETIRED_MARK) alone.
+_h2="$TMP/e13"; mkdir -p "$_h2/.claude/hooks"
+printf '{"worktree":{"baseRef":"head"},"hooks":%s}\n' "$WIRED_HOOKS" > "$_h2/.claude/settings.json"
+OUT13=$(run_sync "$_h2")
+case "$OUT13" in
+  *"$RETIRED_OCC_MARK"*) bad "E13: retired context-occupancy notice printed although neither script is deployed" ;;
+  *) ok "E13: retired context-occupancy notice suppressed once both scripts are gone" ;;
 esac
-case "$OUT12" in
-  *"$PRECOMPACT_MARK"*) ok "E14b: wiring Stop/usage-daily-hint does not suppress the precompact-guard notice" ;;
-  *) bad "E14b: precompact-guard notice muted by an unrelated event key being wired" ;;
+case "$OUT13" in
+  *"$RETIRED_MARK"*) bad "E14: backup-before-deploy notice leaked into the context-occupancy fixture" ;;
+  *) ok "E14: backup-before-deploy notice stays independent of the context-occupancy fixture" ;;
 esac
 
 
